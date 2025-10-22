@@ -5,6 +5,7 @@
 """Create a stacked bar chart of global crop uses (human vs. animal feed)."""
 
 import logging
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -91,36 +92,61 @@ def _extract_crop_use(n: pypsa.Network) -> tuple[pd.Series, pd.Series]:
     if "now" not in n.snapshots:
         raise ValueError("Expected snapshot 'now' in solved network")
 
-    human_use: dict[str, float] = {}
-    feed_use: dict[str, float] = {}
+    human_use: defaultdict[str, float] = defaultdict(float)
+    feed_use: defaultdict[str, float] = defaultdict(float)
 
     flows_p0 = n.links_t.p0.loc["now"] if "p0" in n.links_t else pd.Series(dtype=float)
     flows_p1 = n.links_t.p1.loc["now"] if "p1" in n.links_t else pd.Series(dtype=float)
+    links_df = n.links
+
+    def _strip_prefix(value: str, prefix: str) -> str:
+        return value[len(prefix) :] if value.startswith(prefix) else value
+
+    def _strip_country_suffix(value: str) -> str:
+        return value.rsplit("_", 1)[0] if "_" in value else value
+
+    def _infer_crop_from_food_bus(bus_name: str) -> str:
+        base = _strip_prefix(bus_name, "food_")
+        return _strip_country_suffix(base)
+
+    def _infer_crop_from_crop_bus(bus_name: str) -> str:
+        base = _strip_prefix(bus_name, "crop_")
+        return _strip_country_suffix(base)
+
+    food_bus_to_crop: dict[str, str] = {}
+    for link, attrs in links_df.iterrows():
+        bus1 = str(attrs.get("bus1", ""))
+        bus0 = str(attrs.get("bus0", ""))
+        if not bus1.startswith("food_"):
+            continue
+        if bus1 in food_bus_to_crop:
+            continue
+        if bus0.startswith("crop_"):
+            food_bus_to_crop[bus1] = _infer_crop_from_crop_bus(bus0)
 
     for link in n.links.index:
-        if not link.startswith("convert_"):
+        flow_in = abs(float(flows_p0.get(link, 0.0)))
+        if flow_in <= 0.0:
             continue
 
-        remainder = link[len("convert_") :]
-        if "_to_" not in remainder:
-            continue
+        bus0 = str(links_df.at[link, "bus0"])
+        bus1 = str(links_df.at[link, "bus1"])
+        carrier = str(links_df.at[link, "carrier"])
 
-        crop_token, output = remainder.split("_to_", 1)
-        if crop_token in {"co2", "ch4"} or output.startswith("ghg"):
-            continue
-        value = abs(float(flows_p0.get(link, 0.0)))
-        if value <= 0.0:
-            continue
-
-        if output.startswith("co2") or output.startswith("ch4"):
-            continue
-
-        if output.startswith("ruminant_feed_") or output.startswith(
-            "monogastric_feed_"
+        if link.startswith("consume_"):
+            crop = food_bus_to_crop.get(bus0)
+            if not crop:
+                crop = _infer_crop_from_food_bus(bus0)
+            human_use[crop] += flow_in
+        elif link.startswith("convert_") and (
+            bus1.startswith("feed_")
+            or carrier.startswith("convert_to_feed")
+            or carrier.startswith("feed_")
         ):
-            feed_use[crop_token] = feed_use.get(crop_token, 0.0) + value
+            crop = _infer_crop_from_crop_bus(bus0)
+            feed_use[crop] += flow_in
         else:
-            human_use[crop_token] = human_use.get(crop_token, 0.0) + value
+            continue
 
     pasture_total = 0.0
     for link in n.links.index:

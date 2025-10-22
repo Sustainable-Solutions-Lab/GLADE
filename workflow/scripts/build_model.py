@@ -14,9 +14,11 @@ from sklearn.cluster import KMeans
 
 KM3_PER_M3 = 1e-9  # convert cubic metres to cubic kilometres
 TONNE_TO_MEGATONNE = 1e-6  # convert tonnes to megatonnes
+KG_TO_MEGATONNE = 1e-9  # convert kilograms to megatonnes
 KCAL_TO_MCAL = 1e-6  # convert kilocalories to megacalories
 KCAL_PER_100G_TO_MCAL_PER_TONNE = 1e-2  # kcal/100g to Mcal per tonne of food
 DAYS_PER_YEAR = 365
+N2O_N_TO_N2O = 44.0 / 28.0  # molecular weight ratio to convert N2O-N to N2O
 
 SUPPORTED_NUTRITION_UNITS = {
     "g/100g": {"kind": "mass", "efficiency_factor": TONNE_TO_MEGATONNE},
@@ -271,7 +273,8 @@ def add_carriers_and_buses(
 
     - Regional land buses remain per-region.
     - Crops, residues, foods, food groups, and macronutrients are created per-country.
-    - Primary resources (water, fertilizer) and emissions (co2, ch4) stay global.
+    - Primary resources (water) and emissions (co2, ch4, n2o) use global buses.
+    - Fertilizer has a global supply bus with per-country delivery buses.
     """
     # Land carrier (class-level buses are added later)
     n.add("Carrier", "land", unit="Mha")
@@ -378,18 +381,28 @@ def add_carriers_and_buses(
 
     # Global emission and resource carriers with buses
     for carrier, unit in [
-        ("fertilizer", "kg"),
+        ("fertilizer", "Mt"),
         ("co2", "MtCO2"),
         ("ch4", "MtCH4"),
+        ("n2o", "MtN2O"),
         ("ghg", "MtCO2e"),
     ]:
         n.add("Carrier", carrier, unit=unit)
         n.add("Bus", carrier, carrier=carrier)
 
+    fert_country_buses = [f"fertilizer_{country}" for country in countries]
+    n.add(
+        "Bus",
+        fert_country_buses,
+        carrier="fertilizer",
+    )
+
     scale_meta = n.meta.setdefault("carrier_unit_scale", {})
     scale_meta["co2_t_to_Mt"] = TONNE_TO_MEGATONNE
     scale_meta["ch4_t_to_Mt"] = TONNE_TO_MEGATONNE
     scale_meta["ghg_t_to_Mt"] = TONNE_TO_MEGATONNE
+    scale_meta["n2o_t_to_Mt"] = TONNE_TO_MEGATONNE
+    scale_meta["fertilizer_kg_to_Mt"] = KG_TO_MEGATONNE
 
     for region in water_regions:
         bus_name = f"water_{region}"
@@ -402,6 +415,7 @@ def add_primary_resources(
     region_water_limits: pd.Series,
     co2_price: float,
     ch4_to_co2_factor: float,
+    n2o_to_co2_factor: float,
 ) -> None:
     """Add primary resource components and emissions bookkeeping."""
     # Filter to positive water limits and build stores
@@ -436,7 +450,7 @@ def add_primary_resources(
         bus="fertilizer",
         carrier="fertilizer",
         p_nom_extendable=True,
-        p_nom_max=float(primary_config["fertilizer"]["limit"]),
+        p_nom_max=float(primary_config["fertilizer"]["limit"]) * KG_TO_MEGATONNE,
     )
 
     # Add GHG aggregation store and links from individual gases
@@ -469,12 +483,48 @@ def add_primary_resources(
         efficiency=ch4_to_co2_factor,
         p_nom_extendable=True,
     )
+    n.add(
+        "Link",
+        "convert_n2o_to_ghg",
+        bus0="n2o",
+        bus1="ghg",
+        carrier="n2o",
+        efficiency=n2o_to_co2_factor,
+        p_nom_extendable=True,
+    )
+
+
+def add_fertilizer_distribution_links(
+    n: pypsa.Network,
+    countries: Iterable[str],
+    synthetic_n2o_factor: float,
+) -> None:
+    """Connect the global fertilizer supply bus to country-level fertilizer buses."""
+
+    country_list = list(countries)
+    if not country_list:
+        return
+
+    names = [f"distribute_synthetic_fertilizer_{country}" for country in country_list]
+    params: dict[str, object] = {
+        "bus0": ["fertilizer"] * len(country_list),
+        "bus1": [f"fertilizer_{country}" for country in country_list],
+        "carrier": "fertilizer",
+        "efficiency": [1.0] * len(country_list),
+        "p_nom_extendable": True,
+    }
+
+    emission_mt_per_mt = max(0.0, float(synthetic_n2o_factor)) * N2O_N_TO_N2O
+    if emission_mt_per_mt > 0.0:
+        params["bus2"] = ["n2o"] * len(country_list)
+        params["efficiency2"] = [emission_mt_per_mt] * len(country_list)
+
+    n.add("Link", names, **params)
 
 
 def add_regional_crop_production_links(
     n: pypsa.Network,
     crop_list: list,
-    crops: pd.DataFrame,
     yields_data: dict,
     region_to_country: pd.Series,
     allowed_countries: set,
@@ -566,11 +616,13 @@ def add_regional_crop_production_links(
                 "bus0": df.apply(
                     lambda r: f"land_{r['region']}_class{int(r['resource_class'])}_{'i' if ws == 'i' else 'r'}",
                     axis=1,
-                ),
-                "bus1": df["country"].apply(lambda c: f"crop_{crop}_{c}"),
+                ).tolist(),
+                "bus1": df["country"].apply(lambda c: f"crop_{crop}_{c}").tolist(),
                 "efficiency": df["yield"] * 1e6,  # t/ha → t/Mha
-                "bus3": "fertilizer",
-                "efficiency3": -fert_n_rate_kg_per_ha * 1e6,  # kg N/ha → kg N/Mha
+                "bus3": df["country"].apply(lambda c: f"fertilizer_{c}").tolist(),
+                "efficiency3": -fert_n_rate_kg_per_ha
+                * 1e6
+                * KG_TO_MEGATONNE,  # kg N/ha → Mt N/Mha
                 # Link marginal_cost is per unit of bus0 flow (now Mha).
                 "marginal_cost": base_cost,
                 "p_nom_max": df["suitable_area"] / 1e6,  # ha → Mha
@@ -1969,6 +2021,7 @@ if __name__ == "__main__":
     luc_lef_lookup: dict[tuple[str, int, str, str], float] = {}
     carbon_price = float(snakemake.params.emissions["ghg_price"])
     ch4_to_co2_factor = float(snakemake.params.emissions["ch4_to_co2_factor"])
+    n2o_to_co2_factor = float(snakemake.params.emissions["n2o_to_co2_factor"])
     if ch4_to_co2_factor <= 0.0:
         raise ValueError("`emissions.ch4_to_co2_factor` must be positive.")
     try:
@@ -2192,7 +2245,12 @@ if __name__ == "__main__":
         positive_water_limits,
         carbon_price,
         ch4_to_co2_factor,
+        n2o_to_co2_factor,
     )
+    synthetic_n2o_factor = float(
+        snakemake.params.primary["fertilizer"].get("synthetic_n2o_factor", 0.010)
+    )
+    add_fertilizer_distribution_links(n, cfg_countries, synthetic_n2o_factor)
 
     # Add class-level land buses and generators (shared pools), replacing region-level caps
     # Apply same regional_limit factor per class pool
@@ -2212,7 +2270,6 @@ if __name__ == "__main__":
     add_regional_crop_production_links(
         n,
         crop_list,
-        crops,
         yields_data,
         region_to_country,
         set(cfg_countries),

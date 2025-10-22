@@ -51,6 +51,70 @@ Sources of Emissions
   * CO₂ from clearing vegetation (forest, grassland → cropland)
   * Soil carbon losses
 
+Direct N₂O emission factors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The model uses the 2019 Refinement to the IPCC Guidelines for National Greenhouse Gas Inventories to parameterise direct N₂O emissions from managed soils. Table 11.1 (updated) is reproduced below to make the default emission factors and their uncertainty ranges readily accessible when configuring fertilizer-related pathways.
+
+.. list-table:: Default emission factors to estimate direct N₂O emissions from managed soils (IPCC, 2019 Refinement - Table 11.1)
+   :header-rows: 1
+   :widths: 32 11 14 25 9 9
+
+   * - Emission factor
+     - Aggregated default value
+     - Aggregated uncertainty range
+     - Disaggregation
+     - Default value
+     - Uncertainty range
+   * - EF\ :sub:`1` for N additions from synthetic fertilisers, organic amendments and crop residues, and N mineralised from mineral soil as a result of loss of soil carbon [kg N₂O-N (kg N)\ :sup:`-1`]
+     - 0.010
+     - 0.002 – 0.018
+     - Synthetic fertiliser inputs in wet climates
+
+       Other N inputs in wet climates
+
+       All N inputs in dry climates
+     - 0.016 (wet synthetic)
+
+       0.006 (wet other)
+
+       0.005 (dry)
+     - 0.013 – 0.019
+
+       0.001 – 0.011
+
+       0.000 – 0.011
+   * - EF\ :sub:`1FR` for flooded rice fields [kg N₂O-N (kg N)\ :sup:`-1`]
+     - 0.004
+     - 0.000 – 0.029
+     - Continuous flooding
+
+       Single and multiple drainage
+     - 0.003
+
+       0.005
+     - 0.000 – 0.010
+
+       0.000 – 0.016
+   * - EF\ :sub:`3PRP,CPP` for cattle (dairy, non-dairy and buffalo), poultry and pigs [kg N₂O-N (kg N)\ :sup:`-1`]
+     - 0.004
+     - 0.000 – 0.014
+     - Wet climates
+
+       Dry climates
+     - 0.006
+
+       0.002
+     - 0.000 – 0.027
+
+       0.000 – 0.007
+   * - EF\ :sub:`3PRP,SO` for sheep and “other animals” [kg N₂O-N (kg N)\ :sup:`-1`]
+     - 0.003
+     - 0.000 – 0.010
+     - –
+     - –
+     - –
+
 Carbon Pricing
 ~~~~~~~~~~~~~~
 
@@ -156,7 +220,7 @@ Limitations and assumptions
 
 The current implementation makes several simplifying assumptions that should be considered when interpreting results:
 
-* **Climatic zones**: Zones (tropical, temperate, boreal) are assigned by latitude only (tropical: |lat| < 23.5°, boreal: |lat| ≥ 50°, temperate: otherwise). This does not account for altitude effects (e.g., highland tropics behave more like temperate zones) or local climate variations. A future enhancement would use actual biome or Köppen-Geiger climate classifications.
+* **Climatic zones**: Zones (tropical, temperate, boreal) are assigned by latitude only (tropical: :math:`\lvert \phi \rvert < 23.5^\circ`, boreal: :math:`\lvert \phi \rvert \ge 50^\circ`, temperate: otherwise). This does not account for altitude effects (e.g., highland tropics behave more like temperate zones) or local climate variations. A future enhancement would use actual biome or Köppen-Geiger climate classifications.
 
 * **Agricultural biomass stocks**: Cropland and pasture equilibrium above-ground biomass is assumed to be negligible (0 tC/ha) for annual crops. This is a conservative assumption appropriate for grain crops where biomass is harvested annually, but underestimates carbon storage in perennial crops (orchards, oil palm, coffee) and improved pastures. See ``data/luc_zone_parameters.csv`` for the zone-specific parameters.
 

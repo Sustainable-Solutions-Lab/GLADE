@@ -288,7 +288,7 @@ Fertilizer
 
 Crop production requires nitrogen (N), phosphorus (P), and potassium (K) fertilizers. The model includes:
 
-* **Global fertilizer limit**: Total NPK available (``primary.fertilizer.limit`` in config, units: kg)
+* **Global fertilizer limit**: Total NPK available (``primary.fertilizer.limit`` in config, specified in kg and converted to Mt internally)
 * **Crop-specific requirements**: Fertilizer needed per tonne of production (from ``data/crops.csv``)
 * **Emissions factors**: N₂O emissions from nitrogen application
 

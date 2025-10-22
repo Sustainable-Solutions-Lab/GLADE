@@ -68,7 +68,7 @@ Key Data Structures
 **n.stores**
   Resource stores (land, water, fertilizer) with usage. Columns:
 
-  * ``e_nom``: Total capacity (Mha for land, km³ for water, kg for fertilizer)
+  * ``e_nom``: Total capacity (Mha for land, km³ for water, Mt for fertilizer)
   * ``e_initial``: Available amount
   * ``e``: Amount used or deposited (after solving)
 
