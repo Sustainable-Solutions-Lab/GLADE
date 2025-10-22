@@ -1,0 +1,30 @@
+# Reproduction of Table 3.1 in the GLEAM 3.0 model description (FAO 2022): List of feed materials for ruminant species
+number;code;type;description
+1;GRASSF;roughages;Any type of natural or cultivated fresh grass grazed or fed to the animals.
+2;GRASSH;roughages;Hay (grass is cut, dried and stored) or silage (grass is cut and fermented) from any natural or cultivated grass.
+3;GRASSH2;roughages;Hay from adjacent areas.
+4;GRASSLEGF;roughages;Fresh mixture of any type of grass and leguminous plants that is fed to the animals.
+5;GRASSLEGH;roughages;Hay or silage produced from a mixture of any type of grass and leguminous plants.
+6;FDDRSIL;roughages;Hay or silage from alfalfa (Medicago sativa). Silage from whole barley (Hordeum vulgare), oat (Avena sativa), buckwheat (Fagopyrum esculentum), fonio (Digitaria spp.) plants and whole maize (Zea mays) plants.
+7;RSTRAW;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from rice (Oryza spp.) cultivation.
+8;WSTRAW;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from wheat (Triticum spp.) cultivation.
+9;BSTRAW;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from barley (Hordeum vulgare), rye (Secale cereale) or oat (Avena sativa) cultivation.
+10;ZSTOVER;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from maize (Zea mays) cultivation.
+11;MSTOVER;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from millet (Pennisetum glaucum, Eleusine coracana, Panicum miliaceum, etc.) cultivation.
+12;SSTOVER;roughages;Fibrous residual plant material such as straw, brans, leaves, etc. from sorghum (Sorghum spp.) cultivation.
+13;TOPS;roughages;Top portion of sugarcane (Saccharum spp.) plants, consisting of green leaves, bundle sheath and variable proportions of immature cane.
+14;LEAVES;roughages;Leaves from natural, uncultivated vegetation found in trees, forest, lanes, etc.
+15;FDDRBEET;roughages;Fodder beet (Beta vulgaris), also known as mangel beet or field beet, used as animal feed.
+16;GRAINS;cereals;Grains from barley (Hordeum vulgare), oat (Avena sativa), buckwheat (Fagopyrum esculentum) and fonio (Digitaria spp.).
+17;CORN;cereals;Grains from maize (Zea mays) plant.
+18;MLSOY;by-products;By-product from soy (Glycine max) oil production, commonly referred to as 'soy cakes' or 'soybean meal'.
+19;MLRAPE;by-products;By-product from rape (Brassica napus) oil production, commonly referred to as 'rape cakes' or 'rapeseed meal'.
+20;MLCTTN;by-products;By-product from cottonseed (Gossypium spp.) oil production, commonly referred to as 'cottonseed meal'.
+21;PKEXP;by-products;By-products from the production of kernel palm oil (Elaeis guineensis), commonly referred to as 'kernel cake'.
+22;MZGLTM;by-products;By-product from maize processing. It is a protein-rich feed, with about 65% crude protein content.
+23;MZGLTF;by-products;By-product from maize processing. Unlike the gluten meal, its protein content is lower, about 25% crude protein.
+24;BPULP;by-products;Also known as 'beet pulp', the remaining material after the juice extraction for sugar production from the sugar beet (Beta vulgaris).
+25;MOLASSES;by-products;By-product from the sugarcane sugar extraction.
+26;GRNBYDRY;by-products;'Dry' by-products of grain industries such as brans, middlings, etc.
+27;GRNBYWET;by-products;'Wet' by-products of grain industries such as biofuels, distilleries, breweries, etc.
+28;CONC;concentrates;Concentrate feed from feed mills. Note: assumed to be made up from cereals and by-products.

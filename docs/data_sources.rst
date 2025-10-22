@@ -112,6 +112,45 @@ UNSD SDG Indicator 12.3.1 (Food Loss & Waste)
 
 **Usage**: Supplies per-country loss and waste fractions for food groups, injected into the crop→food conversion efficiencies during ``build_model``.
 
+IFA FUBC — Global Fertilizer Use by Crop and Country
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: International Fertilizer Association (IFA) / Dryad
+
+**Description**: Global dataset on inorganic fertilizer application rates (N, P₂O₅, K₂O) by crop and country based on expert surveys. The dataset includes historical data from 8 previous reports (1986–2014/15) and the most recent survey for the 2017–18 period, covering fertilizer application rates (kg/ha) and total consumption (thousand tonnes) for major crops worldwide.
+
+**Access**: https://datadryad.org/stash/dataset/doi:10.5061/dryad.2rbnzs7qh
+
+**API access**: Dryad API v2 (https://datadryad.org/api/v2/)
+
+**Version**: Version 1 (March 2025)
+
+**Coverage**:
+  * Temporal: 2017–18 period for latest survey, with historical data from 1986 onwards
+  * Geographic: Global, covering countries with significant fertilizer use
+  * Crops: Major crops including cereals, oilseeds, roots & tubers, vegetables, fruits, fiber crops, sugar crops, and others
+
+**License**: Creative Commons Zero v1.0 Universal (CC0 1.0). Data is in the public domain and may be used without restriction.
+
+  * License: https://creativecommons.org/publicdomain/zero/1.0/
+
+**Citation**: Ludemann, C., Gruere, A., Heffer, P., & Dobermann, A. (2025). Global data on fertilizer use by crop and by country [Dataset]. Dryad. https://doi.org/10.5061/dryad.2rbnzs7qh
+
+**Data files**:
+  * ``FUBC_1_to_9_data.csv``: Main dataset with fertilizer application rates and quantities by crop, country, and year
+  * ``Meta_data_FUBC_1_to_9_data.csv``: Column descriptions and metadata
+
+**Key variables**:
+  * Country, ISO3 code, Year, FUBC report number
+  * Crop name and crop area (thousand hectares)
+  * N, P₂O₅, K₂O quantities (thousand tonnes)
+  * N, P₂O₅, K₂O application rates (kg/ha)
+  * Average application rates by nutrient
+
+**Usage**: Crop-specific fertilizer application rates for N₂O emissions modeling and nutrient budget analysis
+
+**Workflow retrieval**: Automatic via the ``download_ifa_fubc`` Snakemake rule using the Dryad API v2. Downloads ``ifa_fubc_1_to_9_data.csv`` and ``ifa_fubc_1_to_9_metadata.csv`` to ``data/downloads/``. No registration or API key required.
+
 Grassland Yield Data
 ~~~~~~~~~~~~~~~~~~~~
 

@@ -182,3 +182,11 @@ Brief descriptions of key external datasets used by this project, with links and
 - License: Creative Commons Attribution 4.0 International (CC BY 4.0)
 - Citation: Cook-Patton, S. C., Leavitt, S. M., Gibbs, D., Harris, N. L., Lister, K., Anderson-Teixeira, K. J., Briggs, R. D., Chazdon, R. L., Crowther, T. W., Ellis, P. W., Griscom, H. P., Herrmann, V., Holl, K. D., Houghton, R. A., Larrosa, C., Lomax, G., Lucas, R., Madsen, P., Malhi, Y., ... Griscom, B. W. (2020). Mapping carbon accumulation potential from global natural forest regrowth. *Nature*, 585(7826), 545-550. https://doi.org/10.1038/s41586-020-2686-x
 - Workflow integration: Retrieved via the `download_forest_carbon_accumulation_1km` rule (curl download, temporary file) and the shared `resample_regrowth` rule. The resampling script leverages rasterio to aggregate by area and reproject onto the model grid used by `prepare_luc_inputs`, writing a compressed NetCDF at `processing/shared/luc/regrowth_resampled.nc`. No registration or API key required.
+
+## GLEAM Supplementary Tables — Global Livestock Environmental Assessment Model
+
+- Description: Supplementary tables from FAO's Global Livestock Environmental Assessment Model (GLEAM) providing detailed livestock system parameters including feed composition, digestibility, methane conversion factors, and manure management characteristics by species, production system, and region.
+- Download: https://www.fao.org/fileadmin/user_upload/gleam/docs/GLEAM_3.0_Supplement_S1.xlsx
+- Version/format: GLEAM 3.0 Supplement S1; Excel workbook (`GLEAM_3.0_Supplement_S1.xlsx`) retrieved automatically to `data/downloads/gleam_3.0_supplement_s1.xlsx` via the `download_gleam_supplement` Snakemake rule.
+- License/terms (summary): Material may be copied, downloaded, and printed for private study, research and teaching purposes, or for use in non-commercial products or services, provided that appropriate acknowledgement of FAO as the source and copyright holder is given and that FAO's endorsement of users' views, products or services is not implied in any way.
+- Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/

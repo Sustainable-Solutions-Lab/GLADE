@@ -208,6 +208,18 @@ rule download_fao_nutrient_conversion_table:
         """
 
 
+rule download_gleam_supplement:
+    output:
+        "data/downloads/gleam_3.0_supplement_s1.xlsx",
+    params:
+        url="https://www.fao.org/fileadmin/user_upload/gleam/docs/GLEAM_3.0_Supplement_S1.xlsx",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}"
+        """
+
+
 rule download_land_cover:
     output:
         # TODO: mark as temp once downstream extraction is confirmed to work

@@ -19,8 +19,9 @@ primary:
 
 # --- section: emissions ---
 emissions:
-  ghg_price: 200 # USD/tCO2-eq (emissions stored in MtCO2-eq internally)
-  ch4_to_co2_factor: 27.2 # IPCC AR6 GWP100 (incl. climate-carbon feedback) for CH4
+  ghg_price: 200 # USD_2024/tCO2-eq (emissions stored in MtCO2-eq internally)
+  ch4_to_co2_factor: 27.0 # IPCC AR6 GWP100 (WG1, Chapter 7, Table 7.15; https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-7/)
+  n2o_to_co2_factor: 273.0 # IPCC AR6 GWP100 (WG1, Chapter 7, Table 7.15; https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-7/)
 
 # --- section: land use change ---
 luc:
@@ -99,6 +100,25 @@ animal_products:
   - chicken meat
   - dairy
   - eggs
+  residue_crops:
+  - banana
+  - barley
+  - chickpea
+  - cowpea
+  - dry-pea
+  - dryland-rice
+  - foxtail-millet
+  - gram
+  - maize
+  - oat
+  - pearl-millet
+  - phaseolus-bean
+  - pigeonpea
+  - rye
+  - sorghum
+  - sugarcane
+  - wetland-rice
+  - wheat
 
 grazing:
   enabled: true

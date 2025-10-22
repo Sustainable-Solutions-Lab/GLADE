@@ -1,0 +1,44 @@
+# Reproduction of Table 3.5 in the GLEAM 3.0 model description (FAO 2022): List of feed materials for monogastrics
+number;code;type;description
+1;SWILL;swill-and-scavenging;Household food waste and other organic material used as feed.
+2;GRASSF;locally-produced;Any type of natural or cultivated fresh grass grazed or fed to the animals.
+3;PULSES;locally-produced;Leguminous beans.
+4;PSTRAW;locally-produced;Fibrous residual plant material such as straw, from leguminous plants cultivation.
+5;CASSAVA;locally-produced;Pellets from cassava (Manihot esculenta) roots.
+6;WHEAT;locally-produced;Grains from wheat (Triticum aestivum).
+7;MAIZE;locally-produced;Grains from maize (Zea mays).
+8;BARLEY;locally-produced;Grains from barley (Hordeum vulgare).
+9;MILLET;locally-produced;Grains from millet (P. glaucum, E. coracana, P. miliaceum, and others).
+10;RICE;locally-produced;Grains from rice (Oryza spp.).
+11;SORGHUM;locally-produced;Grains from sorghum (Sorghum spp.).
+12;SOY;locally-produced;Beans from soy (Glicyne max).
+13;TOPS;locally-produced;Fibrous residual plant material from sugarcane (Saccharum spp.) cultivation.
+14;LEAVES;locally-produced;Leaves from natural, uncultivated vegetation found in trees, forest, lanes etc.
+15;BNFRUIT;locally-produced;Fruit from banana trees (Musa spp.).
+16;BNSTEM;locally-produced;Residual plant material such as stems from banana (Musa spp.) cultivation.
+17;MLSOY;locally-produced;By-product from soy (Glycine max) oil production, commonly referred to as ‘soy cakes’ or ‘soybean meal’.
+18;MLCTTN;locally-produced;By-product from cottonseeds (Gossypium spp.) oil production, commonly referred to as ‘cottonseeds cakes’.
+19;MLOILSDS;locally-produced;By-product (cakes, meals) from oil production other than soy, cottonseed or palm oil.
+20;GRNBYDRY;locally-produced;‘Dry’ by-products of grain industries such as brans, middlings, etc.
+21;PULSES;non-local;Leguminous beans.
+22;CASSAVA;non-local;Pellets from cassava (Manihot esculenta) roots.
+23;WHEAT;non-local;Grains from wheat (Triticum aestivum).
+24;MAIZE;non-local;Grains from maize (Zea mays).
+25;BARLEY;non-local;Grains from barley (Hordeum vulgare).
+26;MILLET;non-local;Grains from millet (P. glaucum, E. coracana, P. miliaceum, and others).
+27;RICE;non-local;Grains from rice (Oryza spp.).
+28;SORGHUM;non-local;Grains from sorghum (Sorghum spp.).
+29;SOY;non-local;Beans from soy (Glicyne max).
+30;RAPESEED;non-local;Seeds from rape (B. napus).
+31;SOYOIL;non-local;Oil extracted from soybeans (Glicyne max).
+32;MLSOY;non-local;By-product from soy (Glycine max) oil production, commonly referred to as ‘soy cakes’ or ‘soybean meal’.
+33;MLCTTN;non-local;By-product from cottonseeds (Gossypium spp) oil production, commonly referred to as ‘cottonseeds cakes’.
+34;MLRAPE;non-local;By-products from rape oil production, commonly referred to as 'canola cakes'.
+35;PKEXP;non-local;By-products from the production of kernel palm oil (Elaeis guineensis), commonly referred to as 'kernel cake'.
+36;MLOILSDS;non-local;By-product (cakes, meals) from oil production other than soy, cottonseed, rapeseed or palm oil.
+37;FISHMEAL;non-local;By-products from the fish industries.
+38;MOLASSES;non-local;By-product from the sugarcane sugar extraction.
+39;GRNBYDRY;non-local;‘Dry’ by-products of grain industries such as brans, middlings, etc.
+40;GRNBYWET;non-local;‘Wet’ by-products of grain industries such as biofuels, distilleries, breweries, etc.
+41;SYNTHETIC;non-local;Synthetic additives such as amino-acids or minerals.
+42;LIMESTONE;non-local;Used as source of calcium, is given to laying hens to favor the formation of the egg shell.

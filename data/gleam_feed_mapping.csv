@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Mapping from GLEAM feed codes to model entities
+#
+# Columns:
+#   - gleam_code: GLEAM feed material code (from Tables 3.1 and 3.5)
+#   - model_entity: Name in model (crop/food/residue)
+#   - entity_type: Type of entity (crop/food/residue)
+#   - feed_category: Feed quality category (forage/concentrate/byproduct)
+#   - animal_type: Which animals can use (ruminant/monogastric/both)
+#   - notes: Description and mapping details
+#
+gleam_code,model_entity,entity_type,feed_category,animal_type,notes
+# --- Grasses and forages ---
+GRASSF,grassland,forage,forage,ruminant,Fresh grass from grazing/managed grassland
+GRASSH,grassland,forage,forage,ruminant,Hay or silage from grass (same as GRASSF for model)
+GRASSH2,grassland,forage,forage,ruminant,Hay from adjacent areas (same as GRASSF)
+GRASSLEGF,alfalfa,crop,forage,ruminant,Fresh grass-legume mixture → alfalfa
+GRASSLEGH,alfalfa,crop,forage,ruminant,Hay/silage from grass-legume → alfalfa
+FDDRSIL,silage-maize,crop,forage,ruminant,Fodder crops silage → silage-maize
+# --- Crop residues (new entities to create) ---
+RSTRAW,rice_straw,residue,forage,ruminant,Rice straw and residues
+WSTRAW,wheat_straw,residue,forage,ruminant,Wheat straw and residues
+BSTRAW,barley_straw,residue,forage,ruminant,Barley/rye/oat straw
+ZSTOVER,maize_stover,residue,forage,ruminant,Maize stover and residues
+MSTOVER,millet_stover,residue,forage,ruminant,Millet stover and residues
+SSTOVER,sorghum_stover,residue,forage,ruminant,Sorghum stover and residues
+TOPS,sugarcane_tops,residue,forage,both,Sugarcane tops and leaves
+PSTRAW,pulse_straw,residue,forage,monogastric,Legume crop residues
+BNSTEM,banana_stem,residue,forage,monogastric,Banana stem residues
+LEAVES,tree_leaves,residue,forage,both,Leaves from trees/forest (not modeled for now)
+# --- Other roughages ---
+FDDRBEET,sugarbeet,crop,forage,ruminant,Fodder beet → sugar beet
+# --- Cereal grains ---
+GRAINS,barley,crop,concentrate,ruminant,"Barley and other cereals (using barley as representative)"
+CORN,maize,crop,concentrate,both,Maize grain
+WHEAT,wheat,crop,concentrate,monogastric,Wheat grain
+MAIZE,maize,crop,concentrate,monogastric,Maize grain (same as CORN)
+BARLEY,barley,crop,concentrate,monogastric,Barley grain
+MILLET,pearl-millet,crop,concentrate,monogastric,Millet grain → pearl millet
+RICE,wetland-rice,crop,concentrate,monogastric,Rice grain → wetland rice
+SORGHUM,sorghum,crop,concentrate,monogastric,Sorghum grain
+# --- Protein crops ---
+SOY,soybean,crop,concentrate,monogastric,Soybean grain
+PULSES,dry-pea,crop,concentrate,monogastric,Legume grains → dry pea as representative
+# --- Roots and tubers ---
+CASSAVA,cassava,crop,concentrate,monogastric,Cassava roots/pellets
+BNFRUIT,banana,crop,concentrate,monogastric,Banana fruit
+# --- Oilseed meals (food processing byproducts) ---
+MLSOY,sunflower meal,food,byproduct,both,Soybean meal → sunflower meal (model has this)
+MLRAPE,rapeseed meal,food,byproduct,both,Rapeseed/canola meal
+MLCTTN,cottonseed_meal,food,byproduct,both,Cottonseed meal (not in model - skip for now)
+MLOILSDS,sunflower meal,food,byproduct,monogastric,Other oilseed meals → sunflower meal
+PKEXP,palm_kernel_meal,food,byproduct,both,Palm kernel cake (not in model - skip for now)
+# --- Grain processing byproducts ---
+GRNBYDRY,wheat bran,food,byproduct,both,"Dry grain byproducts (brans, middlings) → wheat bran"
+GRNBYWET,brewery_grains,food,byproduct,both,Wet grain byproducts (breweries) - not in model
+MZGLTM,corn_gluten_meal,food,byproduct,ruminant,Maize gluten meal (high protein) - not in model
+MZGLTF,corn_gluten_feed,food,byproduct,ruminant,Maize gluten feed (lower protein) - not in model
+# --- Sugar processing byproducts ---
+BPULP,beet_pulp,food,byproduct,ruminant,Sugar beet pulp - not in model
+MOLASSES,molasses,food,byproduct,monogastric,Sugarcane molasses - not in model
+# --- Other feeds (not currently modeled) ---
+RAPESEED,rapeseed,crop,concentrate,monogastric,Rapeseed whole seeds
+SOYOIL,soybean_oil,food,concentrate,monogastric,Soybean oil (processed)
+FISHMEAL,fishmeal,food,byproduct,monogastric,Fish industry byproduct - not modeled
+SYNTHETIC,synthetic,food,concentrate,monogastric,Synthetic additives - not modeled
+LIMESTONE,limestone,food,concentrate,monogastric,Calcium source for laying hens - not modeled
+SWILL,food_waste,food,byproduct,monogastric,Household food waste - not modeled

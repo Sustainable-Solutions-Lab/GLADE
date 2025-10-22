@@ -97,16 +97,16 @@ The model uses feed conversion ratios to link feed inputs to animal outputs, wit
 Feed System Architecture
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-The feed system uses **six distinct feed pools** that combine animal type with feed quality:
+The feed system uses **eight distinct feed pools** that combine animal type with feed quality:
 
-* **Ruminant pools**: ``ruminant_forage``, ``ruminant_concentrate``, ``ruminant_byproduct``
-* **Monogastric pools**: ``monogastric_forage``, ``monogastric_concentrate``, ``monogastric_byproduct``
+* **Ruminant pools**: ``ruminant_roughage``, ``ruminant_forage``, ``ruminant_grain``, ``ruminant_protein``
+* **Monogastric pools**: ``monogastric_low_quality``, ``monogastric_grain``, ``monogastric_energy``, ``monogastric_protein``
 
 This categorization enables the model to:
 
-1. Differentiate methane emissions based on feed digestibility (forage vs. concentrate)
-2. Route crops and byproducts to appropriate feed pools based on nutritional properties
-3. Model production system choices (e.g., grass-fed vs. grain-finished beef)
+1. Differentiate methane emissions using GLEAM feed digestibility classes (roughage/forage vs. grain/protein)
+2. Route crops, residues, and processing byproducts to appropriate feed pools based on nutritional properties
+3. Model production system choices (e.g., roughage-dominated beef vs. high-grain finishing rations)
 
 data/feed_properties.csv
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,9 +129,9 @@ Unified database mapping all feed items (crops and food byproducts) to feed cate
   * **Byproduct**: Processing byproducts (brans, meals, hulls) - moderate digestibility, moderate CH₄
 
 **Typical items**:
-  * *Forages*: alfalfa, biomass sorghum, silage maize
-  * *Concentrates*: wheat, maize, soybean, dry pea
-  * *Byproducts*: wheat bran, rice bran, sunflower meal, rapeseed meal
+  * *Roughage/forage*: grassland forage, alfalfa, silage maize
+  * *Grain/energy*: wheat, maize, soybean, dry pea
+  * *Byproducts/residues*: wheat bran, rice bran, sunflower meal, crop residues (e.g., wheat straw, maize stover)
 
 Byproducts from food processing (with ``source_type=food``) are automatically excluded from human consumption and can only be used as animal feed.
 
@@ -174,25 +174,36 @@ Grazing Links
 
 Grassland is treated as forage-quality feed and routed to the ``feed_ruminant_forage`` pool, where it competes with other forage sources.
 
+Crop Residue Feed Supply
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Crop residues (e.g., straw, stover, pulse haulms) are now generated explicitly using the new Snakemake rule ``build_crop_residue_yields``:
+
+* **Configuration**: Select residue crops via ``animal_products.residue_crops`` in ``config/default.yaml``. Only crops present in ``config.crops`` are processed.
+* **Data sources**:
+  - GLEAM Supplement S1 Table S.3.1 (slope/intercept) and Tables 3.3 / 3.6 (FUE factors)
+  - GLEAM feed codes → model mapping in ``data/gleam_feed_mapping.csv``
+* **Outputs**: Per-crop CSVs at ``processing/{name}/crop_residue_yields/{crop}.csv`` with net dry-matter residue yields (t/ha) by region, resource class, and water supply.
+* **Integration**: ``build_model`` reads all residue CSVs, adds ``residue_{feed_item}_{country}`` buses, and attaches them as additional outputs on crop production links. Residues flow through the same feed supply logic as crops/foods and enter the appropriate feed pools.
+
 Feed Supply Links
 ~~~~~~~~~~~~~~~~~
 
-The ``add_feed_supply_links()`` function creates links from crops and food byproducts to the six feed pools:
+The ``add_feed_supply_links()`` function creates links from crops, crop residues, and food byproducts to the eight feed pools:
 
 **Item-to-Feed-Pool Links**:
-  * **Inputs**: Crop or food byproduct buses (``bus0``)
-  * **Outputs**: One of six feed pool buses (``bus1``)
-    - ``feed_ruminant_forage``, ``feed_ruminant_concentrate``, ``feed_ruminant_byproduct``
-    - ``feed_monogastric_forage``, ``feed_monogastric_concentrate``, ``feed_monogastric_byproduct``
-  * **Efficiency**: Animal-specific digestibility (from ``data/feed_properties.csv``)
-  * **Routing**: Each item creates links to both ruminant and monogastric pools with appropriate efficiencies
-  * Crops compete between human consumption, food processing, and animal feed use
-  * Food byproducts are automatically excluded from human consumption
+  * **Inputs**: Crop, residue, or food byproduct buses (``bus0``)
+  * **Outputs**: One of eight feed pool buses (``bus1``)
+    - Ruminants: ``feed_ruminant_roughage``, ``feed_ruminant_forage``, ``feed_ruminant_grain``, ``feed_ruminant_protein``
+    - Monogastrics: ``feed_monogastric_low_quality``, ``feed_monogastric_grain``, ``feed_monogastric_energy``, ``feed_monogastric_protein``
+  * **Efficiency**: Category-specific digestibility (from ``processing/{name}/ruminant_feed_categories.csv`` / ``monogastric_feed_categories.csv``)
+  * **Routing**: Each feed item is mapped via ``processing/{name}/ruminant_feed_mapping.csv`` and ``processing/{name}/monogastric_feed_mapping.csv`` (generated by ``categorize_feeds.py``) to the relevant pool(s)
+  * Crops compete between human consumption, food processing, and animal feed use; residues and byproducts are exclusive to feed use
 
 **Example flow**:
-  * Maize (concentrate) → ``feed_ruminant_concentrate`` (0.85) + ``feed_monogastric_concentrate`` (0.85)
-  * Wheat bran (byproduct) → ``feed_ruminant_byproduct`` (0.85) + ``feed_monogastric_byproduct`` (0.75)
-  * Alfalfa (forage) → ``feed_ruminant_forage`` (0.88) + ``feed_monogastric_forage`` (0.50)
+  * Wheat grain → ``feed_ruminant_grain`` + ``feed_monogastric_grain`` (digestibility from GLEAM)
+  * Wheat straw (residue) → ``feed_ruminant_roughage`` (low digestibility)
+  * Wheat bran (byproduct) → ``feed_ruminant_grain`` + ``feed_monogastric_low_quality``
 
 Feed-to-Animal-Product Links
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

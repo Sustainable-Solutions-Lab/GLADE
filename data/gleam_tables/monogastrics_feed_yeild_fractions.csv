@@ -1,0 +1,45 @@
+# Reproduction of Table 3.6 in the GLEAM 3.0 model description (FAO 2022): Net yield equations, gross yields, FUE and MFA for each feed material for monogastric species
+number,code,type,Gross dry matter yields,Net yield equation,FUE,MFA
+1,SWILL,Swill and scavenging,NAa,NA,1,1
+2,GRASSF,Locally-produced feed materials,Grass,NA,0.95,1
+3,PULSES,Locally-produced feed materials,Pulses,Equation 3.19,1,Equation 6.10bb
+4,PSTRAW,Locally-produced feed materials,Pulses (crop residues) – Equation 3.2,Equation 3.19,0.90,Equation 6.10ab
+5,CASSAVA,Locally-produced feed materials,Cassava,Equation 3.19,1,1
+6,WHEAT,Locally-produced feed materials,Wheat,Equation 3.19,1,Equation 6.10bc
+7,MAIZE,Locally-produced feed materials,Maize,Equation 3.19,1,Equation 6.10bc
+8,BARLEY,Locally-produced feed materials,Barley,Equation 3.19,1,Equation 6.10b
+9,MILLET,Locally-produced feed materials,Millet,Equation 3.19,1,Equation 6.10b
+10,RICE,Locally-produced feed materials,Rice,Equation 3.19,1,Equation 6.10b
+11,SORGHUM,Locally-produced feed materials,Sorghum,Equation 3.19,1,Equation 6.10b
+12,SOY,Locally-produced feed materials,Soybean,Equation 3.19,1,1
+13,TOPS,Locally-produced feed materials,Sugarcane (crop residues) – Equation 3.2,Equation 3.19,0.70,Equation 6.10ab
+14,LEAVES,Locally-produced feed materials,NAa,NA,NA,NA
+15,BNFRUIT,Locally-produced feed materials,Banana fruits,Equation 3.19,1,Equation 6.10b
+16,BNSTEM,Locally-produced feed materials,Banana fruits (crop residues) – Equation 3.2,Equation 3.19,0.50,Equation 6.10ab
+17,MLSOY,Locally-produced feed materials,Soybean,Equation 3.19,1,0.80
+18,MLCTTN,Locally-produced feed materials,Cotton,Equation 3.19,1,0.45
+19,MLOILSDS,Locally-produced feed materials,Sunflower,Equation 3.19,1,0.60
+20,GRNBYDRY,Locally-produced feed materials,Grains average yieldd,Equation 3.19,1,0.17
+21,GRAINS,Locally-produced feed materials,NA,NA,1,NA
+21,PULSES,Non-local feed materials,Pulses,NA,1,Equation 6.10bb
+22,CASSAVA,Non-local feed materials,Cassava,NA,1,1
+23,WHEAT,Non-local feed materials,Wheat,NA,1,Equation 6.10b
+24,MAIZE,Non-local feed materials,Maize,NA,1,1
+25,BARLEY,Non-local feed materials,Barley,NA,1,Equation 6.10b
+26,MILLET,Non-local feed materials,Millet,NA,1,Equation 6.10b
+27,RICE,Non-local feed materials,Rice,NA,1,Equation 6.10b
+28,SORGHUM,Non-local feed materials,Sorghum,NA,1,Equation 6.10b
+29,SOY,Non-local feed materials,Soybean,NA,1,1
+30,RAPESEED,Non-local feed materials,Rapeseed,NA,1,1
+31,SOYOIL,Non-local feed materials,Soybean,NA,1,0.17
+32,MLSOY,Non-local feed materials,Soybean,NA,1,0.80
+33,MLCTTN,Non-local feed materials,Cotton,NA,1,0.45
+34,MLRAPE,Non-local feed materials,Rapeseed,NA,1,0.58
+35,PKEXP,Non-local feed materials,Oil palm fruit,NA,1,0.03
+36,MLOILSDS,Non-local feed materials,Sunflower,NA,1,0.58
+37,FISHMEAL,Non-local feed materials,NAa,NA,NA,NA
+38,MOLASSES,Non-local feed materials,Sugarcane,NA,1,0.13
+39,GRNBYDRY,Non-local feed materials,Grains average yielde,NA,1,0.17
+40,GRNBYWET,Non-local feed materials,Barley,NA,1,1
+41,SYNTHETIC,Non-local feed materials,NAa,NA,NA,NA
+42,LIMESTONE,Non-local feed materials,NAa,NA,NA,NA

@@ -15,6 +15,7 @@
 #   MY_g_CH4_per_kg_DMI: grams of CH4 per kilogram of dry matter intake
 #
 feed_category,MY_g_CH4_per_kg_DMI,notes
+roughage,23.3,"Low-quality roughages (crop residues, straws), DE < 55% - IPCC Table 10.12 high-forage category"
 forage,23.3,"High-forage diets (>75% forage), DE ≤ 62% - IPCC Table 10.12 non-dairy cattle"
 byproduct,21.0,"Mixed rations (15-75% forage + byproducts/grain), DE 62-71% - IPCC Table 10.12 mixed rations"
 concentrate,13.6,"Concentrate/grain-based feeding (0-15% forage), DE ≥ 72% - IPCC Table 10.12 feedlot"

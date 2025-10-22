@@ -133,6 +133,33 @@ rule prepare_fao_edible_portion:
         "scripts/prepare_fao_edible_portion.py"
 
 
+rule prepare_gleam_feed_properties:
+    input:
+        gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
+        gleam_mapping="data/gleam_feed_mapping.csv",
+    output:
+        ruminant="processing/{name}/ruminant_feed_properties.csv",
+        monogastric="processing/{name}/monogastric_feed_properties.csv",
+    script:
+        "scripts/prepare_gleam_feed_properties.py"
+
+
+
+
+rule categorize_feeds:
+    input:
+        ruminant_feed_properties="processing/{name}/ruminant_feed_properties.csv",
+        monogastric_feed_properties="processing/{name}/monogastric_feed_properties.csv",
+        enteric_methane_yields="data/enteric_methane_yields.csv",
+    output:
+        ruminant_categories="processing/{name}/ruminant_feed_categories.csv",
+        monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
+        ruminant_mapping="processing/{name}/ruminant_feed_mapping.csv",
+        monogastric_mapping="processing/{name}/monogastric_feed_mapping.csv",
+    script:
+        "scripts/categorize_feeds.py"
+
+
 rule build_regions:
     input:
         world="processing/shared/gadm-simplified.gpkg",
@@ -398,14 +425,44 @@ def yield_inputs(wildcards):
     }
 
 
+rule build_crop_residue_yields:
+    input:
+        yield_r=lambda wildcards: f"processing/{wildcards.name}/crop_yields/{wildcards.crop}_r.csv",
+        yield_i=lambda wildcards: (
+            f"processing/{wildcards.name}/crop_yields/{wildcards.crop}_i.csv"
+            if config["irrigation"]["irrigated_crops"] == "all"
+            or wildcards.crop in config["irrigation"]["irrigated_crops"]
+            else []
+        ),
+        gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
+        ruminant_feed_table="data/gleam_tables/ruminants_feed_yield_fractions.csv",
+        monogastric_feed_table="data/gleam_tables/monogastrics_feed_yeild_fractions.csv",
+        regions="processing/{name}/regions.geojson",
+    output:
+        "processing/{name}/crop_residue_yields/{crop}.csv",
+    script:
+        "scripts/build_crop_residue_yields.py"
+
+
+def residue_yield_inputs(_wildcards):
+    return {
+        f"residue_{crop}": f"processing/{name}/crop_residue_yields/{crop}.csv"
+        for crop in (
+            set(config["animal_products"]["residue_crops"]) & set(config["crops"])
+        )
+    }
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
-        crops="data/crops.csv",
+        unpack(residue_yield_inputs),
         foods="data/foods.csv",
-        feed_properties="data/feed_properties.csv",
+        ruminant_feed_categories=f"processing/{name}/ruminant_feed_categories.csv",
+        ruminant_feed_mapping=f"processing/{name}/ruminant_feed_mapping.csv",
+        monogastric_feed_categories=f"processing/{name}/monogastric_feed_categories.csv",
+        monogastric_feed_mapping=f"processing/{name}/monogastric_feed_mapping.csv",
         feed_to_products="data/feed_to_animal_products.csv",
-        enteric_methane_yields="data/enteric_methane_yields.csv",
         food_groups="data/food_groups.csv",
         nutrition="data/nutrition.csv",
         regions="processing/{name}/regions.geojson",

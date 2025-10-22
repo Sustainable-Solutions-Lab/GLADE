@@ -1,0 +1,29 @@
+# Reproduction of Table 3.3 in the GLEAM 3.0 model description (FAO 2022): Net yield equations, gross yields, FUE and MFA for each feed material for ruminant species
+number,code,type,Gross dry matter yields,Net yield equation,FUE,MFA
+1,GRASSF,roughages,Grass,Equation 3.3,Table S.3.2 (Supplement S1),1
+2,GRASSH,roughages,Grass,Same as GRASSF,Table S.3.2 (Supplement S1),1
+3,GRASSH2,roughages,Grass,Same as GRASSF,Table S.3.2 (Supplement S1),1
+4,GRASSLEGF,roughages,Grass,Same as GRASSF,Table S.3.2 (Supplement S1),1
+5,GRASSLEGH,roughages,Grass,Same as GRASSF,Table S.3.2 (Supplement S1),1
+6,FDDRSIL,roughages,Fodder crops,Equation 3.3,1,1
+7,RSTRAW,roughages,Rice (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+8,WSTRAW,roughages,Wheat (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+9,BSTRAW,roughages,Barley (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+10,ZSTOVER,roughages,Maize (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+11,MSTOVER,roughages,Millet (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+12,SSTOVER,roughages,Sorghum (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+13,TOPS,roughages,Sugarcane (crop residues) – Equation 3.2,Equation 3.3,Table S.3.2 (Supplement S1),Equation 6.10ac
+14,LEAVES,roughages,NA,NA,1,1
+15,FDDRBEET,roughages,Sugar beet,Equation 3.3,1,1
+16,GRAINS,cereals,Barley and other cerealsb,NA,1,1
+17,CORN,cereals,Maize,NA,1,1
+18,MLSOY,by-products,Soybean,Equation 3.3,1,0.80
+19,MLRAPE,by-products,Rapeseed,Equation 3.3,1,0.58
+20,MLCTTN,by-products,Cotton,Equation 3.3,1,0.45
+21,PKEXP,by-products,Oil palm fruit,Equation 3.3,1,0.03
+22,MIZGLTM,by-products,Maize,NA,1,0.05
+23,MIZGLTF,by-products,Maize,NA,1,0.21
+24,BPULP,by-products,Sugar beet,NA,1,0.19
+25,MOLASSES,by-products,Sugarcane,Equation 3.3,1,0.13
+26,GRNBYDRY,by-products,Grains average yielde,Equation 3.3,1,0.17
+27,GRNBYWET,by-products,Barley,NA,1,1
