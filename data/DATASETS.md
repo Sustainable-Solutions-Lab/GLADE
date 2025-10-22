@@ -172,7 +172,7 @@ Brief descriptions of key external datasets used by this project, with links and
 
 - Description: Global map of carbon accumulation potential from natural forest regrowth in forest and savanna biomes. The dataset estimates the rate at which carbon could be sequestered in aboveground and belowground (root) live biomass during the first thirty years of natural forest regrowth, regardless of current land cover or potential for reforestation. Based on a compilation of 13,112 georeferenced measurements combined with 66 environmental covariate layers in a machine learning model (random forest).
 - Website: https://data.globalforestwatch.org/documents/f950ea7878e143258a495daddea90cc0
-- Source publication: Cook-Patton, S. C., Leavitt, S. M., Gibbs, D., Harris, N. L., Lister, K., Anderson-Teixeira, K. J., ... & Griscom, B. W. (2020). Mapping carbon accumulation potential from global natural forest regrowth. *Nature*, 585(7826), 545-550. https://doi.org/10.1038/s41586-020-2686-x
+- Source publication: Cook-Patton, S. C., Leavitt, S. M., Gibbs, D., Harris, N. L., Lister, K., Anderson-Teixeira, K. J., ... & Griscom, B. W. (2020). Mapping carbon accumulation potential from natural forest regrowth. *Nature*, 585(7826), 545-550. https://doi.org/10.1038/s41586-020-2686-x
 - Version/format: GeoTIFF format via direct download; native resolution 1 km.
 - Resolution: Native 1 km (1000 m); this project retrieves data at 1 km and resamples onto the model's 1/12° resource grid (≈9 km at the equator) using an xarray/rasterio script with average resampling.
 - Coverage: Global; all forest and savanna biomes (approximately 16% of global land pixels have valid data).
@@ -190,3 +190,14 @@ Brief descriptions of key external datasets used by this project, with links and
 - Version/format: GLEAM 3.0 Supplement S1; Excel workbook (`GLEAM_3.0_Supplement_S1.xlsx`) retrieved automatically to `data/downloads/gleam_3.0_supplement_s1.xlsx` via the `download_gleam_supplement` Snakemake rule.
 - License/terms (summary): Material may be copied, downloaded, and printed for private study, research and teaching purposes, or for use in non-commercial products or services, provided that appropriate acknowledgement of FAO as the source and copyright holder is given and that FAO's endorsement of users' views, products or services is not implied in any way.
 - Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
+
+## IFA FUBC — Global Fertilizer Use by Crop and Country
+
+- Description: Global dataset on inorganic fertilizer application rates (N, P₂O₅, K₂O) by crop and country based on expert surveys conducted by the International Fertilizer Association (IFA) and partners. The dataset includes historical data from 8 previous reports (1986–2014/15) and the most recent survey for the 2017–18 period, covering fertilizer application rates (kg/ha) and total consumption (thousand tonnes) for major crops worldwide.
+- Website: https://datadryad.org/stash/dataset/doi:10.5061/dryad.2rbnzs7qh
+- Version/format: Version 1 (March 2025); CSV files retrieved automatically via Dryad API to `data/downloads/ifa_fubc_1_to_9_data.csv` (main data) and `data/downloads/ifa_fubc_1_to_9_metadata.csv` (column descriptions) via the `download_ifa_fubc` Snakemake rule.
+- Coverage: Global; 2017–18 period for latest survey, with historical data from 1986 onwards. Includes data for major crops (cereals, oilseeds, roots & tubers, vegetables, fruits, etc.) across countries with significant fertilizer use.
+- License/terms (summary): Creative Commons Zero v1.0 Universal (CC0 1.0). Data is in the public domain and may be used without restriction.
+  - License: https://creativecommons.org/publicdomain/zero/1.0/
+- Citation: Ludemann, C., Gruere, A., Heffer, P., & Dobermann, A. (2022). Global data on fertilizer use by crop and by country [Dataset]. Dryad. https://doi.org/10.5061/dryad.2rbnzs7qh
+- Workflow integration: Retrieved via the `download_ifa_fubc` rule using the Dryad API. Data includes nitrogen (N), phosphate (P₂O₅), and potash (K₂O) application rates and quantities by crop, country, and year, enabling calculation of crop-specific fertilizer application rates for N₂O emissions modeling.

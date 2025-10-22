@@ -16,6 +16,8 @@ primary:
     regional_limit: 0.7 # fraction of each region's potential cropland that is made available.
   fertilizer:
     limit: 2e11 # kg (200 Mt total NPK - realistic global scale)
+    # High-input agriculture N application rates (percentile of global FUBC data)
+    n_percentile: 80  # Use 80th percentile for high-input systems (range: 0-100)
 
 # --- section: emissions ---
 emissions:

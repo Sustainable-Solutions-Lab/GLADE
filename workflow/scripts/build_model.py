@@ -492,22 +492,9 @@ def add_regional_crop_production_links(
     residue_lookup = residue_lookup or {}
 
     for crop in crop_list:
-        if crop not in crops.index.get_level_values(0):
-            logger.warning("Crop '%s' not found in crops data, skipping", crop)
-            continue
-
-        crop_data = crops.loc[crop]
-
-        # Get global production coefficients
-        fert_use = pd.to_numeric(
-            crop_data.loc["fertilizer", "value"], errors="coerce"
-        )  # kg/t
-        fert_use = float(fert_use) if np.isfinite(fert_use) else 0.0
-
-        # Get emission coefficients (if they exist)
-        ch4_emission = 0.0
-        if "ch4" in crop_data.index:
-            ch4_emission = crop_data.loc["ch4", "value"] / 1000.0  # kg/t → t/t
+        # Get fertilizer N application rate (kg N/ha/year) for this crop
+        # If crop not in fertilizer data, default to 0 (no fertilizer requirement)
+        fert_n_rate_kg_per_ha = float(fertilizer_n_rates.get(crop, 0.0))
 
         available_supplies = [
             ws for ws in ("r", "i") if f"{crop}_yield_{ws}" in yields_data
@@ -583,7 +570,7 @@ def add_regional_crop_production_links(
                 "bus1": df["country"].apply(lambda c: f"crop_{crop}_{c}"),
                 "efficiency": df["yield"] * 1e6,  # t/ha → t/Mha
                 "bus3": "fertilizer",
-                "efficiency3": -fert_use / df["yield"],  # kg/t remains kg/t
+                "efficiency3": -fert_n_rate_kg_per_ha * 1e6,  # kg N/ha → kg N/Mha
                 # Link marginal_cost is per unit of bus0 flow (now Mha).
                 "marginal_cost": base_cost,
                 "p_nom_max": df["suitable_area"] / 1e6,  # ha → Mha
@@ -662,14 +649,7 @@ def add_regional_crop_production_links(
 
             emission_outputs: dict[str, np.ndarray] = {}
 
-            if ch4_emission > 0:
-                arr = (ch4_emission / df["yield"]).to_numpy(
-                    dtype=float
-                ) * TONNE_TO_MEGATONNE
-                emission_outputs["ch4"] = emission_outputs.get(
-                    "ch4", np.zeros(len(arr), dtype=float)
-                )
-                emission_outputs["ch4"] += arr
+            # Note: Methane emissions from rice cultivation will be added in a separate module
 
             luc_emissions = (
                 luc_lefs * 1e6 * TONNE_TO_MEGATONNE
@@ -1849,8 +1829,10 @@ def add_animal_product_trade_hubs_and_links(
 if __name__ == "__main__":
     read_csv = functools.partial(pd.read_csv, comment="#")
 
-    # Read crop data
-    crops = read_csv(snakemake.input.crops, index_col=["crop", "param"])
+    # Read fertilizer N application rates (kg N/ha/year for high-input agriculture)
+    fertilizer_n_rates = read_csv(snakemake.input.fertilizer_n_rates, index_col="crop")[
+        "n_rate_kg_per_ha"
+    ].to_dict()
 
     # Read food conversion data
     foods = read_csv(snakemake.input.foods)

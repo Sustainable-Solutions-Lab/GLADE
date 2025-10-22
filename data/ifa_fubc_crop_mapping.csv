@@ -1,0 +1,183 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Mapping from model crops to IFA FUBC dataset crop names
+# Multiple FUBC crop names can map to a single model crop (values will be aggregated)
+# Priority: Use specific crop names from older reports; fallback to aggregated categories from recent reports
+
+model_crop,fubc_crop_name,notes
+wheat,Wheat,Includes all wheat types
+wheat,Wheat (Durum),
+wheat,Wheat (Winter),
+wheat,Wheat (Spring),
+wheat,Wheat/Durum,
+wheat,Wheat/Winter,
+wheat,Wheat/Spring,
+wheat,Native Wheat,
+wheat,Wheat/Native,
+dryland-rice,Rice,Rainfed rice
+dryland-rice,Rice/Rainfed,
+wetland-rice,Rice,Irrigated/paddy rice
+wetland-rice,Rice/Irrigated,
+wetland-rice,"Rice, paddy",
+maize,Maize,Grain maize
+maize,Grain maize,
+maize,Grain Maize,
+maize,maize,Case variant
+maize,"Grain maize, incl. CCM",Includes corn-cob-mix
+maize,"Grain Maize, including CCM",
+maize,Maize & Corn,
+maize,Maize/Grain,
+barley,Barley,All barley types
+barley,Barley (Spring),
+barley,Barley (Winter),
+barley,"Barley (Spring}",Typo variant
+barley,Barley/Summer,
+barley,Barley/Winter,
+barley,"Barley (spring)",
+barley,"Barley (winter)",
+oat,Oat,All oat types
+oat,Oats,
+oat,oat,Case variant
+oat,"Oats (Others)",
+rye,Rye,
+sorghum,Sorghum,Grain sorghum
+sorghum,Sorghum/Grain,
+buckwheat,Other cereals,Aggregated category fallback
+foxtail-millet,Millet,
+foxtail-millet,Other cereals,Fallback to aggregated if millet not available
+pearl-millet,Millet,
+pearl-millet,Millet/Pearl,
+pearl-millet,Other cereals,Fallback to aggregated if millet not available
+soybean,Soybean,
+soybean,Soybeans,
+dry-pea,Pea,Dry peas
+dry-pea,Pea/Dry,
+dry-pea,"Pea, dry",
+dry-pea,Pulses,Fallback to aggregated
+chickpea,Chick pea,
+chickpea,Chickpea,
+chickpea,Pulses,Fallback to aggregated
+cowpea,Cowpea,
+cowpea,Pulses,Fallback to aggregated
+gram,Pulses,Aggregated category
+phaseolus-bean,Bean,Common bean
+phaseolus-bean,Beans,
+phaseolus-bean,bean,Case variant
+phaseolus-bean,Bean/Edible,
+phaseolus-bean,Bean/Dry,
+phaseolus-bean,Edible beans,
+phaseolus-bean,Dry bean,
+phaseolus-bean,Dry beans,
+phaseolus-bean,Pulses,Fallback to aggregated
+pigeonpea,Pulses,Aggregated category fallback
+white-potato,Potato,All potato types excluding sweet potato
+white-potato,Potato (early),
+white-potato,Potato (ware),
+white-potato,"Potato (for starch industry)",
+sweet-potato,Potato (Sweet),
+sweet-potato,Potato/Sweet,
+sweet-potato,"Potato, sweet",
+sweet-potato,Roots/Tubers,Fallback if sweet potato not distinguished
+sweet-potato,Roots/tubers,
+cassava,Cassava,
+cassava,Roots/Tubers,Fallback
+cassava,Roots/tubers,
+yam,Yam,
+yam,Roots/Tubers,Fallback
+yam,Roots/tubers,
+tomato,Tomato,All tomato types
+tomato,Tomato/Fresh,
+tomato,Tomato/Processed,
+tomato,Fresh tomatoes,
+tomato,Processed tomatoes,
+tomato,Vegetables,Fallback to aggregated
+carrot,carrot,
+carrot,Carrot,
+carrot,Vegetables,Fallback
+onion,Onion,
+onion,Onion/Dry,
+onion,Dry onions,
+onion,Vegetables,Fallback
+cabbage,Cabbage,All cabbage types
+cabbage,Cabbage/Fresh,
+cabbage,Cabbage/Processed,
+cabbage,Fresh cabbage,
+cabbage,Processed cabbage,
+cabbage,Cabbage/Chinese,
+cabbage,Chinese cabbage,
+cabbage,Vegetables,Fallback
+banana,Banana,Includes plantain where not distinguished
+banana,Plantain,
+banana,Banana/Plantain,
+banana,Plantain and banana,
+citrus,Citrus,All citrus types
+citrus,citrus Fruits,
+citrus,Citrus Fruits,
+citrus,Citrus fruits,
+citrus,Citrus fruit,
+citrus,Citrus (Other),
+citrus,Orange,
+citrus,Lemon,
+citrus,Lime,
+citrus,Grapefruit,
+citrus,Tangerine,
+citrus,Tangelo,
+citrus,Temple,
+citrus,"Fruit primary and citrus fruits and treenuts",Aggregated recent report
+coconut,Coconut,
+coconut,coconut,Case variant
+sunflower,Sunflower,
+sunflower,sunflower,Case variant
+sunflower,Sunflower seed,
+sunflower,"Sunflower, soya, linseed",When not distinguished
+sunflower,"Sunflower. soya, linseed",
+sunflower,"Sunflower,soybean,linseed",
+sunflower,Other oil crops,Fallback to aggregated
+sunflower,Other oil seed,
+sunflower,Oilseeds,
+rapeseed,Rapeseed,
+rapeseed,Oilseed rape,
+rapeseed,Oilseed (rape),
+rapeseed,"Rapeseed & Canola",
+rapeseed,Rapeseed/Winter,
+rapeseed,Other oil crops,Fallback
+rapeseed,Other oil seed,
+rapeseed,Oilseeds,
+groundnut,Groundnut,
+groundnut,Peanut,
+groundnut,Peanuts,
+groundnut,Other oil crops,Fallback
+groundnut,Oilseeds,
+sesame,Sesame,
+sesame,Other oil crops,Fallback
+sesame,Other oil seed,
+sesame,Oilseeds,
+oil-palm,Oil-Palm,
+oil-palm,Oil-palm,
+oil-palm,Oil Palm,
+oil-palm,Oil palm,
+oil-palm,Other oil crops,Fallback
+olive,Olive,
+olive,Other oil crops,Fallback
+sugarcane,Sugar Cane,
+sugarcane,Sugar cane,
+sugarcane,sugar Cane,
+sugarcane,sugar cane,
+sugarcane,Sugarcane,
+sugarcane,Sugar crops,Aggregated fallback
+sugarbeet,Sugar Beet,
+sugarbeet,Sugar beet,
+sugarbeet,sugar Beet,
+sugarbeet,Sugar crops,Aggregated fallback
+alfalfa,Alfalfa,
+alfalfa,Lucerne,
+alfalfa,Fodder (legumes),
+alfalfa,Fodder/Leguminous,
+alfalfa,Leguminous Fodder,
+alfalfa,Leguminous fodder,
+alfalfa,Grassland,Fallback to aggregated
+biomass-sorghum,Sorghum,When not distinguished from grain sorghum
+biomass-sorghum,Grassland,Fallback - biomass sorghum often used as fodder
+biomass-sorghum,Fodder,

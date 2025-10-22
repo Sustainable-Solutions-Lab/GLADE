@@ -144,6 +144,26 @@ rule prepare_gleam_feed_properties:
         "scripts/prepare_gleam_feed_properties.py"
 
 
+rule prepare_fertilizer_application_rates:
+    input:
+        fubc_data="data/downloads/ifa_fubc_1_to_9_data.csv",
+        mapping="data/ifa_fubc_crop_mapping.csv",
+    output:
+        "processing/{name}/fertilizer_application_rates.csv",
+    script:
+        "scripts/prepare_fertilizer_application_rates.py"
+
+
+rule derive_global_fertilizer_rates:
+    input:
+        fertilizer_rates="processing/{name}/fertilizer_application_rates.csv",
+    params:
+        n_percentile=config["primary"]["fertilizer"]["n_percentile"],
+        crops=config["crops"],
+    output:
+        "processing/{name}/global_fertilizer_n_rates.csv",
+    script:
+        "scripts/derive_global_fertilizer_rates.py"
 
 
 rule categorize_feeds:
@@ -457,6 +477,7 @@ rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
+        fertilizer_n_rates="processing/{name}/global_fertilizer_n_rates.csv",
         foods="data/foods.csv",
         ruminant_feed_categories=f"processing/{name}/ruminant_feed_categories.csv",
         ruminant_feed_mapping=f"processing/{name}/ruminant_feed_mapping.csv",

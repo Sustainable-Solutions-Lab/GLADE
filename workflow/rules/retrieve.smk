@@ -278,6 +278,25 @@ rule download_forest_carbon_accumulation_1km:
         """
 
 
+rule download_ifa_fubc:
+    output:
+        data="data/downloads/ifa_fubc_1_to_9_data.csv",
+        metadata="data/downloads/ifa_fubc_1_to_9_metadata.csv",
+    params:
+        data_file_id=3940355,
+        metadata_file_id=3940358,
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.data})"
+        curl -L --fail --progress-bar \
+            -o "{output.data}" \
+            "https://datadryad.org/api/v2/files/{params.data_file_id}/download"
+        curl -L --fail --progress-bar \
+            -o "{output.metadata}" \
+            "https://datadryad.org/api/v2/files/{params.metadata_file_id}/download"
+        """
+
+
 # Conditional rule: retrieve nutrition data from USDA if enabled in config
 if config["data"]["usda"]["retrieve_nutrition"]:
 
