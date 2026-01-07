@@ -49,6 +49,241 @@ from workflow.scripts.snakemake_utils import apply_scenario_config  # noqa: E402
 pypsa.options.api.new_components_api = True
 
 
+def _compute_inferred_multi_cropping_areas(
+    harvested_area_data: dict[str, pd.DataFrame],
+    combinations: dict[str, dict],
+) -> pd.DataFrame:
+    """Compute multi-cropping areas inferred from CROPGRIDS cropping intensity.
+
+    For crops with cropping_intensity > 1, we infer that (CI - 1) * crop_area
+    is being multi-cropped. This function allocates that excess area to
+    configured multi-cropping combinations.
+
+    Returns a DataFrame with columns:
+        combination, region, resource_class, water_supply, inferred_area_ha
+    """
+    from collections import defaultdict
+
+    # Build lookup: crop -> list of combinations containing that crop
+    crop_to_combos: dict[str, list[str]] = defaultdict(list)
+    combo_crops: dict[str, list[str]] = {}
+
+    for name, entry in combinations.items():
+        crops_list = [str(c) for c in entry["crops"]]
+        combo_crops[name] = crops_list
+        for crop in set(crops_list):
+            crop_to_combos[crop].append(name)
+
+    # Extract excess area per crop/region/class/water_supply
+    excess_data: dict[tuple[str, str, int, str], float] = {}
+    for key, df in harvested_area_data.items():
+        # Key format: "{crop}_harvested_{ws}"
+        parts = key.replace("_harvested_", "_").rsplit("_", 1)
+        if len(parts) != 2:
+            continue
+        crop, ws = parts
+
+        if "cropping_intensity" not in df.columns or "crop_area" not in df.columns:
+            continue
+
+        df = df.reset_index()
+        for _, row in df.iterrows():
+            ci = row.get("cropping_intensity", 1.0)
+            crop_area = row.get("crop_area", 0.0)
+            if pd.isna(ci) or pd.isna(crop_area) or ci <= 1.0 or crop_area <= 0:
+                continue
+            excess = (ci - 1.0) * crop_area
+            region = str(row["region"])
+            rc = int(row["resource_class"])
+            excess_data[(crop, region, rc, ws)] = excess
+
+    if not excess_data:
+        return pd.DataFrame(
+            columns=[
+                "combination",
+                "region",
+                "resource_class",
+                "water_supply",
+                "inferred_area_ha",
+            ]
+        )
+
+    # Allocate excess to combinations
+    # Priority: double-crop same crop > mixed combinations
+    records = []
+    allocated: dict[tuple[str, str, int, str], float] = defaultdict(float)
+
+    # First pass: allocate to same-crop combinations (e.g., double_rice)
+    for combo_name, crops_list in combo_crops.items():
+        unique_crops = set(crops_list)
+        if len(unique_crops) != 1:
+            continue  # Not a same-crop combination
+
+        crop = next(iter(unique_crops))
+        for (c, region, rc, ws), excess in excess_data.items():
+            if c != crop:
+                continue
+            remaining = excess - allocated[(crop, region, rc, ws)]
+            if remaining <= 0:
+                continue
+            # Allocate all remaining excess to this same-crop combination
+            allocated[(crop, region, rc, ws)] += remaining
+            records.append(
+                {
+                    "combination": combo_name,
+                    "region": region,
+                    "resource_class": rc,
+                    "water_supply": ws,
+                    "inferred_area_ha": remaining,
+                }
+            )
+
+    # Second pass: allocate to mixed-crop combinations (e.g., rice_wheat)
+    for combo_name, crops_list in combo_crops.items():
+        unique_crops = set(crops_list)
+        if len(unique_crops) == 1:
+            continue  # Already handled
+
+        # For mixed combinations, allocate min(excess of all crops)
+        # Group by region/rc/ws
+        location_excess: dict[tuple[str, int, str], dict[str, float]] = defaultdict(
+            dict
+        )
+        for crop in unique_crops:
+            for (c, region, rc, ws), excess in excess_data.items():
+                if c != crop:
+                    continue
+                remaining = excess - allocated[(crop, region, rc, ws)]
+                if remaining > 0:
+                    location_excess[(region, rc, ws)][crop] = remaining
+
+        for (region, rc, ws), crop_excess in location_excess.items():
+            if set(crop_excess.keys()) != unique_crops:
+                continue  # Not all crops have excess at this location
+            alloc = min(crop_excess.values())
+            if alloc <= 0:
+                continue
+            for crop in unique_crops:
+                allocated[(crop, region, rc, ws)] += alloc
+            records.append(
+                {
+                    "combination": combo_name,
+                    "region": region,
+                    "resource_class": rc,
+                    "water_supply": ws,
+                    "inferred_area_ha": alloc,
+                }
+            )
+
+    return pd.DataFrame(records)
+
+
+def _cap_multi_cropping_areas(
+    gaez_areas: pd.DataFrame,
+    inferred_areas: pd.DataFrame,
+) -> pd.DataFrame:
+    """Replace GAEZ eligible areas with CROPGRIDS-inferred multi-cropping areas.
+
+    For combinations in both GAEZ and inferred: use inferred area
+    For combinations only in inferred: add them (e.g., double_rice not in GAEZ)
+    For combinations only in GAEZ: remove them (no actual multi-cropping)
+
+    Returns a DataFrame with structure matching gaez_areas.
+    """
+    if inferred_areas.empty:
+        # No inferred data, return empty
+        return gaez_areas.iloc[:0].copy()
+
+    # Aggregate inferred areas by combination/region/resource_class/water_supply
+    inferred_agg = (
+        inferred_areas.groupby(
+            ["combination", "region", "resource_class", "water_supply"]
+        )["inferred_area_ha"]
+        .sum()
+        .reset_index()
+        .rename(columns={"inferred_area_ha": "eligible_area_ha"})
+    )
+
+    # Merge with GAEZ to get water_requirement_m3_per_ha where available
+    key_cols = ["combination", "region", "resource_class", "water_supply"]
+    if "water_requirement_m3_per_ha" in gaez_areas.columns:
+        water_req = gaez_areas[*key_cols, "water_requirement_m3_per_ha"].copy()
+        result = inferred_agg.merge(water_req, on=key_cols, how="left")
+        result["water_requirement_m3_per_ha"] = result[
+            "water_requirement_m3_per_ha"
+        ].fillna(0.0)
+    else:
+        result = inferred_agg.copy()
+        result["water_requirement_m3_per_ha"] = 0.0
+
+    # Ensure same column order as gaez_areas
+    result = result[gaez_areas.columns.intersection(result.columns)]
+
+    return result[result["eligible_area_ha"] > 0]
+
+
+def _subtract_multi_cropping_from_harvested(
+    harvested_area_data: dict[str, pd.DataFrame],
+    inferred_areas: pd.DataFrame,
+    combinations: dict[str, dict],
+) -> dict[str, pd.DataFrame]:
+    """Subtract inferred multi-cropping areas from single-crop harvested areas.
+
+    This prevents double-counting: the multi-cropping links handle the extra
+    production from CI > 1, so we must reduce the single-crop harvested areas
+    by the corresponding inferred multi-cropping areas.
+
+    Returns a modified copy of harvested_area_data with reduced harvested_area values.
+    """
+    if inferred_areas.empty:
+        return harvested_area_data
+
+    # Build lookup: combination -> unique crops
+    combo_crops: dict[str, set[str]] = {}
+    for name, entry in combinations.items():
+        combo_crops[name] = {str(c) for c in entry["crops"]}
+
+    # Build reduction lookup: (crop, region, resource_class, water_supply) -> reduction_ha
+    reductions: dict[tuple[str, str, int, str], float] = {}
+    for _, row in inferred_areas.iterrows():
+        combo = row["combination"]
+        region = str(row["region"])
+        rc = int(row["resource_class"])
+        ws = row["water_supply"]
+        area = row["inferred_area_ha"]
+
+        # Subtract from each crop in the combination
+        for crop in combo_crops.get(combo, set()):
+            key = (crop, region, rc, ws)
+            reductions[key] = reductions.get(key, 0.0) + area
+
+    # Apply reductions to harvested_area_data
+    result = {}
+    for key, df in harvested_area_data.items():
+        # Key format: "{crop}_harvested_{ws}"
+        parts = key.replace("_harvested_", "_").rsplit("_", 1)
+        if len(parts) != 2:
+            result[key] = df.copy()
+            continue
+        crop, ws = parts
+
+        df = df.copy()
+        if "harvested_area" in df.columns:
+            df = df.reset_index()
+            for i, row in df.iterrows():
+                region = str(row["region"])
+                rc = int(row["resource_class"])
+                red_key = (crop, region, rc, ws)
+                reduction = reductions.get(red_key, 0.0)
+                if reduction > 0:
+                    old_val = df.at[i, "harvested_area"]
+                    df.at[i, "harvested_area"] = max(0.0, old_val - reduction)
+            df = df.set_index(["region", "resource_class"])
+        result[key] = df
+
+    return result
+
+
 if __name__ == "__main__":
     # Configure logging
     logger = setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)
@@ -232,6 +467,50 @@ if __name__ == "__main__":
 
     multi_cropping_area_df = read_csv(snakemake.input.multi_cropping_area)
     multi_cropping_cycle_df = read_csv(snakemake.input.multi_cropping_yields)
+
+    # When using inferred multi-cropping in validation mode, cap GAEZ eligible areas
+    # by the actual multi-cropped area implied by CROPGRIDS cropping intensity.
+    if enable_inferred_multi_cropping and use_actual_production and harvested_area_data:
+        inferred_areas = _compute_inferred_multi_cropping_areas(
+            harvested_area_data,
+            dict(snakemake.params.multiple_cropping),
+        )
+        if not inferred_areas.empty and not multi_cropping_area_df.empty:
+            # Filter inferred areas to only combinations with cycle_yields data
+            # (e.g., double_rice may be inferred but has no yields in GAEZ)
+            combos_with_yields = set(multi_cropping_cycle_df["combination"].unique())
+            inferred_before = len(inferred_areas)
+            inferred_areas = inferred_areas[
+                inferred_areas["combination"].isin(combos_with_yields)
+            ]
+            if len(inferred_areas) < inferred_before:
+                skipped_combos = (
+                    set(
+                        _compute_inferred_multi_cropping_areas(
+                            harvested_area_data,
+                            dict(snakemake.params.multiple_cropping),
+                        )["combination"].unique()
+                    )
+                    - combos_with_yields
+                )
+                logger.warning(
+                    "Skipping inferred multi-cropping for combinations without cycle yields: %s",
+                    ", ".join(sorted(skipped_combos)),
+                )
+
+            if not inferred_areas.empty:
+                # Cap GAEZ eligible areas by inferred areas from CROPGRIDS
+                multi_cropping_area_df = _cap_multi_cropping_areas(
+                    multi_cropping_area_df, inferred_areas
+                )
+                logger.info(
+                    "Capped multi-cropping areas to CROPGRIDS-inferred values: %.2f Mha total",
+                    multi_cropping_area_df["eligible_area_ha"].sum() / 1e6,
+                )
+                # NOTE: We don't subtract inferred areas from harvested areas because:
+                # - Single-crop yields already skip CI multiplier (via skip_cropping_intensity_multiplier)
+                # - Multi-crop links provide the extra capacity from CI > 1
+                # - Subtracting would create production deficits that can't be filled
 
     luc_lef_lookup: dict[tuple[str, int, str, str], float] = {}
     ch4_to_co2_factor = float(snakemake.params.emissions["ch4_to_co2_factor"])
@@ -495,6 +774,25 @@ if __name__ == "__main__":
         rice_cfg["rainfed_wetland_rice_ch4_scaling_factor"]
     )
 
+    # Multi-cropping can be enabled in two modes:
+    # 1. Standard mode: when not using actual production (optimization)
+    # 2. Inferred mode: in validation with CROPGRIDS data (experimental)
+    enable_multiple_cropping = bool(snakemake.params.multiple_cropping) and (
+        (
+            not use_actual_production
+            and not validation_cfg["production_stability"]["enabled"]
+        )
+        or enable_inferred_multi_cropping
+    )
+    # In validation mode with inferred multi-cropping, the multi-crop links handle
+    # the extra production from cropping_intensity > 1, so we skip the CI multiplier
+    # on single-crop yields to avoid double-counting.
+    use_fixed_multi_cropping = (
+        enable_multiple_cropping
+        and enable_inferred_multi_cropping
+        and use_actual_production
+    )
+
     # Crop production
     crops.add_spared_land_links(n, baseline_land_df, luc_lef_lookup)
     crops.add_regional_crop_production_links(
@@ -512,21 +810,12 @@ if __name__ == "__main__":
         residue_lookup=residue_lookup,
         harvested_area_data=harvested_area_data if use_actual_production else None,
         use_actual_production=use_actual_production,
-    )
-    # Multi-cropping can be enabled in two modes:
-    # 1. Standard mode: when not using actual production (optimization)
-    # 2. Inferred mode: in validation with CROPGRIDS data (experimental)
-    enable_multiple_cropping = bool(snakemake.params.multiple_cropping) and (
-        (
-            not use_actual_production
-            and not validation_cfg["production_stability"]["enabled"]
-        )
-        or enable_inferred_multi_cropping
+        skip_cropping_intensity_multiplier=use_fixed_multi_cropping,
     )
     if enable_multiple_cropping:
-        if enable_inferred_multi_cropping and use_actual_production:
+        if use_fixed_multi_cropping:
             logger.info(
-                "Enabling inferred multi-cropping in validation mode (experimental)"
+                "Enabling inferred multi-cropping in validation mode with fixed areas"
             )
             if harvest_area_source != "cropgrids":
                 logger.warning(
@@ -542,6 +831,7 @@ if __name__ == "__main__":
             crop_costs_per_planting,
             fertilizer_n_rates,
             residue_lookup,
+            use_fixed_areas=use_fixed_multi_cropping,
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")

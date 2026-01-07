@@ -36,12 +36,20 @@ def add_regional_crop_production_links(
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     harvested_area_data: Mapping[str, pd.DataFrame] | None = None,
     use_actual_production: bool = False,
+    skip_cropping_intensity_multiplier: bool = False,
 ) -> None:
     """Add crop production links per region/resource class and water supply.
 
     Rainfed yields must be present for every crop; irrigated yields are used when
     provided by the preprocessing pipeline. Output links produce into the same
     crop bus per country; link names encode supply type (i/r) and resource class.
+
+    Parameters
+    ----------
+    skip_cropping_intensity_multiplier : bool
+        When True, do not multiply yields by cropping_intensity even when
+        use_actual_production is True. Use this when explicit multi-cropping
+        links handle the additional production from multi-cropped land.
     """
     residue_lookup = residue_lookup or {}
     harvested_area_data = harvested_area_data or {}
@@ -114,9 +122,13 @@ def add_regional_crop_production_links(
                     df["cropping_intensity"] = 1.0
 
                 # CROPGRIDS provides both crop_area (physical land) and harvested_area.
-                # GAEZ only provides harvested_area. Use crop_area when available to
-                # avoid double-counting multi-cropped land.
-                if harvest_area_source == "cropgrids":
+                # GAEZ only provides harvested_area.
+                # - When NOT skipping CI multiplier: use crop_area (yields will be * CI)
+                # - When skipping CI multiplier: use harvested_area (yields already account for multi-cropping)
+                if (
+                    harvest_area_source == "cropgrids"
+                    and not skip_cropping_intensity_multiplier
+                ):
                     area_series = df["crop_area"]
                 else:
                     area_series = df["harvested_area"]
@@ -181,7 +193,9 @@ def add_regional_crop_production_links(
 
             # Land bus flows are in Mha; yields (t/ha) numerically equal Mt/Mha so
             # the efficiency terms remain the raw yield values.
-            if use_actual_production:
+            # When multi-cropping links are enabled, they handle the extra production
+            # from cropping_intensity > 1, so we skip the multiplier here.
+            if use_actual_production and not skip_cropping_intensity_multiplier:
                 df["yield"] = df["yield"] * df["cropping_intensity"]
 
             link_params = {
@@ -311,8 +325,16 @@ def add_multi_cropping_links(
     crop_costs_per_planting: Mapping[str, float],
     fertilizer_n_rates: Mapping[str, float],
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
+    use_fixed_areas: bool = False,
 ) -> None:
-    """Add multi-cropping production links with a vectorised workflow."""
+    """Add multi-cropping production links with a vectorised workflow.
+
+    Parameters
+    ----------
+    use_fixed_areas : bool
+        When True (validation mode), set p_nom_extendable=False and fix link
+        capacities to eligible_area_ha. Default False allows optimization.
+    """
 
     if eligible_area.empty or cycle_yields.empty:
         logger.info("No multi-cropping combinations with positive area; skipping")
@@ -425,8 +447,13 @@ def add_multi_cropping_links(
         * 1e6
         * constants.USD_TO_BNUSD
     )
-    base["p_nom_extendable"] = True
+    base["p_nom_extendable"] = not use_fixed_areas
     base["p_nom_max"] = base["eligible_area_ha"] / 1e6
+    if use_fixed_areas:
+        # In validation mode, fix multi-cropping to observed/inferred values
+        base["p_nom"] = base["eligible_area_ha"] / 1e6
+        base["p_nom_min"] = base["eligible_area_ha"] / 1e6
+        base["p_min_pu"] = 1.0
 
     residue_records: list[dict[str, object]] = []
     for (crop, water, region, res_class), feed_dict in residue_lookup.items():
@@ -680,6 +707,8 @@ def add_multi_cropping_links(
         "p_nom_max",
         "marginal_cost",
     ]
+    if use_fixed_areas:
+        component_cols.extend(["p_nom", "p_nom_min", "p_min_pu"])
     link_df = link_df[component_cols]
     link_df = link_df.join(bus_wide, how="left").join(eff_wide, how="left")
 

@@ -51,8 +51,12 @@ def add_feed_slack_generators(
         logger.info("No feed buses found; skipping feed slack")
         return
 
-    # Only add positive slack for ruminant grassland (to avoid inflating N2O via protein feed)
+    # Only add positive slack for ruminant grassland and monogastric energy feed.
+    # This keeps slack away from high-protein feeds while still allowing a
+    # flexible monogastric-compatible pool.
     grassland_buses = [bus for bus in feed_buses if "ruminant_grassland" in bus]
+    mono_energy_buses = [bus for bus in feed_buses if "monogastric_energy" in bus]
+    positive_slack_buses = grassland_buses + mono_energy_buses
 
     # Add carriers for slack
     n.carriers.add(
@@ -60,18 +64,18 @@ def add_feed_slack_generators(
         unit="Mt",
     )
 
-    # Add positive slack generators only for grassland (provide feed when insufficient)
-    if grassland_buses:
-        gen_pos_names = [f"slack_positive_feed_{bus}" for bus in grassland_buses]
+    # Add positive slack generators for the selected feed buses (provide feed when insufficient)
+    if positive_slack_buses:
+        gen_pos_names = [f"slack_positive_feed_{bus}" for bus in positive_slack_buses]
         n.generators.add(
             gen_pos_names,
-            bus=grassland_buses,
+            bus=positive_slack_buses,
             carrier="slack_positive_feed",
             p_nom_extendable=True,
             marginal_cost=marginal_cost,
         )
         logger.info(
-            "Added %d positive feed slack generators (grassland only)",
+            "Added %d positive feed slack generators (grassland + monogastric energy)",
             len(gen_pos_names),
         )
 
