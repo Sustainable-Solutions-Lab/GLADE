@@ -52,11 +52,35 @@ def harvested_area_model_inputs(_wildcards):
     return inputs
 
 
+def production_stability_build_inputs(wildcards):
+    """Return production stability baseline inputs when penalty mode is l1/quadratic."""
+    stability_cfg = get_effective_config(wildcards.scenario)["validation"][
+        "production_stability"
+    ]
+    if not stability_cfg["enabled"]:
+        return {}
+    if stability_cfg["penalty_mode"] not in ("l1", "quadratic"):
+        return {}
+
+    inputs = {}
+    if stability_cfg["crops"]["enabled"]:
+        inputs["crop_production_baseline"] = (
+            f"processing/{wildcards.name}/faostat_crop_production.csv"
+        )
+        inputs["faostat_crop_item_map"] = "data/faostat_crop_item_map.csv"
+    if stability_cfg["animals"]["enabled"]:
+        inputs["animal_production_baseline"] = (
+            f"processing/{wildcards.name}/faostat_animal_production.csv"
+        )
+    return inputs
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
+        unpack(production_stability_build_inputs),
         fertilizer_n_rates="processing/{name}/global_fertilizer_n_rates.csv",
         foods="data/foods.csv",
         moisture_content="data/crop_moisture_content.csv",
@@ -102,6 +126,7 @@ rule build_model:
                 "land.py",
                 "nutrition.py",
                 "primary_resources.py",
+                "production_stability.py",
                 "trade.py",
                 "utils.py",
             ],
@@ -135,6 +160,9 @@ rule build_model:
         grazing=lambda w: get_effective_config(w.scenario)["grazing"],
         health_reference_year=lambda w: get_effective_config(w.scenario)["health"][
             "reference_year"
+        ],
+        production_stability=lambda w: get_effective_config(w.scenario)["validation"][
+            "production_stability"
         ],
         netcdf=lambda w: get_effective_config(w.scenario)["netcdf"],
         # Only used to force correct reruns when scenario_defs changes.

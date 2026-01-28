@@ -26,6 +26,7 @@ from workflow.scripts.build_model import (
     land,
     nutrition,
     primary_resources,
+    production_stability,
     trade,
     utils,
 )
@@ -685,6 +686,39 @@ if __name__ == "__main__":
         snakemake.input.health_cluster_cause,
         snakemake.config["health"],
     )
+
+    # Production stability stores (for l1/quadratic penalty modes)
+    stability_cfg = snakemake.params.production_stability
+    if stability_cfg["enabled"] and stability_cfg["penalty_mode"] in (
+        "l1",
+        "quadratic",
+    ):
+        crop_baseline = None
+        crop_to_fao_item: dict[str, str] = {}
+        animal_baseline = None
+
+        if stability_cfg["crops"]["enabled"]:
+            crop_baseline = read_csv(snakemake.input.crop_production_baseline)
+            fao_map_df = read_csv(snakemake.input.faostat_crop_item_map)
+            crop_to_fao_item = dict(
+                zip(
+                    fao_map_df["crop"].astype(str),
+                    fao_map_df["faostat_item"].astype(str),
+                )
+            )
+
+        if stability_cfg["animals"]["enabled"]:
+            animal_baseline = read_csv(snakemake.input.animal_production_baseline)
+
+        production_stability.add_production_stability_stores(
+            n,
+            stability_cfg,
+            crop_baseline,
+            animal_baseline,
+            crop_to_fao_item,
+            food_to_group,
+            food_loss_waste,
+        )
 
     # Compute and store health cluster populations from country populations
     cluster_map_df = read_csv(snakemake.input.health_clusters)

@@ -28,6 +28,7 @@ Categories extracted:
 - Slack penalties: Constraint violation penalties (ideally zero)
 - Resource supply: Land and resource generators (usually zero cost)
 - Nutrient tracking: Nutrient stores (usually zero cost)
+- Production stability: Penalty for deviating from baseline production (L1 or quadratic)
 
 All costs are in billion USD, matching the model's internal units.
 
@@ -159,6 +160,8 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
                 categories.append("Fertilizer")
             elif carrier == "spared_land":
                 categories.append("Crop production")
+            elif carrier == "production_stability":
+                categories.append("Production stability")
             else:
                 raise ValueError(
                     f"Unrecognized Store carrier: '{carrier}' for store '{name}'. "
@@ -177,8 +180,9 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     """Extract objective function breakdown by cost category.
 
     Uses PyPSA's statistics module to compute capex and opex contributions
-    grouped by high-level categories. Validates that the sum approximately
-    matches the reported model objective.
+    grouped by high-level categories. Production stability penalties are
+    automatically captured via the marginal_cost_storage (L1) or
+    marginal_cost_quadratic (quadratic) attributes on stability stores.
 
     Parameters
     ----------
@@ -218,10 +222,14 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     # Filter out negligible categories
     total = total[total.abs() > 1e-9]
 
-    # Validate against model objective
+    # Production stability penalties are now captured via PyPSA statistics
+    # through the marginal_cost_storage (L1) or marginal_cost_quadratic (quadratic)
+    # attributes on stability stores with carrier="production_stability"
+
     extracted_sum = total.sum()
     model_objective = n.objective
 
+    # Validate against model objective
     if model_objective != 0:
         rel_error = abs(extracted_sum - model_objective) / abs(model_objective)
         if rel_error > OBJECTIVE_RTOL:
@@ -236,14 +244,6 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
             raise ValueError(
                 f"Model objective is zero but extracted costs sum to {extracted_sum:.6f}"
             )
-
-    logger.info(
-        "Objective breakdown: extracted %.4f bn USD across %d categories "
-        "(model objective: %.4f bn USD)",
-        extracted_sum,
-        len(total),
-        model_objective,
-    )
 
     # Convert to single-row DataFrame
     result = total.to_frame().T
@@ -269,6 +269,7 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
         "Emissions aggregation": "emissions_aggregation",
         "Land use": "land_use",
         "Water": "water",
+        "Production stability": "production_stability",
     }
     result = result.rename(columns=column_map)
 
@@ -276,7 +277,6 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
 
 
 def main() -> None:
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     # Load network
@@ -285,12 +285,6 @@ def main() -> None:
 
     # Extract breakdown
     breakdown = extract_objective_breakdown(n)
-
-    # Log category values
-    for col in breakdown.columns:
-        value = breakdown[col].iloc[0]
-        if abs(value) > 1e-6:
-            logger.info("  %s: %.4f bn USD", col, value)
 
     # Write output
     output_path = Path(snakemake.output.objective_breakdown)
