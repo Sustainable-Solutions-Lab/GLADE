@@ -123,6 +123,10 @@ def _extract_multi_crop_production(n: pypsa.Network) -> pd.DataFrame:
         port_df = port_df[is_crop_bus.values & (port_df["production_mt"] > 0)]
         port_dfs.append(port_df)
 
+    # Filter out empty DataFrames to avoid FutureWarning on concat
+    port_dfs = [df for df in port_dfs if not df.empty]
+    if not port_dfs:
+        return pd.DataFrame(columns=["crop", "region", "country", "production_mt"])
     df = pd.concat(port_dfs, ignore_index=True)
 
     return df.groupby(["crop", "region", "country"], as_index=False)[
@@ -186,6 +190,10 @@ def extract_crop_production(n: pypsa.Network) -> pd.DataFrame:
     multi_production = _extract_multi_crop_production(n)
     results.append(multi_production)
 
+    # Filter out empty DataFrames to avoid FutureWarning on concat
+    results = [r for r in results if not r.empty]
+    if not results:
+        return pd.DataFrame(columns=["crop", "region", "country", "production_mt"])
     df = pd.concat(results, ignore_index=True)
 
     # Aggregate by crop, region, country (in case of duplicates)
@@ -259,7 +267,10 @@ def _extract_multi_crop_land_use(n: pypsa.Network) -> pd.DataFrame:
         )
         port_dfs.append(port_df)
 
-    # Stack all ports
+    # Stack all ports; filter out empty DataFrames to avoid FutureWarning
+    port_dfs = [df for df in port_dfs if not df.empty]
+    if not port_dfs:
+        return pd.DataFrame(columns=columns)
     all_ports = pd.concat(port_dfs, ignore_index=True)
 
     # Filter to valid crop buses with positive efficiency
@@ -343,6 +354,10 @@ def extract_land_use(n: pypsa.Network) -> pd.DataFrame:
     multi_land = _extract_multi_crop_land_use(n)
     results.append(multi_land)
 
+    # Filter out empty DataFrames to avoid FutureWarning on concat
+    results = [r for r in results if not r.empty]
+    if not results:
+        return pd.DataFrame(columns=columns)
     df = pd.concat(results, ignore_index=True)
 
     # Aggregate by all dimensions
