@@ -142,22 +142,22 @@ The aggregation process:
    * ``crop``: Crop name
    * ``area_ha``: Available area in hectares
 
-Land Limit Dataset Options
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Irrigated Area Source
+~~~~~~~~~~~~~~~~~~~~~
 
-The configuration parameter ``aggregation.land_limit_dataset`` controls how land availability is determined:
+The configuration parameter ``aggregation.irrigated_area_source`` controls how irrigated land availability is determined:
 
-* **"suitability"** (default): Use GAEZ suitability rasters per crop and water supply
+* **"current"** (default): Use GAEZ "land equipped for irrigation" dataset
 
-  * More conservative: only counts land GAEZ deems suitable
-  * Crop-specific: different crops have different suitable area
+  * Uniform: all crops share the same irrigated area
+  * Represents land that is currently equipped for irrigation
 
-* **"irrigated"**: Use irrigated cropland share for all crops
+* **"potential"**: Use GAEZ irrigated suitability rasters per crop
 
-  * Simpler: all crops have the same suitable area per water supply
-  * Based on GAEZ's "land equipped for irrigation" dataset
+  * Crop-specific: different crops have different potential irrigated area
+  * More conservative: only counts land GAEZ deems suitable for irrigated production of each crop
 
-The "irrigated" option is typically used when you want a uniform land base across all crops, while "suitability" is more realistic but creates more heterogeneity.
+The "current" option provides a simpler, uniform land base across all crops, while "potential" is more realistic but creates crop-specific heterogeneity in irrigated land availability.
 
 Grazing-only Land
 -----------------

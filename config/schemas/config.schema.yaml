@@ -892,7 +892,7 @@ properties:
       - simplify_tolerance_km
       - simplify_min_area_km
       - resource_class_quantiles
-      - land_limit_dataset
+      - irrigated_area_source
     additionalProperties: false
     properties:
       regions:
@@ -927,10 +927,10 @@ properties:
           minimum: 0
           maximum: 1
         description: "Quantiles for resource class binning"
-      land_limit_dataset:
+      irrigated_area_source:
         type: string
-        enum: [suitability, irrigated]
-        description: "Crop land-use limitation source for yield aggregation"
+        enum: [current, potential]
+        description: "Data source for irrigated land area: 'current' uses GAEZ land equipped for irrigation, 'potential' uses crop-specific irrigated suitability rasters"
 
   countries:
     type: array

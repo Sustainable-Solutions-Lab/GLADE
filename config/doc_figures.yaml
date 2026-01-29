@@ -13,7 +13,7 @@ aggregation:
   regions:
     target_count: 250  # Reduced from 400 for faster processing
   resource_class_quantiles: [0.33, 0.67]  # Just 3 classes instead of 4
-  land_limit_dataset: "irrigated"
+  irrigated_area_source: "current"
 
 # Fewer trade hubs for simpler network visualization
 trade:

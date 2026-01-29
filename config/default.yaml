@@ -484,10 +484,10 @@ aggregation:
   simplify_tolerance_km: 5
   simplify_min_area_km: 25
   resource_class_quantiles: [0.25, 0.5, 0.75]
-  # Crop land-use limitation source used when aggregating yields by region/resource class.
-  # - "suitability": limit area using GAEZ suitability rasters per water supply (irrigated/rainfed)
-  # - "irrigated": limit area using the irrigated cropland share (for irrigated) and its complement (for rainfed)
-  land_limit_dataset: "irrigated"
+  # Data source for determining irrigated land area when aggregating by region/resource class.
+  # - "current": use GAEZ "land equipped for irrigation" dataset (same area for all crops)
+  # - "potential": use GAEZ irrigated suitability rasters (crop-specific potential area)
+  irrigated_area_source: "current"
 
 # --- section: countries ---
 countries:

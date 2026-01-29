@@ -91,7 +91,7 @@ if __name__ == "__main__":
     si_files: list[str] = list(snakemake.input.si)  # type: ignore[attr-defined]
     irrigated_share_path: str | None = getattr(snakemake.input, "irrigated_share", None)  # type: ignore[attr-defined]
 
-    land_limit_mode: str = snakemake.params.land_limit_dataset  # type: ignore[name-defined]
+    irrigated_area_source: str = snakemake.params.irrigated_area_source  # type: ignore[name-defined]
 
     # Load classes
     ds = xr.load_dataset(classes_nc)
@@ -193,15 +193,11 @@ if __name__ == "__main__":
     df_r = aggregate_area(area_r, "r")
     del area_r
 
-    if land_limit_mode == "suitability":
+    if irrigated_area_source == "potential":
         area_i = max_suitability(si_files)
         if area_i.size:
             np.multiply(area_i, cell_area_rows[:, np.newaxis], out=area_i)
-    elif land_limit_mode == "irrigated":
-        if not irrigated_share_path:
-            raise ValueError(
-                "irrigated_share input required when land_limit_dataset='irrigated'"
-            )
+    else:  # "current"
         area_i = load_scaled_fraction(
             irrigated_share_path,
             target_shape=(height, width),
@@ -210,8 +206,6 @@ if __name__ == "__main__":
         )
         if area_i.size:
             np.multiply(area_i, cell_area_rows[:, np.newaxis], out=area_i)
-    else:
-        raise ValueError(f"Unknown land_limit_dataset: {land_limit_mode}")
 
     df_i = aggregate_area(area_i, "i")
     del area_i

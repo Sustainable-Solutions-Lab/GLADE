@@ -81,7 +81,7 @@ rule aggregate_class_areas:
         irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         regions="processing/{name}/regions.geojson",
     params:
-        land_limit_dataset=config["aggregation"]["land_limit_dataset"],
+        irrigated_area_source=config["aggregation"]["irrigated_area_source"],
     output:
         "processing/{name}/land_area_by_class.csv",
     log:
