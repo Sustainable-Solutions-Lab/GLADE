@@ -329,7 +329,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/cf/4e/35a80cae583a37cf15604b44240e45c05e04e86f9cfd766623149297e971/pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ab/4c/b888e6cf58bd9db9c93f40d1c6be8283ff49d88919231afe93a6bcf61626/pydeck-0.9.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/dd/e0aa7ebef5168c75b772eda64978c597a9129b46be17779054652a7999e4/pyOpenSSL-24.2.1-py3-none-any.whl
-      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.2%2Bfood.opt#25be7af2e2b983203d02dc4c7318a8b6a0a4c72e
+      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/32/00/ec8597a64f2be301ce1ee3290d067f49f6a7afb226b67d5f15b56d772ba5/rapidfuzz-3.14.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
@@ -798,7 +798,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/cf/4e/35a80cae583a37cf15604b44240e45c05e04e86f9cfd766623149297e971/pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ab/4c/b888e6cf58bd9db9c93f40d1c6be8283ff49d88919231afe93a6bcf61626/pydeck-0.9.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/dd/e0aa7ebef5168c75b772eda64978c597a9129b46be17779054652a7999e4/pyOpenSSL-24.2.1-py3-none-any.whl
-      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.2%2Bfood.opt#25be7af2e2b983203d02dc4c7318a8b6a0a4c72e
+      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/32/00/ec8597a64f2be301ce1ee3290d067f49f6a7afb226b67d5f15b56d772ba5/rapidfuzz-3.14.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
@@ -1269,7 +1269,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/cf/4e/35a80cae583a37cf15604b44240e45c05e04e86f9cfd766623149297e971/pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ab/4c/b888e6cf58bd9db9c93f40d1c6be8283ff49d88919231afe93a6bcf61626/pydeck-0.9.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/dd/e0aa7ebef5168c75b772eda64978c597a9129b46be17779054652a7999e4/pyOpenSSL-24.2.1-py3-none-any.whl
-      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.2%2Bfood.opt#25be7af2e2b983203d02dc4c7318a8b6a0a4c72e
+      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/32/00/ec8597a64f2be301ce1ee3290d067f49f6a7afb226b67d5f15b56d772ba5/rapidfuzz-3.14.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
@@ -1629,7 +1629,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/cf/4e/35a80cae583a37cf15604b44240e45c05e04e86f9cfd766623149297e971/pydantic_core-2.41.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ab/4c/b888e6cf58bd9db9c93f40d1c6be8283ff49d88919231afe93a6bcf61626/pydeck-0.9.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d9/dd/e0aa7ebef5168c75b772eda64978c597a9129b46be17779054652a7999e4/pyOpenSSL-24.2.1-py3-none-any.whl
-      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.2%2Bfood.opt#25be7af2e2b983203d02dc4c7318a8b6a0a4c72e
+      - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/32/00/ec8597a64f2be301ce1ee3290d067f49f6a7afb226b67d5f15b56d772ba5/rapidfuzz-3.14.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
@@ -6306,16 +6306,16 @@ packages:
   - pkg:pypi/pyproj?source=hash-mapping
   size: 534602
   timestamp: 1757954997735
-- pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.2%2Bfood.opt#25be7af2e2b983203d02dc4c7318a8b6a0a4c72e
+- pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
   name: pypsa
-  version: 1.0.7.2+food.opt
+  version: 1.0.7.3+food.opt
   requires_dist:
   - numpy
   - scipy
-  - pandas>=0.24
+  - pandas>=0.24,<3.0.0
   - xarray
   - netcdf4!=1.7.4
-  - linopy>=0.5
+  - linopy>=0.6.1
   - matplotlib
   - plotly
   - pydeck>=0.6
@@ -6333,6 +6333,7 @@ packages:
   - python-calamine ; extra == 'excel'
   - gurobipy ; extra == 'gurobipy'
   - cloudpathlib ; extra == 'cloudpath'
+  - tsam ; extra == 'tsam'
   - pytest ; extra == 'dev'
   - pytest-cov ; extra == 'dev'
   - pytest-mpl ; extra == 'dev'
@@ -6361,6 +6362,8 @@ packages:
   - gurobipy ; extra == 'docs'
   - openpyxl ; extra == 'docs'
   - python-calamine ; extra == 'docs'
+  - pytest ; extra == 'docs'
+  - cartopy>=0.16 ; extra == 'docs'
   requires_python: '>=3.11'
 - conda: https://conda.anaconda.org/conda-forge/noarch/pyshp-3.0.2-pyhd8ed1ab_0.conda
   sha256: 0ab5dbacb7092bce41eeec35d84e0378e5a69935ac986dc4bdc8694b48181240

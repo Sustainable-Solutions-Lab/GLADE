@@ -57,7 +57,7 @@ snakemake = ">=9.13.7, <10"
 food-opt-workflow = { path = ".", editable = true }
 
 # Optimization and modeling; own branches of pypsa and linopy with custom features needed by food-opt
-pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.0.7.2+food.opt" }
+pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.0.7.3+food.opt" }
 linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.6.1+food.opt" }
 
 # Geospatial processing
@@ -99,6 +99,8 @@ snakefmt = ">=0.11.2, <0.12"         # Snakemake code formatter
 [activation.env]
 # Enable new PyPSA components API globally
 PYPSA_API__NEW_COMPONENTS_API = "true"
+# Disable network requests (update checks) for faster loading
+PYPSA_GENERAL__ALLOW_NETWORK_REQUESTS = "false"
 
 [tasks]
 smk = { cmd = "tools/smk" }
