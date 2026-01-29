@@ -94,7 +94,6 @@ def _ensure_mode_zero(mode: str) -> None:
 def main() -> None:
     classes_path: str = snakemake.input.classes  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
-    lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
     agb_path: str = snakemake.input.agb  # type: ignore[name-defined]
     soc_path: str = snakemake.input.soc  # type: ignore[name-defined]
     regrowth_path: str = snakemake.input.regrowth  # type: ignore[name-defined]
@@ -120,9 +119,6 @@ def main() -> None:
     zone_idx = _zone_index(lat, width)
     params = _zone_parameters(zone_params_path)
     area_matrix = _area_matrix(transform, height, width)
-
-    lc_ds = xr.load_dataset(lc_masks_path)
-    forest_mask = lc_ds["forest_mask"].astype(bool).values
 
     agb = xr.load_dataset(agb_path)["agb_tc_per_ha"].astype(np.float32).values
     soc_0_30 = xr.load_dataset(soc_path)["soc_0_30_tc_per_ha"].astype(np.float32).values
@@ -157,19 +153,21 @@ def main() -> None:
     p_crop = (s_nat - s_ag_crop) * CO2_PER_C
     p_past = (s_nat - s_ag_past) * CO2_PER_C
 
-    forest_mask_bool = forest_mask.astype(bool)
-    # Only credit regrowth on cells that the potential-forest map flags as forested.
-    eligible_regrowth = forest_mask_bool & np.isfinite(regrowth_tc)
-    regrowth_tc = np.where(eligible_regrowth, regrowth_tc, 0.0)
-    regrowth = regrowth_tc * CO2_PER_C
+    # Convert regrowth rates from tC to tCO2
+    regrowth = np.where(np.isfinite(regrowth_tc), regrowth_tc, 0.0) * CO2_PER_C
 
-    lef_crop = p_crop / horizon_years + regrowth
-    lef_past = p_past / horizon_years + regrowth
+    # Land conversion LEFs include only pulse emissions (amortized over horizon).
+    # Regrowth opportunity cost is NOT included here to avoid double-counting:
+    # the model explicitly represents the alternative (spare land for regrowth)
+    # via separate spare_land links with lef_spared.
+    lef_crop = p_crop / horizon_years
+    lef_past = p_past / horizon_years
 
-    # Spared land only provides negative emissions (through regrowth) if current
-    # above-ground biomass is below threshold (i.e., recently cleared or degraded land).
-    # Areas with high existing biomass (mature forest) do not exhibit additional
-    # regrowth sequestration and should not be credited.
+    # Spared land provides negative emissions (sequestration through regrowth) if:
+    # 1. Cook-Patton regrowth data exists for this cell (potential forest area)
+    # 2. Current above-ground biomass is below threshold (recently cleared/degraded)
+    # Areas with high existing biomass (mature forest) are already at equilibrium
+    # and do not exhibit the rapid early-successional regrowth that Cook-Patton quantifies.
     agb_threshold: float = float(snakemake.params.agb_threshold)  # type: ignore[name-defined]
     lef_spared = np.where(agb <= agb_threshold, -regrowth, 0.0)
 

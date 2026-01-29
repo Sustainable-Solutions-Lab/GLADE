@@ -689,16 +689,22 @@ Conceptual overview
 For every grid cell on the common suitability grid, the workflow computes three main quantities:
 
 * **Pulse emissions (:math:`P_{i,u}`)** – the one-off release (or uptake) that occurs when land transitions from its natural state to land use :math:`u` (cropland or pasture). We estimate above-ground biomass (AGB), below-ground biomass (BGB), and soil organic carbon (SOC) stocks for both the natural and agricultural equilibria, then convert the difference to CO₂ using the stoichiometric factor :math:`44/12`.
-* **Annual regrowth (:math:`R_i`)** – the ongoing sequestration potential when land is spared or allowed to regrow. Regrowth credits are only granted where the baseline land-cover map indicates the area is **eligible for potential forest** (forest fraction above the configured threshold), reflecting that the Cook-Patton & Griscom dataset quantifies how much carbon *could* accumulate if forests were allowed to return.
+* **Annual regrowth (:math:`R_i`)** – the ongoing sequestration potential when land is spared and allowed to regrow. Regrowth rates are derived from Cook-Patton & Griscom (2020), which quantifies carbon accumulation in young regenerating forests. Credits are only granted where current above-ground biomass is below a threshold (default 20 tC/ha), ensuring that only recently cleared or degraded land—not mature forest—receives regrowth credits.
 * **Managed flux (:math:`M_{i,u}`)** – ongoing emissions from managed systems (e.g., peat oxidation, continuous tillage). The current implementation sets :math:`M_{i,u} = 0` everywhere as a simplifying assumption.
 
-The per-hectare land-use change factor (LEF) combines these components over the planning horizon :math:`H` (years) configured in ``config/default.yaml``:
+The per-hectare land-use change factor (LEF) for **conversion** (cropland or pasture) includes only amortised pulse emissions:
 
 .. math::
 
-   \mathrm{LEF}_{i,u} = \frac{P_{i,u}}{H} + (R_i - M_{i,u})
+   \mathrm{LEF}_{\mathrm{crop}} = \frac{P_{\mathrm{crop}}}{H}, \quad \mathrm{LEF}_{\mathrm{pasture}} = \frac{P_{\mathrm{pasture}}}{H}
 
-LEFs are computed for three uses (``cropland``, ``pasture``, ``spared``). Cropland and pasture incur positive costs when they release carbon; spared land yields negative LEFs because regrowth produces a CO₂ sink. Area-weighted aggregation over resource classes produces region-level coefficients that the optimisation layer consumes.
+The LEF for **spared land** provides sequestration credits through regrowth:
+
+.. math::
+
+   \mathrm{LEF}_{\mathrm{spared}} = \begin{cases} -R_i & \text{if AGB} \leq \text{threshold} \\ 0 & \text{otherwise} \end{cases}
+
+Regrowth is *not* included in the conversion LEFs to avoid double-counting: the model explicitly represents the reforestation alternative via separate ``spare_land`` links. Area-weighted aggregation over resource classes produces region-level coefficients that the optimisation layer consumes.
 
 Application in the optimisation distinguishes new conversion from existing area: cropland LEFs are charged only when land expands (``convert_new_land_*``), while baseline cropland can be spared to earn the spared LEF. Pasture LEFs attach to grazing supply links so that expanding pasture bears its conversion cost.
 
