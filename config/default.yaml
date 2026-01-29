@@ -751,7 +751,6 @@ data:
     period: "FP2140" # Future: "FP2140" (2021-2040), "FP4160" (2041-2060), "FP6180" (2061-2080), "FP8100" (2081-2100); Historical: "HP0120" (2001-2020), "HP8100" (1981-2000)
     climate_scenario: "SSP126" # "SSP126" (low emissions), "SSP370" (medium, ~RCP4.5), "SSP585" (high), "HIST" (historical)
     input_level: "H" # "H" (High), "L" (Low)
-    water_supply: "R" # "I" (irrigated), "R" (rainfed)
     # Variable codes for GAEZ v5
     yield_var: "RES05-YCX" # Average attainable yield, current cropland
     water_requirement_var: "RES05-WDC" # Water deficit/net irrigation requirement during crop cycle, current cropland

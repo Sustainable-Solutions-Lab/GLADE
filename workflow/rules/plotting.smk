@@ -30,7 +30,7 @@ def _gaez_actual_yield_raster_path(crop_name: str, water_supply: str) -> str:
 
 def yield_gap_raster_inputs(wildcards):
     crop_name = wildcards.crop
-    ws = str(gaez["water_supply"]).lower()
+    ws = wildcards.water_supply
     return {
         "potential_yield": gaez_path("yield", ws, crop_name),
         "actual_yield": _gaez_actual_yield_raster_path(crop_name, ws),
@@ -41,9 +41,9 @@ rule plot_yield_gap:
     input:
         unpack(yield_gap_raster_inputs),
     output:
-        pdf="results/{name}/plots/yield_gap_{crop}.pdf",
+        pdf="results/{name}/plots/yield_gap_{crop}_{water_supply}.pdf",
     log:
-        "logs/{name}/plot_yield_gap_{crop}.log",
+        "logs/{name}/plot_yield_gap_{crop}_{water_supply}.log",
     script:
         "../scripts/plotting/plot_yield_gap.py"
 
@@ -356,11 +356,11 @@ rule plot_yield_map:
 rule plot_average_yield_gap_by_country:
     input:
         regions="processing/{name}/regions.geojson",
-        csv="processing/{name}/yield_gap_by_country_all_crops.csv",
+        csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
     output:
-        pdf="results/{name}/plots/yield_gap_by_country_average.pdf",
+        pdf="results/{name}/plots/yield_gap_by_country_average_{water_supply}.pdf",
     log:
-        "logs/{name}/plot_average_yield_gap_by_country.log",
+        "logs/{name}/plot_average_yield_gap_by_country_{water_supply}.log",
     script:
         "../scripts/plotting/plot_yield_gap_by_country_average.py"
 

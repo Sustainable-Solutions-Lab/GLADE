@@ -954,7 +954,6 @@ properties:
           - period
           - climate_scenario
           - input_level
-          - water_supply
           - yield_var
           - water_requirement_var
           - suitability_var
@@ -978,10 +977,6 @@ properties:
             type: string
             enum: [H, L]
             description: "GAEZ v5 input level (H=High, L=Low)"
-          water_supply:
-            type: string
-            enum: [I, R]
-            description: "GAEZ v5 water supply (I=irrigated, R=rainfed)"
           yield_var:
             type: string
             description: "GAEZ v5 yield variable code"

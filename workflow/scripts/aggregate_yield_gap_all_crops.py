@@ -7,11 +7,11 @@
 Aggregate per-crop country yield fractions into a single per-country average.
 
 Input (Snakemake):
- - Multiple CSVs: processing/{name}/yield_gap_by_country_{crop}.csv, each with
-   columns: country,fraction_achieved
+ - Multiple CSVs: processing/{name}/yield_gap_by_country_{crop}_{water_supply}.csv,
+   each with columns: country,fraction_achieved
 
 Output:
- - CSV: processing/{name}/yield_gap_by_country_all_crops.csv
+ - CSV: processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv
    Columns: country, fraction_achieved_mean
 """
 
@@ -28,8 +28,9 @@ def aggregate(inputs: list[str], output: str) -> None:
         df = pd.read_csv(path)
         # Expect 'country' and 'fraction_achieved'
         # Derive column name for this crop
-        stem = Path(path).stem  # yield_gap_by_country_{crop}
-        crop = stem.replace("yield_gap_by_country_", "")
+        stem = Path(path).stem  # yield_gap_by_country_{crop}_{water_supply}
+        # Strip the water_supply suffix (e.g., "_r" or "_i")
+        crop = stem.replace("yield_gap_by_country_", "").rsplit("_", 1)[0]
         crop_names.append(crop)
         frames.append(df.rename(columns={"fraction_achieved": crop}))
 

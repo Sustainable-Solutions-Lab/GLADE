@@ -18,14 +18,14 @@ with _DEFAULT_CONFIG_PATH.open(encoding="utf-8") as _cfg_file:
 
 _first_crop = _default_config["crops"][0]
 _default_gaez_cfg = _default_config["data"]["gaez"]
-_default_ws = str(_default_gaez_cfg["water_supply"]).lower()
+# Hardcoded: water supply is arbitrary for grid extraction (only resolution/extent matter)
 _grid_yield_raster = (
     "data/downloads/gaez_yield"
     f"_{_default_gaez_cfg['climate_model']}"
     f"_{_default_gaez_cfg['period']}"
     f"_{_default_gaez_cfg['climate_scenario']}"
     f"_{_default_gaez_cfg['input_level']}"
-    f"_{_default_ws}"
+    "_r"
     f"_{_first_crop}.tif"
 )
 
