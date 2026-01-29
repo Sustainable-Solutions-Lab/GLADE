@@ -134,13 +134,29 @@ properties:
         description: "Reference year for production data"
       production_stability:
         type: object
-        required: [enabled, crops, animals]
+        required: [enabled, penalty_mode, crops, animals]
         additionalProperties: false
         description: "Limit production deviation from baseline levels"
         properties:
           enabled:
             type: boolean
             description: "Whether to apply production stability bounds"
+          penalty_mode:
+            type: string
+            enum: ["hard", "quadratic", "l1"]
+            description: "hard = inequality bounds, quadratic = soft penalty in objective, l1 = linear absolute value penalty"
+          quadratic_cost:
+            type: number
+            minimum: 0
+            description: "Cost coefficient for quadratic deviation penalty (bn USD per deviation² unit)"
+          l1_cost:
+            type: number
+            minimum: 0
+            description: "Cost coefficient for L1 (absolute value) deviation penalty (bn USD per Mt deviation for absolute, bn USD per unit relative deviation for relative)"
+          deviation_type:
+            type: string
+            enum: ["absolute", "relative"]
+            description: "For quadratic: absolute = (P - B)², relative = ((P - B) / B)². For L1: absolute = |P - B|, relative = |(P - B) / B|"
           crops:
             type: object
             required: [enabled, max_relative_deviation, enable_slack]

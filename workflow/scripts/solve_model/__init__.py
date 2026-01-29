@@ -8,6 +8,6 @@ Modular package providing specialized constraint builders for the PyPSA
 linopy model during optimization.
 """
 
-from . import health
+from . import health, production_stability
 
-__all__ = ["health"]
+__all__ = ["health", "production_stability"]
