@@ -428,3 +428,19 @@ rule plot_ghg_health_global:
         "logs/{name}/plot_ghg_health_global_scen-{scenario}.log",
     script:
         "../scripts/plotting/plot_ghg_health_global.py"
+
+
+rule plot_luc_emissions:
+    """Plot land use change emissions by country (bar) and resource class (map)."""
+    input:
+        network="results/{name}/solved/model_scen-{scenario}.nc",
+        regions="processing/{name}/regions.geojson",
+        resource_classes="processing/{name}/resource_classes.nc",
+    output:
+        bar_pdf="results/{name}/plots/scen-{scenario}/luc_emissions_bar.pdf",
+        map_pdf="results/{name}/plots/scen-{scenario}/luc_emissions_map.pdf",
+        csv="results/{name}/plots/scen-{scenario}/luc_emissions.csv",
+    log:
+        "logs/{name}/plot_luc_emissions_scen-{scenario}.log",
+    script:
+        "../scripts/plotting/plot_luc_emissions.py"
