@@ -747,6 +747,30 @@ During model construction, ``build_model.py`` loads these inputs, converts LEFs 
 
 All LUC flows connect to the global ``co2`` bus, which feeds a priced CO₂ store (``emissions.ghg_price``). This keeps cropland expansion, pasture expansion, and regrowth credits on the same carbon price scale while avoiding double-charging existing land. The spatial pattern of the resulting LEFs is shown in :ref:`fig-luc-lef`.
 
+Cropland baseline data source
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The model can derive baseline cropland area from two sources, controlled by ``luc.cropland_source``:
+
+* **"gaez"** (default): Uses GAEZ RES06-HAR (2010-2019 average harvested area) summed across all crop modules. This ensures consistency with production stability constraints that also use GAEZ data. When multiple model crops map to the same RES06 module (e.g., oat, rye, and buckwheat all map to OCE), the module's harvested area is counted only once to avoid double-counting.
+
+* **"esa"**: Uses ESA CCI land cover satellite data to identify pixels classified as cropland. This approach may show different spatial patterns than GAEZ, particularly in areas with multi-cropping or mixed land use.
+
+Multi-cropping handling
+^^^^^^^^^^^^^^^^^^^^^^^
+
+GAEZ RES06-HAR stores *harvested* area, which can exceed physical land area in regions with double or triple cropping. For example, a field that produces two rice crops per year would have harvested area equal to twice its physical area. To convert harvested area to physical cropland extent:
+
+1. Sum harvested area across all unique RES06 modules for each water supply (irrigated/rainfed)
+2. Where total harvested area exceeds gridcell physical area, scale proportionally so that irrigated + rainfed = cell area
+
+This approach preserves the irrigated/rainfed split while ensuring baseline cropland doesn't exceed physical limits.
+
+Irrigated vs. rainfed split
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Both cropland sources use the GAEZ "land equipped for irrigation" share raster to split total cropland into irrigated and rainfed fractions. This ensures consistent water supply attribution regardless of the underlying cropland extent source.
+
 Spared land filtering
 ~~~~~~~~~~~~~~~~~~~~~
 

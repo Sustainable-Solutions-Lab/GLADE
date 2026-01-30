@@ -404,6 +404,7 @@ properties:
       - managed_flux_mode
       - forest_fraction_threshold
       - spared_land_agb_threshold_tc_per_ha
+      - cropland_source
     additionalProperties: false
     properties:
       horizon_years:
@@ -423,6 +424,10 @@ properties:
         type: number
         minimum: 0
         description: "Max AGB (tC/ha) for spared land eligibility"
+      cropland_source:
+        type: string
+        enum: [gaez, esa]
+        description: "Data source for cropland baseline: 'gaez' (RES06-HAR harvested area) or 'esa' (satellite land cover)"
 
   crops:
     type: array

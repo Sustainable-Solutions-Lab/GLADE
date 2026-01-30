@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import csv
 from pathlib import Path
 
 import yaml
@@ -15,6 +16,44 @@ _PROJECT_ROOT = Path(workflow.basedir).parent
 _DEFAULT_CONFIG_PATH = _PROJECT_ROOT / "config" / "default.yaml"
 with _DEFAULT_CONFIG_PATH.open(encoding="utf-8") as _cfg_file:
     _default_config = yaml.safe_load(_cfg_file)
+
+
+def _get_unique_res06_rasters(crops: list[str]) -> dict[str, str]:
+    """Get paths to unique GAEZ RES06-HAR rasters (one per res06_code × water supply).
+
+    Returns a dict mapping "{res06_code}_{water}" to the raster path.
+    """
+    # Load the mapping to get RES06 codes
+    mapping_path = _PROJECT_ROOT / "data" / "gaez_crop_code_mapping.csv"
+    with mapping_path.open(newline="") as f:
+        crop_to_res06 = {
+            row["crop_name"]: row["res06_code"].strip().upper()
+            for row in csv.DictReader(f)
+        }
+
+    # Collect unique RES06 codes
+    unique_res06_codes = set()
+    for crop in crops:
+        if crop in crop_to_res06:
+            unique_res06_codes.add(crop_to_res06[crop])
+
+    # Generate raster paths for each unique RES06 code and water supply
+    # Use the first crop that maps to each code to get the raster path
+    res06_to_crop = {}
+    for crop in crops:
+        if crop in crop_to_res06:
+            res06_code = crop_to_res06[crop]
+            if res06_code not in res06_to_crop:
+                res06_to_crop[res06_code] = crop
+
+    rasters = {}
+    for res06_code, crop in res06_to_crop.items():
+        for water in ["i", "r"]:
+            key = f"{res06_code}_{water}"
+            rasters[key] = f"data/downloads/gaez_harvested_area_{water}_{crop}.tif"
+
+    return rasters
+
 
 _first_crop = _default_config["crops"][0]
 _default_gaez_cfg = _default_config["data"]["gaez"]
@@ -100,18 +139,43 @@ rule build_current_grassland_area:
         "../scripts/build_current_grassland_area.py"
 
 
-rule build_current_cropland_area:
-    input:
-        classes="processing/{name}/resource_classes.nc",
-        lc_masks=rules.prepare_luc_inputs.output.lc_masks,
-        irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
-        regions="processing/{name}/regions.geojson",
-    output:
-        cropland_area="processing/{name}/cropland_baseline_by_class.csv",
-    log:
-        "logs/{name}/build_current_cropland_area.log",
-    script:
-        "../scripts/build_current_cropland_area.py"
+def _gaez_cropland_baseline_inputs(_wildcards):
+    """Return input dict for GAEZ-based cropland baseline rule."""
+    return _get_unique_res06_rasters(config["crops"])
+
+
+if config["luc"]["cropland_source"] == "gaez":
+
+    # GAEZ-based cropland baseline: sum harvested area from RES06-HAR rasters
+    rule build_current_cropland_area:
+        input:
+            unpack(_gaez_cropland_baseline_inputs),
+            classes="processing/{name}/resource_classes.nc",
+            regions="processing/{name}/regions.geojson",
+            crop_mapping="data/gaez_crop_code_mapping.csv",
+            irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
+        output:
+            cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        log:
+            "logs/{name}/build_current_cropland_area.log",
+        script:
+            "../scripts/build_cropland_baseline_from_gaez.py"
+
+else:
+
+    # ESA-based cropland baseline: use satellite land cover classification
+    rule build_current_cropland_area:
+        input:
+            classes="processing/{name}/resource_classes.nc",
+            lc_masks=rules.prepare_luc_inputs.output.lc_masks,
+            irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
+            regions="processing/{name}/regions.geojson",
+        output:
+            cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        log:
+            "logs/{name}/build_current_cropland_area.log",
+        script:
+            "../scripts/build_current_cropland_area.py"
 
 
 rule build_grazing_only_land:

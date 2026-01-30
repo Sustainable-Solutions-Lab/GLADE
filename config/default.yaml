@@ -111,6 +111,10 @@ luc:
   managed_flux_mode: "zero"
   forest_fraction_threshold: 0.2  # Minimum forest fraction (0-1) to apply regrowth sequestration
   spared_land_agb_threshold_tc_per_ha: 20.0  # Max AGB (tC/ha) for spared land eligibility
+  # Data source for cropland baseline area:
+  # - "gaez": GAEZ RES06-HAR (2010-2019 average harvested area), consistent with production stability
+  # - "esa": ESA CCI land cover satellite data
+  cropland_source: "gaez"
 
 # --- section: crops ---
 crops:
@@ -773,7 +777,7 @@ data:
   land_cover:
     # ECMWF credentials: configure in config/secrets.yaml or via environment variables
     # See config/secrets.yaml.example for setup instructions
-    year: "2022"
+    year: "2020"  # Align with GAEZ current production which is a 2019-2021 average
     version: "v2_1_1"
   soilgrids:
     target_resolution_m: 10000  # Target resolution in meters (10000m = 10km)
