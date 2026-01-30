@@ -5,19 +5,20 @@
 """Plot emissions breakdown by source for CO2, CH4, and N2O."""
 
 from collections import defaultdict
-import logging
 from pathlib import Path
 
+import cartopy.crs as ccrs
+import geopandas as gpd
 import matplotlib
 
 matplotlib.use("pdf")
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pypsa
 
 from workflow.scripts.logging_config import setup_script_logging
-
-logger = logging.getLogger(__name__)
 
 
 def categorize_emission_carrier(carrier: str, bus_carrier: str) -> str:
@@ -216,6 +217,195 @@ def extract_emissions_by_source(
         emissions["CH4"]["Manure: managed systems"] = manure_mtco2eq
 
     return emissions
+
+
+def extract_emissions_by_region(
+    n: pypsa.Network,
+    ch4_gwp: float,
+    n2o_gwp: float,
+    regions_gdf: gpd.GeoDataFrame,
+) -> pd.DataFrame:
+    """Extract emissions and land area by region for intensity calculation.
+
+    Uses vectorized pandas operations for efficiency. For country-level links
+    (no region), emissions are distributed to regions proportionally by land area.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Solved network
+    ch4_gwp : float
+        Global warming potential for CH4 (kg CO2eq / kg CH4)
+    n2o_gwp : float
+        Global warming potential for N2O (kg CO2eq / kg N2O)
+    regions_gdf : gpd.GeoDataFrame
+        Regions GeoDataFrame with 'region' and 'country' columns
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns: CO2, CH4, N2O (MtCO2eq), land_area (Mha)
+        Index is region name.
+    """
+    links = n.links.static.copy()
+    buses = n.buses.static
+    weights = n.snapshot_weightings["objective"]
+
+    # Compute weighted flow for all links at once
+    p0 = n.links.dynamic["p0"]
+    links["flow"] = (p0 * weights.values[:, None]).sum(axis=0)
+
+    # Identify region vs country level links
+    links["has_region"] = (links["region"].notna()) & (links["region"] != "")
+
+    # GWP config: bus_carrier -> (output_col, gwp, unit_factor)
+    gas_config = {
+        "co2": ("CO2", 1.0, 1.0),
+        "ch4": ("CH4", ch4_gwp, 1e-6),
+        "n2o": ("N2O", n2o_gwp, 1e-6),
+    }
+
+    # Carriers to exclude
+    conversion_carriers = {"co2", "ch4", "n2o", "emission_aggregation"}
+    land_use_carriers = {
+        "crop_production",
+        "crop_production_multi",
+        "grassland_production",
+    }
+
+    # --- Land area by region (vectorized) ---
+    land_mask = links["carrier"].isin(land_use_carriers) & links["has_region"]
+    land_area_by_region = (
+        links.loc[land_mask & (links["flow"] > 0)]
+        .groupby("region")["flow"]
+        .sum()
+        .rename("land_area")
+    )
+
+    # --- Emissions by region and country (vectorized) ---
+    # Filter out conversion carriers
+    emit_links = links[~links["carrier"].isin(conversion_carriers)].copy()
+
+    # Build bus carrier lookup
+    bus_carrier_map = buses["carrier"].to_dict()
+
+    # Process each emission port (bus2, bus3, bus4 typically have emissions)
+    region_emissions = []
+    country_emissions = []
+
+    for port_idx in range(2, 5):
+        bus_col = f"bus{port_idx}"
+        eff_col = f"efficiency{port_idx}"
+
+        if bus_col not in emit_links.columns or eff_col not in emit_links.columns:
+            continue
+
+        # Get bus carrier for each link
+        port_bus_carrier = emit_links[bus_col].map(bus_carrier_map)
+
+        # Filter to emission buses only
+        is_emission = port_bus_carrier.isin(gas_config.keys())
+        port_links = emit_links[is_emission].copy()
+
+        if port_links.empty:
+            continue
+
+        port_bus_carrier = port_bus_carrier[is_emission]
+        port_links["bus_carrier"] = port_bus_carrier
+
+        # Get efficiency and compute emissions
+        eff = port_links[eff_col].fillna(0.0)
+        port_links["emission"] = port_links["flow"] * eff
+
+        # Apply GWP and unit conversion
+        for bus_carrier, (col_name, gwp, unit_factor) in gas_config.items():
+            mask = port_links["bus_carrier"] == bus_carrier
+            port_links.loc[mask, "emission"] *= gwp * unit_factor
+            port_links.loc[mask, "gas"] = col_name
+
+        # Split into region-level and country-level
+        has_region = port_links["has_region"]
+
+        if has_region.any():
+            region_df = port_links.loc[has_region, ["region", "gas", "emission"]]
+            region_emissions.append(region_df)
+
+        if (~has_region).any():
+            country_df = port_links.loc[~has_region, ["country", "gas", "emission"]]
+            country_emissions.append(country_df)
+
+    # --- Aggregate region-level emissions ---
+    if region_emissions:
+        all_region = pd.concat(region_emissions, ignore_index=True)
+        region_pivot = all_region.pivot_table(
+            index="region",
+            columns="gas",
+            values="emission",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+    else:
+        region_pivot = pd.DataFrame(columns=["CO2", "CH4", "N2O"])
+
+    # --- Aggregate country-level emissions ---
+    if country_emissions:
+        all_country = pd.concat(country_emissions, ignore_index=True)
+        country_pivot = all_country.pivot_table(
+            index="country",
+            columns="gas",
+            values="emission",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+    else:
+        country_pivot = pd.DataFrame(columns=["CO2", "CH4", "N2O"])
+
+    # --- Build result DataFrame ---
+    # Start with land area
+    result = land_area_by_region.to_frame()
+
+    # Add region-level emissions
+    for col in ["CO2", "CH4", "N2O"]:
+        if col in region_pivot.columns:
+            result[col] = region_pivot[col]
+        else:
+            result[col] = 0.0
+
+    result = result.fillna(0.0)
+
+    # --- Distribute country emissions to regions by land area ---
+    if not country_pivot.empty:
+        # Build region -> country mapping
+        region_country = regions_gdf.set_index("region")["country"]
+
+        # Add country to result
+        result["country"] = result.index.map(region_country)
+
+        # Compute land area totals by country
+        country_land_totals = result.groupby("country")["land_area"].sum()
+
+        # Compute region fraction within each country
+        result["country_land_total"] = result["country"].map(country_land_totals)
+        result["region_fraction"] = np.where(
+            result["country_land_total"] > 0,
+            result["land_area"] / result["country_land_total"],
+            0.0,
+        )
+
+        # Distribute country emissions
+        for col in ["CO2", "CH4", "N2O"]:
+            if col not in country_pivot.columns:
+                continue
+            country_col = result["country"].map(country_pivot[col]).fillna(0.0)
+            result[col] = result[col] + country_col * result["region_fraction"]
+
+        # Clean up temporary columns
+        result = result.drop(
+            columns=["country", "country_land_total", "region_fraction"]
+        )
+
+    result.index.name = "region"
+    return result[["CO2", "CH4", "N2O", "land_area"]]
 
 
 def process_faostat_emissions(
@@ -538,6 +728,135 @@ def save_emissions_table(
     logger.info("Wrote emissions breakdown table to %s", output_path)
 
 
+def plot_emissions_choropleth(
+    emissions_by_region: pd.DataFrame,
+    regions_path: str,
+    output_path: Path,
+) -> None:
+    """Create a three-panel choropleth map showing CO2, CH4, N2O emission intensity by region.
+
+    Parameters
+    ----------
+    emissions_by_region : pd.DataFrame
+        DataFrame with region as index and CO2, CH4, N2O (MtCO2eq), land_area (Mha) columns
+    regions_path : str
+        Path to regions GeoJSON file
+    output_path : Path
+        Path to save the PDF plot
+    """
+    # Load regions GeoDataFrame
+    gdf = gpd.read_file(regions_path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs(4326, allow_override=True)
+    else:
+        gdf = gdf.to_crs(4326)
+
+    if "region" not in gdf.columns:
+        raise ValueError("Regions GeoDataFrame must contain a 'region' column")
+
+    gdf = gdf.set_index("region")
+
+    # Merge emissions data with geometries
+    gdf = gdf.join(emissions_by_region, how="left")
+    gdf = gdf.fillna(0.0)
+
+    # Calculate emission intensities (tCO2eq/ha = MtCO2eq/Mha)
+    # Avoid division by zero
+    land_area = gdf["land_area"].replace(0, float("nan"))
+    gdf["CO2_intensity"] = gdf["CO2"] / land_area
+    gdf["CH4_intensity"] = gdf["CH4"] / land_area
+    gdf["N2O_intensity"] = gdf["N2O"] / land_area
+
+    # Create figure with three vertically stacked panels
+    fig, axes = plt.subplots(
+        3,
+        1,
+        figsize=(12, 14),
+        subplot_kw={"projection": ccrs.EqualEarth()},
+    )
+
+    # Gas configuration
+    gases = ["CO2", "CH4", "N2O"]
+    gas_labels = {
+        "CO2": "CO₂",
+        "CH4": "CH₄",
+        "N2O": "N₂O",
+    }
+
+    # Compute shared color scale across all gases using 99th percentile
+    all_intensities = []
+    for gas in gases:
+        intensity_col = f"{gas}_intensity"
+        valid = gdf[intensity_col].dropna()
+        valid = valid[valid > 0]
+        all_intensities.extend(valid.tolist())
+
+    if all_intensities:
+        vmin = 0
+        vmax = np.percentile(all_intensities, 99)
+    else:
+        vmin, vmax = 0, 1
+
+    cmap = plt.colormaps["Reds"]
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    plate = ccrs.PlateCarree()
+
+    for idx, gas in enumerate(gases):
+        ax = axes[idx]
+        ax.set_facecolor("#f7f9fb")
+        ax.set_global()
+
+        intensity_col = f"{gas}_intensity"
+
+        # Plot all regions with no data in light gray first
+        ax.add_geometries(
+            gdf.geometry,
+            crs=plate,
+            facecolor="#e0e0e0",
+            edgecolor="none",
+            zorder=1,
+        )
+
+        # Plot regions with intensity data
+        for _region, row in gdf.iterrows():
+            intensity_val = row[intensity_col]
+            if pd.notna(intensity_val) and intensity_val > 0:
+                color = cmap(norm(intensity_val))
+                ax.add_geometries(
+                    [row.geometry],
+                    crs=plate,
+                    facecolor=color,
+                    edgecolor="none",
+                    zorder=2,
+                )
+
+        # Add gridlines
+        gl = ax.gridlines(draw_labels=False, linewidth=0.4, color="#aaaaaa", alpha=0.5)
+        gl.xlocator = plt.MultipleLocator(60)
+        gl.ylocator = plt.MultipleLocator(30)
+
+        ax.set_title(
+            f"{gas_labels[gas]} Emission Intensity", fontsize=12, fontweight="bold"
+        )
+
+    # Adjust layout to leave space for colorbar
+    fig.subplots_adjust(bottom=0.08, hspace=0.1)
+
+    # Add single shared colorbar at bottom
+    cbar_ax = fig.add_axes([0.25, 0.02, 0.5, 0.015])
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal", extend="max")
+    cbar.set_label("Emission intensity (tCO₂eq/ha)", fontsize=10)
+    cbar.ax.tick_params(labelsize=8)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    logger.info("Wrote emissions choropleth map to %s", output_path)
+
+
 if __name__ == "__main__":
     global logger
     logger = setup_script_logging(snakemake.log[0])
@@ -568,6 +887,7 @@ if __name__ == "__main__":
 
     pdf_path = Path(snakemake.output.pdf)
     csv_path = Path(snakemake.output.csv)
+    choropleth_path = Path(snakemake.output.choropleth_pdf)
 
     save_emissions_table(emissions, csv_path)
     plot_emissions_breakdown(
@@ -575,4 +895,25 @@ if __name__ == "__main__":
         faostat_emissions_processed,
         gleam_emissions,
         pdf_path,
+    )
+
+    # Load regions GeoDataFrame for emissions extraction
+    logger.info("Loading regions from %s", snakemake.input.regions)
+    regions_gdf = gpd.read_file(snakemake.input.regions)
+    if regions_gdf.crs is None:
+        regions_gdf = regions_gdf.set_crs(4326, allow_override=True)
+    else:
+        regions_gdf = regions_gdf.to_crs(4326)
+
+    # Extract emissions by region and plot choropleth
+    logger.info("Extracting emissions by region for choropleth map")
+    emissions_by_region = extract_emissions_by_region(
+        network, ch4_gwp, n2o_gwp, regions_gdf
+    )
+    logger.info("Found emissions for %d regions", len(emissions_by_region))
+
+    plot_emissions_choropleth(
+        emissions_by_region,
+        snakemake.input.regions,
+        choropleth_path,
     )

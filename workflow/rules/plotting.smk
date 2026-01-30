@@ -382,9 +382,11 @@ rule plot_emissions_breakdown:
         network="results/{name}/solved/model_scen-{scenario}.nc",
         faostat_emissions="processing/{name}/faostat_emissions.csv",
         gleam_emissions="data/gleam_livestock_emissions.csv",
+        regions="processing/{name}/regions.geojson",
     output:
         pdf="results/{name}/plots/scen-{scenario}/emissions_breakdown.pdf",
         csv="results/{name}/plots/scen-{scenario}/emissions_breakdown.csv",
+        choropleth_pdf="results/{name}/plots/scen-{scenario}/emissions_choropleth.pdf",
     params:
         ch4_gwp=lambda w: get_effective_config(w.scenario)["emissions"][
             "ch4_to_co2_factor"
