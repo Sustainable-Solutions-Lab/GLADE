@@ -285,7 +285,6 @@ def _write_csv(
 
 
 if __name__ == "__main__":
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     logger.info("Loading solved network from %s", snakemake.input.network)

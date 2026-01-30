@@ -178,8 +178,7 @@ def plot_resource_classes_map(
 
 
 if __name__ == "__main__":
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
+    setup_script_logging(snakemake.log[0])
     plot_resource_classes_map(
         Path(snakemake.input.classes),  # type: ignore[name-defined]
         Path(snakemake.input.regions),  # type: ignore[name-defined]

@@ -208,8 +208,7 @@ def _determine_water_supply_for_title(
 
 
 def main() -> None:
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
+    setup_script_logging(snakemake.log[0])
 
     params = snakemake.params  # type: ignore[name-defined]
     inputs = snakemake.input  # type: ignore[name-defined]

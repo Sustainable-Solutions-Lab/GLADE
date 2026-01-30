@@ -169,7 +169,6 @@ def _write_csv(df: pd.DataFrame, output_csv: Path) -> None:
 
 
 if __name__ == "__main__":
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     logger.info("Loading solved network from %s", snakemake.input.network)

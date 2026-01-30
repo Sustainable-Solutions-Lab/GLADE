@@ -5,6 +5,7 @@
 
 """Plot relative risk curves by risk factor and cause."""
 
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -14,6 +15,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 
 def plot_relative_risk_curves(

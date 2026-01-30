@@ -276,7 +276,6 @@ def _plot(df: pd.DataFrame, output_pdf: Path) -> None:
 
 
 if __name__ == "__main__":
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     network = pypsa.Network(snakemake.input.network)

@@ -6,6 +6,7 @@
 """Plot food consumption by health cluster using pie charts on a map."""
 
 from collections.abc import Iterable, Mapping, Sequence
+import logging
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -23,6 +24,8 @@ import pandas as pd
 from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
+
+logger = logging.getLogger(__name__)
 
 PLATE_CARREE = ccrs.PlateCarree()
 

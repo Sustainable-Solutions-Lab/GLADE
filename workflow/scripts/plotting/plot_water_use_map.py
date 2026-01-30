@@ -4,6 +4,7 @@
 
 """Plot regional water use with pies for natural vs slack supply (Mm³)."""
 
+import logging
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -18,6 +19,8 @@ import pypsa
 matplotlib.use("pdf")
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 
 def _setup_regions(regions_path: str) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:

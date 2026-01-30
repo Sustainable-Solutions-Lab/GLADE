@@ -192,7 +192,6 @@ def plot_yll_bar(
 
 
 if __name__ == "__main__":
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     # Load GHG intensity data (at food level)

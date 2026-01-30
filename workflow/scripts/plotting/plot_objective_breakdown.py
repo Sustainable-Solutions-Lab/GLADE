@@ -6,6 +6,7 @@
 """Plot objective breakdown from pre-computed analysis data."""
 
 from collections.abc import Iterable
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -16,6 +17,8 @@ import numpy as np
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 # Human-readable labels for category columns
 CATEGORY_LABELS = {

@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import logging
 from pathlib import Path
 
 from affine import Affine
@@ -25,6 +26,8 @@ from rasterio.transform import array_bounds
 import xarray as xr
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 # Crop to group mapping for simplified visualization
 CROP_TO_GROUP = {

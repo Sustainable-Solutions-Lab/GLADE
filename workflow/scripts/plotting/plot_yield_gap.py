@@ -183,8 +183,7 @@ def plot_yield_gap(
 
 
 if __name__ == "__main__":
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
+    setup_script_logging(snakemake.log[0])
     # Snakemake interface
     plot_yield_gap(
         potential_path=snakemake.input.potential_yield,

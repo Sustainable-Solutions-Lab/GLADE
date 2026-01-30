@@ -5,6 +5,7 @@
 """Plot emissions breakdown by source for CO2, CH4, and N2O."""
 
 from collections import defaultdict
+import logging
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -19,6 +20,8 @@ import pandas as pd
 import pypsa
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 
 def categorize_emission_carrier(carrier: str, bus_carrier: str) -> str:
@@ -858,7 +861,6 @@ def plot_emissions_choropleth(
 
 
 if __name__ == "__main__":
-    global logger
     logger = setup_script_logging(snakemake.log[0])
 
     network = pypsa.Network(snakemake.input.network)

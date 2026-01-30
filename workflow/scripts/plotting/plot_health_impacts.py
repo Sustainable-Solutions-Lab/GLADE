@@ -8,6 +8,7 @@
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import logging
 from math import exp
 from pathlib import Path
 
@@ -27,6 +28,8 @@ import pypsa
 from workflow.scripts import constants
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_health_cluster_population
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -313,7 +313,6 @@ def _plot_raster_map(
 
 
 def main() -> None:
-    global logger
     logger = setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
     network = pypsa.Network(snakemake.input.network)  # type: ignore[name-defined]
