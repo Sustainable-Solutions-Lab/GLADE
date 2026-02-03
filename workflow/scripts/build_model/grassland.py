@@ -5,7 +5,7 @@
 """Grassland feed production components for the food systems model.
 
 This module handles the creation of links that produce ruminant feed from
-grassland (both rainfed cropland and dedicated marginal pasture).
+the pasture pool.
 """
 
 from collections.abc import Callable
@@ -143,7 +143,7 @@ def add_grassland_feed_links(
     grass_df["resource_class"] = grass_df["resource_class"].astype(int)
     grass_df = grass_df.set_index(["region", "resource_class"])
 
-    base_frame = grass_df.join(
+    base_df = grass_df.join(
         land_rainfed[["area_ha"]].rename(columns={"area_ha": "land_area"}),
         how="inner",
     )
@@ -153,72 +153,49 @@ def add_grassland_feed_links(
             .astype(float)
             .rename("observed_area")
         )
-        base_frame = base_frame.join(observed_area, how="left")
+        base_df = base_df.join(observed_area, how="left")
 
-    candidate_area = base_frame["suitable_area"].fillna(base_frame["land_area"])
-    land_cap = np.minimum(candidate_area.to_numpy(), base_frame["land_area"].to_numpy())
-    base_index = base_frame.index
-    land_cap_series = pd.Series(land_cap, index=base_index, dtype=float)
+    candidate_area = base_df["suitable_area"].fillna(base_df["land_area"])
+    land_cap = np.minimum(candidate_area.to_numpy(), base_df["land_area"].to_numpy())
+    idx = base_df.index
+    land_cap_series = pd.Series(land_cap, index=idx, dtype=float)
 
-    cropland_frame = base_frame.copy()
-    marginal_frame: pd.DataFrame | None = None
+    # Compute total available area per region/class: cropland-eligible + marginal
+    if pasture_land_area is not None and not pasture_land_area.empty:
+        marginal_cap_series = pasture_land_area.reindex(idx, fill_value=0.0)
+    else:
+        marginal_cap_series = pd.Series(0.0, index=idx, dtype=float)
 
     if use_actual_production:
-        # Under validation the observed harvested/grazed area is split so that
-        # marginal hectares are satisfied first (subject to the derived
-        # land_marginal potential) and only the remainder pulls from the shared
-        # cropland pool.
         observed_series = (
-            pd.to_numeric(base_frame.get("observed_area"), errors="coerce")
+            pd.to_numeric(base_df.get("observed_area"), errors="coerce")
             .fillna(0.0)
             .astype(float)
         )
-        base_frame = base_frame.drop(columns=["observed_area"])
-        if pasture_land_area is not None and not pasture_land_area.empty:
-            marginal_cap_series = pasture_land_area.reindex(base_index, fill_value=0.0)
-        else:
-            marginal_cap_series = pd.Series(0.0, index=base_index, dtype=float)
-        observed_aligned = observed_series.reindex(base_index)
-        marginal_alloc = np.minimum(
-            observed_aligned.to_numpy(), marginal_cap_series.to_numpy()
+        base_df = base_df.drop(columns=["observed_area"])
+        observed_aligned = observed_series.reindex(idx)
+        # Total available = observed, capped by combined land potential
+        total_cap = land_cap_series + marginal_cap_series
+        base_df["available_area"] = np.minimum(
+            observed_aligned.to_numpy(), total_cap.to_numpy()
         )
-        cropland_observed = np.maximum(
-            observed_aligned.to_numpy() - marginal_alloc, 0.0
-        )
-        cropland_available = np.minimum(land_cap_series.to_numpy(), cropland_observed)
-        cropland_frame["available_area"] = cropland_available
-        cropland_frame = cropland_frame[cropland_frame["available_area"] > 0]
-
-        if np.any(marginal_alloc > 0.0):
-            marginal_series = pd.Series(
-                marginal_alloc,
-                index=base_index,
-                name="available_area",
-            )
-            marginal_frame = grass_df.join(marginal_series, how="inner")
-            marginal_frame = marginal_frame[marginal_frame["available_area"] > 0]
     else:
-        cropland_frame["available_area"] = land_cap_series.reindex(
-            cropland_frame.index
-        ).to_numpy()
-        cropland_frame = cropland_frame[cropland_frame["available_area"] > 0]
-        if pasture_land_area is not None and not pasture_land_area.empty:
-            marginal_frame = grass_df.join(
-                pasture_land_area.rename("available_area"), how="inner"
-            )
-            marginal_frame = marginal_frame[marginal_frame["available_area"] > 0]
+        # Total available = cropland-eligible cap + marginal cap
+        base_df["available_area"] = (
+            (land_cap_series + marginal_cap_series).reindex(base_df.index).to_numpy()
+        )
 
-    # Helper to convert a per-region/class frame into Link components. The caller
-    # passes a name prefix so we can distinguish cropland-competing vs.
-    # marginal-only grassland in the network outputs.
-    def _add_links_for_frame(
-        frame: pd.DataFrame,
+    production_df = base_df[base_df["available_area"] > 0].copy()
+
+    def _add_links(
+        df: pd.DataFrame,
         name_prefix: str,
         bus0_builder: Callable[[pd.Series], str],
     ) -> bool:
-        if frame is None or frame.empty:
+        """Convert a per-region/class DataFrame into grassland production links."""
+        if df is None or df.empty:
             return False
-        work = frame.reset_index()
+        work = df.reset_index()
         work["country"] = work["region"].map(region_to_country)
         work = work[work["country"].isin(allowed_countries)]
         work = work.dropna(subset=["country"])
@@ -270,25 +247,13 @@ def add_grassland_feed_links(
         n.links.add(work_indexed.index, **params)
         return True
 
-    link_added = False
-
-    # Standard grassland links consume land from the same rainfed cropland pool
-    # that crops use, so they continue to compete for those hectares when
-    # optimisation is unconstrained.
-    link_added |= _add_links_for_frame(
-        cropland_frame,
+    # All grassland links consume from the pasture pool, which aggregates
+    # land from existing cropland, new land conversion, and marginal grazing land.
+    link_added = _add_links(
+        production_df,
         "produce:grassland",
-        lambda r: f"land:pool:{r['region']}_c{int(r['resource_class'])}_r",
+        lambda r: f"land:pasture:{r['region']}_c{int(r['resource_class'])}",
     )
-
-    if marginal_frame is not None and not marginal_frame.empty:
-        # Marginal grassland links tap into the exclusive land_marginal buses so
-        # grazing can expand without reducing cropland-suitable land.
-        link_added |= _add_links_for_frame(
-            marginal_frame,
-            "produce:grassland_marginal",
-            lambda r: f"land:marginal:{r['region']}_c{int(r['resource_class'])}",
-        )
 
     if not link_added:
         logger.info("Grassland entries have zero available area; skipping")

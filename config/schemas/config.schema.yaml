@@ -106,6 +106,8 @@ properties:
       - use_actual_production
       - enforce_gdd_baseline
       - land_slack
+      - disable_new_cropland
+      - disable_new_pasture
       - slack_marginal_cost
       - production_year
       - production_stability
@@ -123,6 +125,12 @@ properties:
       land_slack:
         type: boolean
         description: "Enable land slack generators (allows exceeding regional land limits at cost)"
+      disable_new_cropland:
+        type: boolean
+        description: "If true, no new land can supply the cropland pool"
+      disable_new_pasture:
+        type: boolean
+        description: "If true, no new land can supply the pasture pool"
       slack_marginal_cost:
         type: number
         minimum: 0

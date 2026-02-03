@@ -17,6 +17,7 @@ import pandas as pd
 import pypsa
 
 from .. import constants
+from .utils import merge_lef
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ def add_regional_crop_production_links(
 
             bus0_series = df.apply(
                 lambda r,
-                ws=ws: f"land:pool:{r['region']}_c{int(r['resource_class'])}_{'i' if ws == 'i' else 'r'}",
+                ws=ws: f"land:cropland:{r['region']}_c{int(r['resource_class'])}_{'i' if ws == 'i' else 'r'}",
                 axis=1,
             )
             missing_bus_mask = ~bus0_series.isin(n.buses.static.index)
@@ -468,7 +469,7 @@ def add_multi_cropping_links(
     index_df["resource_class"] = index_df["resource_class"].astype(int)
     index_df["carrier"] = "crop_production_multi"
     index_df["bus0"] = (
-        "land:pool:"
+        "land:cropland:"
         + index_df["region"].astype(str)
         + "_c"
         + index_df["resource_class"].astype(str)
@@ -720,7 +721,7 @@ def add_multi_cropping_links(
 def add_spared_land_links(
     n: pypsa.Network,
     baseline_land_df: pd.DataFrame,
-    luc_lef_lookup: Mapping[tuple[str, int, str, str], float],
+    lef_df: pd.DataFrame,
 ) -> None:
     """Add optional links to allocate spared land and credit CO2 sinks.
 
@@ -733,12 +734,12 @@ def add_spared_land_links(
         The network to add links to.
     baseline_land_df : pd.DataFrame
         Current cropland area by region/water_supply/resource_class.
-    luc_lef_lookup : Mapping
-        Land-use change emission factors (tCO2/ha/yr) by (region, class, water, use).
-        The spared land LEFs already incorporate AGB threshold filtering.
+    lef_df : pd.DataFrame
+        LEF lookup from ``_build_luc_lef_lookup`` (columns: region,
+        resource_class, water_supply, use, lef).
     """
 
-    if not luc_lef_lookup:
+    if lef_df.empty:
         logger.info("No LUC LEF entries available for spared land; skipping")
         return
 
@@ -750,12 +751,7 @@ def add_spared_land_links(
         logger.info("No baseline cropland available for sparing; skipping spared links")
         return
 
-    df["lef"] = df.apply(
-        lambda r: luc_lef_lookup.get(
-            (r["region"], int(r["resource_class"]), r["water_supply"], "spared"), 0.0
-        ),
-        axis=1,
-    )
+    df["lef"] = merge_lef(df, lef_df, "spared", allow_missing=True)
 
     df = df[(df["lef"] != 0.0) & (df["area_ha"] > 0)].copy()
 
@@ -765,7 +761,7 @@ def add_spared_land_links(
 
     def _bus0(row: pd.Series) -> str:
         return (
-            f"land:existing:{row['region']}_c{int(row['resource_class'])}_"
+            f"land:existing_cropland:{row['region']}_c{int(row['resource_class'])}_"
             f"{row['water_supply']}"
         )
 
@@ -790,7 +786,7 @@ def add_spared_land_links(
     missing_bus_mask = ~df["bus0"].isin(n.buses.static.index)
     if missing_bus_mask.any():
         logger.debug(
-            "Skipping %d spared land links due to missing land_existing buses",
+            "Skipping %d spared land links due to missing land_existing_cropland buses",
             int(missing_bus_mask.sum()),
         )
         df = df[~missing_bus_mask]
@@ -836,9 +832,8 @@ def add_spared_land_links(
         bus1=link_df["sink_bus"],
         efficiency=1.0,
         bus2="emission:co2",
-        efficiency2=(
-            link_df["lef"] * 1e6 * constants.TONNE_TO_MEGATONNE
-        ),  # tCO2/ha/yr → MtCO2/Mha/yr
+        # tCO2/ha = MtCO2/Mha numerically, no conversion needed
+        efficiency2=link_df["lef"],
         p_nom_extendable=True,
         p_nom_max=link_df["area_mha"],
         region=link_df["region"],

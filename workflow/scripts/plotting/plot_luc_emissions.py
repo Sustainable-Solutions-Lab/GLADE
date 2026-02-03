@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _extract_luc_emissions_by_country(
     n: pypsa.Network, snapshot: str, region_to_country: dict[str, str]
 ) -> pd.DataFrame:
-    """Extract LUC emissions by country from land_conversion and spare_land links.
+    """Extract LUC emissions by country from expansion and sparing links.
 
     Returns DataFrame with columns: expansion_co2, sequestration_co2, net_co2
     Index is country code (ISO3).
@@ -42,7 +42,7 @@ def _extract_luc_emissions_by_country(
     sequestration: dict[str, float] = {}
 
     # Land conversion links (positive emissions from expansion)
-    lc_mask = links_static["carrier"] == "land_conversion"
+    lc_mask = links_static["carrier"].isin(["land_conversion", "new_to_pasture"])
     lc_links = links_static[lc_mask]
     for link in lc_links.index:
         region = lc_links.at[link, "region"]
@@ -57,7 +57,7 @@ def _extract_luc_emissions_by_country(
         expansion[country] = expansion.get(country, 0.0) + emission
 
     # Spare land links (negative emissions from sequestration)
-    sl_mask = links_static["carrier"] == "spare_land"
+    sl_mask = links_static["carrier"].isin(["spare_land", "spare_marginal"])
     sl_links = links_static[sl_mask]
     for link in sl_links.index:
         region = sl_links.at[link, "region"]
@@ -118,7 +118,9 @@ def _extract_luc_intensity_by_cell(
             land_area[key] = land_area.get(key, 0.0) + abs(flow)
 
     _process_links("land_conversion")
+    _process_links("new_to_pasture")
     _process_links("spare_land")
+    _process_links("spare_marginal")
 
     # Compute intensity: MtCO2/yr / Mha = tCO2/ha/yr
     intensity: dict[tuple[int, int], float] = {}

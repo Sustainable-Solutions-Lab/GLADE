@@ -99,7 +99,8 @@ Names use `:` as delimiter. Pattern: `{type}:{specifier}:{scope}`
 | Crops/foods | `{type}:{item}:{country}` | `crop:wheat:USA`, `food:bread:USA` |
 | Feed | `feed:{category}:{country}` | `feed:ruminant_grain:USA` |
 | Nutrients | `nutrient:{nutrient}:{country}` | `nutrient:protein:USA` |
-| Land | `land:{type}:{region}_c{class}_{water}` | `land:pool:usa_east_c1_r` |
+| Land (cropland) | `land:cropland:{region}_c{class}_{water}` | `land:cropland:usa_east_c1_r` |
+| Land (pasture) | `land:pasture:{region}_c{class}` | `land:pasture:usa_east_c1` |
 | Water | `water:{region}` | `water:usa_east` |
 | Emissions | `emission:{type}` | `emission:co2`, `emission:ghg` |
 | **Links** | | |

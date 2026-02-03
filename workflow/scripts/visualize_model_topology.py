@@ -28,7 +28,7 @@ def categorize_bus(bus_name: str, carrier: str) -> str | None:
     Returns None if the bus should not appear in the high-level topology.
     """
     # Land
-    if carrier == "land" or "land_" in bus_name:
+    if carrier.startswith("land"):
         return "Land"
 
     # Water

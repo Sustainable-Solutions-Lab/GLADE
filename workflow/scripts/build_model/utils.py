@@ -158,27 +158,74 @@ def _fresh_mass_conversion_factors(
     return factors
 
 
-def _build_luc_lef_lookup(
-    df: pd.DataFrame,
-) -> dict[tuple[str, int, str, str], float]:
-    """Return LEF (tCO2/ha/yr) lookup keyed by (region, class, water, use)."""
+def _build_luc_lef_lookup(df: pd.DataFrame) -> pd.DataFrame:
+    """Return LEF (tCO2/ha/yr) as a DataFrame with columns:
+    region, resource_class, water_supply, use, lef.
+    """
 
     if df.empty:
-        return {}
-
-    lookup: dict[tuple[str, int, str, str], float] = {}
-    for row in df.itertuples(index=False):
-        lef = getattr(row, "LEF_tCO2_per_ha_yr", np.nan)
-        if not np.isfinite(lef):
-            continue
-        key = (
-            str(row.region),
-            int(row.resource_class),
-            str(row.water),
-            str(row.use),
+        return pd.DataFrame(
+            columns=["region", "resource_class", "water_supply", "use", "lef"]
         )
-        lookup[key] = float(lef)
-    return lookup
+
+    out = df.rename(columns={"water": "water_supply", "LEF_tCO2_per_ha_yr": "lef"})[
+        ["region", "resource_class", "water_supply", "use", "lef"]
+    ].copy()
+    out["resource_class"] = out["resource_class"].astype(int)
+    out["lef"] = pd.to_numeric(out["lef"], errors="coerce")
+    out = out[np.isfinite(out["lef"])].reset_index(drop=True)
+    return out
+
+
+def merge_lef(
+    df: pd.DataFrame,
+    lef_df: pd.DataFrame,
+    use: str,
+    *,
+    on: list[str] | None = None,
+    allow_missing: bool = False,
+) -> pd.Series:
+    """Merge LEF values onto *df* for a given land-use type.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Target rows (must contain the *on* columns).
+    lef_df : pd.DataFrame
+        LEF lookup from :func:`_build_luc_lef_lookup`.
+    use : str
+        Land-use type to filter (e.g. ``"cropland"``, ``"pasture"``, ``"spared"``).
+    on : list[str], optional
+        Columns to merge on.  Defaults to ``["region", "resource_class", "water_supply"]``.
+    allow_missing : bool
+        If ``False`` (default), raise :class:`ValueError` when any merged LEF is NaN.
+        If ``True``, fill NaN with ``0.0``.
+
+    Returns
+    -------
+    pd.Series
+        LEF values aligned to *df*'s index.
+    """
+    if on is None:
+        on = ["region", "resource_class", "water_supply"]
+
+    subset = lef_df.loc[lef_df["use"] == use, [*on, "lef"]]
+    merged = df[on].merge(subset, on=on, how="left")
+
+    missing_mask = merged["lef"].isna()
+    if missing_mask.any():
+        n_missing = int(missing_mask.sum())
+        n_total = len(df)
+        sample = df.loc[missing_mask.values, on].drop_duplicates().head(5)
+        if not allow_missing:
+            raise ValueError(
+                f"Missing LEF data for use={use!r}: {n_missing}/{n_total} rows "
+                f"({n_missing / n_total:.1%}). "
+                f"Sample unmatched keys:\n{sample.to_string(index=False)}"
+            )
+        merged["lef"] = merged["lef"].fillna(0.0)
+
+    return merged["lef"].set_axis(df.index)
 
 
 def _calculate_manure_n_outputs(

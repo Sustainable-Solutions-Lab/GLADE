@@ -158,7 +158,7 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
                 categories.append("Water")
             elif carrier == "fertilizer":
                 categories.append("Fertilizer")
-            elif carrier == "spared_land":
+            elif carrier in ("spared_land", "spared_marginal"):
                 categories.append("Crop production")
             elif carrier == "production_stability":
                 categories.append("Production stability")

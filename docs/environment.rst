@@ -37,13 +37,15 @@ With this structure the linear program keeps separate ledgers for each greenhous
 Land representation in the network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Land is represented with three carriers and corresponding bus groups per (region, resource class, water supply):
+Land is represented with a dual-pool structure per (region, resource class):
 
-* ``land_pool_*`` buses hold the usable cropland area that production links consume.
-* ``land_existing_*`` buses supply the baseline cropland area (from ``processing/{name}/cropland_baseline_by_class.csv``) via fixed-capacity generators and one-way links into the pool.
-* ``land_new_*`` buses supply expansion land up to the configured regional limit; ``convert_new_land_*`` links route this expansion into the pool and emit CO₂ according to the cropland LEFs.
+* ``land:cropland:*`` buses hold the usable cropland area that crop production links consume (per region/class/water).
+* ``land:pasture:*`` buses hold the pasture area that grassland production links consume (per region/class, water-agnostic).
+* ``land:existing_cropland:*`` buses supply the baseline cropland area (from ``processing/{name}/cropland_baseline_by_class.csv``) via fixed-capacity generators and links into both pools.
+* ``land:new:*`` buses supply expansion land up to the configured regional limit; conversion links route this expansion into either pool and emit CO₂ according to the relevant LEFs.
+* ``land:existing_pasture:*`` buses supply grazing-only land that flows exclusively to the pasture pool.
 
-Crop production links draw only from ``land_pool_*``. LUC emissions are carried on the expansion-conversion links, not on crop links. When validation fixes harvested areas, optional slack generators attach to the pool to enforce fixed land use at a configurable penalty.
+Crop production links draw from ``land:cropland:*``; grassland production links draw from ``land:pasture:*``. LUC emissions are carried on the conversion links, not on production links. When validation fixes harvested areas, optional slack generators attach to both pool types.
 
 Sources of Emissions
 ~~~~~~~~~~~~~~~~~~~~
@@ -678,6 +680,8 @@ All GHG emissions (CO₂, CH₄, N₂O) are priced at a configurable rate:
 
 .. [2] FAO (2022). *Global Livestock Environmental Assessment Model (GLEAM) 3.0*. Food and Agriculture Organization of the United Nations. https://www.fao.org/gleam/
 
+.. _luc-emissions:
+
 Land Use Change
 ---------------
 
@@ -741,9 +745,9 @@ The land-use change workflow:
 
 During model construction, ``build_model.py`` loads these inputs, converts LEFs to marginal CO₂ flows (MtCO₂ per Mha-year), and applies them by land state:
 
-* Baseline cropland enters via fixed ``land_existing_*`` generators. It does **not** pay conversion costs but can be **spared** via ``spare_*`` links that earn regrowth credits.
-* Expansion cropland lives on ``land_new_*`` buses up to the suitability cap; only the ``convert_new_land_*`` links that move this expansion into ``land_pool_*`` apply cropland LEFs (and emit CO₂).
-* Pasture conversion costs ride on the grazing supply links that tap pasture area.
+* Baseline cropland enters via fixed ``land_existing_cropland_*`` generators. It does **not** pay conversion costs but can be **spared** via ``spare_land_*`` links that earn regrowth credits.
+* Expansion cropland lives on ``land_new_*`` buses up to the suitability cap; ``convert_new_land_*`` links move this expansion into ``land:cropland:*`` (applying cropland LEFs), and ``convert_new_to_pasture_*`` links move it into ``land:pasture:*`` (applying pasture LEFs).
+* Existing grazing-only land enters via ``land_existing_pasture_*`` generators and flows to the pasture pool via ``marginal_to_pasture`` links, or can be spared via ``spare_marginal`` links.
 
 All LUC flows connect to the global ``co2`` bus, which feeds a priced CO₂ store (``emissions.ghg_price``). This keeps cropland expansion, pasture expansion, and regrowth credits on the same carbon price scale while avoiding double-charging existing land. The spatial pattern of the resulting LEFs is shown in :ref:`fig-luc-lef`.
 
@@ -771,6 +775,8 @@ Irrigated vs. rainfed split
 
 Both cropland sources use the GAEZ "land equipped for irrigation" share raster to split total cropland into irrigated and rainfed fractions. This ensures consistent water supply attribution regardless of the underlying cropland extent source.
 
+.. _luc-spared-land-filtering:
+
 Spared land filtering
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -795,9 +801,9 @@ This ensures:
 
 The threshold of 20 tC/ha is intermediate between typical agricultural land (0-10 tC/ha) and mature forest (50-200+ tC/ha). Areas above this threshold are assumed to represent established vegetation that would not exhibit the rapid early-successional regrowth rates quantified by Cook-Patton et al.
 
-Only baseline cropland (existing managed area) can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
+Only baseline cropland (existing managed area) and existing grazing-only land can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
 
-Network links that implement this behaviour use the ``spare_*`` naming scheme: they pull from ``land_existing_*`` buses and produce to dedicated ``land_spared_*`` sinks with CO₂ outputs proportional to the spared LEF.
+Network links that implement this behaviour use the ``spare_*`` naming scheme: ``spare_land_*`` links pull from ``land:existing_cropland:*`` buses, and ``spare_marginal_*`` links pull from ``land:existing_pasture:*`` buses. Both produce to dedicated spared-land sinks with CO₂ outputs proportional to the spared LEF.
 
 .. _fig-luc-lef:
 

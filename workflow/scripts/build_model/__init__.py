@@ -29,10 +29,11 @@ Buses::
     residue:{item}:{country}        e.g., residue:wheat_straw:USA
     group:{group}:{country}         e.g., group:cereals:USA
     nutrient:{nutrient}:{country}   e.g., nutrient:protein:USA
-    land:pool:{region}_c{class}_{water}     e.g., land:pool:usa_east_c1_r
-    land:existing:{region}_c{class}_{water} e.g., land:existing:usa_east_c1_r
-    land:new:{region}_c{class}_{water}      e.g., land:new:usa_east_c1_r
-    land:marginal:{region}_c{class}         e.g., land:marginal:usa_east_c1
+    land:cropland:{region}_c{class}_{water}            e.g., land:cropland:usa_east_c1_r
+    land:pasture:{region}_c{class}                    e.g., land:pasture:usa_east_c1
+    land:existing_cropland:{region}_c{class}_{water}  e.g., land:existing_cropland:usa_east_c1_r
+    land:new:{region}_c{class}_{water}                e.g., land:new:usa_east_c1_r
+    land:existing_pasture:{region}_c{class}           e.g., land:existing_pasture:usa_east_c1
     water:{region}                  e.g., water:usa_east
     fertilizer:supply               (global)
     fertilizer:{country}            e.g., fertilizer:USA
@@ -48,8 +49,12 @@ Links::
     animal:{product}_{feed}:{country}         e.g., animal:beef_grassfed:USA
     consume:{food}:{country}                  e.g., consume:bread:USA
     use:existing_land:{region}_c{class}_{water}
+    use:existing_to_pasture:{region}_c{class}
     convert:new_land:{region}_c{class}_{water}
+    convert:new_to_pasture:{region}_c{class}
+    use:marginal_to_pasture:{region}_c{class}
     spare:land:{region}_c{class}_{water}
+    spare:marginal:{region}_c{class}
     distribute:fertilizer:{country}
     incorporate:residue_{item}:{country}
     aggregate:{from}_to_{to}                  e.g., aggregate:ch4_to_ghg
@@ -66,7 +71,7 @@ Stores::
 
 Generators::
 
-    supply:land_{type}:{region}_c{class}_{water}  e.g., supply:land_existing:usa_east_c1_r
+    supply:land_{type}:{region}_c{class}_{water}  e.g., supply:land_existing_cropland:usa_east_c1_r
     supply:fertilizer
     slack:{type}:{scope}             e.g., slack:water:usa_east
 
@@ -77,7 +82,8 @@ Use the ``carrier`` column for type identification. Carriers identify **link typ
 specific items (crops, foods, products) are stored in metadata columns.
 
 - Buses: ``crop_{crop}``, ``food_{food}``, ``feed_{category}``, ``residue_{item}``,
-  ``group_{group}``, ``{nutrient}``, ``land``, ``land_existing``, ``land_new``,
+  ``group_{group}``, ``{nutrient}``, ``land_cropland``, ``land_pasture``,
+  ``land_existing_cropland``, ``land_existing_pasture``, ``land_new``,
   ``water``, ``fertilizer``, ``co2``, ``ch4``, ``n2o``, ``ghg``
 
 - Links:
@@ -95,7 +101,8 @@ specific items (crops, foods, products) are stored in metadata columns.
   - ``biomass_byproduct``: Byproduct to biomass (use ``food`` column)
   - ``fertilizer_distribution``: Fertilizer distribution
   - ``emission_aggregation``: GHG emission aggregation
-  - ``land_use``, ``land_conversion``, ``spare_land``, ``residue_incorporation``: unchanged
+  - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``,
+    ``marginal_to_pasture``, ``spare_land``, ``spare_marginal``, ``residue_incorporation``
 
 Custom Columns
 --------------

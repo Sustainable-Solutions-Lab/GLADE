@@ -4,28 +4,34 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
-from collections.abc import Mapping
-
 import numpy as np
 import pandas as pd
 import pypsa
 
-from .. import constants
 from . import primary_resources
+from .utils import merge_lef
 
 
 def add_land_components(
     n: pypsa.Network,
     total_land_area: pd.DataFrame,
     baseline_land_area: pd.DataFrame,
-    luc_lef_lookup: Mapping[tuple[str, int, str, str], float],
+    lef_df: pd.DataFrame,
     *,
     reg_limit: float,
     land_slack_cost: float,
     enable_land_slack: bool,
     min_area_ha: float,
+    disable_new_cropland: bool = False,
+    disable_new_pasture: bool = False,
 ) -> None:
-    """Add land buses/generators that distinguish existing vs. new cropland.
+    """Add dual-pool land system with separate cropland and pasture pools.
+
+    Creates a land system with:
+    - Cropland pools (per region/class/water) for crop production
+    - Pasture pools (per region/class, water-agnostic) for grassland production
+    - Supply from existing cropland baseline and new land expansion
+    - Links routing land to both pools with appropriate LUC emissions
 
     Parameters
     ----------
@@ -35,17 +41,21 @@ def add_land_components(
         Total suitable land indexed by (region, water_supply, resource_class).
     baseline_land_area : pd.DataFrame
         Currently managed cropland indexed the same way.
-    luc_lef_lookup : Mapping
-        Lookup for cropland LUC coefficients.
+    lef_df : pd.DataFrame
+        LEF lookup from ``_build_luc_lef_lookup`` (columns: region,
+        resource_class, water_supply, use, lef).
     reg_limit : float
-        Maximum fraction of total potential cropland that can be utilized.
-        Applies to both existing and new cropland combined.
+        Maximum fraction of total potential land that can be utilized.
     land_slack_cost : float
         Marginal cost (bnUSD/Mha) for slack generators.
     enable_land_slack : bool
-        Whether to add slack generators that allow exceeding regional land limits.
-    min_area_ha : float, optional
-        Minimum area threshold (ha). Entries with area below this are filtered out.
+        Whether to add slack generators for land constraints.
+    min_area_ha : float
+        Minimum area threshold (ha). Entries below this are filtered out.
+    disable_new_cropland : bool
+        If True, no new land can supply the cropland pool.
+    disable_new_pasture : bool
+        If True, no new land can supply the pasture pool.
     """
 
     if total_land_area.empty:
@@ -53,11 +63,14 @@ def add_land_components(
 
     # Ensure carriers exist before adding components
     for carrier_name in (
-        "land",
-        "land_existing",
+        "land_cropland",
+        "land_pasture",
+        "land_existing_cropland",
         "land_new",
         "land_use",
         "land_conversion",
+        "existing_to_pasture",
+        "new_to_pasture",
     ):
         if carrier_name not in n.carriers.static.index:
             n.carriers.add(carrier_name, unit="Mha")
@@ -78,9 +91,6 @@ def add_land_components(
     land_index_df["expansion_area_ha"] = expansion_series.to_numpy()
 
     # Apply reg_limit to total potential area, then split between existing and new
-    # total_available = total_area * reg_limit
-    # existing_available = min(baseline, total_available)
-    # new_available = max(0, total_available - baseline)
     total_available = land_index_df["area_ha"] * reg_limit
     land_index_df["existing_available_ha"] = np.minimum(
         land_index_df["baseline_area_ha"], total_available
@@ -90,8 +100,9 @@ def add_land_components(
     )
 
     # Build bus names using ':' delimiter
-    land_index_df["pool_bus"] = (
-        "land:pool:"
+    # Cropland pools: per region/class/water
+    land_index_df["cropland_bus"] = (
+        "land:cropland:"
         + land_index_df["region"].astype(str)
         + "_c"
         + land_index_df["resource_class"].astype(str)
@@ -99,7 +110,7 @@ def add_land_components(
         + land_index_df["water_supply"].astype(str)
     )
     land_index_df["existing_bus"] = (
-        "land:existing:"
+        "land:existing_cropland:"
         + land_index_df["region"].astype(str)
         + "_c"
         + land_index_df["resource_class"].astype(str)
@@ -113,6 +124,13 @@ def add_land_components(
         + land_index_df["resource_class"].astype(str)
         + "_"
         + land_index_df["water_supply"].astype(str)
+    )
+    # Pasture pools: per region/class only (water-agnostic)
+    land_index_df["pasture_bus"] = (
+        "land:pasture:"
+        + land_index_df["region"].astype(str)
+        + "_c"
+        + land_index_df["resource_class"].astype(str)
     )
 
     active_mask = (
@@ -131,30 +149,42 @@ def add_land_components(
         if land_index_df.empty:
             return
 
-    pool_bus_names = land_index_df["pool_bus"].tolist()
-    pool_regions = land_index_df["region"].tolist()
-    n.buses.add(pool_bus_names, carrier="land", region=pool_regions)
+    # Add cropland pool buses (per region/class/water)
+    cropland_bus_names = land_index_df["cropland_bus"].tolist()
+    cropland_regions = land_index_df["region"].tolist()
+    n.buses.add(cropland_bus_names, carrier="land_cropland", region=cropland_regions)
 
-    # Filter to rows where existing land is available (after applying reg_limit)
+    # Add pasture pool buses (per region/class, water-agnostic)
+    # Only create unique pasture buses (deduplicate across water supplies)
+    pasture_df = (
+        land_index_df.groupby(["region", "resource_class", "pasture_bus"])
+        .first()
+        .reset_index()
+    )
+    pasture_bus_names = pasture_df["pasture_bus"].tolist()
+    pasture_regions = pasture_df["region"].tolist()
+    n.buses.add(pasture_bus_names, carrier="land_pasture", region=pasture_regions)
+
+    # --- Existing cropland supply ---
     baseline_rows = land_index_df[land_index_df["existing_available_ha"] > 0].copy()
     if not baseline_rows.empty:
+        # Add existing cropland buses
         n.buses.add(
             baseline_rows["existing_bus"].tolist(),
-            carrier="land_existing",
+            carrier="land_existing_cropland",
             region=baseline_rows["region"].tolist(),
         )
 
-    if not baseline_rows.empty:
+        # Add generators for existing cropland
         existing_gen_names = [
-            f"supply:land_existing:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
+            f"supply:land_existing_cropland:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
             for row in baseline_rows.itertuples(index=False)
         ]
-        # Use existing_available_ha (constrained by reg_limit) instead of baseline
         existing_available_mha = baseline_rows["existing_available_ha"].to_numpy() / 1e6
         n.generators.add(
             existing_gen_names,
             bus=baseline_rows["existing_bus"].tolist(),
-            carrier="land_existing",
+            carrier="land_existing_cropland",
             p_nom=existing_available_mha,
             p_nom_extendable=False,
             marginal_cost=0.0,
@@ -162,15 +192,17 @@ def add_land_components(
             resource_class=baseline_rows["resource_class"].tolist(),
             water_supply=baseline_rows["water_supply"].tolist(),
         )
-        existing_link_names = [
+
+        # Links: existing → cropland pool
+        existing_to_cropland_names = [
             f"use:existing_land:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
             for row in baseline_rows.itertuples(index=False)
         ]
         n.links.add(
-            existing_link_names,
+            existing_to_cropland_names,
             carrier="land_use",
             bus0=baseline_rows["existing_bus"].tolist(),
-            bus1=baseline_rows["pool_bus"].tolist(),
+            bus1=baseline_rows["cropland_bus"].tolist(),
             efficiency=1.0,
             p_nom=existing_available_mha,
             p_nom_extendable=False,
@@ -179,39 +211,42 @@ def add_land_components(
             water_supply=baseline_rows["water_supply"].tolist(),
         )
 
-    if luc_lef_lookup:
-        land_index_df["luc_efficiency"] = land_index_df.apply(
-            lambda r: float(
-                luc_lef_lookup.get(
-                    (
-                        r["region"],
-                        int(r["resource_class"]),
-                        r["water_supply"],
-                        "cropland",
-                    ),
-                    0.0,
-                )
-            ),
-            axis=1,
-        )
-    else:
-        land_index_df["luc_efficiency"] = 0.0
+        # Links: existing → pasture pool (rainfed only, no LUC emissions)
+        rainfed_baseline = baseline_rows[baseline_rows["water_supply"] == "r"].copy()
+        if not rainfed_baseline.empty:
+            existing_to_pasture_names = [
+                f"use:existing_to_pasture:{row.region}_c{int(row.resource_class)}"
+                for row in rainfed_baseline.itertuples(index=False)
+            ]
+            rainfed_mha = rainfed_baseline["existing_available_ha"].to_numpy() / 1e6
+            n.links.add(
+                existing_to_pasture_names,
+                carrier="existing_to_pasture",
+                bus0=rainfed_baseline["existing_bus"].tolist(),
+                bus1=rainfed_baseline["pasture_bus"].tolist(),
+                efficiency=1.0,
+                p_nom=rainfed_mha,
+                p_nom_extendable=False,
+                region=rainfed_baseline["region"].tolist(),
+                resource_class=rainfed_baseline["resource_class"].tolist(),
+                water_supply=rainfed_baseline["water_supply"].tolist(),
+            )
 
-    # Filter to rows where new land is available (after applying reg_limit)
+    # --- New land supply ---
     expansion_rows = land_index_df[land_index_df["new_available_ha"] > 0].copy()
     if not expansion_rows.empty:
+        # Add new land buses
         n.buses.add(
             expansion_rows["new_bus"].tolist(),
             carrier="land_new",
             region=expansion_rows["region"].tolist(),
         )
 
-    if not expansion_rows.empty:
+        # Add generators for new land
         new_gen_names = [
             f"supply:land_new:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
             for row in expansion_rows.itertuples(index=False)
         ]
-        # Use new_available_ha (already accounts for reg_limit)
         new_available_mha = expansion_rows["new_available_ha"].to_numpy() / 1e6
         n.generators.add(
             new_gen_names,
@@ -224,28 +259,72 @@ def add_land_components(
             resource_class=expansion_rows["resource_class"].tolist(),
             water_supply=expansion_rows["water_supply"].tolist(),
         )
-        new_link_names = [
-            f"convert:new_land:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
-            for row in expansion_rows.itertuples(index=False)
-        ]
-        n.links.add(
-            new_link_names,
-            carrier="land_conversion",
-            bus0=expansion_rows["new_bus"].tolist(),
-            bus1=expansion_rows["pool_bus"].tolist(),
-            efficiency=1.0,
-            bus2="emission:co2",
-            efficiency2=(
-                expansion_rows["luc_efficiency"].to_numpy()
-                * 1e6
-                * constants.TONNE_TO_MEGATONNE
-            ),
-            p_nom_extendable=True,
-            p_nom_max=new_available_mha,
-            region=expansion_rows["region"].tolist(),
-            resource_class=expansion_rows["resource_class"].tolist(),
-            water_supply=expansion_rows["water_supply"].tolist(),
-        )
 
+        # Links: new → cropland pool (with LUC emissions)
+        if not disable_new_cropland:
+            if not lef_df.empty:
+                luc_cropland = merge_lef(
+                    expansion_rows, lef_df, "cropland", allow_missing=False
+                )
+            else:
+                luc_cropland = pd.Series(0.0, index=expansion_rows.index)
+            new_to_cropland_names = [
+                f"convert:new_land:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
+                for row in expansion_rows.itertuples(index=False)
+            ]
+            # tCO2/ha = MtCO2/Mha numerically, no conversion needed
+            n.links.add(
+                new_to_cropland_names,
+                carrier="land_conversion",
+                bus0=expansion_rows["new_bus"].tolist(),
+                bus1=expansion_rows["cropland_bus"].tolist(),
+                efficiency=1.0,
+                bus2="emission:co2",
+                efficiency2=luc_cropland.to_numpy(),
+                p_nom_extendable=True,
+                p_nom_max=new_available_mha,
+                region=expansion_rows["region"].tolist(),
+                resource_class=expansion_rows["resource_class"].tolist(),
+                water_supply=expansion_rows["water_supply"].tolist(),
+            )
+
+        # Links: new → pasture pool (rainfed only, with LUC emissions)
+        if not disable_new_pasture:
+            rainfed_expansion = expansion_rows[
+                expansion_rows["water_supply"] == "r"
+            ].copy()
+            if not rainfed_expansion.empty:
+                if not lef_df.empty:
+                    luc_pasture = merge_lef(
+                        rainfed_expansion, lef_df, "pasture", allow_missing=False
+                    )
+                else:
+                    luc_pasture = pd.Series(0.0, index=rainfed_expansion.index)
+                new_to_pasture_names = [
+                    f"convert:new_to_pasture:{row.region}_c{int(row.resource_class)}"
+                    for row in rainfed_expansion.itertuples(index=False)
+                ]
+                rainfed_new_mha = rainfed_expansion["new_available_ha"].to_numpy() / 1e6
+                n.links.add(
+                    new_to_pasture_names,
+                    carrier="new_to_pasture",
+                    bus0=rainfed_expansion["new_bus"].tolist(),
+                    bus1=rainfed_expansion["pasture_bus"].tolist(),
+                    efficiency=1.0,
+                    bus2="emission:co2",
+                    efficiency2=luc_pasture.to_numpy(),
+                    p_nom_extendable=True,
+                    p_nom_max=rainfed_new_mha,
+                    region=rainfed_expansion["region"].tolist(),
+                    resource_class=rainfed_expansion["resource_class"].tolist(),
+                    water_supply=rainfed_expansion["water_supply"].tolist(),
+                )
+
+    # Add slack generators to both pool types if enabled
     if enable_land_slack:
-        primary_resources._add_land_slack_generators(n, pool_bus_names, land_slack_cost)
+        primary_resources._add_land_slack_generators(
+            n, cropland_bus_names, land_slack_cost
+        )
+        primary_resources._add_land_slack_generators(
+            n, pasture_bus_names, land_slack_cost
+        )

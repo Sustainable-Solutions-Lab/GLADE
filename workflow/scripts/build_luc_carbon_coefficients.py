@@ -7,10 +7,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 from pathlib import Path
 
 from affine import Affine
+from exactextract import exact_extract
+from exactextract.raster import NumPyRasterSource
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pyproj import Geod
 import xarray as xr
 
 CO2_PER_C = 44.0 / 12.0
@@ -45,27 +46,6 @@ def _zone_index(latitudes: np.ndarray, width: int) -> np.ndarray:
     return zone_idx
 
 
-def _area_matrix(transform: Affine, height: int, width: int) -> np.ndarray:
-    pixel_width = abs(transform.a)
-    pixel_height = abs(transform.e)
-    left = transform.c
-    top = transform.f
-
-    geod = Geod(ellps="WGS84")
-    row_areas = np.zeros(height, dtype=np.float64)
-    for row in range(height):
-        lat_center = top + (row + 0.5) * transform.e
-        lat_top = lat_center + pixel_height / 2.0
-        lat_bottom = lat_center - pixel_height / 2.0
-        lon_left = left
-        lon_right = left + pixel_width
-        lons = [lon_left, lon_right, lon_right, lon_left, lon_left]
-        lats = [lat_bottom, lat_bottom, lat_top, lat_top, lat_bottom]
-        area_m2, _ = geod.polygon_area_perimeter(lons, lats)
-        row_areas[row] = abs(area_m2) / 10000.0  # m² → ha
-    return np.repeat(row_areas[:, np.newaxis], width, axis=1).astype(np.float32)
-
-
 def _zone_parameters(path: str) -> dict[str, np.ndarray]:
     params = pd.read_csv(path, comment="#").set_index("zone")
     missing = [zone for zone in ZONE_ORDER if zone not in params.index]
@@ -75,13 +55,6 @@ def _zone_parameters(path: str) -> dict[str, np.ndarray]:
         )
     ordered = params.loc[ZONE_ORDER]
     return {key: ordered[key].to_numpy(dtype=np.float32) for key in ordered.columns}
-
-
-def _region_name_map(regions_path: str) -> dict[int, str]:
-    regions_gdf = gpd.read_file(regions_path)
-    if "region" not in regions_gdf.columns:
-        raise ValueError("regions.geojson must contain a 'region' column")
-    return {idx: str(name) for idx, name in enumerate(regions_gdf["region"].tolist())}
 
 
 def _ensure_mode_zero(mode: str) -> None:
@@ -113,12 +86,10 @@ def main() -> None:
 
     classes_ds = xr.load_dataset(classes_path)
     transform, height, width, lon, lat = _load_transform(classes_ds)
-    region_id = classes_ds["region_id"].astype(np.int32).values
     resource_class = classes_ds["resource_class"].astype(np.int16).values
 
     zone_idx = _zone_index(lat, width)
     params = _zone_parameters(zone_params_path)
-    area_matrix = _area_matrix(transform, height, width)
 
     agb = xr.load_dataset(agb_path)["agb_tc_per_ha"].astype(np.float32).values
     soc_0_30 = xr.load_dataset(soc_path)["soc_0_30_tc_per_ha"].astype(np.float32).values
@@ -212,18 +183,34 @@ def main() -> None:
         encoding={"LEF_tCO2_per_ha_yr": {"zlib": True, "dtype": "float32"}},
     )
 
-    region_map = _region_name_map(regions_path)
-    valid_cells = (
-        (region_id >= 0)
-        & (resource_class >= 0)
-        & np.isfinite(area_matrix)
-        & (area_matrix > 0)
-    )
+    # --- Aggregate per-pixel LEFs to per-region/class coefficients ---
+    # Uses exact_extract with region polygons and class masks so that tiny
+    # regions that don't cover a full grid cell still get correct
+    # area-weighted LEFs via fractional cell overlaps.
+
+    regions_gdf = gpd.read_file(regions_path)
+    crs_wkt = classes_ds.attrs.get("crs_wkt")
+    if crs_wkt:
+        regions_gdf = regions_gdf.to_crs(crs_wkt)
+    regions_for_extract = regions_gdf.reset_index()
+
+    xmin = float(transform.c)
+    ymax = float(transform.f)
+    xmax = xmin + width * transform.a
+    ymin = ymax + height * transform.e
+    raster_kwargs = {
+        "xmin": xmin,
+        "ymin": ymin,
+        "xmax": xmax,
+        "ymax": ymax,
+        "nodata": np.nan,
+        "srs_wkt": crs_wkt,
+    }
 
     uses = {
-        "cropland": lef_crop,
-        "pasture": lef_past,
-        "spared": lef_spared,
+        "cropland": lef_crop.astype(np.float32),
+        "pasture": lef_past.astype(np.float32),
+        "spared": lef_spared.astype(np.float32),
     }
     water_options = {
         "cropland": ("r", "i"),
@@ -231,55 +218,90 @@ def main() -> None:
         "spared": ("r", "i"),
     }
 
-    rows: list[dict[str, object]] = []
-    region_ids = np.unique(region_id[valid_cells])
-    for rid in region_ids:
-        region_mask = valid_cells & (region_id == rid)
-        if not np.any(region_mask):
+    agb_src = NumPyRasterSource(
+        np.where(np.isfinite(agb), agb, np.nan).astype(np.float32), **raster_kwargs
+    )
+
+    n_classes = (
+        int(np.nanmax(resource_class)) + 1
+        if np.isfinite(resource_class.astype(float)).any()
+        else 0
+    )
+
+    frames: list[pd.DataFrame] = []
+    for cls in range(n_classes):
+        mask_float = (resource_class == cls).astype(np.float32)
+        if not np.any(mask_float > 0):
             continue
-        class_ids = np.unique(resource_class[region_mask])
-        for cid in class_ids:
-            class_mask = region_mask & (resource_class == cid)
-            if not np.any(class_mask):
+
+        # Class mask as weight (0 = not this class, 1 = this class).
+        # Don't set nodata so 0s are treated as zero weight, not missing.
+        mask_src = NumPyRasterSource(
+            mask_float, xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax, srs_wkt=crs_wkt
+        )
+
+        # Area-weighted mean AGB per region for this class
+        agb_stats = exact_extract(
+            agb_src,
+            regions_for_extract,
+            ["weighted_mean"],
+            weights=mask_src,
+            include_cols=["region"],
+            output="pandas",
+        )
+
+        # Area-weighted mean LEF per region for each use type
+        for use, lef_arr in uses.items():
+            lef_src = NumPyRasterSource(lef_arr, **raster_kwargs)
+            lef_stats = exact_extract(
+                lef_src,
+                regions_for_extract,
+                ["weighted_mean"],
+                weights=mask_src,
+                include_cols=["region"],
+                output="pandas",
+            )
+
+            # Merge and filter to rows with finite LEFs
+            merged = lef_stats.rename(columns={"weighted_mean": "LEF_tCO2_per_ha_yr"})
+            merged["mean_agb_tc_per_ha"] = agb_stats["weighted_mean"]
+            merged["resource_class"] = cls
+            merged["use"] = use
+            merged = merged.dropna(subset=["LEF_tCO2_per_ha_yr"])
+            merged = merged[np.isfinite(merged["LEF_tCO2_per_ha_yr"])]
+            if merged.empty:
                 continue
-            weights = area_matrix[class_mask]
 
-            # Compute area-weighted mean AGB for this region/class
-            agb_values = agb[class_mask]
-            agb_valid = np.isfinite(agb_values)
-            if np.any(agb_valid):
-                w_agb = weights[agb_valid]
-                if w_agb.sum() > 0:
-                    mean_agb_tc_per_ha = float(
-                        np.sum(agb_values[agb_valid] * w_agb) / np.sum(w_agb)
-                    )
-                else:
-                    mean_agb_tc_per_ha = 0.0
-            else:
-                mean_agb_tc_per_ha = 0.0
+            # Fill NaN AGB with 0 (regions outside AGB coverage)
+            merged["mean_agb_tc_per_ha"] = merged["mean_agb_tc_per_ha"].fillna(0.0)
 
-            for use, data in uses.items():
-                values = data[class_mask]
-                valid = np.isfinite(values)
-                if not np.any(valid):
-                    continue
-                w = weights[valid]
-                if w.sum() <= 0:
-                    continue
-                avg_lef = float(np.sum(values[valid] * w) / np.sum(w))
-                for water in water_options[use]:
-                    rows.append(
-                        {
-                            "region": region_map.get(rid, f"region{rid:04d}"),
-                            "resource_class": int(cid),
-                            "water": water,
-                            "use": use,
-                            "LEF_tCO2_per_ha_yr": avg_lef,
-                            "mean_agb_tc_per_ha": mean_agb_tc_per_ha,
-                        }
-                    )
+            # Expand water supply options for this use type
+            for water in water_options[use]:
+                frame = merged[
+                    [
+                        "region",
+                        "resource_class",
+                        "use",
+                        "LEF_tCO2_per_ha_yr",
+                        "mean_agb_tc_per_ha",
+                    ]
+                ].copy()
+                frame["water"] = water
+                frames.append(frame)
 
-    coeffs_df = pd.DataFrame(rows)
+    if frames:
+        coeffs_df = pd.concat(frames, ignore_index=True)
+    else:
+        coeffs_df = pd.DataFrame(
+            columns=[
+                "region",
+                "resource_class",
+                "water",
+                "use",
+                "LEF_tCO2_per_ha_yr",
+                "mean_agb_tc_per_ha",
+            ]
+        )
     coeffs_df.sort_values(["region", "resource_class", "water", "use"], inplace=True)
     coeffs_df.to_csv(coeffs_out, index=False)
 

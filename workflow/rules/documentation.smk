@@ -19,6 +19,7 @@ DOC_FIGURES = [
     # Introduction figures
     "intro_global_coverage",
     "model_topology",
+    "land_flows",
     # Land use figures
     "land_resource_classes",
     "environment_luc_inputs",
@@ -73,6 +74,17 @@ rule doc_fig_model_topology:
         "logs/shared/doc_fig_model_topology.log",
     script:
         "../scripts/visualize_model_topology.py"
+
+
+rule doc_fig_land_flows:
+    """Generate land flow diagram showing cropland and pasture pool structure."""
+    output:
+        svg="docs/_static/figures/land_flows.svg",
+        png="docs/_static/figures/land_flows.png",
+    log:
+        "logs/shared/doc_fig_land_flows.log",
+    script:
+        "../scripts/doc_figures/land_flows.py"
 
 
 rule doc_fig_land_resource_classes:

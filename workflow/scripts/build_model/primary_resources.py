@@ -24,7 +24,7 @@ def _add_land_slack_generators(
 
     if "land_slack" not in n.carriers.static.index:
         n.carriers.add("land_slack", unit="Mha")
-    # Extract suffix from bus name (e.g., "land:pool:usa_c1_r" -> "usa_c1_r")
+    # Extract suffix from bus name (e.g., "land:cropland:usa_c1_r" -> "usa_c1_r")
     slack_names = [f"slack:land:{bus.split(':')[-1]}" for bus in bus_names]
     n.generators.add(
         slack_names,
