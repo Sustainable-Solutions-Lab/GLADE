@@ -50,15 +50,9 @@ COLORMAPS = {
     "regrowth": _cmap_with_white_base("YlOrRd"),
 }
 
-# Figure dimensions (width, height in inches)
-FIGURE_SIZES = {
-    "map_wide": (12, 6),  # Wide maps (global coverage)
-    "map_square": (8, 8),  # Square maps (regional focus)
-    "map_tall": (6, 9),  # Tall maps (specific regions)
-    "chart": (8, 6),  # Standard charts
-    "chart_wide": (10, 4),  # Wide charts (timeseries, comparisons)
-    "chart_small": (6, 4),  # Small charts (insets, simple plots)
-}
+# Canonical figure width in inches. All doc figures use this width so that
+# font sizes appear consistent when rendered at the same display width.
+FIGURE_WIDTH = 9
 
 # Typography helpers
 FONT_SIZES = {
@@ -67,6 +61,8 @@ FONT_SIZES = {
     "legend": 9,
     "tick": 9,
     "annotation": 8,
+    "colorbar_label": 9,
+    "colorbar_tick": 8,
 }
 
 # Standard DPI for output
@@ -117,7 +113,11 @@ def apply_doc_style():
 
 
 def save_doc_figure(fig, output_path: str, format: str = "svg", **kwargs):
-    """Save figure with consistent settings.
+    """Save figure with consistent settings and normalized width.
+
+    Crops vertical whitespace (like ``bbox_inches="tight"``) but preserves
+    the full figure width so that font sizes appear consistent when figures
+    are displayed at the same width on the web page.
 
     Args:
         fig: Matplotlib figure object
@@ -125,6 +125,8 @@ def save_doc_figure(fig, output_path: str, format: str = "svg", **kwargs):
         format: Output format ('svg' or 'png')
         **kwargs: Additional arguments passed to fig.savefig()
     """
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.transforms import Bbox
 
     output_path = Path(output_path)
 
@@ -136,11 +138,30 @@ def save_doc_figure(fig, output_path: str, format: str = "svg", **kwargs):
     else:
         raise ValueError(f"Unsupported format: {format}")
 
-    # Set defaults
+    pad = kwargs.pop("pad_inches", 0.1)
+
+    # Compute tight bounding box using Agg renderer (works regardless of
+    # the active backend; returns inches in matplotlib 3.x).
+    original_canvas = fig.canvas
+    FigureCanvasAgg(fig)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    tight_inches = fig.get_tightbbox(renderer)
+    fig.set_canvas(original_canvas)
+
+    # Preserve full figure width (no horizontal crop) but crop vertically
+    fig_width = fig.get_size_inches()[0]
+    bbox = Bbox.from_extents(
+        0,
+        tight_inches.y0 - pad,
+        fig_width,
+        tight_inches.y1 + pad,
+    )
+
     save_kwargs = {
         "format": format,
-        "bbox_inches": "tight",
-        "pad_inches": 0.1,
+        "bbox_inches": bbox,
+        "pad_inches": 0,  # padding already included in bbox
     }
 
     if format == "png":

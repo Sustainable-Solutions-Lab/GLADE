@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 
 from workflow.scripts.doc_figures_config import (
     COLORS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -43,7 +44,7 @@ def main(regions_path: str, svg_output_path: str, png_output_path: str):
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -73,7 +74,11 @@ def main(regions_path: str, svg_output_path: str, png_output_path: str):
         else:
             spine.set_visible(False)
 
-    ax.set_title("Global Model Coverage and Regional Aggregation", fontsize=12, pad=10)
+    ax.set_title(
+        "Global Model Coverage and Regional Aggregation",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
+    )
 
     # Add text annotation with region count
     n_regions = len(regions)
@@ -82,7 +87,7 @@ def main(regions_path: str, svg_output_path: str, png_output_path: str):
         0.98,
         f"{n_regions} optimization regions",
         transform=ax.transAxes,
-        fontsize=9,
+        fontsize=FONT_SIZES["annotation"],
         verticalalignment="top",
         bbox={
             "boxstyle": "round,pad=0.5",

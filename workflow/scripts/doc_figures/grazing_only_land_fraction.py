@@ -17,6 +17,7 @@ import xarray as xr
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
+    FIGURE_WIDTH,
     apply_doc_style,
     save_doc_figure,
 )
@@ -203,7 +204,7 @@ def main(
     cmap = COLORMAPS["forest"]
     norm = mcolors.Normalize(vmin=0.0, vmax=vmax)
 
-    fig = plt.figure(figsize=(12, 5.4))
+    fig = plt.figure(figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.45))
     gs = fig.add_gridspec(
         1, 2, wspace=0.025, left=0.02, right=0.98, top=0.9, bottom=0.1
     )

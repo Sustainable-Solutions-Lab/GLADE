@@ -14,7 +14,7 @@ import pandas as pd
 
 from workflow.scripts.doc_figures_config import (
     COLORS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
     FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
@@ -127,7 +127,7 @@ def plot_ghg_bar(
     apply_doc_style()
 
     if df.empty:
-        fig, ax = plt.subplots(figsize=FIGURE_SIZES["chart"])
+        fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5))
         ax.text(0.5, 0.5, "No data available", ha="center", va="center")
         ax.axis("off")
         save_doc_figure(fig, svg_path, format="svg")
@@ -138,7 +138,7 @@ def plot_ghg_bar(
     # Sort by GHG intensity descending (highest at top)
     df = df.sort_values("ghg_kgco2e_per_kg", ascending=True)
 
-    fig, ax = plt.subplots(figsize=FIGURE_SIZES["chart"])
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5))
 
     groups = df["food_group"].tolist()
     labels = [FOOD_GROUP_LABELS.get(g, g.replace("_", " ").title()) for g in groups]
@@ -195,7 +195,7 @@ def plot_yll_bar(
     apply_doc_style()
 
     if df.empty:
-        fig, ax = plt.subplots(figsize=FIGURE_SIZES["chart"])
+        fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5))
         ax.text(0.5, 0.5, "No data available", ha="center", va="center")
         ax.axis("off")
         save_doc_figure(fig, svg_path, format="svg")
@@ -208,7 +208,7 @@ def plot_yll_bar(
     df["abs_yll"] = df["yll_per_kg"].abs()
     df = df.sort_values("abs_yll", ascending=True)
 
-    fig, ax = plt.subplots(figsize=FIGURE_SIZES["chart"])
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5))
 
     groups = df["food_group"].tolist()
     labels = [FOOD_GROUP_LABELS.get(g, g.replace("_", " ").title()) for g in groups]

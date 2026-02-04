@@ -14,7 +14,8 @@ import xarray as xr
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -85,7 +86,7 @@ def _plot_panel(
     )
 
     ax.coastlines(linewidth=0.3, color="#666666", alpha=0.4)
-    ax.set_title(title, fontsize=11, pad=6)
+    ax.set_title(title, fontsize=FONT_SIZES["title"], pad=6)
 
     cbar = plt.colorbar(
         im,
@@ -94,8 +95,8 @@ def _plot_panel(
         pad=0.02,
         fraction=0.035,
     )
-    cbar.set_label(cbar_label, fontsize=9)
-    cbar.ax.tick_params(labelsize=8)
+    cbar.set_label(cbar_label, fontsize=FONT_SIZES["colorbar_label"])
+    cbar.ax.tick_params(labelsize=FONT_SIZES["colorbar_tick"])
 
     return ax
 
@@ -136,7 +137,7 @@ def main(
     fig, axes = plt.subplots(
         2,
         2,
-        figsize=(FIGURE_SIZES["map_wide"][0], FIGURE_SIZES["map_wide"][1] * 1.2),
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.6),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -204,7 +205,7 @@ def main(
         0.02,
         0.02,
         "Data sources: ESA CCI Land Cover, ESA Biomass CCI v6.0, ISRIC SoilGrids 2.0, Cook-Patton & Griscom (2020)",
-        fontsize=8,
+        fontsize=FONT_SIZES["colorbar_tick"],
     )
 
     save_doc_figure(fig, svg_output_path, format="svg")

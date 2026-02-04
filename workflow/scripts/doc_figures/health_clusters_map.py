@@ -16,7 +16,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from workflow.scripts.doc_figures_config import (
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -71,7 +72,7 @@ def main(
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -102,7 +103,7 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title("Health Clusters", fontsize=12, pad=10)
+    ax.set_title("Health Clusters", fontsize=FONT_SIZES["title"], pad=10)
 
     # Add text annotation with cluster count
     ax.text(
@@ -110,7 +111,7 @@ def main(
         0.98,
         f"{n_clusters} health clusters\n{len(countries)} countries",
         transform=ax.transAxes,
-        fontsize=9,
+        fontsize=FONT_SIZES["annotation"],
         verticalalignment="top",
         bbox={
             "boxstyle": "round,pad=0.5",

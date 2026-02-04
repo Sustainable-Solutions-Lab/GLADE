@@ -16,7 +16,8 @@ import pandas as pd
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -87,7 +88,7 @@ def main(
     fig, (ax1, ax2) = plt.subplots(
         1,
         2,
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -127,7 +128,9 @@ def main(
 
     crop_display_name = crop_name.replace("-", " ").title()
     ax1.set_title(
-        f"{crop_display_name} - Resource Class {resource_class_1}", fontsize=11, pad=10
+        f"{crop_display_name} - Resource Class {resource_class_1}",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
     )
 
     # Plot resource class 2
@@ -161,7 +164,9 @@ def main(
             spine.set_visible(False)
 
     ax2.set_title(
-        f"{crop_display_name} - Resource Class {resource_class_2}", fontsize=11, pad=10
+        f"{crop_display_name} - Resource Class {resource_class_2}",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
     )
 
     # Add shared colorbar at bottom
@@ -173,7 +178,9 @@ def main(
     )
     sm.set_array([])
     cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
-    cbar.set_label("Average Yield (tonnes/hectare)", fontsize=9)
+    cbar.set_label(
+        "Average Yield (tonnes/hectare)", fontsize=FONT_SIZES["colorbar_label"]
+    )
 
     plt.tight_layout()
 

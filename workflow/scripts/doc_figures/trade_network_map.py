@@ -16,7 +16,8 @@ from sklearn.cluster import KMeans
 
 from workflow.scripts.doc_figures_config import (
     COLORS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -118,7 +119,7 @@ def main(
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -250,7 +251,9 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(f"Trade Network ({n_hubs_actual} Hubs)", fontsize=12, pad=10)
+    ax.set_title(
+        f"Trade Network ({n_hubs_actual} Hubs)", fontsize=FONT_SIZES["title"], pad=10
+    )
 
     # Add legend
     from matplotlib.lines import Line2D
@@ -288,7 +291,7 @@ def main(
         frameon=True,
         fancybox=False,
         shadow=False,
-        fontsize=8,
+        fontsize=FONT_SIZES["colorbar_tick"],
     )
 
     plt.tight_layout()

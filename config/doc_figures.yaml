@@ -46,3 +46,6 @@ food_groups:
       min: 100      # ~1 small serving/day
     eggs:
       min: 15       # ~1 egg every 4 days
+
+solving:
+  solver: "gurobi"

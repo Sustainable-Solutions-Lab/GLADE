@@ -13,7 +13,8 @@ import xarray as xr
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -66,26 +67,26 @@ def main(
         regions = regions.to_crs(4326)
 
     use_to_label = {
-        "cropland": "Cropland land-use emission factor",
-        "pasture": "Pasture land-use emission factor",
-        "spared": "Spared land-use emission factor",
+        "cropland": "Cropland expansion emission factor",
+        "spared": "Spared land sequestration factor",
     }
 
     panels = []
     for use, data in zip(uses, lef_cube):
-        panels.append((use, data))
+        if use in use_to_label:
+            panels.append((use, data))
 
     vmax = _symmetric_limits([arr for _, arr in panels])
 
     ncols = 2
-    nrows = 2
+    nrows = 1
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(FIGURE_SIZES["map_wide"][0], FIGURE_SIZES["map_wide"][1] * 1.4),
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
-    axes = axes.flatten()
+    axes = [axes] if nrows == 1 and ncols == 1 else list(axes)
 
     extent = [float(lon.min()), float(lon.max()), float(lat.min()), float(lat.max())]
 
@@ -111,32 +112,34 @@ def main(
             linewidth=0.2,
             alpha=0.3,
         )
-        ax.set_title(use_to_label.get(use, use.title()), fontsize=11, pad=8)
+        ax.set_title(
+            use_to_label.get(use, use.title()), fontsize=FONT_SIZES["title"], pad=8
+        )
 
     # If there are fewer panels than axes (e.g. last panel missing), hide extras
     for ax in axes[len(panels) :]:
         ax.set_visible(False)
 
     fig.subplots_adjust(
-        left=0.05, right=0.97, top=0.91, bottom=0.16, wspace=0.18, hspace=0.25
+        left=0.03,
+        right=0.97,
+        top=0.90,
+        bottom=0.18,
+        wspace=0.12,
     )
 
     cbar = fig.colorbar(
         im,
-        ax=[a for a in axes if a.get_visible()],
+        ax=axes,
         orientation="horizontal",
-        fraction=0.035,
+        fraction=0.045,
         pad=0.08,
     )
-    cbar.set_label("Land-use emission factor (tCO₂ per ha per year)", fontsize=9)
-    cbar.ax.tick_params(labelsize=8)
-
-    fig.text(
-        0.05,
-        0.09,
-        "Positive values = emissions cost    Negative values = sequestration credit",
-        fontsize=8,
+    cbar.set_label(
+        "Land-use emission factor (tCO₂ per ha per year)",
+        fontsize=FONT_SIZES["colorbar_label"],
     )
+    cbar.ax.tick_params(labelsize=FONT_SIZES["colorbar_tick"])
 
     save_doc_figure(fig, svg_output_path, format="svg")
     save_doc_figure(fig, png_output_path, format="png", dpi=300)

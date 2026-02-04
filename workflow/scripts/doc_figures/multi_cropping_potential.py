@@ -19,7 +19,8 @@ import rasterio
 import rasterio.enums
 
 from workflow.scripts.doc_figures_config import (
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -204,10 +205,9 @@ def main(
 
     cmap_zones, norm_zones = _build_zone_colormap()
 
-    fig_width, fig_height = FIGURE_SIZES["map_wide"]
     fig, axes = plt.subplots(
         nrows=2,
-        figsize=(fig_width, fig_height * 1.7),
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.85),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
     fig.subplots_adjust(hspace=0.3)
@@ -238,7 +238,11 @@ def main(
     )
     ax_top.coastlines(linewidth=0.3, color="#666666", alpha=0.4)
     supply_label = "Rain-fed" if water_supply == "rainfed" else "Irrigated"
-    ax_top.set_title(f"GAEZ Multi-Cropping Zones ({supply_label})", fontsize=12, pad=10)
+    ax_top.set_title(
+        f"GAEZ Multi-Cropping Zones ({supply_label})",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
+    )
 
     cbar_top = fig.colorbar(
         im,
@@ -250,7 +254,7 @@ def main(
     ticks = np.arange(1, 1 + len(ZONE_LABELS))
     cbar_top.set_ticks(ticks)
     cbar_top.set_ticklabels([ZONE_LABELS[t] for t in ticks], rotation=20, ha="right")
-    cbar_top.ax.tick_params(labelsize=8)
+    cbar_top.ax.tick_params(labelsize=FONT_SIZES["colorbar_tick"])
 
     # Bottom panel: fraction of land suitable for multiple cropping
     ax_bottom = axes[1]
@@ -276,7 +280,7 @@ def main(
     ax_bottom.coastlines(linewidth=0.3, color="#666666", alpha=0.4)
     ax_bottom.set_title(
         f"Share of Region with Climate Suitable for Sequential Multi-Cropping ({supply_label})",
-        fontsize=12,
+        fontsize=FONT_SIZES["title"],
         pad=10,
     )
 
@@ -291,7 +295,9 @@ def main(
         pad=0.05,
         fraction=0.045,
     )
-    cbar_bottom.set_label("Fraction of region area", fontsize=9)
+    cbar_bottom.set_label(
+        "Fraction of region area", fontsize=FONT_SIZES["colorbar_label"]
+    )
 
     # Save outputs
     save_doc_figure(fig, svg_output_path, format="svg")

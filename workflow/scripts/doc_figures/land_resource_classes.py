@@ -18,7 +18,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
-from workflow.scripts.doc_figures_config import apply_doc_style, save_doc_figure
+from workflow.scripts.doc_figures_config import (
+    FIGURE_WIDTH,
+    FONT_SIZES,
+    apply_doc_style,
+    save_doc_figure,
+)
 
 
 def main(
@@ -115,7 +120,7 @@ def main(
 
     # Create figure (half-width for documentation)
     fig, ax = plt.subplots(
-        figsize=(6, 5),  # Compact size for inline documentation
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.85),
         subplot_kw={
             "projection": ccrs.Stereographic(
                 central_longitude=center_lon, central_latitude=center_lat
@@ -199,7 +204,7 @@ def main(
     title_text = f"Resource Class Stratification: {country_name} {region_name}"
     ax.set_title(
         title_text,
-        fontsize=12,
+        fontsize=FONT_SIZES["title"],
         pad=10,
         weight="bold",
     )
@@ -213,7 +218,10 @@ def main(
         fraction=0.046,
         ticks=np.arange(max_class + 1),
     )
-    cbar.set_label("Resource Class (higher = better yield potential)", fontsize=9)
+    cbar.set_label(
+        "Resource Class (higher = better yield potential)",
+        fontsize=FONT_SIZES["colorbar_label"],
+    )
     # Set tick labels to show class numbers
     cbar.ax.set_xticklabels([f"{int(i)}" for i in range(max_class + 1)])
 

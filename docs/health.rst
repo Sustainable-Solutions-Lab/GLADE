@@ -348,6 +348,16 @@ number of clusters is configured via ``health.region_clusters``.
    Health clusters grouping countries based on geographic proximity, GDP per
    capita similarity, and population balance.
 
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/health_burden.png
+   :width: 100%
+   :alt: Choropleth map of diet-attributable disease burden by health cluster
+
+   Baseline diet-attributable chronic disease burden (years of life lost per
+   100,000 population) by health cluster, computed from Global Burden of Disease
+   data. Clusters with higher burden tend to have diets with greater exposure to
+   dietary risk factors such as low fruit and vegetable intake or high red meat
+   consumption.
+
 Solver Compatibility
 ~~~~~~~~~~~~~~~~~~~~
 

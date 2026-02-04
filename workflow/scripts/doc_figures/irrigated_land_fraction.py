@@ -16,7 +16,8 @@ import rasterio
 import rasterio.enums
 
 from workflow.scripts.doc_figures_config import (
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -75,7 +76,7 @@ def main(
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -119,11 +120,16 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title("Fraction of Land Equipped for Irrigation", fontsize=12, pad=10)
+    ax.set_title(
+        "Fraction of Land Equipped for Irrigation", fontsize=FONT_SIZES["title"], pad=10
+    )
 
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, fraction=0.046)
-    cbar.set_label("Fraction of land equipped for irrigation", fontsize=9)
+    cbar.set_label(
+        "Fraction of land equipped for irrigation",
+        fontsize=FONT_SIZES["colorbar_label"],
+    )
 
     # Add data source note
     ax.text(
@@ -131,7 +137,7 @@ def main(
         0.02,
         "Data: GAEZ v5 (LR-IRR)",
         transform=ax.transAxes,
-        fontsize=8,
+        fontsize=FONT_SIZES["colorbar_tick"],
         verticalalignment="bottom",
         bbox={
             "boxstyle": "round,pad=0.3",

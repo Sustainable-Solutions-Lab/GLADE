@@ -15,7 +15,8 @@ import pandas as pd
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -66,7 +67,7 @@ def main(
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -98,7 +99,11 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title("Growing Season Water Availability by Region", fontsize=12, pad=10)
+    ax.set_title(
+        "Growing Season Water Availability by Region",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
+    )
 
     # Add colorbar
     sm = plt.cm.ScalarMappable(
@@ -112,7 +117,9 @@ def main(
     )
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, orientation="horizontal", pad=0.05, fraction=0.046)
-    cbar.set_label("Growing Season Water Availability (mm)", fontsize=9)
+    cbar.set_label(
+        "Growing Season Water Availability (mm)", fontsize=FONT_SIZES["colorbar_label"]
+    )
 
     # Add data source note
     ax.text(
@@ -120,7 +127,7 @@ def main(
         0.02,
         "Data: Water Footprint Network, aggregated to regions",
         transform=ax.transAxes,
-        fontsize=8,
+        fontsize=FONT_SIZES["colorbar_tick"],
         verticalalignment="bottom",
         bbox={
             "boxstyle": "round,pad=0.3",

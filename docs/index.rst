@@ -13,7 +13,60 @@ A global food systems optimization model that explores trade-offs between enviro
 
 *Dominant crop group and land-use intensity under increasing trade friction. The animation sweeps from nearly free trade (0.25× baseline transport costs) through the baseline (1×) and costly trade (4×) to near-autarky (100×). As trade becomes more expensive, production disperses from comparative-advantage regions toward local self-sufficiency, and total land use rises.*
 
+----
+
+Global scope and spatial resolution
+------------------------------------
+
+The model divides the world into sub-national optimization regions and connects them through hub-based :doc:`trade networks <food_processing>`. Within each region, high-resolution geophysical data — crop yield potentials, land cover, irrigation infrastructure, water availability — are aggregated from gridcell-level datasets to drive the optimization. More than 60 crops are represented, each with spatially explicit yield potentials derived from the `GAEZ <https://gaez.fao.org/>`_ framework. See :doc:`data_sources` for the full list of input datasets.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/intro_global_coverage.png
+   :width: 100%
+   :alt: Global model coverage map
+
+   Optimization regions (here 250) created by clustering administrative units. Each region has its own land endowment, crop yields, water budget, and dietary requirements.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/crop_yield_wheat.png
+   :width: 100%
+   :alt: Wheat yield potential map
+
+   Example input data: wheat rainfed yield potential (tonnes/ha) from GAEZ v5. See :doc:`crop_production` for yield maps of other crops, water resources, and multi-cropping.
+
+Supply chain representation
+---------------------------
+
+The optimization covers the food supply chain from primary resources to human nutrition: :doc:`land allocation <land_use>` and :doc:`crop production <crop_production>`, :doc:`livestock <livestock>` systems with grazing and feed-based pathways, :doc:`food processing <food_processing>` with co-products, waste, and international trade, and finally :doc:`nutritional requirements <nutrition>` that ensure diets meet caloric and food-group constraints for every country's population.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/model_topology.png
+   :width: 100%
+   :alt: Model topology showing high-level material flows
+
+   High-level topology of the model. Commodities flow from primary inputs (land, water, fertilizer) through crop and animal production, processing and trade, to final consumption — with emissions tracked at each stage. See :doc:`model_framework` for the mathematical formulation.
+
+Environmental impacts
+---------------------
+
+The model tracks greenhouse gas emissions from multiple sources — including land-use change, rice cultivation, livestock, and fertilizer application — all spatially resolved and converted to CO\ :sub:`2`-equivalents. The figure below shows one component: annualised emission factors from land-use change, derived from satellite-based biomass and soil carbon data. These and other emissions can be priced into the objective function or capped as constraints, allowing the optimizer to find production patterns that reduce environmental pressure. See :doc:`environment` for details.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/environment_luc_lef.png
+   :alt: Global maps of land-use change emission factors
+   :width: 100%
+
+   Annualised land-use change emission factors used in the optimisation. Left: CO\ :sub:`2` released per hectare of cropland expansion. Right: CO\ :sub:`2` sequestered per hectare of existing cropland spared and allowed to regenerate.
+
+Diet and health
+---------------
+
+Dietary constraints ensure that each country's population meets nutritional requirements across food groups. The model integrates epidemiological data from the `Global Burden of Disease <https://www.healthdata.org/research-analysis/gbd>`_ study to quantify how dietary patterns affect disease burden, measured in years of life lost. This makes it possible to optimize jointly for environmental sustainability and public health. See :doc:`nutrition`, :doc:`current_diets`, and :doc:`health`.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/health_burden.png
+   :width: 100%
+   :alt: Choropleth map of diet-attributable disease burden by health cluster
+
+   Baseline diet-attributable chronic disease burden (years of life lost per 100,000 population) by health cluster, derived from Global Burden of Disease data. Countries are grouped into epidemiological clusters that share similar disease profiles.
+
 .. toctree::
+   :hidden:
    :maxdepth: 2
 
    introduction
@@ -34,10 +87,3 @@ A global food systems optimization model that explores trade-offs between enviro
    analysis
    api/index
    development
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

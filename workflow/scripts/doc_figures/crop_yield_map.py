@@ -18,7 +18,8 @@ import rasterio
 
 from workflow.scripts.doc_figures_config import (
     COLORMAPS,
-    FIGURE_SIZES,
+    FIGURE_WIDTH,
+    FONT_SIZES,
     apply_doc_style,
     save_doc_figure,
 )
@@ -75,7 +76,7 @@ def main(
 
     # Create figure with EqualEarth projection
     fig, ax = plt.subplots(
-        figsize=FIGURE_SIZES["map_wide"],
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
 
@@ -123,11 +124,15 @@ def main(
 
     # Format crop name for title
     crop_display_name = crop_name.replace("-", " ").title()
-    ax.set_title(f"{crop_display_name} Yield Potential (Rainfed)", fontsize=12, pad=10)
+    ax.set_title(
+        f"{crop_display_name} Yield Potential (Rainfed)",
+        fontsize=FONT_SIZES["title"],
+        pad=10,
+    )
 
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, fraction=0.046)
-    cbar.set_label("Yield (tonnes/hectare)", fontsize=9)
+    cbar.set_label("Yield (tonnes/hectare)", fontsize=FONT_SIZES["colorbar_label"])
 
     # Add data source note
     ax.text(
@@ -135,7 +140,7 @@ def main(
         0.02,
         "Data: GAEZ v5",
         transform=ax.transAxes,
-        fontsize=8,
+        fontsize=FONT_SIZES["colorbar_tick"],
         verticalalignment="bottom",
         bbox={
             "boxstyle": "round,pad=0.3",

@@ -11,7 +11,6 @@ and a subtitle indicating the trade-friction scenario.
 """
 
 import logging
-from pathlib import Path
 
 import matplotlib
 
@@ -27,6 +26,12 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+from workflow.scripts.doc_figures_config import (
+    FIGURE_WIDTH,
+    FONT_SIZES,
+    apply_doc_style,
+    save_doc_figure,
+)
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
     CROP_GROUP_COLORS,
@@ -63,12 +68,10 @@ def _plot_frame(
         frame_label: Subtitle text describing this scenario.
         bar_xmax_mha: Fixed x-axis maximum for the bar chart (Mha).
     """
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    apply_doc_style()
 
     fig, ax = plt.subplots(
-        figsize=(13, 6.5),
-        dpi=150,
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH * 0.5),
         subplot_kw={"projection": ccrs.EqualEarth()},
     )
     ax.set_facecolor("#ffffff")
@@ -154,8 +157,8 @@ def _plot_frame(
     gl.ylocator = mticker.FixedLocator(np.arange(-60, 61, 15))
     gl.xformatter = LongitudeFormatter(number_format=".0f")
     gl.yformatter = LatitudeFormatter(number_format=".0f")
-    gl.xlabel_style = {"size": 6, "color": "#555555"}
-    gl.ylabel_style = {"size": 6, "color": "#555555"}
+    gl.xlabel_style = {"size": FONT_SIZES["annotation"], "color": "#555555"}
+    gl.ylabel_style = {"size": FONT_SIZES["annotation"], "color": "#555555"}
     gl.top_labels = False
     gl.right_labels = False
 
@@ -239,9 +242,11 @@ def _plot_frame(
 
         # Style inset
         inset_ax.set_yticks(y_positions)
-        inset_ax.set_yticklabels([g[0] for g in group_data], fontsize=6)
-        inset_ax.set_xlabel("Land use (Mha)", fontsize=6)
-        inset_ax.tick_params(axis="x", labelsize=5)
+        inset_ax.set_yticklabels(
+            [g[0] for g in group_data], fontsize=FONT_SIZES["tick"]
+        )
+        inset_ax.set_xlabel("Land use (Mha)", fontsize=FONT_SIZES["label"])
+        inset_ax.tick_params(axis="x", labelsize=FONT_SIZES["tick"])
         inset_ax.tick_params(axis="y", length=0)
 
         x_margin_factor = 1.22
@@ -265,7 +270,7 @@ def _plot_frame(
         "Gray hatched areas not modeled",
         ha="right",
         va="bottom",
-        fontsize=6,
+        fontsize=FONT_SIZES["annotation"],
         color="#666666",
         style="italic",
     )
@@ -278,15 +283,15 @@ def _plot_frame(
         transform=plate,
         ha="center",
         va="center",
-        fontsize=12,
+        fontsize=FONT_SIZES["title"],
         fontweight="bold",
         color="#444444",
         zorder=5,
     )
 
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    save_doc_figure(fig, output_path, format="png", dpi=300)
     plt.close(fig)
-    logger.info("Saved production pattern frame to %s", out)
+    logger.info("Saved production pattern frame to %s", output_path)
 
 
 def main() -> None:

@@ -808,11 +808,11 @@ Network links that implement this behaviour use the ``spare_*`` naming scheme: `
 .. _fig-luc-lef:
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/environment_luc_lef.png
-   :alt: Global maps of cropland, pasture, and spared land LEFs
+   :alt: Global maps of cropland expansion and spared land emission factors
    :align: center
    :width: 95%
 
-   Annualised land-use change emission factors (LEFs) used in the optimisation. Warm colors indicate positive emissions costs (CO₂ release), while cool colors represent sequestration credits.
+   Annualised land-use change emission factors (LEFs) used in the optimisation. Left: CO₂ released per hectare of cropland expansion. Right: CO₂ sequestered per hectare of existing cropland spared and allowed to regenerate.
 
 Limitations and assumptions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

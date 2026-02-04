@@ -14,6 +14,13 @@ from glob import glob
 # Documentation figures are generated using the doc_figures config
 DOC_FIG_NAME = "doc_figures"
 
+# Shared styling files tracked as inputs so Snakemake reruns figures when
+# font sizes, colormaps, or other styling parameters change.
+DOC_FIG_STYLE = [
+    "workflow/scripts/doc_figures_config.py",
+    "workflow/scripts/doc_figures_style.mplstyle",
+]
+
 # List of all documentation figures to generate
 DOC_FIGURES = [
     # Introduction figures
@@ -47,6 +54,7 @@ DOC_FIGURES = [
     "analysis_marginal_yll",
     # Health figures
     "health_clusters",
+    "health_burden",
 ]
 
 
@@ -54,6 +62,7 @@ rule doc_fig_intro_global_coverage:
     """Generate global coverage map showing all modeled regions."""
     input:
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/intro_global_coverage.svg",
         png="docs/_static/figures/intro_global_coverage.png",
@@ -78,6 +87,8 @@ rule doc_fig_model_topology:
 
 rule doc_fig_land_flows:
     """Generate land flow diagram showing cropland and pasture pool structure."""
+    input:
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/land_flows.svg",
         png="docs/_static/figures/land_flows.png",
@@ -92,6 +103,7 @@ rule doc_fig_land_resource_classes:
     input:
         classes=f"processing/{DOC_FIG_NAME}/resource_classes.nc",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/land_resource_classes.svg",
         png="docs/_static/figures/land_resource_classes.png",
@@ -109,6 +121,7 @@ rule doc_fig_environment_luc_inputs:
         soc=f"processing/{DOC_FIG_NAME}/luc/soc.nc",
         regrowth="processing/shared/luc/regrowth_resampled.nc",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/environment_luc_inputs.svg",
         png="docs/_static/figures/environment_luc_inputs.png",
@@ -123,6 +136,7 @@ rule doc_fig_environment_luc_lef:
     input:
         annualized=f"processing/{DOC_FIG_NAME}/luc/annualized.nc",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/environment_luc_lef.svg",
         png="docs/_static/figures/environment_luc_lef.png",
@@ -138,6 +152,7 @@ rule doc_fig_crop_yield:
         yield_raster=lambda w: gaez_path("yield", "r", w.crop),
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
         conversions="data/yield_unit_conversions.csv",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/crop_yield_{crop}.svg",
         png="docs/_static/figures/crop_yield_{crop}.png",
@@ -152,6 +167,7 @@ rule doc_fig_crop_yield_resource_class:
     input:
         crop_yields=f"processing/{DOC_FIG_NAME}/crop_yields/{{crop}}_r.csv",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/crop_yield_resource_class_{crop}.svg",
         png="docs/_static/figures/crop_yield_resource_class_{crop}.png",
@@ -169,6 +185,7 @@ rule doc_fig_multi_cropping_potential_rainfed:
     input:
         zone_raster=lambda w: gaez_path("multiple_cropping_zone", "r", "all"),
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/multi_cropping_potential_rainfed.svg",
         png="docs/_static/figures/multi_cropping_potential_rainfed.png",
@@ -185,6 +202,7 @@ rule doc_fig_multi_cropping_potential_irrigated:
     input:
         zone_raster=lambda w: gaez_path("multiple_cropping_zone", "i", "all"),
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/multi_cropping_potential_irrigated.svg",
         png="docs/_static/figures/multi_cropping_potential_irrigated.png",
@@ -201,6 +219,7 @@ rule doc_fig_water_basin_availability:
     input:
         basin_shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
         water_data=f"processing/{DOC_FIG_NAME}/water/blue_water_availability.csv",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/water_basin_availability.svg",
         png="docs/_static/figures/water_basin_availability.png",
@@ -215,6 +234,7 @@ rule doc_fig_water_region_availability:
     input:
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
         water_data=f"processing/{DOC_FIG_NAME}/water/region_growing_season_water.csv",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/water_region_availability.svg",
         png="docs/_static/figures/water_region_availability.png",
@@ -229,6 +249,7 @@ rule doc_fig_irrigated_land_fraction:
     input:
         irrigated_fraction="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/irrigated_land_fraction.svg",
         png="docs/_static/figures/irrigated_land_fraction.png",
@@ -243,6 +264,7 @@ rule doc_fig_grassland_yield:
     input:
         grassland_yield="data/downloads/grassland_yield_historical.nc4",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/grassland_yield.svg",
         png="docs/_static/figures/grassland_yield.png",
@@ -259,6 +281,7 @@ rule doc_fig_grazing_only_land_fraction:
         lc_masks=f"processing/{DOC_FIG_NAME}/luc/lc_masks.nc",
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
         suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/grazing_only_land_fraction.svg",
         png="docs/_static/figures/grazing_only_land_fraction.png",
@@ -272,6 +295,7 @@ rule doc_fig_trade_network:
     """Generate trade network map showing hubs and links."""
     input:
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/trade_network.svg",
         png="docs/_static/figures/trade_network.png",
@@ -325,6 +349,7 @@ rule doc_fig_analysis_ghg_health:
     input:
         ghg_intensity=f"results/{DOC_FIG_NAME}/analysis/scen-default/ghg_intensity.csv",
         health_marginals=f"results/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.csv",
+        style=DOC_FIG_STYLE,
     output:
         ghg_svg="docs/_static/figures/analysis_marginal_ghg.svg",
         ghg_png="docs/_static/figures/analysis_marginal_ghg.png",
@@ -341,6 +366,7 @@ rule doc_fig_health_clusters:
     input:
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
         clusters=f"processing/{DOC_FIG_NAME}/health/country_clusters.csv",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/health_clusters.svg",
         png="docs/_static/figures/health_clusters.png",
@@ -348,6 +374,23 @@ rule doc_fig_health_clusters:
         "logs/shared/doc_fig_health_clusters.log",
     script:
         "../scripts/doc_figures/health_clusters_map.py"
+
+
+rule doc_fig_health_burden:
+    """Generate choropleth of baseline diet-attributable disease burden."""
+    input:
+        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        clusters=f"processing/{DOC_FIG_NAME}/health/country_clusters.csv",
+        cluster_cause_baseline=f"processing/{DOC_FIG_NAME}/health/cluster_cause_baseline.csv",
+        cluster_summary=f"processing/{DOC_FIG_NAME}/health/cluster_summary.csv",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/health_burden.svg",
+        png="docs/_static/figures/health_burden.png",
+    log:
+        "logs/shared/doc_fig_health_burden.log",
+    script:
+        "../scripts/doc_figures/health_burden_map.py"
 
 
 # --- Trade friction production pattern GIF ---
@@ -373,6 +416,7 @@ rule doc_fig_production_pattern_frame:
         land_area_by_class=f"processing/{DOC_FIG_NAME}/land_area_by_class.csv",
         land_grazing_only=f"processing/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
         land_use=f"results/{DOC_FIG_NAME}/analysis/scen-{{trade_scenario}}/land_use.csv",
+        style=DOC_FIG_STYLE,
     output:
         png="docs/_static/figures/production_pattern_{trade_scenario}.png",
     params:
