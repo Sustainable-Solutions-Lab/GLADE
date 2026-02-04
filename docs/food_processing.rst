@@ -25,7 +25,7 @@ Data Files
 
 The two files below, created and distributed for internal food-opt use, define possible food processing pathways and food groups.
 
-**data/foods.csv**
+**data/curated/foods.csv**
   Defines crop-to-food processing pathways using a pathway-based format that supports multi-output processing. Each pathway can convert one crop into one or more food products, with conversion factors maintaining mass balance.
 
   Columns:
@@ -46,15 +46,15 @@ The two files below, created and distributed for internal food-opt use, define p
 
      When ``validation.use_actual_yields`` is true, the sugarcane, sugarbeet, and oil-palm rasters already deliver whole-crop fresh mass, so the workflow skips the conversion above and relies on the moisture table to convert to dry matter before applying extraction factors.
 
-**data/food_groups.csv**
+**data/curated/food_groups.csv**
   Maps foods to food groups for dietary constraint aggregation and health impact assessment. Each food must be assigned to exactly one food group.
 
   Columns:
 
-  * ``food``: Food product name (must match foods produced in ``data/foods.csv``)
+  * ``food``: Food product name (must match foods produced in ``data/curated/foods.csv``)
   * ``group``: Food group identifier (e.g., ``grain``, ``whole_grains``, ``legumes``, ``oil``, ``byproduct``)
 
-  **Coverage**: This file must include all foods that can be produced according to ``data/foods.csv`` pathways, including byproducts (bran, meal, hulls, etc.). Foods without group assignments will generate warnings and will not contribute to food group constraints or health impact calculations.
+  **Coverage**: This file must include all foods that can be produced according to ``data/curated/foods.csv`` pathways, including byproducts (bran, meal, hulls, etc.). Foods without group assignments will generate warnings and will not contribute to food group constraints or health impact calculations.
 
   **Food groups**: Standard groups include grains, whole_grains, legumes, nuts_seeds, oil, starchy_vegetable, fruits, vegetables, sugar, byproduct, red_meat, poultry, dairy, and eggs. Additional groups can be defined by extending ``config.food_groups.included``.
 

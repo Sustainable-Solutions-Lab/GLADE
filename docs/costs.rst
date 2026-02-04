@@ -169,7 +169,7 @@ FADN data requires more complex processing due to its farm-level aggregation:
    * This produces costs comparable across countries with different price levels
 
 6. **Temporal and Spatial Aggregation**: Average across countries and years for each FADN crop category
-7. **Crop Mapping**: Map FADN categories to model crop names using ``data/fadn_crop_mapping.yaml``
+7. **Crop Mapping**: Map FADN categories to model crop names using ``data/curated/fadn_crop_mapping.yaml``
 8. **Output**: ``processing/{name}/fadn_costs.csv`` with same column structure as USDA
 
 Merging Crop Costs
@@ -183,7 +183,7 @@ The merging process combines USDA and FADN cost estimates:
 2. **Average Across Sources**: For crops with data from multiple sources, compute the mean cost
 3. **Apply Fallback Mappings**: For crops without direct cost data, use costs from similar crops:
 
-   * Defined in ``data/crop_cost_fallbacks.yaml``
+   * Defined in ``data/curated/crop_cost_fallbacks.yaml``
    * Example: Rye → Wheat costs, Silage-maize → Maize costs
 
 4. **Default to Zero**: Crops without data or fallbacks receive zero costs (with warnings logged)

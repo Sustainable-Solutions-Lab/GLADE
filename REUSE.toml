@@ -27,16 +27,23 @@ SPDX-FileCopyrightText = "Institute for Health Metrics and Evaluation (IHME)"
 SPDX-License-Identifier = "LicenseRef-IHME-NonCommercial"
 
 [[annotations]]
-path = "data/M49-codes.csv"
+path = "data/curated/M49-codes.csv"
 precedence = "override"
 SPDX-FileCopyrightText = "2025 United Nations Statistics Division"
 SPDX-License-Identifier = "CC0-1.0"
 
 [[annotations]]
-path = "data/**.csv"
+path = "data/curated/**.csv"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
 SPDX-License-Identifier = "PDDL-1.0"
+
+# IFA FUBC dataset (bundled due to Dryad API access restrictions)
+[[annotations]]
+path = "data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Ludemann, Gruere, Heffer, Dobermann (2022)"
+SPDX-License-Identifier = "CC0-1.0"
 
 [[annotations]]
 path = "docs/_static/**"

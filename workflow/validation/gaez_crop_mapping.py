@@ -31,7 +31,7 @@ def validate_gaez_crop_mapping(config: dict, project_root: Path) -> None:
 
     Note: Basic config structure is validated by JSON Schema.
     """
-    csv_path = project_root / "data" / "gaez_crop_code_mapping.csv"
+    csv_path = project_root / "data" / "curated" / "gaez_crop_code_mapping.csv"
     if not csv_path.exists():
         raise FileNotFoundError(f"Expected data file at {csv_path}")
 

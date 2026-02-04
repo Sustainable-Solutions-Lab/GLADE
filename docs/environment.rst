@@ -243,9 +243,9 @@ Monogastric animals (pigs, poultry) produce negligible enteric methane and are n
 Data Sources
 ^^^^^^^^^^^^
 
-* **IPCC values**: ``data/ipcc_enteric_methane_yields.csv`` maps feed categories to MY values from IPCC (2019) Table 10.12
+* **IPCC values**: ``data/curated/ipcc_enteric_methane_yields.csv`` maps feed categories to MY values from IPCC (2019) Table 10.12
 * **Feed properties**: ``processing/{name}/ruminant_feed_categories.csv`` generated from GLEAM 3.0 [2]_ Supplement S1, Table S.3.3 (Ruminant Nutrition Parameters)
-* **Feed mapping**: ``data/gleam_feed_mapping.csv`` links model feed items to GLEAM feed categories
+* **Feed mapping**: ``data/curated/gleam_feed_mapping.csv`` links model feed items to GLEAM feed categories
 
 Implementation
 ^^^^^^^^^^^^^^
@@ -253,7 +253,7 @@ Implementation
 Enteric emissions are calculated in ``workflow/scripts/build_model.py`` within the ``add_feed_to_animal_product_links()`` function:
 
 1. Feed items are categorized by digestibility into roughage/forage/grain/protein pools (``workflow/scripts/categorize_feeds.py``)
-2. Each category is assigned an MY value from ``data/ipcc_enteric_methane_yields.csv``
+2. Each category is assigned an MY value from ``data/curated/ipcc_enteric_methane_yields.csv``
 3. For each animal production link, CH₄ emissions per tonne of feed intake are calculated and attached to ``bus2`` (methane bus)
 4. Emissions scale linearly with feed consumption in the optimization
 
@@ -296,7 +296,7 @@ where:
     * 0.02 for pigs
     * 0.00 for poultry (minimal urinary losses)
 
-  * **Ash** is the ash content of feed (% dry matter, from ``data/feed_ash_content.csv`` based on `feedtables.com <https://www.feedtables.com/>`_)
+  * **Ash** is the ash content of feed (% dry matter, from ``data/curated/feed_ash_content.csv`` based on `feedtables.com <https://www.feedtables.com/>`_)
 
 The formula accounts for:
   * Undigested feed (1 - digestibility)
@@ -331,7 +331,7 @@ B₀ represents the theoretical maximum CH₄ yield from complete anaerobic dige
      - 0.39
      - IPCC Table 10.16
 
-Data source: ``data/ipcc_manure_methane_producing_capacity.csv``
+Data source: ``data/curated/ipcc_manure_methane_producing_capacity.csv``
 
 Methane Conversion Factors (MCF)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -361,15 +361,15 @@ The weighted MCF is calculated as:
 
    \text{MCF}_\text{weighted} = \sum_{i} f_i \times \text{MCF}_i
 
-where **f**\ :sub:`i` is the fraction of manure managed in system *i* (from ``data/gleam_tables/manure_management_systems_fraction.csv``).
+where **f**\ :sub:`i` is the fraction of manure managed in system *i* (from ``data/curated/gleam_tables/manure_management_systems_fraction.csv``).
 
 Data Sources
 ^^^^^^^^^^^^
 
-* **B₀ values**: ``data/ipcc_manure_methane_producing_capacity.csv`` (IPCC 2019 Table 10.16)
-* **MCF values**: ``data/ipcc_manure_methane_conversion_factors.csv`` (IPCC 2019 Table 10.17)
-* **MMS distributions**: ``data/gleam_tables/manure_management_systems_fraction.csv`` (GLEAM 3.0 Supplement S1)
-* **Ash content**: ``data/feed_ash_content.csv`` (from feedtables.com, matched to model feed entities)
+* **B₀ values**: ``data/curated/ipcc_manure_methane_producing_capacity.csv`` (IPCC 2019 Table 10.16)
+* **MCF values**: ``data/curated/ipcc_manure_methane_conversion_factors.csv`` (IPCC 2019 Table 10.17)
+* **MMS distributions**: ``data/curated/gleam_tables/manure_management_systems_fraction.csv`` (GLEAM 3.0 Supplement S1)
+* **Ash content**: ``data/curated/feed_ash_content.csv`` (from feedtables.com, matched to model feed entities)
 * **Feed properties**: ``processing/{name}/ruminant_feed_categories.csv`` and ``processing/{name}/monogastric_feed_categories.csv`` (digestibility from GLEAM 3.0)
 
 Implementation
@@ -460,7 +460,7 @@ Animal product nitrogen content is calculated from protein using the standard Jo
 
 This factor reflects that proteins average ~16% nitrogen by mass (1/6.25 ≈ 0.16). While specific proteins vary (5.18-6.38), 6.25 is the `FAO-recommended general conversion factor <https://www.fao.org/4/y5022e/y5022e03.htm>`_ for mixed animal products [3]_.
 
-Protein content is sourced from USDA FoodData Central (``data/nutrition.csv``).
+Protein content is sourced from USDA FoodData Central (``data/curated/nutrition.csv``).
 
 Manure Nitrogen as Fertilizer
 """"""""""""""""""""""""""""""
@@ -553,14 +553,14 @@ Manure N₂O emission factors are preprocessed in ``workflow/scripts/calculate_m
 
 1. For each (product, feed_category) combination, calculate MMS-weighted emission factors:
 
-   * Load MMS distributions from GLEAM (``data/gleam_tables/manure_management_systems_fraction.csv``)
+   * Load MMS distributions from GLEAM (``data/curated/gleam_tables/manure_management_systems_fraction.csv``)
    * Map feed categories to Livestock Production Systems (LPS):
 
      - ``ruminant_grassland`` → Grassland LPS (high pasture fraction)
      - Other ruminant categories → Mixed LPS (moderate pasture fraction)
      - Monogastrics → Industrial/Intermediate LPS (low pasture fraction)
 
-   * Calculate weighted N₂O factors from ``data/ipcc_manure_n2o_emission_factors.csv``:
+   * Calculate weighted N₂O factors from ``data/curated/ipcc_manure_n2o_emission_factors.csv``:
 
      - **pasture_fraction**: Share of manure deposited on pasture
      - **pasture_n2o_ef**: EF\ :sub:`3PRP` (0.02 for cattle, 0.01 for others)
@@ -721,7 +721,7 @@ The LUC pipeline harmonises several global datasets to the common grid:
 * Above-ground biomass from ESA Biomass CCI v6.0 (:ref:`esa-biomass-cci`)
 * Soil organic carbon stocks (0–30 cm) from ISRIC SoilGrids 2.0 (:ref:`soilgrids-soc`), scaled to 1 m depth using IPCC Tier 1 factors
 * Natural forest regrowth rates from Cook-Patton & Griscom (2020) (:ref:`cook-patton-regrowth`), representing the carbon that would accumulate if previously cleared land were reforested
-* IPCC Tier 1 below-ground biomass ratios, soil depletion factors, and agricultural equilibrium assumptions stored in ``data/luc_zone_parameters.csv``
+* IPCC Tier 1 below-ground biomass ratios, soil depletion factors, and agricultural equilibrium assumptions stored in ``data/curated/luc_zone_parameters.csv``
 
 These layers are reprojected, resampled, and combined by dedicated Snakemake rules to produce per-cell biomass/SOC stocks, forest masks, and regrowth rates ready for downstream processing. Figure :ref:`fig-luc-inputs` summarises the harmonised rasters on the common model grid.
 
@@ -821,10 +821,10 @@ The current implementation makes several simplifying assumptions that should be 
 
 * **Climatic zones**: Zones (tropical, temperate, boreal) are assigned by latitude only (tropical: :math:`\lvert \phi \rvert < 23.5^\circ`, boreal: :math:`\lvert \phi \rvert \ge 50^\circ`, temperate: otherwise). This does not account for altitude effects (e.g., highland tropics behave more like temperate zones) or local climate variations. A future enhancement would use actual biome or Köppen-Geiger climate classifications.
 
-* **Agricultural biomass stocks**: Cropland and pasture equilibrium above-ground biomass is assumed to be negligible (0 tC/ha) for annual crops. This is a conservative assumption appropriate for grain crops where biomass is harvested annually, but underestimates carbon storage in perennial crops (orchards, oil palm, coffee) and improved pastures. See ``data/luc_zone_parameters.csv`` for the zone-specific parameters.
+* **Agricultural biomass stocks**: Cropland and pasture equilibrium above-ground biomass is assumed to be negligible (0 tC/ha) for annual crops. This is a conservative assumption appropriate for grain crops where biomass is harvested annually, but underestimates carbon storage in perennial crops (orchards, oil palm, coffee) and improved pastures. See ``data/curated/luc_zone_parameters.csv`` for the zone-specific parameters.
 
 * **Forest mask threshold**: Regrowth sequestration is only applied to cells with ≥20% forest fraction in the land-cover-derived potential forest layer (i.e., areas that would naturally support forest if unmanaged). This threshold can be adjusted via ``config['luc']['forest_fraction_threshold']`` (default: 0.2). Raising the threshold restricts eligibility to areas that are strongly classified as forest; lowering it allows credits on lightly wooded mosaics.
 
-* **Soil organic carbon depth**: SOC stocks in the 0-30 cm layer (from SoilGrids) are scaled to 1 m depth using zone-specific factors from ``data/luc_zone_parameters.csv``. **TODO**: These factors require verification against IPCC 2006/2019 Guidelines Volume 4 Chapter 2 to ensure they match the intended Tier 1 methodology.
+* **Soil organic carbon depth**: SOC stocks in the 0-30 cm layer (from SoilGrids) are scaled to 1 m depth using zone-specific factors from ``data/curated/luc_zone_parameters.csv``. **TODO**: These factors require verification against IPCC 2006/2019 Guidelines Volume 4 Chapter 2 to ensure they match the intended Tier 1 methodology.
 
 * **Managed flux**: Set to zero everywhere (:math:`M_{i,u} = 0`), meaning ongoing emissions from agricultural management (e.g., peat oxidation, tillage-induced decomposition) are not currently modeled. Future work could incorporate organic soil maps and management-specific emission factors.

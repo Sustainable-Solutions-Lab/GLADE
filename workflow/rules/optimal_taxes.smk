@@ -24,7 +24,7 @@ rule extract_optimal_consumption:
     """
     input:
         network="results/{name}/solved/model_scen-optimize.nc",
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
     output:
         consumption="results/{name}/optimal_taxes/optimal_consumption.csv",
     log:
@@ -73,7 +73,7 @@ rule plot_optimal_taxes_diet_comparison:
             "results/{name}/solved/model_scen-extract_taxes.nc",
             "results/{name}/solved/model_scen-apply_taxes.nc",
         ],
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
     output:
         pdf="results/{name}/plots/optimal_taxes/diet_comparison.pdf",
         csv="results/{name}/plots/optimal_taxes/diet_comparison.csv",

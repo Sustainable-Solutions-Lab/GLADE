@@ -15,7 +15,7 @@ processed products rather than whole-crop dry matter:
   we force to 1.0 for whole grain, handling milling separately.
 - Sugar crops (sugarcane, sugarbeet) and oil-palm: we operate on whole-crop dry
   matter, so the edible portion is forced to 1.0 and downstream processing is
-  handled in ``data/foods.csv``.
+  handled in ``data/curated/foods.csv``.
 """
 
 import csv

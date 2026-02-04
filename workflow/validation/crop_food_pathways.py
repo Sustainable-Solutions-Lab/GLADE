@@ -35,7 +35,7 @@ def validate_crop_food_pathways(config: dict, project_root: Path) -> None:
 
     Note: Basic config structure is validated by JSON Schema.
     """
-    csv_path = project_root / "data" / "foods.csv"
+    csv_path = project_root / "data" / "curated" / "foods.csv"
     if not csv_path.exists():
         raise FileNotFoundError(f"Expected data file at {csv_path}")
 

@@ -91,7 +91,7 @@ gaez_cfg = config["data"]["gaez"]
 grazing_cfg = config.get("grazing", {})
 
 # Load GAEZ crop code mapping from CSV
-with open("data/gaez_crop_code_mapping.csv", newline="") as _gaez_mapping_file:
+with open("data/curated/gaez_crop_code_mapping.csv", newline="") as _gaez_mapping_file:
     _GAEZ_CODE_MAPPING = {
         row["crop_name"]: {
             "res02": row["res02_code"],

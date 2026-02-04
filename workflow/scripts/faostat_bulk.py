@@ -70,7 +70,7 @@ def load_bulk_csv(path: str | object) -> pd.DataFrame:
 def load_m49_to_iso3(m49_csv_path: str | object) -> dict[str, str]:
     """Build a mapping from M49 numeric code (str) to ISO3 alpha code.
 
-    Uses the project's ``data/M49-codes.csv`` (semicolon-separated, with
+    Uses the project's ``data/curated/M49-codes.csv`` (semicolon-separated, with
     comment lines starting with ``#``).
     """
     df = pd.read_csv(str(m49_csv_path), sep=";", encoding="utf-8-sig", comment="#")

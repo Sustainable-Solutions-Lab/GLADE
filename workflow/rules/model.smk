@@ -67,7 +67,7 @@ def production_stability_build_inputs(wildcards):
         inputs["crop_production_baseline"] = (
             f"processing/{wildcards.name}/faostat_crop_production.csv"
         )
-        inputs["faostat_crop_item_map"] = "data/faostat_crop_item_map.csv"
+        inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
     if stability_cfg["animals"]["enabled"]:
         inputs["animal_production_baseline"] = (
             f"processing/{wildcards.name}/faostat_animal_production.csv"
@@ -82,16 +82,16 @@ rule build_model:
         unpack(harvested_area_model_inputs),
         unpack(production_stability_build_inputs),
         fertilizer_n_rates="processing/{name}/global_fertilizer_n_rates.csv",
-        foods="data/foods.csv",
-        moisture_content="data/crop_moisture_content.csv",
+        foods="data/curated/foods.csv",
+        moisture_content="data/curated/crop_moisture_content.csv",
         ruminant_feed_categories="processing/{name}/ruminant_feed_categories.csv",
         ruminant_feed_mapping="processing/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_categories="processing/{name}/monogastric_feed_categories.csv",
         monogastric_feed_mapping="processing/{name}/monogastric_feed_mapping.csv",
         feed_to_products="processing/{name}/feed_to_animal_products.csv",
         manure_emissions="processing/{name}/manure_emission_factors.csv",
-        food_groups="data/food_groups.csv",
-        nutrition="data/nutrition.csv",
+        food_groups="data/curated/food_groups.csv",
+        nutrition="data/curated/nutrition.csv",
         regions="processing/{name}/regions.geojson",
         land_area_by_class="processing/{name}/land_area_by_class.csv",
         cropland_baseline="processing/{name}/cropland_baseline_by_class.csv",
@@ -183,13 +183,13 @@ def solve_model_inputs(w):
     """
     inputs = {
         "network": f"results/{w.name}/build/model_scen-{w.scenario}.nc",
-        "m49": "data/M49-codes.csv",
+        "m49": "data/curated/M49-codes.csv",
         "health_risk_breakpoints": f"processing/{w.name}/health/scen-{w.scenario}/risk_breakpoints.csv",
         "health_cluster_cause": f"processing/{w.name}/health/scen-{w.scenario}/cluster_cause_baseline.csv",
         "health_cause_log": f"processing/{w.name}/health/scen-{w.scenario}/cause_log_breakpoints.csv",
         "health_cluster_summary": f"processing/{w.name}/health/scen-{w.scenario}/cluster_summary.csv",
         "health_clusters": f"processing/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
-        "food_groups": "data/food_groups.csv",
+        "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": f"processing/{w.name}/dietary_intake.csv",
     }
 
@@ -224,7 +224,7 @@ def solve_model_inputs(w):
                 f"processing/{w.name}/faostat_crop_production.csv"
             )
             # Include FAO item mapping to aggregate crops sharing an FAO item
-            inputs["faostat_crop_item_map"] = "data/faostat_crop_item_map.csv"
+            inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
         if stability_cfg["animals"]["enabled"]:
             inputs["animal_production_baseline"] = (
                 f"processing/{w.name}/faostat_animal_production.csv"
@@ -248,8 +248,8 @@ rule calculate_food_group_ratios:
     """
     input:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
-        food_item_map="data/faostat_food_item_map.csv",
-        food_groups="data/food_groups.csv",
+        food_item_map="data/curated/faostat_food_item_map.csv",
+        food_groups="data/curated/food_groups.csv",
     params:
         byproducts=config["byproducts"],
     output:

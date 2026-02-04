@@ -139,7 +139,7 @@ Each file contains:
 * ``ash_pct_DM``: Ash content (% of dry matter)
 * ``NDF_pct_DM``: Neutral detergent fiber (% of dry matter)
 
-These properties are extracted from the GLEAM 3.0 supplement using ``data/gleam_feed_mapping.csv`` to map between model feed items and GLEAM feed categories.
+These properties are extracted from the GLEAM 3.0 supplement using ``data/curated/gleam_feed_mapping.csv`` to map between model feed items and GLEAM feed categories.
 
 **Feed quality categories** (assigned based on nitrogen content and digestibility):
 
@@ -225,7 +225,7 @@ Wirsenius (2000) [1]_ provides feed requirements per kg **carcass weight** (dres
 
 Available regions (from Wirsenius 2000): East Asia, East Europe, Latin America & Caribbean, North Africa & West Asia, North America & Oceania, South & Central Asia, Sub-Saharan Africa, West Europe
 
-When ``feed_efficiency_regions`` is null, each country uses the feed conversion efficiencies from its geographic region. The mapping from countries to Wirsenius regions is defined in ``data/country_wirsenius_region.csv``.
+When ``feed_efficiency_regions`` is null, each country uses the feed conversion efficiencies from its geographic region. The mapping from countries to Wirsenius regions is defined in ``data/curated/country_wirsenius_region.csv``.
 
 **Example efficiencies** (North America & Oceania + West Europe average, with carcass-to-retail conversion):
 
@@ -322,7 +322,7 @@ Crop residues (e.g., straw, stover, pulse haulms) are now generated explicitly u
 * **Configuration**: Select residue crops via ``animal_products.residue_crops`` in ``config/default.yaml``. Only crops present in ``config.crops`` are processed.
 * **Data sources**:
   - GLEAM Supplement S1 Table S.3.1 (slope/intercept) and Tables 3.3 / 3.6 (FUE factors)
-  - GLEAM feed codes → model mapping in ``data/gleam_feed_mapping.csv``
+  - GLEAM feed codes → model mapping in ``data/curated/gleam_feed_mapping.csv``
 * **Outputs**: Per-crop CSVs at ``processing/{name}/crop_residue_yields/{crop}.csv`` with net dry-matter residue yields (t/ha) by region, resource class, and water supply.
 * **Integration**: ``build_model`` reads all residue CSVs, adds ``residue_{feed_item}_{country}`` buses, and attaches them as additional outputs on crop production links. Residues flow through the same feed supply logic as crops/foods and enter the appropriate feed pools or soil incorporation.
 
@@ -429,7 +429,7 @@ Summary
 Data Sources
 ^^^^^^^^^^^^
 
-* ``data/ipcc_enteric_methane_yields.csv``: IPCC methane yields by feed category
+* ``data/curated/ipcc_enteric_methane_yields.csv``: IPCC methane yields by feed category
 * ``processing/{name}/ruminant_feed_categories.csv``: Feed categories with MY values (generated from GLEAM 3.0 data)
 
 Manure Management (CH₄, N₂O)

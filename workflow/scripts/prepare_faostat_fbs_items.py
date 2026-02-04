@@ -11,7 +11,7 @@ the food item mapping file from a FAOSTAT FBS bulk CSV. This raw data
 is used for calculating within-group food consumption ratios.
 
 Input:
-    - data/faostat_food_item_map.csv: Mapping from model foods to FBS items
+    - data/curated/faostat_food_item_map.csv: Mapping from model foods to FBS items
     - FAOSTAT FBS bulk CSV
 
 Output:

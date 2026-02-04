@@ -130,7 +130,7 @@ Aggregation Process
 
    * **Potential runs**: GAEZ RES05 “yield” rasters are in kg/ha, so the default multiplier is ``0.001`` (kg → tonne). This is the behaviour in the standard (non-validation) configuration.
    * **Validation runs**: When ``validation.use_actual_yields: true`` the pipeline swaps to the GAEZ “actual yield” rasters, which are already in tonnes per hectare. In this mode the default multiplier is ``1.0`` so we do not double scale the data.
-   * **Sugar & oil crops**: ``data/yield_unit_conversions.csv`` stores overrides for sugarcane, sugarbeet, and oil-palm because GAEZ reports processed outputs (sugar or oil). The factors are interpreted relative to the historical kg/ha baseline, so they continue to work for both scenarios (we convert them into a scenario-agnostic multiplier inside ``build_crop_yields.py``).
+   * **Sugar & oil crops**: ``data/curated/yield_unit_conversions.csv`` stores overrides for sugarcane, sugarbeet, and oil-palm because GAEZ reports processed outputs (sugar or oil). The factors are interpreted relative to the historical kg/ha baseline, so they continue to work for both scenarios (we convert them into a scenario-agnostic multiplier inside ``build_crop_yields.py``).
 
 4. **Mask by suitability**: Only aggregate over suitable land (SX1 > 0)
 
@@ -190,16 +190,16 @@ In the PyPSA model (``workflow/scripts/build_model.py``), crop production is rep
   * ``efficiency3`` (bus3, negative): Fertilizer requirement in kg/t
   * ``efficiency4`` (bus4, positive): Emissions in tCO₂-eq/t
 
-When crops are converted into foods, the model first rescales the dry-matter crop bus to fresh edible mass using FAO edible portion coefficients and moisture shares drawn from ``data/crop_moisture_content.csv``. The scaling factor ``edible_portion_coefficient / (1 - moisture_fraction)`` is applied before product-specific extraction factors in ``data/foods.csv``. Crops listed in ``data/yield_unit_conversions.csv`` are the cases where GAEZ reports processed outputs (sugar or oil); the table converts those back to dry matter so that subsequent processing logic is uniform.
+When crops are converted into foods, the model first rescales the dry-matter crop bus to fresh edible mass using FAO edible portion coefficients and moisture shares drawn from ``data/curated/crop_moisture_content.csv``. The scaling factor ``edible_portion_coefficient / (1 - moisture_fraction)`` is applied before product-specific extraction factors in ``data/curated/foods.csv``. Crops listed in ``data/curated/yield_unit_conversions.csv`` are the cases where GAEZ reports processed outputs (sugar or oil); the table converts those back to dry matter so that subsequent processing logic is uniform.
 
 **Crop-specific exceptions**: For certain crops, FAO's edible portion coefficients do not match the model's yield units, requiring special handling in ``workflow/scripts/prepare_fao_edible_portion.py``:
 
 * **Grains** (rice, barley, oat, buckwheat): FAO coefficients reflect milled/hulled conversion, but we track whole grain. Coefficient forced to 1.0; milling handled separately.
-* **Sugar crops** (sugarcane, sugarbeet) and **oil-palm**: GAEZ reports processed outputs (sugar or palm oil). Yields are converted back to whole-crop dry matter via ``data/yield_unit_conversions.csv``, and edible portion coefficients are forced to 1.0 so that extraction losses are handled in ``data/foods.csv``.
+* **Sugar crops** (sugarcane, sugarbeet) and **oil-palm**: GAEZ reports processed outputs (sugar or palm oil). Yields are converted back to whole-crop dry matter via ``data/curated/yield_unit_conversions.csv``, and edible portion coefficients are forced to 1.0 so that extraction losses are handled in ``data/curated/foods.csv``.
 
 .. note::
 
-   When ``validation.use_actual_yields`` is enabled, the GAEZ “actual” rasters already reflect whole-crop fresh mass for sugarcane, sugarbeet, and oil palm, so the workflow bypasses the conversion overrides above and relies directly on ``data/crop_moisture_content.csv`` to compute dry-matter production. This keeps validation-era sugarcane output near observed fresh cane harvests instead of re-scaling the processed sugar or oil mass.
+   When ``validation.use_actual_yields`` is enabled, the GAEZ “actual” rasters already reflect whole-crop fresh mass for sugarcane, sugarbeet, and oil palm, so the workflow bypasses the conversion overrides above and relies directly on ``data/curated/crop_moisture_content.csv`` to compute dry-matter production. This keeps validation-era sugarcane output near observed fresh cane harvests instead of re-scaling the processed sugar or oil mass.
 
 The model constrains:
 
@@ -459,13 +459,13 @@ Crop-Specific Data Files
 
   Add new parameters by appending rows; comment lines starting with ``#`` are ignored by loaders.
 
-**data/gaez_crop_code_mapping.csv**
+**data/curated/gaez_crop_code_mapping.csv**
   Lookup table aligning food-opt crop identifiers with GAEZ resource codes. Columns: ``crop_name``, ``description``, and the RES02/RES05/RES06 codes used to locate raster layers.
 
-**data/yield_unit_conversions.csv**
+**data/curated/yield_unit_conversions.csv**
   Optional per-crop overrides for converting raw GAEZ yields to tonnes of dry matter per hectare. Columns: ``code`` (crop identifier), ``factor_to_t_per_ha`` (multiplier applied to raster values), and ``note`` for context. Only sugar crops and oil-palm currently require overrides; all other crops use the default ``0.001`` factor (kg → tonne).
 
-**data/crop_moisture_content.csv**
+**data/curated/crop_moisture_content.csv**
   Moisture fractions (0-1) for each modelled crop, primarily sourced from the GAEZ v5 Module VII documentation with explicit notes where assumptions were required. Combined with edible portion coefficients to convert dry matter yields into fresh edible mass.
 
 Workflow Rules

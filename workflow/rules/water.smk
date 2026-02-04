@@ -16,8 +16,8 @@ Water supply scenario:
 
 rule prepare_fertilizer_application_rates:
     input:
-        fubc_data="data/downloads/ifa_fubc_1_to_9_data.csv",
-        mapping="data/ifa_fubc_crop_mapping.csv",
+        fubc_data="data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/FUBC_1_to_9_data.csv",
+        mapping="data/curated/ifa_fubc_crop_mapping.csv",
     output:
         "processing/{name}/fertilizer_application_rates.csv",
     log:

@@ -20,7 +20,7 @@ rule extract_ghg_intensity:
     """Extract GHG intensity and totals by food and country."""
     input:
         network="results/{name}/solved/model_scen-{scenario}.nc",
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
         food_consumption="results/{name}/analysis/scen-{scenario}/food_consumption.csv",
     params:
         ghg_price=lambda w: get_effective_config(w.scenario)["emissions"]["ghg_price"],

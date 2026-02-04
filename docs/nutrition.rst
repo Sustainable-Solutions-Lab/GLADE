@@ -56,7 +56,7 @@ constraints for the ones that need limits (``min``, ``max``, or ``equal`` in
 g/person/day). Leaving ``constraints`` empty allows the optimizer to choose any
 mix of foods that satisfies macronutrient and other requirements.
 
-Foods are assigned to groups in ``data/food_groups.csv``. Example:
+Foods are assigned to groups in ``data/curated/food_groups.csv``. Example:
 
 .. TODO: refine this section
 ..
@@ -106,7 +106,7 @@ Age-structured population is used in the health module to weight dietary risk fa
 Nutritional Content Data
 -------------------------
 
-The file ``data/nutrition.csv`` contains nutritional composition for each food product, sourced from the **USDA FoodData Central** database. This data is retrieved from the SR Legacy (Standard Reference) database, which provides laboratory-analyzed nutrient data for foods.
+The file ``data/curated/nutrition.csv`` contains nutritional composition for each food product, sourced from the **USDA FoodData Central** database. This data is retrieved from the SR Legacy (Standard Reference) database, which provides laboratory-analyzed nutrient data for foods.
 
 **Data source**: U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2019. https://fdc.nal.usda.gov/
 
@@ -116,14 +116,14 @@ The file ``data/nutrition.csv`` contains nutritional composition for each food p
 
 The FAO Nutrient Conversion Table for Supply Utilization Accounts (2024 edition) is also stored locally in ``data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx`` via the ``download_fao_nutrient_conversion_table`` workflow rule, providing FAO-authored nutrient factors for cross-checking FAOSTAT supply data (subject to FAO's non-commercial use guidance). ``workflow/scripts/prepare_fao_edible_portion.py`` distils the edible portion coefficients from sheet ``03`` of that workbook for all configured crops, materialising them in ``processing/{name}/fao_edible_portion.csv`` for downstream use.
 
-When the model assembles crop→food conversion links it rescales dry-matter crop production to fresh edible food mass using these coefficients together with moisture fractions from ``data/crop_moisture_content.csv``: dry harvests are uplifted by ``edible_portion_coefficient / (1 - moisture_fraction)`` before applying the pathway-specific processing factors from ``data/foods.csv``. Each processing pathway can produce multiple food products with factors that maintain mass balance (sum ≤ 1.0). Crops flagged in ``data/yield_unit_conversions.csv`` are the few cases where GAEZ reports processed outputs (sugar or oil); those entries handle the unit conversion back to dry matter so that downstream processing can proceed uniformly.
+When the model assembles crop→food conversion links it rescales dry-matter crop production to fresh edible food mass using these coefficients together with moisture fractions from ``data/curated/crop_moisture_content.csv``: dry harvests are uplifted by ``edible_portion_coefficient / (1 - moisture_fraction)`` before applying the pathway-specific processing factors from ``data/curated/foods.csv``. Each processing pathway can produce multiple food products with factors that maintain mass balance (sum ≤ 1.0). Crops flagged in ``data/curated/yield_unit_conversions.csv`` are the few cases where GAEZ reports processed outputs (sugar or oil); those entries handle the unit conversion back to dry matter so that downstream processing can proceed uniformly.
 
 **Retrieval**:
 
 * The repository includes pre-fetched nutritional data from USDA
 * To update with fresh data, enable ``data.usda.retrieve_nutrition: true`` in the config
-* Run: ``snakemake -- data/nutrition.csv`` (requires network access and API key)
-* Food-to-USDA mappings are maintained in ``data/usda_food_mapping.csv``
+* Run: ``snakemake -- data/curated/nutrition.csv`` (requires network access and API key)
+* Food-to-USDA mappings are maintained in ``data/curated/usda_food_mapping.csv``
 * A shared API key is included in the repository; users can optionally obtain their own free API key at https://fdc.nal.usda.gov/api-key-signup
 
 Per-Capita vs. Total Consumption
@@ -155,7 +155,7 @@ Workflow Integration
 Nutritional constraints are incorporated in the ``build_model`` rule:
 
 1. **Load population**: ``processing/{name}/population.csv``
-2. **Load nutrition data**: ``data/nutrition.csv``
+2. **Load nutrition data**: ``data/curated/nutrition.csv``
 3. **Create nutrient buses**: Per-country buses for each nutrient
 4. **Create food → nutrient links**: Based on nutritional content
 5. **Add global constraints**: Population × requirement bounds

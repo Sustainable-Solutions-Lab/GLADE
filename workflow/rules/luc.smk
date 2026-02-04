@@ -24,7 +24,7 @@ def _get_unique_res06_rasters(crops: list[str]) -> dict[str, str]:
     Returns a dict mapping "{res06_code}_{water}" to the raster path.
     """
     # Load the mapping to get RES06 codes
-    mapping_path = _PROJECT_ROOT / "data" / "gaez_crop_code_mapping.csv"
+    mapping_path = _PROJECT_ROOT / "data" / "curated" / "gaez_crop_code_mapping.csv"
     with mapping_path.open(newline="") as f:
         crop_to_res06 = {
             row["crop_name"]: row["res06_code"].strip().upper()
@@ -152,7 +152,7 @@ if config["luc"]["cropland_source"] == "gaez":
             unpack(_gaez_cropland_baseline_inputs),
             classes="processing/{name}/resource_classes.nc",
             regions="processing/{name}/regions.geojson",
-            crop_mapping="data/gaez_crop_code_mapping.csv",
+            crop_mapping="data/curated/gaez_crop_code_mapping.csv",
             irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
@@ -199,7 +199,7 @@ rule build_luc_carbon_coefficients:
         agb=rules.prepare_luc_inputs.output.agb,
         soc=rules.prepare_luc_inputs.output.soc,
         regrowth=rules.prepare_luc_inputs.output.regrowth,
-        zone_parameters="data/luc_zone_parameters.csv",
+        zone_parameters="data/curated/luc_zone_parameters.csv",
     params:
         horizon_years=config["luc"]["horizon_years"],
         managed_flux_mode=config["luc"]["managed_flux_mode"],

@@ -15,8 +15,8 @@ equally among them.
 
 Input:
     - FBS item-level supply data (from prepare_faostat_fbs_items.py)
-    - Food-to-FBS-item mapping (data/faostat_food_item_map.csv)
-    - Food groups (data/food_groups.csv)
+    - Food-to-FBS-item mapping (data/curated/faostat_food_item_map.csv)
+    - Food groups (data/curated/food_groups.csv)
 
 Output:
     - CSV with columns: country, food_group, food, ratio

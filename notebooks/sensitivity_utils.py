@@ -440,7 +440,7 @@ def extract_combined_param_value(scenario_name: str) -> tuple[float, float] | No
 
 def load_food_to_group(project_root: Path) -> dict[str, str]:
     """Load food to group mapping from CSV."""
-    food_groups_df = pd.read_csv(project_root / "data" / "food_groups.csv")
+    food_groups_df = pd.read_csv(project_root / "data" / "curated" / "food_groups.csv")
     return dict(zip(food_groups_df["food"], food_groups_df["group"]))
 
 

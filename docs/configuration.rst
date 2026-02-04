@@ -544,4 +544,4 @@ Plotting Configuration
 
 Customize visualization colors for publication-quality plots. The
 ``colors.food_groups`` palette is applied consistently across all food-group
-charts and maps; extend it if you add new groups to ``data/food_groups.csv``.
+charts and maps; extend it if you add new groups to ``data/curated/food_groups.csv``.

@@ -5,8 +5,8 @@
 """
 Retrieve nutritional data from USDA FoodData Central API.
 
-This script fetches nutrition data for foods listed in data/usda_food_mapping.csv
-and outputs in the format expected by the model (data/nutrition.csv).
+This script fetches nutrition data for foods listed in data/curated/usda_food_mapping.csv
+and outputs in the format expected by the model (data/curated/nutrition.csv).
 
 Requires network access to call the USDA API. Credentials are sourced from
 config/secrets.yaml or the USDA_API_KEY environment variable.
@@ -15,9 +15,9 @@ Adding New Foods
 ----------------
 When adding a new food to the model, you must:
 
-1. Add the food to data/food_groups.csv with its food group classification
+1. Add the food to data/curated/food_groups.csv with its food group classification
 2. Find the appropriate USDA FoodData Central (FDC) ID from the SR Legacy database
-3. Add the mapping to data/usda_food_mapping.csv
+3. Add the mapping to data/curated/usda_food_mapping.csv
 
 To search for foods in the USDA database using the API:
 
@@ -54,8 +54,8 @@ Manual search via web interface:
 
 Validation
 ----------
-This script validates that all non-byproduct foods in data/food_groups.csv have
-corresponding entries in data/usda_food_mapping.csv. The script will fail if any
+This script validates that all non-byproduct foods in data/curated/food_groups.csv have
+corresponding entries in data/curated/usda_food_mapping.csv. The script will fail if any
 foods are missing from the mapping file.
 """
 

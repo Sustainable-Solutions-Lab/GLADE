@@ -47,7 +47,7 @@ Brief descriptions of key external datasets used by this project, with links and
 - Description: Economic Research Service (ERS) cost and returns data providing detailed production cost estimates (USD per acre) for major U.S. crops. Data includes operating costs (seed, chemicals, custom services, fuel, repairs, labor) and allocated overhead (machinery depreciation, farm overhead, taxes/insurance). This project uses a 10-year average (2015–2024) to establish baseline production costs per hectare.
 - Website: https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
 - Data catalog: https://catalog.data.gov/dataset/commodity-costs-and-returns
-- Version/format: Individual crop CSV files retrieved via direct download from ERS QuickStats portal. URLs are listed in `data/usda_cost_sources.csv`.
+- Version/format: Individual crop CSV files retrieved via direct download from ERS QuickStats portal. URLs are listed in `data/curated/usda_cost_sources.csv`.
 - Coverage: U.S. total (national averages); annual data from 1975 to present depending on crop.
 - License/terms (summary): Creative Commons Attribution (CC BY). Free to use with attribution to USDA Economic Research Service.
 - Citation: U.S. Department of Agriculture, Economic Research Service. Commodity Costs and Returns. https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
@@ -58,7 +58,7 @@ Brief descriptions of key external datasets used by this project, with links and
 - Description: Economic Research Service (ERS) livestock production cost data providing estimates for major U.S. animal products. Includes milk cost of production estimates (cost per hundredweight of milk), cow-calf cost and returns (cost per head per year), and hog cost and returns (cost per head marketed). Data includes operating costs (labor, veterinary, energy) and allocated overhead (housing, equipment depreciation, interest).
 - Website (Milk): https://www.ers.usda.gov/data-products/milk-cost-of-production-estimates/
 - Website (Livestock Commodity Costs): https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
-- Version/format: Excel files retrieved via direct download. URLs are listed in `data/usda_animal_cost_sources.csv`.
+- Version/format: Excel files retrieved via direct download. URLs are listed in `data/curated/usda_animal_cost_sources.csv`.
 - Coverage: U.S. animal products (milk, cow-calf for beef, hogs for pork). Temporal coverage varies by product (milk: 2005-present, cow-calf: 2008-present, hogs: 2010-present).
 - License/terms (summary): Creative Commons Attribution (CC BY). Free to use with attribution to USDA Economic Research Service.
 - Citation: U.S. Department of Agriculture, Economic Research Service. Milk Cost of Production Estimates / Commodity Costs and Returns (Livestock).
@@ -156,11 +156,11 @@ Brief descriptions of key external datasets used by this project, with links and
 - API documentation: https://fdc.nal.usda.gov/api-guide.html
 - API key: The repository includes a shared API key for convenience. Users can optionally obtain their own API key (free, instant signup) at https://fdc.nal.usda.gov/api-key-signup.
 - Version/format: Retrieved via REST API; nutritional values per 100g of food product.
-- Content: Macronutrient composition (protein, carbohydrates, total lipid/fat, energy/calories) used to define food nutritional properties in `data/nutrition.csv`.
+- Content: Macronutrient composition (protein, carbohydrates, total lipid/fat, energy/calories) used to define food nutritional properties in `data/curated/nutrition.csv`.
 - License/terms (summary): Public domain data published under CC0 1.0 Universal (CC0 1.0). No permission needed for use, but USDA requests attribution and notification of products using the data.
   - License: https://creativecommons.org/publicdomain/zero/1.0/
 - Citation: U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2019. fdc.nal.usda.gov.
-- Workflow integration: Optional rule `retrieve_usda_nutrition` (controlled by `config['data']['usda']['retrieve_nutrition']`) retrieves data via API and writes to `data/nutrition.csv`. By default, this rule is disabled and the repository includes pre-fetched nutritional data.
+- Workflow integration: Optional rule `retrieve_usda_nutrition` (controlled by `config['data']['usda']['retrieve_nutrition']`) retrieves data via API and writes to `data/curated/nutrition.csv`. By default, this rule is disabled and the repository includes pre-fetched nutritional data.
 
 ## Copernicus — Satellite Land Cover
 
@@ -232,12 +232,12 @@ Brief descriptions of key external datasets used by this project, with links and
 
 - Description: Global dataset on inorganic fertilizer application rates (N, P₂O₅, K₂O) by crop and country based on expert surveys conducted by the International Fertilizer Association (IFA) and partners. The dataset includes historical data from 8 previous reports (1986–2014/15) and the most recent survey for the 2017–18 period, covering fertilizer application rates (kg/ha) and total consumption (thousand tonnes) for major crops worldwide.
 - Website: https://datadryad.org/stash/dataset/doi:10.5061/dryad.2rbnzs7qh
-- Version/format: Version 1 (March 2025); CSV files retrieved automatically via Dryad API to `data/downloads/ifa_fubc_1_to_9_data.csv` (main data) and `data/downloads/ifa_fubc_1_to_9_metadata.csv` (column descriptions) via the `download_ifa_fubc` Snakemake rule.
+- Version/format: Version 1 (March 2025); bundled with the repository under `data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/`. The full Dryad dataset is included as-is.
 - Coverage: Global; 2017–18 period for latest survey, with historical data from 1986 onwards. Includes data for major crops (cereals, oilseeds, roots & tubers, vegetables, fruits, etc.) across countries with significant fertilizer use.
 - License/terms (summary): Creative Commons Zero v1.0 Universal (CC0 1.0). Data is in the public domain and may be used without restriction.
   - License: https://creativecommons.org/publicdomain/zero/1.0/
 - Citation: Ludemann, C., Gruere, A., Heffer, P., & Dobermann, A. (2022). Global data on fertilizer use by crop and by country [Dataset]. Dryad. https://doi.org/10.5061/dryad.2rbnzs7qh
-- Workflow integration: Retrieved via the `download_ifa_fubc` rule using the Dryad API. Data includes nitrogen (N), phosphate (P₂O₅), and potash (K₂O) application rates and quantities by crop, country, and year, enabling calculation of crop-specific fertilizer application rates for N₂O emissions modeling.
+- Workflow integration: Bundled dataset (CC0 licensed) included directly in the repository due to Dryad API access restrictions. Data includes nitrogen (N), phosphate (P₂O₅), and potash (K₂O) application rates and quantities by crop, country, and year, enabling calculation of crop-specific fertilizer application rates for N₂O emissions modeling.
 
 ## FADN — Farm Accountancy Data Network (EU)
 

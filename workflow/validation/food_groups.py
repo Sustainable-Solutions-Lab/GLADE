@@ -20,7 +20,7 @@ FOOD_GROUP_SCHEMA = DataFrameSchema(
 
 
 def validate_food_groups(config: dict, project_root: Path) -> None:
-    """Validate that config food groups cover all categories in data/food_groups.csv.
+    """Validate that config food groups cover all categories in data/curated/food_groups.csv.
 
     Note: Basic structure validation (types, uniqueness, non-empty) is handled
     by the JSON Schema. This validator only checks against the data file.
@@ -37,7 +37,7 @@ def validate_food_groups(config: dict, project_root: Path) -> None:
     # JSON Schema already validated structure; we can safely access included
     included_groups = set(config["food_groups"]["included"])
 
-    csv_path = project_root / "data" / "food_groups.csv"
+    csv_path = project_root / "data" / "curated" / "food_groups.csv"
     if not csv_path.exists():
         raise FileNotFoundError(f"Expected data file at {csv_path}")
 

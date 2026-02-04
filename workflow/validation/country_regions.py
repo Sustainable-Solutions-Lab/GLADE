@@ -31,7 +31,7 @@ def validate_country_regions(config: dict, project_root: Path) -> None:
     # Check 1: All countries have region mappings
     config_countries = set(config["countries"])
 
-    csv_path = project_root / "data" / "country_wirsenius_region.csv"
+    csv_path = project_root / "data" / "curated" / "country_wirsenius_region.csv"
     if not csv_path.exists():
         raise FileNotFoundError(f"Expected data file at {csv_path}")
 
@@ -42,7 +42,7 @@ def validate_country_regions(config: dict, project_root: Path) -> None:
     if missing:
         missing_text = ", ".join(missing)
         raise ValueError(
-            f"Countries in config missing from data/country_wirsenius_region.csv: {missing_text}. "
+            f"Countries in config missing from data/curated/country_wirsenius_region.csv: {missing_text}. "
             f"Add mappings for these countries to enable feed conversion efficiency calculations."
         )
 

@@ -109,7 +109,7 @@ rule plot_health_impacts:
         health_cluster_risk_baseline="processing/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
         derived_tmrel="processing/{name}/health/scen-{scenario}/derived_tmrel.csv",
         population="processing/{name}/population.csv",
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
     params:
         health_risk_factors=config["health"]["risk_factors"],
         # Convert from USD/YLL -> bnUSD/YLL for objective consistency
@@ -332,7 +332,7 @@ def yield_map_inputs(wildcards):
     else:
         return {
             "raster": gaez_path("yield", wildcards.water_supply, wildcards.item),
-            "conversions": "data/yield_unit_conversions.csv",
+            "conversions": "data/curated/yield_unit_conversions.csv",
         }
 
 
@@ -381,7 +381,7 @@ rule plot_emissions_breakdown:
     input:
         network="results/{name}/solved/model_scen-{scenario}.nc",
         faostat_emissions="processing/{name}/faostat_emissions.csv",
-        gleam_emissions="data/gleam_livestock_emissions.csv",
+        gleam_emissions="data/curated/gleam_livestock_emissions.csv",
         regions="processing/{name}/regions.geojson",
     output:
         pdf="results/{name}/plots/scen-{scenario}/emissions_breakdown.pdf",
@@ -403,7 +403,7 @@ rule plot_emissions_breakdown:
 rule plot_consumption_balance:
     input:
         food_consumption="results/{name}/analysis/scen-{scenario}/food_consumption.csv",
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
         population="processing/{name}/population.csv",
         clusters="processing/{name}/health/scen-{scenario}/country_clusters.csv",
     output:

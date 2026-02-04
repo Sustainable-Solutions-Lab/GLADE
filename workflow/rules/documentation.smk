@@ -151,7 +151,7 @@ rule doc_fig_crop_yield:
     input:
         yield_raster=lambda w: gaez_path("yield", "r", w.crop),
         regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
-        conversions="data/yield_unit_conversions.csv",
+        conversions="data/curated/yield_unit_conversions.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/crop_yield_{crop}.svg",

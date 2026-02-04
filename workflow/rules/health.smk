@@ -16,7 +16,7 @@ rule retrieve_gdp_per_capita:
     Missing data is imputed using UN M49 sub-regional means.
     """
     input:
-        m49="data/M49-codes.csv",
+        m49="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
         year=config["health"]["clustering"]["gdp_reference_year"],
@@ -66,9 +66,9 @@ rule prepare_faostat_fbs_items:
     from a bulk FBS CSV, used for calculating within-group food consumption ratios.
     """
     input:
-        food_item_map="data/faostat_food_item_map.csv",
+        food_item_map="data/curated/faostat_food_item_map.csv",
         fbs_csv="data/downloads/faostat/FBS.csv",
-        m49_codes="data/M49-codes.csv",
+        m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
         reference_year=config["food_groups"]["fix_within_group_ratios"][
@@ -91,7 +91,7 @@ rule prepare_faostat_gdd_supplements:
     """
     input:
         fbs_csv="data/downloads/faostat/FBS.csv",
-        m49_codes="data/M49-codes.csv",
+        m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
         reference_year=config["health"]["reference_year"],
@@ -119,7 +119,7 @@ rule merge_dietary_sources:
 
 rule prepare_food_loss_waste:
     input:
-        m49="data/M49-codes.csv",
+        m49="data/curated/M49-codes.csv",
         animal_production="processing/{name}/faostat_animal_production.csv",
         faostat_gdd_supplements="processing/{name}/faostat_gdd_supplements.csv",
         population="processing/{name}/population.csv",
@@ -181,7 +181,7 @@ rule prepare_health_costs:
         dr="processing/{name}/health/gbd_mortality_rates.csv",
         population="processing/{name}/population_age.csv",
         life_table="processing/{name}/health/life_table.csv",
-        food_groups="data/food_groups.csv",
+        food_groups="data/curated/food_groups.csv",
         gdp="data/downloads/gdp_per_capita.csv",
     params:
         countries=lambda w: get_effective_config(w.scenario)["countries"],

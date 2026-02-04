@@ -13,7 +13,7 @@ and manure emissions calculations.
 rule prepare_faostat_animal_production:
     input:
         qcl_csv="data/downloads/faostat/QCL.csv",
-        m49_codes="data/M49-codes.csv",
+        m49_codes="data/curated/M49-codes.csv",
     params:
         production_year=config["validation"]["production_year"],
         countries=config["countries"],
@@ -29,7 +29,7 @@ rule prepare_faostat_animal_production:
 
 rule prepare_faostat_yields:
     input:
-        mapping="data/faostat_animal_yield_mapping.yaml",
+        mapping="data/curated/faostat_animal_yield_mapping.yaml",
         qcl_csv="data/downloads/faostat/QCL.csv",
     params:
         cost_params=config["animal_costs"]["faostat"],
@@ -45,7 +45,7 @@ rule prepare_faostat_yields:
 rule prepare_gleam_feed_properties:
     input:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
-        gleam_mapping="data/gleam_feed_mapping.csv",
+        gleam_mapping="data/curated/gleam_feed_mapping.csv",
     output:
         ruminant="processing/{name}/ruminant_feed_properties.csv",
         monogastric="processing/{name}/monogastric_feed_properties.csv",
@@ -59,8 +59,8 @@ rule categorize_feeds:
     input:
         ruminant_feed_properties="processing/{name}/ruminant_feed_properties.csv",
         monogastric_feed_properties="processing/{name}/monogastric_feed_properties.csv",
-        enteric_methane_yields="data/ipcc_enteric_methane_yields.csv",
-        ash_content="data/feed_ash_content.csv",
+        enteric_methane_yields="data/curated/ipcc_enteric_methane_yields.csv",
+        ash_content="data/curated/feed_ash_content.csv",
     output:
         ruminant_categories="processing/{name}/ruminant_feed_categories.csv",
         monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
@@ -74,10 +74,10 @@ rule categorize_feeds:
 
 rule build_feed_to_animal_products:
     input:
-        wirsenius="data/wirsenius_feed_energy_requirements.csv",
+        wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
         ruminant_categories="processing/{name}/ruminant_feed_categories.csv",
         monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
-        country_region_map="data/country_wirsenius_region.csv",
+        country_region_map="data/curated/country_wirsenius_region.csv",
     output:
         "processing/{name}/feed_to_animal_products.csv",
     params:
@@ -98,10 +98,10 @@ rule calculate_manure_emissions:
     input:
         ruminant_feed_categories="processing/{name}/ruminant_feed_categories.csv",
         monogastric_feed_categories="processing/{name}/monogastric_feed_categories.csv",
-        b0_data="data/ipcc_manure_methane_producing_capacity.csv",
-        mcf_data="data/ipcc_manure_methane_conversion_factors.csv",
-        mms_fractions="data/gleam_tables/manure_management_systems_fraction.csv",
-        n2o_efs="data/ipcc_manure_n2o_emission_factors.csv",
+        b0_data="data/curated/ipcc_manure_methane_producing_capacity.csv",
+        mcf_data="data/curated/ipcc_manure_methane_conversion_factors.csv",
+        mms_fractions="data/curated/gleam_tables/manure_management_systems_fraction.csv",
+        n2o_efs="data/curated/ipcc_manure_n2o_emission_factors.csv",
     output:
         "processing/{name}/manure_emission_factors.csv",
     log:

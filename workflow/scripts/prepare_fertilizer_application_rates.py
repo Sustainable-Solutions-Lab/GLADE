@@ -16,7 +16,7 @@ nitrogen (N) application rates for model crops by country. It:
 
 Input files:
     - data/downloads/ifa_fubc_1_to_9_data.csv: Raw FUBC dataset
-    - data/ifa_fubc_crop_mapping.csv: Mapping from model crops to FUBC crop names
+    - data/curated/ifa_fubc_crop_mapping.csv: Mapping from model crops to FUBC crop names
 
 Output:
     - processing/{name}/fertilizer_application_rates.csv: N application rates by crop and country

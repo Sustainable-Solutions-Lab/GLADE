@@ -86,7 +86,7 @@ rule download_fadn_data:
 
 rule retrieve_usda_costs:
     input:
-        sources="data/usda_cost_sources.csv",
+        sources="data/curated/usda_cost_sources.csv",
         cpi="processing/shared/cpi_annual.csv",
     params:
         base_year=config["currency_base_year"],
@@ -103,7 +103,7 @@ rule retrieve_usda_costs:
 rule retrieve_fadn_costs:
     input:
         data="data/downloads/fadn_nuts0_so.csv",
-        mapping="data/fadn_crop_mapping.yaml",
+        mapping="data/curated/fadn_crop_mapping.yaml",
         hicp="processing/shared/hicp_annual.csv",
         ppp="processing/shared/ppp_eur_intl_dollar.csv",
     params:
@@ -125,7 +125,7 @@ rule merge_crop_costs:
             "processing/{name}/usda_costs.csv",
             "processing/{name}/fadn_costs.csv",
         ],
-        fallbacks="data/crop_cost_fallbacks.yaml",
+        fallbacks="data/curated/crop_cost_fallbacks.yaml",
     params:
         crops=config["crops"],
         base_year=config["currency_base_year"],
@@ -139,7 +139,7 @@ rule merge_crop_costs:
 
 rule retrieve_usda_animal_costs:
     input:
-        sources="data/usda_animal_cost_sources.csv",
+        sources="data/curated/usda_animal_cost_sources.csv",
         cpi="processing/shared/cpi_annual.csv",
     params:
         base_year=config["currency_base_year"],
@@ -156,7 +156,7 @@ rule retrieve_usda_animal_costs:
 rule retrieve_fadn_animal_costs:
     input:
         data="data/downloads/fadn_nuts0_so.csv",
-        mapping="data/fadn_animal_mapping.yaml",
+        mapping="data/curated/fadn_animal_mapping.yaml",
         hicp="processing/shared/hicp_annual.csv",
         ppp="processing/shared/ppp_eur_intl_dollar.csv",
         yields="processing/{name}/faostat_animal_yields.csv",
@@ -632,38 +632,15 @@ rule download_forest_carbon_accumulation_1km:
         """
 
 
-rule download_ifa_fubc:
-    output:
-        data="data/downloads/ifa_fubc_1_to_9_data.csv",
-        metadata="data/downloads/ifa_fubc_1_to_9_metadata.csv",
-    params:
-        data_file_id=3940355,
-        metadata_file_id=3940358,
-    log:
-        "logs/shared/download_ifa_fubc.log",
-    shell:
-        r"""
-        mkdir -p "$(dirname {output.data})"
-        curl -L --fail --progress-bar \
-            -o "{output.data}" \
-            "https://datadryad.org/api/v2/files/{params.data_file_id}/download" \
-            > {log} 2>&1
-        curl -L --fail --progress-bar \
-            -o "{output.metadata}" \
-            "https://datadryad.org/api/v2/files/{params.metadata_file_id}/download" \
-            >> {log} 2>&1
-        """
-
-
 # Conditional rule: retrieve nutrition data from USDA if enabled in config
 if config["data"]["usda"]["retrieve_nutrition"]:
 
     rule retrieve_usda_nutrition:
         input:
-            mapping="data/usda_food_mapping.csv",
-            food_groups="data/food_groups.csv",
+            mapping="data/curated/usda_food_mapping.csv",
+            food_groups="data/curated/food_groups.csv",
         output:
-            "data/nutrition.csv",
+            "data/curated/nutrition.csv",
         log:
             "logs/shared/retrieve_usda_nutrition.log",
         script:

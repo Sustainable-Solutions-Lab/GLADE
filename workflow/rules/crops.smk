@@ -12,9 +12,9 @@ and crop residue processing.
 
 rule prepare_faostat_crop_production:
     input:
-        mapping="data/faostat_crop_item_map.csv",
+        mapping="data/curated/faostat_crop_item_map.csv",
         qcl_csv="data/downloads/faostat/QCL.csv",
-        m49_codes="data/M49-codes.csv",
+        m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
         production_year=config["validation"]["production_year"],
@@ -30,7 +30,7 @@ rule prepare_faostat_crop_production:
 rule prepare_fao_edible_portion:
     input:
         table="data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx",
-        mapping="data/faostat_crop_item_map.csv",
+        mapping="data/curated/faostat_crop_item_map.csv",
     params:
         crops=config["crops"],
     output:
@@ -69,8 +69,8 @@ rule build_crop_yields:
         unpack(yield_and_suitability_for_crop),
         classes="processing/{name}/resource_classes.nc",
         regions="processing/{name}/regions.geojson",
-        yield_unit_conversions="data/yield_unit_conversions.csv",
-        moisture_content="data/crop_moisture_content.csv",
+        yield_unit_conversions="data/curated/yield_unit_conversions.csv",
+        moisture_content="data/curated/crop_moisture_content.csv",
     params:
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
@@ -88,7 +88,7 @@ rule build_harvested_area_gaez:
         ),
         classes="processing/{name}/resource_classes.nc",
         regions="processing/{name}/regions.geojson",
-        crop_mapping="data/gaez_crop_code_mapping.csv",
+        crop_mapping="data/curated/gaez_crop_code_mapping.csv",
         faostat_production="processing/{name}/faostat_crop_production.csv",
     output:
         "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
@@ -115,7 +115,7 @@ def multi_cropping_inputs(_wildcards):
     inputs = {
         "classes": "processing/{name}/resource_classes.nc",
         "regions": "processing/{name}/regions.geojson",
-        "yield_unit_conversions": "data/yield_unit_conversions.csv",
+        "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
     }
     for ws in ("r", "i"):
         for crop in sorted(crops_by_supply[ws]):
@@ -142,7 +142,7 @@ def multi_cropping_inputs(_wildcards):
 rule build_multi_cropping:
     input:
         unpack(multi_cropping_inputs),
-        moisture_content="data/crop_moisture_content.csv",
+        moisture_content="data/curated/crop_moisture_content.csv",
     params:
         combinations=lambda wildcards: config["multiple_cropping"],
         use_actual_yields=config["validation"]["use_actual_yields"],
@@ -178,8 +178,8 @@ rule build_crop_residue_yields:
             else []
         ),
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
-        ruminant_feed_table="data/gleam_tables/ruminants_feed_yield_fractions.csv",
-        monogastric_feed_table="data/gleam_tables/monogastrics_feed_yeild_fractions.csv",
+        ruminant_feed_table="data/curated/gleam_tables/ruminants_feed_yield_fractions.csv",
+        monogastric_feed_table="data/curated/gleam_tables/monogastrics_feed_yeild_fractions.csv",
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/crop_residue_yields/{crop}.csv",

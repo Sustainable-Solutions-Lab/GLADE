@@ -65,7 +65,7 @@ USDA Cost and Returns Data
 
 **Retrieval**: Direct CSV download via ``workflow/scripts/retrieve_usda_costs.py``. The script implements robust retries (5 attempts with backoff) to handle server instability.
 
-  * **Manual Fallback**: If automated retrieval fails, download the CSVs from the URLs listed in ``data/usda_cost_sources.csv``.
+  * **Manual Fallback**: If automated retrieval fails, download the CSVs from the URLs listed in ``data/curated/usda_cost_sources.csv``.
 
 **Coverage**: 9 major crops (corn/maize, wheat, rice, barley, oats, sorghum, soybeans, groundnut/peanuts, cotton)
 
@@ -82,7 +82,7 @@ Costs explicitly **excluded** (modeled endogenously):
 
 **Inflation adjustment**: All costs are inflation-adjusted to a configurable base year (default: 2024) using US CPI-U data from BLS. See :ref:`bls-cpi-data` for details.
 
-**Note**: USDA data is merged with EU FADN data (see :ref:`fadn-cost-data`) via the ``merge_crop_costs`` rule to provide comprehensive global coverage. For crops without direct cost data from either source, fallback mappings are applied via ``data/crop_cost_fallbacks.yaml`` (e.g., other cereals use wheat costs, other legumes use soybean costs). When data is available from multiple sources, costs are averaged.
+**Note**: USDA data is merged with EU FADN data (see :ref:`fadn-cost-data`) via the ``merge_crop_costs`` rule to provide comprehensive global coverage. For crops without direct cost data from either source, fallback mappings are applied via ``data/curated/crop_cost_fallbacks.yaml`` (e.g., other cereals use wheat costs, other legumes use soybean costs). When data is available from multiple sources, costs are averaged.
 
 USDA Livestock Cost Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -101,7 +101,7 @@ USDA Livestock Cost Data
 
 **Retrieval**: Excel download and processing via ``workflow/scripts/retrieve_usda_animal_costs.py``. The script implements robust retries (5 attempts with backoff) to handle intermittent server timeouts.
 
-  * **Manual Fallback**: If automated retrieval fails, users can manually download the CSVs from the URLs listed in ``data/usda_animal_cost_sources.csv`` and place them in the processing directory, or simply re-run the workflow as the server often recovers.
+  * **Manual Fallback**: If automated retrieval fails, users can manually download the CSVs from the URLs listed in ``data/curated/usda_animal_cost_sources.csv`` and place them in the processing directory, or simply re-run the workflow as the server often recovers.
 
 **Coverage**: 3 major animal products (dairy/milk, beef cattle via cow-calf, pork via hogs)
 
@@ -180,9 +180,7 @@ IFA FUBC — Global Fertilizer Use by Crop and Country
 
 **Description**: Global dataset on inorganic fertilizer application rates (N, P₂O₅, K₂O) by crop and country based on expert surveys. The dataset includes historical data from 8 previous reports (1986–2014/15) and the most recent survey for the 2017–18 period, covering fertilizer application rates (kg/ha) and total consumption (thousand tonnes) for major crops worldwide.
 
-**Access**: https://datadryad.org/stash/dataset/doi:10.5061/dryad.2rbnzs7qh
-
-**API access**: Dryad API v2 (https://datadryad.org/api/v2/)
+**Source**: https://datadryad.org/stash/dataset/doi:10.5061/dryad.2rbnzs7qh
 
 **Version**: Version 1 (March 2025)
 
@@ -210,7 +208,7 @@ IFA FUBC — Global Fertilizer Use by Crop and Country
 
 **Usage**: Crop-specific fertilizer application rates for N₂O emissions modeling and nutrient budget analysis
 
-**Workflow retrieval**: Automatic via the ``download_ifa_fubc`` Snakemake rule using the Dryad API v2. Downloads ``ifa_fubc_1_to_9_data.csv`` and ``ifa_fubc_1_to_9_metadata.csv`` to ``data/downloads/``. No registration or API key required.
+**Workflow integration**: Bundled with the repository under ``data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/`` (CC0 licensed). The full Dryad dataset is included as-is due to Dryad API access restrictions.
 
 .. _fadn-cost-data:
 
@@ -593,7 +591,7 @@ Huang et al. — Gridded Irrigation Water Withdrawals
 Food Processing Data
 --------------------
 
-data/foods.csv — Crop-to-Food Processing Pathways
+data/curated/foods.csv — Crop-to-Food Processing Pathways
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Type**: Hand-written configuration file (maintained in repository)
@@ -645,11 +643,11 @@ USDA FoodData Central
 
 **Workflow retrieval**: Optional via ``retrieve_usda_nutrition`` rule (using the API with included API key)
 
-**Configuration**: Set ``data.usda.retrieve_nutrition: true`` in config to fetch fresh data. By default, the repository includes pre-fetched data in ``data/nutrition.csv``.
+**Configuration**: Set ``data.usda.retrieve_nutrition: true`` in config to fetch fresh data. By default, the repository includes pre-fetched data in ``data/curated/nutrition.csv``.
 
 **API Key**: The repository includes a shared API key for convenience. Users can optionally obtain their own API key (free, instant signup) at https://fdc.nal.usda.gov/api-key-signup and update the ``data.usda.api_key`` value in the config.
 
-The mapping from model foods to USDA FoodData Central IDs is maintained in ``data/usda_food_mapping.csv``. This file maps internal food names (e.g., "flour-white", "rice-white", "meat-chicken") to specific FDC IDs from the SR Legacy database (e.g., wheat flour white all-purpose enriched, white rice cooked, chicken breast raw).
+The mapping from model foods to USDA FoodData Central IDs is maintained in ``data/curated/usda_food_mapping.csv``. This file maps internal food names (e.g., "flour-white", "rice-white", "meat-chicken") to specific FDC IDs from the SR Legacy database (e.g., wheat flour white all-purpose enriched, white rice cooked, chicken breast raw).
 
 FAO Nutrient Conversion Table for SUA (2024)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -664,7 +662,7 @@ FAO Nutrient Conversion Table for SUA (2024)
 
 **Workflow retrieval**: Automatically downloaded to ``data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx`` by the ``download_fao_nutrient_conversion_table`` rule in ``workflow/rules/retrieve.smk``.
 
-**Usage**: Contains data on edible portion of foods. ``workflow/scripts/prepare_fao_edible_portion.py`` reads sheet ``03`` to export edible portion coefficients for configured crops into ``processing/{name}/fao_edible_portion.csv``. Moisture fractions required for fresh-mass scaling live in ``data/crop_moisture_content.csv`` (derived primarily from the GAEZ v5 Module VII documentation with a few documented assumptions) and are joined inside ``workflow/scripts/build_model.py``. Note that for certain crops (grains: rice, barley, oat, buckwheat; sugar crops: sugarcane, sugarbeet; oil crops: oil-palm), the script overrides FAO's coefficients to 1.0 so that downstream processing pathways manage the losses explicitly.
+**Usage**: Contains data on edible portion of foods. ``workflow/scripts/prepare_fao_edible_portion.py`` reads sheet ``03`` to export edible portion coefficients for configured crops into ``processing/{name}/fao_edible_portion.csv``. Moisture fractions required for fresh-mass scaling live in ``data/curated/crop_moisture_content.csv`` (derived primarily from the GAEZ v5 Module VII documentation with a few documented assumptions) and are joined inside ``workflow/scripts/build_model.py``. Note that for certain crops (grains: rice, barley, oat, buckwheat; sugar crops: sugarcane, sugarbeet; oil crops: oil-palm), the script overrides FAO's coefficients to 1.0 so that downstream processing pathways manage the losses explicitly.
 
 Mock and Placeholder Data
 --------------------------
