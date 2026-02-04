@@ -36,10 +36,11 @@ Brief descriptions of key external datasets used by this project, with links and
 
 - Description: United Nations Statistics Division SDG Indicator database. We use series ``AG_FLS_PCT`` (Food loss percentage) and ``AG_FOOD_WST_PC`` (Food waste per capita) to parameterize pre- and post-retail losses by country and food group.
 - Website: https://unstats.un.org/sdgs/dataportal
-- API documentation: https://unstats.un.org/sdgs/UNSDGAPIV5/swagger/index.html
-- Version/format: JSON retrieved via the UNSD SDG API.
-- License/terms (summary): Data may be copied, duplicated, and redistributed provided UNdata/UNSD is cited as the reference. (UNdata terms: “All data and metadata provided on UNdata’s website are available free of charge and may be copied freely, duplicated and further distributed provided that UNdata is cited as the reference.”)
+- Archive: https://unstats.un.org/sdgs/indicators/database/archive
+- Version/format: Bulk CSV downloaded from the UNSD SDG Indicators Database archive (2025 Q4.1 release). The full archive (~56 MB zip, ~1.7 GB uncompressed) is filtered during extraction to retain only the two relevant series (~500 KB).
+- License/terms (summary): Data may be copied, duplicated, and redistributed provided UNdata/UNSD is cited as the reference. (UNdata terms: "All data and metadata provided on UNdata's website are available free of charge and may be copied freely, duplicated and further distributed provided that UNdata is cited as the reference.")
 - Citation: United Nations Statistics Division. SDG Indicator Database, Goal 12.3.1a/b (Food Loss and Waste). https://unstats.un.org/sdgs/dataportal (accessed YYYY-MM-DD).
+- Workflow integration: Retrieved via the ``download_unsd_sdg`` rule (bulk zip download) and ``extract_unsd_sdg`` rule (filter to AG_FLS_PCT and AG_FOOD_WST_PC series). Output: ``data/downloads/unsd/SDG_12_3_1.csv``. Processed by ``prepare_food_loss_waste.py``.
 
 ## USDA ERS — Cost and Returns Data
 

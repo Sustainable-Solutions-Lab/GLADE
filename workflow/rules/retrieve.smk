@@ -271,6 +271,34 @@ rule extract_faostat_gt:
         """
 
 
+rule download_unsd_sdg:
+    output:
+        temp("data/downloads/unsd/SDG.zip"),
+    params:
+        url="https://unstats.un.org/sdgs/indicators/database/archive/2025_Q4.1_AllData_After_20251212_CSV.zip",
+    log:
+        "logs/shared/download_unsd_sdg.log",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_unsd_sdg:
+    input:
+        "data/downloads/unsd/SDG.zip",
+    output:
+        "data/downloads/unsd/SDG_12_3_1.csv",
+    log:
+        "logs/shared/extract_unsd_sdg.log",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        unzip -p "{input}" "*.csv" | {{ head -1; grep -E "AG_FLS_PCT|AG_FOOD_WST_PC"; }} > "{output}" 2> {log}
+        """
+
+
 rule download_gaez_yield_data:
     output:
         "data/downloads/gaez_yield_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",

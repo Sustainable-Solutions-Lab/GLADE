@@ -165,11 +165,11 @@ UNSD SDG Indicator 12.3.1 (Food Loss & Waste)
 
 **Description**: SDG indicator database series ``AG_FLS_PCT`` (Food loss percentage) and ``AG_FOOD_WST_PC`` (Food waste per capita) covering SDG 12.3.1a/b.
 
-**Access**: https://unstats.un.org/sdgs/dataportal (see API documentation at https://unstats.un.org/sdgs/UNSDGAPIV5/swagger/index.html)
+**Access**: https://unstats.un.org/sdgs/dataportal; bulk archive at https://unstats.un.org/sdgs/indicators/database/archive
 
-**License**: UNdata terms — data may be copied and redistributed free of charge provided UNdata/UNSD is cited (“All data and metadata provided on UNdata’s website are available free of charge and may be copied freely, duplicated and further distributed provided that UNdata is cited as the reference.”).
+**License**: UNdata terms — data may be copied and redistributed free of charge provided UNdata/UNSD is cited ("All data and metadata provided on UNdata's website are available free of charge and may be copied freely, duplicated and further distributed provided that UNdata is cited as the reference.").
 
-**Retrieval**: ``workflow/scripts/prepare_food_loss_waste.py`` queries the UNSD SDG API, falling back to global product shares to derive food group–specific loss factors where regional detail is missing.
+**Retrieval**: Downloaded as a bulk CSV archive from the UNSD SDG Indicators Database (2025 Q4.1 release, ~56 MB zip). During extraction, the CSV is filtered to retain only the two relevant series (``AG_FLS_PCT`` and ``AG_FOOD_WST_PC``, ~500 KB). ``workflow/scripts/prepare_food_loss_waste.py`` reads the filtered CSV and falls back to global product shares to derive food group–specific loss factors where regional detail is missing.
 
 **Usage**: Supplies per-country loss and waste fractions for food groups, injected into the crop→food conversion efficiencies during ``build_model``.
 
