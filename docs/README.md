@@ -113,23 +113,17 @@ Default tag is `doc-figures`. This script:
 gh auth login
 ```
 
-### Updating Figure References
+### Figure References
 
-Documentation files reference figures via GitHub release URLs:
+Documentation `.rst` files always reference figures via GitHub release URLs:
 
 ```rst
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/figure_name.png
 ```
 
-To switch between local and remote references:
-
-```bash
-# Update to use GitHub URLs (for commits)
-tools/update-figure-refs --to-remote
-
-# Revert to local paths (for testing)
-tools/update-figure-refs --to-local
-```
+When building locally, `conf.py` has a `source-read` hook that transparently
+rewrites these to local `_static/figures/` paths if the figures have been
+generated. No manual URL switching is needed.
 
 ### Workflow Summary
 
@@ -137,8 +131,7 @@ When updating figures (using pixi tasks):
 1. Generate: `pixi run --environment dev build-docs`
 2. Test locally: `pixi run --environment dev docs-local`
 3. Upload: `pixi run --environment dev upload-doc-figures`
-4. Update refs: `pixi run --environment dev update-figure-refs-remote`
-5. Commit: Only `.rst` files change, not the figures themselves
+4. Commit: Only `.rst` files change, not the figures themselves
 
 ## Publishing to ReadTheDocs
 

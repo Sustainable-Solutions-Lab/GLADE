@@ -366,20 +366,15 @@ tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs
 # 2. Upload to GitHub release (requires gh CLI authentication)
 tools/upload-doc-figures
 
-# 3. Update .rst references to use remote URLs
-tools/update-figure-refs --to-remote
-
-# 4. Commit only the .rst changes (not the figures)
+# 3. Commit any .rst changes (not the figures)
 git add docs/*.rst
 git commit -m "Update documentation figures"
 ```
 
-For local testing, you can use local figure paths:
-```bash
-tools/update-figure-refs --to-local
-make html  # Build docs with local figures
-tools/update-figure-refs --to-remote  # Switch back before committing
-```
+`.rst` files always contain remote GitHub release URLs. When building docs locally,
+`conf.py` has a `source-read` hook that transparently rewrites these to local
+`_static/figures/` paths if the local figures directory exists. No manual URL
+switching is needed.
 
 **Never** commit figure files (`*.png`, `*.svg`) to git - they are hosted externally to keep the repository lean.
 

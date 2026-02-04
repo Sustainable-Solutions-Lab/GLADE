@@ -120,6 +120,4 @@ format-all = { depends-on = ["format", "format-snakemake"] }
 # Documentation tasks
 build-docs = { cmd = "tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs" }
 upload-doc-figures = { cmd = "tools/upload-doc-figures" }
-update-figure-refs-remote = { cmd = "tools/update-figure-refs --to-remote" }
-update-figure-refs-local = { cmd = "tools/update-figure-refs --to-local" }
-docs-local = { cmd = "tools/update-figure-refs --to-local && sphinx-build -b html docs docs/_build/html" }
+docs-local = { cmd = "sphinx-build -b html docs docs/_build/html" }

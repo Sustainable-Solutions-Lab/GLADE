@@ -97,7 +97,17 @@ FIGURE_BASE_URL = (
     f"https://github.com/{GITHUB_REPO}/releases/download/{FIGURE_RELEASE_TAG}"
 )
 
-# Define global substitutions for easy figure referencing
-rst_prolog = f"""
-.. |figure_url| replace:: {FIGURE_BASE_URL}
-"""
+# When building locally, automatically use local figures if they exist.
+# This means .rst files can always contain remote URLs (the committed state)
+# and local builds will transparently use local figures without manual switching.
+LOCAL_FIGURES_DIR = os.path.join(os.path.dirname(__file__), "_static", "figures")
+
+
+def _use_local_figures(app, docname, source):
+    """Replace remote figure URLs with local paths when local figures exist."""
+    if os.path.isdir(LOCAL_FIGURES_DIR):
+        source[0] = source[0].replace(FIGURE_BASE_URL + "/", "_static/figures/")
+
+
+def setup(app):
+    app.connect("source-read", _use_local_figures)
