@@ -31,11 +31,17 @@ Output:
 import logging
 import sys
 
-import faostat
 import pandas as pd
 import pycountry
 import requests
 
+from workflow.scripts.faostat_bulk import (
+    add_iso3_column,
+    filter_bulk,
+    get_element_map,
+    load_bulk_csv,
+    load_m49_to_iso3,
+)
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -356,55 +362,61 @@ def process_food_loss_data(
 
 
 def fetch_faostat_food_supply(
-    countries: list[str], reference_year: int
+    countries: list[str],
+    reference_year: int,
+    fbs_csv: str,
+    m49_csv: str,
 ) -> pd.DataFrame:
-    """Fetch total food supply per capita from FAOSTAT Food Balance Sheets.
+    """Read total food supply per capita from FAOSTAT FBS bulk CSV.
 
     Args:
         countries: List of ISO3 country codes
         reference_year: Year for which to retrieve data
+        fbs_csv: Path to extracted FAOSTAT FBS bulk CSV
+        m49_csv: Path to M49 codes CSV for ISO3 mapping
 
     Returns:
         DataFrame with columns: country (ISO3), food_supply_g_day
     """
-    logger.info("Fetching FAOSTAT food supply data for %d", reference_year)
+    logger.info("Reading FAOSTAT food supply data for %d", reference_year)
 
-    # Use FBS (Food Balance Sheets) dataset
-    # Element: "Food supply quantity (kg/capita/yr)"
-    DATASET = "FBS"
-    ELEMENT_LABEL = "Food supply quantity (kg/capita/yr)"
+    bulk = load_bulk_csv(fbs_csv)
 
-    # Get parameter mappings
-    elem_map = faostat.get_par(DATASET, "Element")
-
-    if ELEMENT_LABEL not in elem_map:
-        raise RuntimeError(f"Element '{ELEMENT_LABEL}' not found in FAOSTAT FBS")
-    element_code = elem_map[ELEMENT_LABEL]
-
-    # Query FAOSTAT for the requested year.
-    # The API does not expose the aggregate "Grand Total" alongside this element,
-    # so we pull the per-item values and aggregate locally.
-    logger.info("Querying FAOSTAT for total food supply")
-    target_countries = [code.upper() for code in countries]
-    pars = {
-        "element": element_code,
-        "year": str(reference_year),
-    }
-
-    try:
-        df = faostat.get_data_df(
-            DATASET, pars=pars, coding={"area": "ISO3"}, strval=True
+    # Find element code for food supply quantity
+    element_map = get_element_map(bulk)
+    elem_code = None
+    for label, code in element_map.items():
+        if "food supply quantity" in label.lower() and "kg" in label.lower():
+            elem_code = code
+            break
+    if elem_code is None:
+        raise RuntimeError(
+            "Element 'Food supply quantity (kg/capita/yr)' not found in FBS bulk data"
         )
-    except Exception as exc:  # pragma: no cover - network/runtime errors
-        logger.error("Failed to fetch FAOSTAT data for %d: %s", reference_year, exc)
-        return pd.DataFrame(columns=["country", "food_supply_g_day"])
+
+    # Add ISO3 column
+    m49_to_iso3 = load_m49_to_iso3(m49_csv)
+    bulk = add_iso3_column(bulk, m49_to_iso3)
+
+    target_countries = [code.upper() for code in countries]
+
+    # Include fallback countries in the filter
+    all_fallback_countries = set()
+    for proxies in FALLBACK_FOOD_SUPPLY.values():
+        all_fallback_countries.update(c.upper() for c in proxies)
+    filter_countries = list(set(target_countries) | all_fallback_countries)
+
+    df = filter_bulk(
+        bulk,
+        element_codes=[elem_code],
+        years=[reference_year],
+        iso3_codes=filter_countries,
+    )
 
     if df.empty:
-        logger.warning("FAOSTAT returned no food supply data for requested selection")
+        logger.warning("FAOSTAT FBS bulk data returned no food supply data")
         return pd.DataFrame(columns=["country", "food_supply_g_day"])
 
-    # Process results
-    df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
     df = df.dropna(subset=["Value"])
     if df.empty:
         logger.warning(
@@ -412,23 +424,11 @@ def fetch_faostat_food_supply(
         )
         return pd.DataFrame(columns=["country", "food_supply_g_day"])
 
-    # Identify the ISO3 column (returned via coding system)
-    iso_col = None
-    for candidate in df.columns:
-        normalized = candidate.strip().lower().replace(" ", "_")
-        if normalized in {"area_code", "area_code_(iso3)", "area_code_iso3"}:
-            iso_col = candidate
-            break
-    if iso_col is None and "Area Code" in df.columns:
-        iso_col = "Area Code"
+    df["country"] = df["iso3"].astype(str).str.upper()
 
-    if iso_col is None:
-        logger.warning("Could not identify ISO3 area column in FAOSTAT response")
-        return pd.DataFrame(columns=["country", "food_supply_g_day"])
-
-    df["country"] = df[iso_col].astype(str).str.upper()
-    df = df[df["country"].isin(target_countries)]
-    df = df[df["Unit"].str.lower() == "kg/cap"]
+    # Filter by unit (kg/cap)
+    if "Unit" in df.columns:
+        df = df[df["Unit"].str.lower() == "kg/cap"]
 
     if df.empty:
         logger.warning(
@@ -696,6 +696,7 @@ def main():
     animal_production_file = snakemake.input["animal_production"]
     faostat_gdd_supplements_file = snakemake.input["faostat_gdd_supplements"]
     population_file = snakemake.input["population"]
+    fbs_csv = snakemake.input["fbs_csv"]
     output_file = snakemake.output["food_loss_waste"]
     countries = snakemake.params["countries"]
     food_groups = snakemake.params["food_groups"]
@@ -715,8 +716,10 @@ def main():
     faostat_supply = pd.read_csv(faostat_gdd_supplements_file)
     population = pd.read_csv(population_file)
 
-    # Fetch FAOSTAT food supply data
-    food_supply = fetch_faostat_food_supply(countries, reference_year)
+    # Read FAOSTAT food supply data from bulk CSV
+    food_supply = fetch_faostat_food_supply(
+        countries, reference_year, fbs_csv, m49_file
+    )
 
     # Query UNSD API
     loss_data = query_unsd_series("AG_FLS_PCT")

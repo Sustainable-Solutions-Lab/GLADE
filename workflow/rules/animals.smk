@@ -10,6 +10,37 @@ and manure emissions calculations.
 """
 
 
+rule prepare_faostat_animal_production:
+    input:
+        qcl_csv="data/downloads/faostat/QCL.csv",
+        m49_codes="data/M49-codes.csv",
+    params:
+        production_year=config["validation"]["production_year"],
+        countries=config["countries"],
+        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+    output:
+        "processing/{name}/faostat_animal_production.csv",
+    log:
+        "logs/{name}/prepare_faostat_animal_production.log",
+    script:
+        "../scripts/prepare_faostat_animal_production.py"
+
+
+rule prepare_faostat_yields:
+    input:
+        mapping="data/faostat_animal_yield_mapping.yaml",
+        qcl_csv="data/downloads/faostat/QCL.csv",
+    params:
+        cost_params=config["animal_costs"]["faostat"],
+        averaging_period=config["animal_costs"]["averaging_period"],
+    output:
+        "processing/{name}/faostat_animal_yields.csv",
+    log:
+        "logs/{name}/prepare_faostat_yields.log",
+    script:
+        "../scripts/prepare_faostat_yields.py"
+
+
 rule prepare_gleam_feed_properties:
     input:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",

@@ -153,20 +153,6 @@ rule retrieve_usda_animal_costs:
         "../scripts/retrieve_usda_animal_costs.py"
 
 
-rule retrieve_faostat_yields:
-    input:
-        mapping="data/faostat_animal_yield_mapping.yaml",
-    params:
-        cost_params=config["animal_costs"]["faostat"],
-        averaging_period=config["animal_costs"]["averaging_period"],
-    output:
-        "processing/{name}/faostat_animal_yields.csv",
-    log:
-        "logs/{name}/retrieve_faostat_yields.log",
-    script:
-        "../scripts/retrieve_faostat_yields.py"
-
-
 rule retrieve_fadn_animal_costs:
     input:
         data="data/downloads/fadn_nuts0_so.csv",
@@ -204,42 +190,85 @@ rule merge_animal_costs:
         "../scripts/merge_animal_costs.py"
 
 
-rule retrieve_faostat_crop_production:
+rule download_faostat_qcl:
+    output:
+        temp("data/downloads/faostat/QCL.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/Production_Crops_Livestock_E_All_Data_(Normalized).zip",
+    log:
+        "logs/shared/download_faostat_qcl.log",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_qcl:
     input:
-        mapping="data/faostat_crop_item_map.csv",
-    params:
-        countries=config["countries"],
-        production_year=config["validation"]["production_year"],
+        "data/downloads/faostat/QCL.zip",
     output:
-        "processing/{name}/faostat_crop_production.csv",
+        "data/downloads/faostat/QCL.csv",
     log:
-        "logs/{name}/retrieve_faostat_crop_production.log",
-    script:
-        "../scripts/retrieve_faostat_crop_production.py"
+        "logs/shared/extract_faostat_qcl.log",
+    shell:
+        r"""
+        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
+        """
 
 
-rule retrieve_faostat_animal_production:
-    params:
-        production_year=config["validation"]["production_year"],
-        countries=config["countries"],
-        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+rule download_faostat_fbs:
     output:
-        "processing/{name}/faostat_animal_production.csv",
-    log:
-        "logs/{name}/retrieve_faostat_animal_production.log",
-    script:
-        "../scripts/retrieve_faostat_animal_production.py"
-
-
-rule retrieve_faostat_emissions:
-    output:
-        "processing/{name}/faostat_emissions.csv",
+        temp("data/downloads/faostat/FBS.zip"),
     params:
-        year=config["validation"]["production_year"],
+        url="https://bulks-faostat.fao.org/production/FoodBalanceSheets_E_All_Data_(Normalized).zip",
     log:
-        "logs/{name}/retrieve_faostat_emissions.log",
-    script:
-        "../scripts/retrieve_faostat_emissions.py"
+        "logs/shared/download_faostat_fbs.log",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_fbs:
+    input:
+        "data/downloads/faostat/FBS.zip",
+    output:
+        "data/downloads/faostat/FBS.csv",
+    log:
+        "logs/shared/extract_faostat_fbs.log",
+    shell:
+        r"""
+        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
+        """
+
+
+rule download_faostat_gt:
+    output:
+        temp("data/downloads/faostat/GT.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/Emissions_Totals_E_All_Data_(Normalized).zip",
+    log:
+        "logs/shared/download_faostat_gt.log",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_gt:
+    input:
+        "data/downloads/faostat/GT.zip",
+    output:
+        "data/downloads/faostat/GT.csv",
+    log:
+        "logs/shared/extract_faostat_gt.log",
+    shell:
+        r"""
+        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
+        """
 
 
 rule download_gaez_yield_data:
@@ -596,27 +625,6 @@ rule download_ifa_fubc:
             "https://datadryad.org/api/v2/files/{params.metadata_file_id}/download" \
             >> {log} 2>&1
         """
-
-
-rule retrieve_faostat_fbs_items:
-    """Retrieve raw item-level supply data from FAOSTAT Food Balance Sheets.
-
-    Fetches supply data (kg/capita/year) for all items in the food item mapping,
-    used for calculating within-group food consumption ratios.
-    """
-    input:
-        food_item_map="data/faostat_food_item_map.csv",
-    params:
-        countries=config["countries"],
-        reference_year=config["food_groups"]["fix_within_group_ratios"][
-            "reference_year"
-        ],
-    output:
-        fbs_items="processing/{name}/faostat_fbs_items.csv",
-    log:
-        "logs/{name}/retrieve_faostat_fbs_items.log",
-    script:
-        "../scripts/retrieve_faostat_fbs_items.py"
 
 
 # Conditional rule: retrieve nutrition data from USDA if enabled in config

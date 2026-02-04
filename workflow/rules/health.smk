@@ -59,21 +59,47 @@ rule prepare_gdd_dietary_intake:
         "../scripts/prepare_gdd_dietary_intake.py"
 
 
-rule retrieve_faostat_gdd_supplements:
-    """Retrieve FAOSTAT supply data to supplement GDD dietary intake.
+rule prepare_faostat_fbs_items:
+    """Prepare raw item-level supply data from FAOSTAT Food Balance Sheets.
 
-    Fetches dairy, poultry, and oil supply data from FAOSTAT FBS to fill gaps
-    in the Global Dietary Database (GDD) which lacks data for these food groups.
+    Reads supply data (kg/capita/year) for all items in the food item mapping
+    from a bulk FBS CSV, used for calculating within-group food consumption ratios.
     """
+    input:
+        food_item_map="data/faostat_food_item_map.csv",
+        fbs_csv="data/downloads/faostat/FBS.csv",
+        m49_codes="data/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["food_groups"]["fix_within_group_ratios"][
+            "reference_year"
+        ],
+    output:
+        fbs_items="processing/{name}/faostat_fbs_items.csv",
+    log:
+        "logs/{name}/prepare_faostat_fbs_items.log",
+    script:
+        "../scripts/prepare_faostat_fbs_items.py"
+
+
+rule prepare_faostat_gdd_supplements:
+    """Prepare FAOSTAT supply data to supplement GDD dietary intake.
+
+    Reads dairy, poultry, and oil supply data from FAOSTAT FBS bulk CSV to
+    fill gaps in the Global Dietary Database (GDD).
+    """
+    input:
+        fbs_csv="data/downloads/faostat/FBS.csv",
+        m49_codes="data/M49-codes.csv",
     params:
         countries=config["countries"],
         reference_year=config["health"]["reference_year"],
     output:
         supply="processing/{name}/faostat_gdd_supplements.csv",
     log:
-        "logs/{name}/retrieve_faostat_gdd_supplements.log",
+        "logs/{name}/prepare_faostat_gdd_supplements.log",
     script:
-        "../scripts/retrieve_faostat_gdd_supplements.py"
+        "../scripts/prepare_faostat_gdd_supplements.py"
 
 
 rule merge_dietary_sources:
@@ -95,6 +121,7 @@ rule prepare_food_loss_waste:
         animal_production="processing/{name}/faostat_animal_production.csv",
         faostat_gdd_supplements="processing/{name}/faostat_gdd_supplements.csv",
         population="processing/{name}/population.csv",
+        fbs_csv="data/downloads/faostat/FBS.csv",
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],

@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Prepare FAOSTAT emissions data (Domain GT) for global comparison."""
+
+from pathlib import Path
+
+import pandas as pd
+
+from workflow.scripts.faostat_bulk import (
+    _int_str,
+    load_bulk_csv,
+)
+from workflow.scripts.logging_config import setup_script_logging
+
+if __name__ == "__main__":
+    logger = setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)
+
+    output_path = Path(snakemake.output[0])
+    gt_csv = snakemake.input.gt_csv
+    year = int(snakemake.params.year)
+
+    # FAOSTAT items to fetch (mapped to model categories)
+    # Note: We fetch individual gases to apply model GWPs later.
+    items = {
+        "Crop Residues": 5064,
+        "Rice Cultivation": 5060,
+        "Burning - Crop residues": 5066,
+        "Synthetic Fertilizers": 5061,
+        "Drained organic soils": 6729,
+        "Enteric Fermentation": 5058,
+        "Manure Management": 5059,
+        "Manure applied to Soils": 5062,
+        "Manure left on Pasture": 5063,
+        "Net Forest conversion": 6750,
+    }
+
+    # Elements: Emissions in kt (CH4, N2O, CO2)
+    elements = {
+        "Emissions (CH4)": 7225,  # kt
+        "Emissions (N2O)": 7230,  # kt
+        "Emissions (CO2)": 7273,  # kt
+    }
+
+    logger.info("Loading FAOSTAT GT bulk CSV")
+    bulk = load_bulk_csv(gt_csv)
+
+    # Filter for World (Area Code 5000), requested items, elements, and year
+    item_codes = {_int_str(c) for c in items.values()}
+    element_codes = {_int_str(c) for c in elements.values()}
+
+    mask = (
+        (bulk["Area Code"].map(_int_str) == "5000")
+        & (bulk["Item Code"].map(_int_str).isin(item_codes))
+        & (bulk["Element Code"].map(_int_str).isin(element_codes))
+        & (bulk["Year"].map(_int_str) == str(year))
+    )
+    df = bulk.loc[mask].copy()
+
+    logger.info("Filtered GT data for World, Year %s: %d rows", year, len(df))
+
+    if df.empty:
+        raise RuntimeError(
+            "FAOSTAT GT bulk data returned no emissions data for the requested selection"
+        )
+
+    # Filter and clean
+    df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+    df = df.dropna(subset=["Value"])
+
+    # Create standardized output
+    records = []
+
+    for _, row in df.iterrows():
+        item = str(row["Item"]).strip()
+        element = str(row["Element"]).strip()
+        value = float(row["Value"])
+        unit = str(row["Unit"]).strip().lower()
+
+        # Normalize unit to kilotonnes (kt)
+        factor = 1.0
+        if unit in ["tonnes", "t"]:
+            factor = 1e-3
+        elif unit in ["kilotonnes", "kt"] or unit in ["gigagrams", "gg"]:
+            factor = 1.0
+        else:
+            logger.warning(
+                "Unknown unit '%s' for %s - %s. Assuming kt.", unit, item, element
+            )
+
+        records.append(
+            {"item": item, "element": element, "value_kt": value * factor, "year": year}
+        )
+
+    result = pd.DataFrame(records)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(output_path, index=False)
+    logger.info("Saved %d emission records to %s", len(result), output_path)

@@ -14,7 +14,7 @@ When multiple foods map to the same FBS item, the FBS supply is split
 equally among them.
 
 Input:
-    - FBS item-level supply data (from retrieve_faostat_fbs_items.py)
+    - FBS item-level supply data (from prepare_faostat_fbs_items.py)
     - Food-to-FBS-item mapping (data/faostat_food_item_map.csv)
     - Food groups (data/food_groups.csv)
 

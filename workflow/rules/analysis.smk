@@ -3,6 +3,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
+rule prepare_faostat_emissions:
+    input:
+        gt_csv="data/downloads/faostat/GT.csv",
+    output:
+        "processing/{name}/faostat_emissions.csv",
+    params:
+        year=config["validation"]["production_year"],
+    log:
+        "logs/{name}/prepare_faostat_emissions.log",
+    script:
+        "../scripts/prepare_faostat_emissions.py"
+
+
 rule extract_ghg_intensity:
     """Extract GHG intensity and totals by food and country."""
     input:

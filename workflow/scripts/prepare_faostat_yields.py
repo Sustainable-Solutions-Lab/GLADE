@@ -3,40 +3,45 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """
-Retrieve FAOSTAT animal production and stock data to calculate yields.
+Prepare FAOSTAT animal production and stock data to calculate yields.
 Used to convert FADN per-head costs to per-tonne costs.
 """
 
 import logging
 from pathlib import Path
 
-import faostat
 import pandas as pd
 import yaml
 
+from workflow.scripts.faostat_bulk import (
+    _int_str,
+    get_item_map,
+    load_bulk_csv,
+)
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
 logger = logging.getLogger(__name__)
 
 
-def map_items_to_codes(item_names: list[str]) -> dict[str, str]:
-    """Map item names to FAOSTAT item codes."""
-    item_map = faostat.get_par("QCL", "Item")
+def map_items_to_codes(
+    item_names: list[str], bulk_item_map: dict[str, str]
+) -> dict[str, str]:
+    """Map item names to FAOSTAT item codes using bulk CSV metadata."""
     item_name_to_code = {}
 
     for name in item_names:
         # Try exact match first
-        if name in item_map:
-            item_name_to_code[name] = str(item_map[name])
+        if name in bulk_item_map:
+            item_name_to_code[name] = str(bulk_item_map[name])
         else:
             # Try case-insensitive match
-            for k, v in item_map.items():
+            for k, v in bulk_item_map.items():
                 if str(k).lower() == name.lower():
                     item_name_to_code[name] = str(v)
                     break
             else:
-                logger.warning(f"Item '{name}' not found in FAOSTAT")
+                logger.warning(f"Item '{name}' not found in FAOSTAT bulk data")
 
     if not item_name_to_code:
         raise RuntimeError("No valid items found")
@@ -76,7 +81,7 @@ def calculate_yields(
                     (group["item"].str.lower() == prod_item_name.lower())
                     & (
                         group["element_code"]
-                        .astype(str)
+                        .map(_int_str)
                         .isin(element_codes["production"])
                     )
                 ]
@@ -90,14 +95,18 @@ def calculate_yields(
                     (group["item"].str.lower() == prod_item_name.lower())
                     & (
                         group["element_code"]
-                        .astype(str)
+                        .map(_int_str)
                         .isin(element_codes["producing_animals"])
                     )
                 ]
             elif stock_item_name:
                 s_rows = group[
                     (group["item"].str.lower() == stock_item_name.lower())
-                    & (group["element_code"].astype(str).isin(element_codes["stocks"]))
+                    & (
+                        group["element_code"]
+                        .map(_int_str)
+                        .isin(element_codes["stocks"])
+                    )
                 ]
 
             if not s_rows.empty:
@@ -131,6 +140,7 @@ if __name__ == "__main__":
 
     output_path = Path(snakemake.output[0])
     mapping_path = snakemake.input.mapping
+    qcl_csv = snakemake.input.qcl_csv
     cost_params = snakemake.params.cost_params
     averaging_period = snakemake.params.averaging_period
 
@@ -158,29 +168,34 @@ if __name__ == "__main__":
         if stock_item := info.get("stock_item"):
             all_items.add(stock_item)
 
-    # Map item names to FAOSTAT codes
-    item_name_to_code = map_items_to_codes(list(all_items))
+    # Load bulk CSV and get item map
+    logger.info("Loading FAOSTAT QCL bulk CSV")
+    bulk = load_bulk_csv(qcl_csv)
+    bulk_item_map = get_item_map(bulk)
 
-    # Query FAOSTAT for all elements and items
+    # Map item names to FAOSTAT codes
+    item_name_to_code = map_items_to_codes(list(all_items), bulk_item_map)
+
+    # Query for all elements and items
     all_elem_codes = (
         element_codes["production"]
         + element_codes["stocks"]
         + element_codes["producing_animals"]
     )
 
-    logger.info("Querying FAOSTAT...")
-    df = faostat.get_data_df(
-        "QCL",
-        pars={
-            "element": all_elem_codes,
-            "item": list(item_name_to_code.values()),
-            "year": years,
-        },
-        strval=True,
+    # Filter bulk data
+    logger.info("Filtering FAOSTAT QCL data...")
+    from workflow.scripts.faostat_bulk import filter_bulk
+
+    df = filter_bulk(
+        bulk,
+        element_codes=all_elem_codes,
+        item_codes=list(item_name_to_code.values()),
+        years=[int(y) for y in years],
     )
 
     if df.empty:
-        raise RuntimeError("FAOSTAT returned empty dataframe")
+        raise RuntimeError("FAOSTAT bulk data returned empty dataframe after filtering")
 
     # Calculate yields
     records = calculate_yields(df, product_to_items, element_codes, aggregate_limit)

@@ -64,7 +64,6 @@ linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.6.1+food.opt
 exactextract = ">=0.2.2, <0.3"       # Fast zonal statistics from rasters
 
 # Data retrieval
-faostat = ">=1.1.2, <2"              # FAO statistics API client
 ecmwf-datastores-client = ">=0.4.1, <0.5" # ECMWF climate data access
 gsutil = ">=5.35, <6"                # Google Cloud Storage CLI
 

@@ -10,6 +10,22 @@ and crop residue processing.
 """
 
 
+rule prepare_faostat_crop_production:
+    input:
+        mapping="data/faostat_crop_item_map.csv",
+        qcl_csv="data/downloads/faostat/QCL.csv",
+        m49_codes="data/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        production_year=config["validation"]["production_year"],
+    output:
+        "processing/{name}/faostat_crop_production.csv",
+    log:
+        "logs/{name}/prepare_faostat_crop_production.log",
+    script:
+        "../scripts/prepare_faostat_crop_production.py"
+
+
 rule prepare_fao_edible_portion:
     input:
         table="data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx",

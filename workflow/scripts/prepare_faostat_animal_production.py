@@ -3,20 +3,27 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later
 
-Retrieve FAO animal production statistics for validation constraints.
+Prepare FAO animal production statistics for validation constraints.
 
-This script queries FAOSTAT for country-level production of major animal
-products (dairy, beef, pork, poultry, eggs) to establish production targets
+Reads country-level production of major animal products (dairy, beef, pork,
+poultry, eggs) from a FAOSTAT QCL bulk CSV to establish production targets
 for validation mode.
 """
 
 import logging
 from pathlib import Path
 
-import faostat
 import numpy as np
 import pandas as pd
 
+from workflow.scripts.faostat_bulk import (
+    _int_str,
+    add_iso3_column,
+    filter_bulk,
+    get_item_map,
+    load_bulk_csv,
+    load_m49_to_iso3,
+)
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -42,20 +49,9 @@ ADDITIONAL_DAIRY_SOURCES = {
 }
 
 
-def _normalize(name: str) -> str:
-    return name.strip().lower().replace(" ", "_")
-
-
-def _find_column(df: pd.DataFrame, candidates: set[str]) -> str:
-    for column in df.columns:
-        if _normalize(column) in candidates:
-            return column
-    raise KeyError(
-        f"Could not find column matching {sorted(candidates)} in {df.columns.tolist()}"
-    )
-
-
 def main() -> None:
+    qcl_csv = snakemake.input.qcl_csv  # type: ignore[name-defined]
+    m49_codes = snakemake.input.m49_codes  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     production_year = int(snakemake.params.production_year)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
@@ -63,31 +59,15 @@ def main() -> None:
         snakemake.params.carcass_to_retail_meat
     )
 
-    dataset = "QCL"  # Crops and livestock products
+    # Load bulk CSV and extract metadata
+    logger.info("Loading FAOSTAT QCL bulk CSV")
+    bulk = load_bulk_csv(qcl_csv)
+    item_map = get_item_map(bulk)
 
-    logger.info("Loading FAOSTAT parameter metadata for dataset '%s'", dataset)
-    try:
-        element_map = faostat.get_par(dataset, "Element")
-        item_map = faostat.get_par(dataset, "Item")
-    except Exception as exc:  # pragma: no cover - network error
-        raise RuntimeError(f"Failed to retrieve FAOSTAT metadata: {exc}") from exc
-
-    # Find production element
-    element_code = None
-    element_label_used = None
-    for label, code in element_map.items():
-        normalized = str(label).strip().lower()
-        if normalized.startswith("production"):
-            element_code = code
-            element_label_used = label
-            break
-    if element_code is None:
-        raise RuntimeError(
-            f"Failed to locate a production element in FAOSTAT dataset '{dataset}'"
-        )
-    logger.info(
-        "Using FAOSTAT element '%s' (code %s)", element_label_used, element_code
-    )
+    # QCL element 5510 = "Production" in tonnes (covers crops and livestock).
+    # Note: element 5513 also has label "Production" but is eggs-only.
+    element_code = "5510"
+    logger.info("Using FAOSTAT element 'Production' (code %s)", element_code)
 
     # Map FAOSTAT items to codes
     faostat_to_model: dict[str, str] = {}  # faostat_item_code -> model_product
@@ -132,51 +112,34 @@ def main() -> None:
     if not item_codes:
         raise RuntimeError("No FAOSTAT items could be mapped")
 
-    query_pars = {
-        "element": element_code,
-        "item": item_codes,
-        "year": str(production_year),
-    }
+    # Add ISO3 column from M49 codes
+    m49_to_iso3 = load_m49_to_iso3(m49_codes)
+    bulk = add_iso3_column(bulk, m49_to_iso3)
 
+    # Filter bulk data
     logger.info(
-        "Requesting FAOSTAT country-level production data for year %s (%d animal products)",
+        "Filtering FAOSTAT production data for year %s (%d animal products)",
         production_year,
         len(item_codes),
     )
-    try:
-        df = faostat.get_data_df(
-            dataset,
-            pars=query_pars,
-            strval=True,
-            coding={"area": "ISO3"},  # Get ISO3 country codes
-        )
-    except Exception as exc:  # pragma: no cover - network error
-        raise RuntimeError(
-            f"Failed to retrieve FAOSTAT production data: {exc}"
-        ) from exc
+    df = filter_bulk(
+        bulk,
+        element_codes=[element_code],
+        item_codes=item_codes,
+        years=[production_year],
+        iso3_codes=countries,
+    )
 
     if df.empty:
         raise RuntimeError(
             "FAOSTAT returned no production data for the requested selection"
         )
 
-    # Find required columns
-    iso_candidates = {"area_code_iso3", "area_code_(iso3)", "area_code"}
-    item_code_candidates = {"item_code", "item_code_(faostat)"}
-    value_candidates = {"value"}
-    year_candidates = {"year"}
-
-    iso_col = _find_column(df, iso_candidates)
-    item_code_col = _find_column(df, item_code_candidates)
-    value_col = _find_column(df, value_candidates)
-    year_col = _find_column(df, year_candidates)
-
-    df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
-    df = df.dropna(subset=[value_col])
+    df = df.dropna(subset=["Value"])
     if df.empty:
         raise RuntimeError("FAOSTAT production data contains no numeric values")
 
-    # Check and filter by unit (should be tonnes for most, number for eggs)
+    # Check and filter by unit
     if "Unit" in df.columns:
         units_series = df["Unit"].astype(str).str.lower()
         logger.info(
@@ -184,37 +147,20 @@ def main() -> None:
             ", ".join(sorted(units_series.unique())),
         )
 
-    # Filter to configured countries only
-    df[iso_col] = df[iso_col].astype(str).str.strip()
-    countries_set = set(countries)
-    before_filter = len(df)
-    df = df[df[iso_col].isin(countries_set)]
-    after_filter = len(df)
-
-    logger.info(
-        "Filtered to %d configured countries: %d -> %d rows",
-        len(countries_set),
-        before_filter,
-        after_filter,
-    )
-
-    if df.empty:
-        raise RuntimeError("No production data for configured countries")
-
     # Build country-level records
     records: list[dict[str, object]] = []
     for _, row in df.iterrows():
-        country = str(row[iso_col]).strip()
-        item_code = str(row[item_code_col]).strip()
+        country = str(row["iso3"]).strip()
+        item_code = _int_str(row["Item Code"])
         product = faostat_to_model.get(item_code)
         if not product:
             continue
 
-        value = float(row[value_col])
+        value = float(row["Value"])
         if not np.isfinite(value) or value < 0:
             continue
 
-        year = int(float(row[year_col]))
+        year = int(float(row["Year"]))
         records.append(
             {
                 "country": country,
