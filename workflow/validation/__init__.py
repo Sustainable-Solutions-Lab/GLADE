@@ -17,6 +17,7 @@ from .crop_food_pathways import validate_crop_food_pathways
 from .food_groups import validate_food_groups
 from .gaez_crop_mapping import validate_gaez_crop_mapping
 from .health_map import validate_health_map
+from .multi_cropping import validate_multi_cropping
 from .optimal_taxes import validate_optimal_taxes
 from .secrets import load_secrets_with_env_fallback
 
@@ -31,6 +32,7 @@ _CHECKS: dict[str, Validator] = {
     "crop_food_pathways": validate_crop_food_pathways,
     "gaez_crop_mapping": validate_gaez_crop_mapping,
     "health_map": validate_health_map,
+    "multi_cropping": validate_multi_cropping,
 }
 
 

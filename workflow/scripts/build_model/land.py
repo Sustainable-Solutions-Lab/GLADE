@@ -100,38 +100,18 @@ def add_land_components(
     )
 
     # Build bus names using ':' delimiter
+    region_class = (
+        land_index_df["region"].astype(str)
+        + "_c"
+        + land_index_df["resource_class"].astype(str)
+    )
+    region_class_water = region_class + "_" + land_index_df["water_supply"].astype(str)
     # Cropland pools: per region/class/water
-    land_index_df["cropland_bus"] = (
-        "land:cropland:"
-        + land_index_df["region"].astype(str)
-        + "_c"
-        + land_index_df["resource_class"].astype(str)
-        + "_"
-        + land_index_df["water_supply"].astype(str)
-    )
-    land_index_df["existing_bus"] = (
-        "land:existing_cropland:"
-        + land_index_df["region"].astype(str)
-        + "_c"
-        + land_index_df["resource_class"].astype(str)
-        + "_"
-        + land_index_df["water_supply"].astype(str)
-    )
-    land_index_df["new_bus"] = (
-        "land:new:"
-        + land_index_df["region"].astype(str)
-        + "_c"
-        + land_index_df["resource_class"].astype(str)
-        + "_"
-        + land_index_df["water_supply"].astype(str)
-    )
+    land_index_df["cropland_bus"] = "land:cropland:" + region_class_water
+    land_index_df["existing_bus"] = "land:existing_cropland:" + region_class_water
+    land_index_df["new_bus"] = "land:new:" + region_class_water
     # Pasture pools: per region/class only (water-agnostic)
-    land_index_df["pasture_bus"] = (
-        "land:pasture:"
-        + land_index_df["region"].astype(str)
-        + "_c"
-        + land_index_df["resource_class"].astype(str)
-    )
+    land_index_df["pasture_bus"] = "land:pasture:" + region_class
 
     active_mask = (
         (land_index_df["area_ha"] > 0)
@@ -175,11 +155,19 @@ def add_land_components(
             region=baseline_rows["region"].tolist(),
         )
 
+        # Build suffix for name generation
+        baseline_suffix = (
+            baseline_rows["region"].astype(str)
+            + "_c"
+            + baseline_rows["resource_class"].astype(int).astype(str)
+            + "_"
+            + baseline_rows["water_supply"].astype(str)
+        )
+
         # Add generators for existing cropland
-        existing_gen_names = [
-            f"supply:land_existing_cropland:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
-            for row in baseline_rows.itertuples(index=False)
-        ]
+        existing_gen_names = (
+            "supply:land_existing_cropland:" + baseline_suffix
+        ).tolist()
         existing_available_mha = baseline_rows["existing_available_ha"].to_numpy() / 1e6
         n.generators.add(
             existing_gen_names,
@@ -194,10 +182,7 @@ def add_land_components(
         )
 
         # Links: existing → cropland pool
-        existing_to_cropland_names = [
-            f"use:existing_land:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
-            for row in baseline_rows.itertuples(index=False)
-        ]
+        existing_to_cropland_names = ("use:existing_land:" + baseline_suffix).tolist()
         n.links.add(
             existing_to_cropland_names,
             carrier="land_use",
@@ -214,10 +199,14 @@ def add_land_components(
         # Links: existing → pasture pool (rainfed only, no LUC emissions)
         rainfed_baseline = baseline_rows[baseline_rows["water_supply"] == "r"].copy()
         if not rainfed_baseline.empty:
-            existing_to_pasture_names = [
-                f"use:existing_to_pasture:{row.region}_c{int(row.resource_class)}"
-                for row in rainfed_baseline.itertuples(index=False)
-            ]
+            rainfed_baseline_suffix = (
+                rainfed_baseline["region"].astype(str)
+                + "_c"
+                + rainfed_baseline["resource_class"].astype(int).astype(str)
+            )
+            existing_to_pasture_names = (
+                "use:existing_to_pasture:" + rainfed_baseline_suffix
+            ).tolist()
             rainfed_mha = rainfed_baseline["existing_available_ha"].to_numpy() / 1e6
             n.links.add(
                 existing_to_pasture_names,
@@ -242,11 +231,17 @@ def add_land_components(
             region=expansion_rows["region"].tolist(),
         )
 
+        # Build suffix for name generation
+        expansion_suffix = (
+            expansion_rows["region"].astype(str)
+            + "_c"
+            + expansion_rows["resource_class"].astype(int).astype(str)
+            + "_"
+            + expansion_rows["water_supply"].astype(str)
+        )
+
         # Add generators for new land
-        new_gen_names = [
-            f"supply:land_new:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
-            for row in expansion_rows.itertuples(index=False)
-        ]
+        new_gen_names = ("supply:land_new:" + expansion_suffix).tolist()
         new_available_mha = expansion_rows["new_available_ha"].to_numpy() / 1e6
         n.generators.add(
             new_gen_names,
@@ -268,10 +263,7 @@ def add_land_components(
                 )
             else:
                 luc_cropland = pd.Series(0.0, index=expansion_rows.index)
-            new_to_cropland_names = [
-                f"convert:new_land:{row.region}_c{int(row.resource_class)}_{row.water_supply}"
-                for row in expansion_rows.itertuples(index=False)
-            ]
+            new_to_cropland_names = ("convert:new_land:" + expansion_suffix).tolist()
             # tCO2/ha = MtCO2/Mha numerically, no conversion needed
             n.links.add(
                 new_to_cropland_names,
@@ -300,10 +292,14 @@ def add_land_components(
                     )
                 else:
                     luc_pasture = pd.Series(0.0, index=rainfed_expansion.index)
-                new_to_pasture_names = [
-                    f"convert:new_to_pasture:{row.region}_c{int(row.resource_class)}"
-                    for row in rainfed_expansion.itertuples(index=False)
-                ]
+                rainfed_expansion_suffix = (
+                    rainfed_expansion["region"].astype(str)
+                    + "_c"
+                    + rainfed_expansion["resource_class"].astype(int).astype(str)
+                )
+                new_to_pasture_names = (
+                    "convert:new_to_pasture:" + rainfed_expansion_suffix
+                ).tolist()
                 rainfed_new_mha = rainfed_expansion["new_available_ha"].to_numpy() / 1e6
                 n.links.add(
                     new_to_pasture_names,

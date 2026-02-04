@@ -8,6 +8,7 @@ This module handles the creation of carriers and buses that form the
 foundation of the PyPSA network model.
 """
 
+import pandas as pd
 import pypsa
 
 from .. import constants
@@ -33,20 +34,22 @@ def add_carriers_and_buses(
     - Primary resources (water) and emissions (co2, ch4, n2o) use global buses.
     - Fertilizer has a global supply bus with per-country delivery buses.
 
-    Bus names use ':' as delimiter: {type}:{specifier}:{scope}
-    All buses have 'country' and 'region' columns (NaN when not applicable).
+    Bus names use ":" as delimiter: {type}:{specifier}:{scope}
+    All buses have "country" and "region" columns (NaN when not applicable).
     """
     # Land carrier (class-level buses are added later)
     n.carriers.add("land", unit="Mha")
 
     # Crops per country
-    crop_buses = [
-        f"crop:{crop}:{country}" for country in countries for crop in crop_list
-    ]
-    crop_carriers = [f"crop_{crop}" for country in countries for crop in crop_list]
-    crop_countries = [country for country in countries for _ in crop_list]
-    crop_names = [crop for _ in countries for crop in crop_list]
-    if crop_buses:
+    if crop_list:
+        idx = pd.MultiIndex.from_product(
+            [countries, crop_list], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        crop_buses = ("crop:" + df["item"] + ":" + df["country"]).tolist()
+        crop_carriers = ("crop_" + df["item"]).tolist()
+        crop_countries = df["country"].tolist()
+        crop_names = df["item"].tolist()
         n.carriers.add(sorted({f"crop_{crop}" for crop in crop_list}), unit="Mt")
         n.buses.add(
             crop_buses, carrier=crop_carriers, country=crop_countries, crop=crop_names
@@ -55,18 +58,14 @@ def add_carriers_and_buses(
     # Residues per country
     residue_items_sorted = sorted(dict.fromkeys(residue_feed_items))
     if residue_items_sorted:
-        residue_buses = [
-            f"residue:{item}:{country}"
-            for country in countries
-            for item in residue_items_sorted
-        ]
-        residue_carriers = [
-            f"residue_{item}" for country in countries for item in residue_items_sorted
-        ]
-        residue_countries = [
-            country for country in countries for _ in residue_items_sorted
-        ]
-        residue_names = [item for _ in countries for item in residue_items_sorted]
+        idx = pd.MultiIndex.from_product(
+            [countries, residue_items_sorted], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        residue_buses = ("residue:" + df["item"] + ":" + df["country"]).tolist()
+        residue_carriers = ("residue_" + df["item"]).tolist()
+        residue_countries = df["country"].tolist()
+        residue_names = df["item"].tolist()
         n.carriers.add(sorted(set(residue_carriers)), unit="Mt")
         n.buses.add(
             residue_buses,
@@ -76,27 +75,29 @@ def add_carriers_and_buses(
         )
 
     # Foods per country
-    food_buses = [
-        f"food:{food}:{country}" for country in countries for food in food_list
-    ]
-    food_carriers = [f"food_{food}" for country in countries for food in food_list]
-    food_countries = [country for country in countries for _ in food_list]
-    food_names = [food for _ in countries for food in food_list]
-    if food_buses:
+    if food_list:
+        idx = pd.MultiIndex.from_product(
+            [countries, food_list], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        food_buses = ("food:" + df["item"] + ":" + df["country"]).tolist()
+        food_carriers = ("food_" + df["item"]).tolist()
+        food_countries = df["country"].tolist()
+        food_names = df["item"].tolist()
         n.carriers.add(sorted({f"food_{food}" for food in food_list}), unit="Mt")
         n.buses.add(
             food_buses, carrier=food_carriers, country=food_countries, food=food_names
         )
 
     # Food groups per country
-    group_buses = [
-        f"group:{group}:{country}" for country in countries for group in food_group_list
-    ]
-    group_carriers = [
-        f"group_{group}" for country in countries for group in food_group_list
-    ]
-    group_countries = [country for country in countries for _ in food_group_list]
-    if group_buses:
+    if food_group_list:
+        idx = pd.MultiIndex.from_product(
+            [countries, food_group_list], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        group_buses = ("group:" + df["item"] + ":" + df["country"]).tolist()
+        group_carriers = ("group_" + df["item"]).tolist()
+        group_countries = df["country"].tolist()
         n.carriers.add(
             sorted({f"group_{group}" for group in food_group_list}),
             unit="Mt",
@@ -105,53 +106,37 @@ def add_carriers_and_buses(
 
     # Macronutrients per country
     nutrient_list_sorted = sorted(dict.fromkeys(nutrient_list))
-    for nutrient in nutrient_list_sorted:
-        unit = nutrient_units[nutrient]
-        carrier_unit = _carrier_unit_for_nutrient(unit)
-        if nutrient not in n.carriers.static.index:
-            n.carriers.add(nutrient, unit=carrier_unit)
+    new_nutrients = [
+        nut for nut in nutrient_list_sorted if nut not in n.carriers.static.index
+    ]
+    if new_nutrients:
+        carrier_units = [
+            _carrier_unit_for_nutrient(nutrient_units[nut]) for nut in new_nutrients
+        ]
+        n.carriers.add(new_nutrients, unit=carrier_units)
 
     if nutrient_list_sorted:
-        nutrient_buses = [
-            f"nutrient:{nut}:{country}"
-            for country in countries
-            for nut in nutrient_list_sorted
-        ]
-        nutrient_carriers = [
-            nut for country in countries for nut in nutrient_list_sorted
-        ]
-        nutrient_countries = [
-            country for country in countries for _ in nutrient_list_sorted
-        ]
+        idx = pd.MultiIndex.from_product(
+            [countries, nutrient_list_sorted], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        nutrient_buses = ("nutrient:" + df["item"] + ":" + df["country"]).tolist()
+        nutrient_carriers = df["item"].tolist()
+        nutrient_countries = df["country"].tolist()
         n.buses.add(
             nutrient_buses, carrier=nutrient_carriers, country=nutrient_countries
         )
 
-        scale_meta = n.meta.setdefault("carrier_unit_scale", {})
-        if any(
-            _nutrient_kind(nutrient_units[nut]) == "energy"
-            for nut in nutrient_list_sorted
-        ):
-            scale_meta["macronutrient_kcal_to_PJ"] = constants.KCAL_TO_PJ
-
     # Feed carriers per country (9 pools: 5 ruminant + 4 monogastric quality classes)
-    feed_categories = [
-        "ruminant_grassland",
-        "ruminant_roughage",
-        "ruminant_forage",
-        "ruminant_grain",
-        "ruminant_protein",
-        "monogastric_low_quality",
-        "monogastric_grain",
-        "monogastric_energy",
-        "monogastric_protein",
-    ]
-    feed_buses = [
-        f"feed:{fc}:{country}" for country in countries for fc in feed_categories
-    ]
-    feed_carriers = [f"feed_{fc}" for country in countries for fc in feed_categories]
-    feed_countries = [country for country in countries for _ in feed_categories]
-    if feed_buses:
+    feed_categories = constants.FEED_CATEGORIES
+    if feed_categories:
+        idx = pd.MultiIndex.from_product(
+            [countries, feed_categories], names=["country", "item"]
+        )
+        df = idx.to_frame(index=False)
+        feed_buses = ("feed:" + df["item"] + ":" + df["country"]).tolist()
+        feed_carriers = ("feed_" + df["item"]).tolist()
+        feed_countries = df["country"].tolist()
         n.carriers.add(sorted(set(feed_carriers)), unit="Mt")
         n.buses.add(feed_buses, carrier=feed_carriers, country=feed_countries)
 
@@ -169,13 +154,17 @@ def add_carriers_and_buses(
         ("ghg", "MtCO2e"),
     ]:
         n.carriers.add(carrier, unit=unit)
-    # Add global emission buses (no country)
-    n.buses.add("emission:co2", carrier="co2")
-    n.buses.add("emission:ch4", carrier="ch4")
-    n.buses.add("emission:n2o", carrier="n2o")
-    n.buses.add("emission:ghg", carrier="ghg")
-    # Global fertilizer supply bus
-    n.buses.add("fertilizer:supply", carrier="fertilizer")
+    # Add global emission buses and fertilizer supply bus
+    n.buses.add(
+        [
+            "emission:co2",
+            "emission:ch4",
+            "emission:n2o",
+            "emission:ghg",
+            "fertilizer:supply",
+        ],
+        carrier=["co2", "ch4", "n2o", "ghg", "fertilizer"],
+    )
 
     # Per-country fertilizer buses
     fert_country_buses = [f"fertilizer:{country}" for country in countries]
@@ -185,14 +174,22 @@ def add_carriers_and_buses(
         country=countries,
     )
 
+    # Consolidate all carrier_unit_scale assignments
     scale_meta = n.meta.setdefault("carrier_unit_scale", {})
-    scale_meta["co2_t_to_Mt"] = constants.TONNE_TO_MEGATONNE
-    scale_meta["ch4_t_to_Mt"] = constants.TONNE_TO_MEGATONNE
-    scale_meta["ghg_t_to_Mt"] = constants.TONNE_TO_MEGATONNE
-    scale_meta["n2o_t_to_Mt"] = constants.TONNE_TO_MEGATONNE
-    scale_meta["fertilizer_t_to_Mt"] = constants.TONNE_TO_MEGATONNE
+    for key in (
+        "co2_t_to_Mt",
+        "ch4_t_to_Mt",
+        "ghg_t_to_Mt",
+        "n2o_t_to_Mt",
+        "fertilizer_t_to_Mt",
+    ):
+        scale_meta[key] = constants.TONNE_TO_MEGATONNE
     scale_meta["water_mm3_per_m3"] = constants.MM3_PER_M3
+    if nutrient_list_sorted and any(
+        _nutrient_kind(nutrient_units[nut]) == "energy" for nut in nutrient_list_sorted
+    ):
+        scale_meta["macronutrient_kcal_to_PJ"] = constants.KCAL_TO_PJ
 
-    for region in water_regions:
-        bus_name = f"water:{region}"
-        n.buses.add(bus_name, carrier="water", region=region)
+    # Per-region water buses
+    water_bus_names = [f"water:{region}" for region in water_regions]
+    n.buses.add(water_bus_names, carrier="water", region=list(water_regions))

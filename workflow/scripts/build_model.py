@@ -30,6 +30,7 @@ from workflow.scripts.build_model import (
     trade,
     utils,
 )
+from workflow.scripts.constants import FEED_CATEGORIES
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.snakemake_utils import apply_scenario_config
 
@@ -123,20 +124,27 @@ if __name__ == "__main__":
             .unique()
             .tolist()
         )
-        residue_lookup = {}
-        for row in residue_yields.itertuples(index=False):
-            feed_item = getattr(row, "feed_item", "")
-            if not isinstance(feed_item, str) or not feed_item:
-                continue
-            key = (
-                str(row.crop),
-                str(row.water_supply),
-                str(row.region),
-                int(row.resource_class),
+        valid = residue_yields.dropna(subset=["feed_item"])
+        valid = valid[valid["feed_item"].astype(str).str.len() > 0]
+        valid = valid.assign(
+            crop=valid["crop"].astype(str),
+            water_supply=valid["water_supply"].astype(str),
+            region=valid["region"].astype(str),
+            resource_class=valid["resource_class"].astype(int),
+        )
+        residue_lookup = (
+            valid.groupby(["crop", "water_supply", "region", "resource_class"])
+            .apply(
+                lambda g: dict(
+                    zip(
+                        g["feed_item"].astype(str),
+                        g["residue_yield_t_per_ha"].astype(float),
+                    )
+                ),
+                include_groups=False,
             )
-            residue_lookup.setdefault(key, {})[feed_item] = float(
-                getattr(row, "residue_yield_t_per_ha", 0.0)
-            )
+            .to_dict()
+        )
     else:
         residue_feed_items = []
         residue_lookup = {}
@@ -159,8 +167,9 @@ if __name__ == "__main__":
     else:
         expected_irrigated_crops = set(map(str, irrigation_cfg))
 
-    # Read yields data for each configured crop and water supply
+    # Read yields data (and harvested area if needed) for each crop and water supply
     yields_data: dict[str, pd.DataFrame] = {}
+    harvested_area_data: dict[str, pd.DataFrame] = {}
     for crop in snakemake.params.crops:
         expected_supplies = ["r"]
         if crop in expected_irrigated_crops:
@@ -171,13 +180,7 @@ if __name__ == "__main__":
             yields_df, _ = utils._load_crop_yield_table(snakemake.input[yields_key])
             yields_data[yields_key] = yields_df
 
-    harvested_area_data: dict[str, pd.DataFrame] = {}
-    if use_actual_production:
-        for crop in snakemake.params.crops:
-            expected_supplies = ["r"]
-            if crop in expected_irrigated_crops:
-                expected_supplies.append("i")
-            for ws in expected_supplies:
+            if use_actual_production:
                 harvest_key = f"{crop}_harvested_{ws}"
                 path = snakemake.input[harvest_key]
                 harvest_df, _ = utils._load_crop_yield_table(path)
@@ -204,11 +207,9 @@ if __name__ == "__main__":
 
     combined_index = land_class_df.index.union(cropland_baseline_df.index)
     land_class_df = land_class_df.reindex(combined_index, fill_value=0.0)
-    baseline_land_df = (
-        cropland_baseline_df.reindex(combined_index, fill_value=0.0)
-        .astype(float)
-        .rename(columns={"area_ha": "area_ha"})
-    )
+    baseline_land_df = cropland_baseline_df.reindex(
+        combined_index, fill_value=0.0
+    ).astype(float)
 
     multi_cropping_area_df = read_csv(snakemake.input.multi_cropping_area)
     multi_cropping_cycle_df = read_csv(snakemake.input.multi_cropping_yields)
@@ -473,21 +474,25 @@ if __name__ == "__main__":
     # Existing pasture buses (grazing-only land)
     existing_pasture_bus_names: list[str] = []
     if grazing_only_area_series is not None and not grazing_only_area_series.empty:
-        existing_pasture_bus_names = [
-            f"land:existing_pasture:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
-        pasture_regions = [region for region, _cls in grazing_only_area_series.index]
+        g_df = pd.DataFrame(
+            [(r, int(c)) for r, c in grazing_only_area_series.index],
+            columns=["region", "cls"],
+        )
+        suffix = g_df["region"] + "_c" + g_df["cls"].astype(str)
+        existing_pasture_bus_names = ("land:existing_pasture:" + suffix).tolist()
+        pasture_gen_names = ("supply:land_existing_pasture:" + suffix).tolist()
+        pasture_pool_buses = ("land:pasture:" + suffix).tolist()
+        marginal_to_pasture_names = ("use:marginal_to_pasture:" + suffix).tolist()
+        spare_marginal_names = ("spare:marginal:" + suffix).tolist()
+        spared_marginal_buses = ("land:spared_marginal:" + suffix).tolist()
+        pasture_regions = g_df["region"].tolist()
+
         n.carriers.add("land_existing_pasture", unit="Mha")
         n.buses.add(
             existing_pasture_bus_names,
             carrier="land_existing_pasture",
             region=pasture_regions,
         )
-        pasture_gen_names = [
-            f"supply:land_existing_pasture:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
         n.generators.add(
             pasture_gen_names,
             bus=existing_pasture_bus_names,
@@ -504,10 +509,6 @@ if __name__ == "__main__":
         # Add marginal_to_pasture links: existing_pasture → pasture pool
         # Ensure pasture pool buses exist for regions that only have marginal land
         n.carriers.add("marginal_to_pasture", unit="Mha")
-        pasture_pool_buses = [
-            f"land:pasture:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
         missing_pasture = [
             (bus, region)
             for bus, region in zip(pasture_pool_buses, pasture_regions)
@@ -522,10 +523,6 @@ if __name__ == "__main__":
                 carrier="land_pasture",
                 region=list(missing_regions),
             )
-        marginal_to_pasture_names = [
-            f"use:marginal_to_pasture:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
         marginal_area_mha = reg_limit * grazing_only_area_series.values / 1e6
         n.links.add(
             marginal_to_pasture_names,
@@ -541,22 +538,14 @@ if __name__ == "__main__":
         # Add spare_marginal links: existing_pasture → spared (with sequestration)
         n.carriers.add("spare_marginal", unit="Mha")
         n.carriers.add("spared_marginal", unit="Mha")
-        spare_marginal_names = [
-            f"spare:marginal:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
-        spared_marginal_buses = [
-            f"land:spared_marginal:{region}_c{int(cls)}"
-            for region, cls in grazing_only_area_series.index
-        ]
         n.buses.add(
             spared_marginal_buses, carrier="spared_marginal", region=pasture_regions
         )
         # Get spared LEF for each region/class (use rainfed water supply)
         spare_df = pd.DataFrame(
             {
-                "region": [r for r, _ in grazing_only_area_series.index],
-                "resource_class": [int(c) for _, c in grazing_only_area_series.index],
+                "region": g_df["region"].tolist(),
+                "resource_class": g_df["cls"].tolist(),
                 "water_supply": "r",
             }
         )
@@ -673,24 +662,12 @@ if __name__ == "__main__":
     )
 
     # Feed trade networks (between countries via hubs)
-    # Feed categories must match infrastructure.py lines 110-120
-    feed_category_list = [
-        "ruminant_grassland",
-        "ruminant_roughage",
-        "ruminant_forage",
-        "ruminant_grain",
-        "ruminant_protein",
-        "monogastric_low_quality",
-        "monogastric_grain",
-        "monogastric_energy",
-        "monogastric_protein",
-    ]
     trade.add_feed_trade_hubs_and_links(
         n,
         snakemake.params.trade,
         regions_df,
         cfg_countries,
-        feed_category_list,
+        FEED_CATEGORIES,
     )
 
     # Crop residue soil incorporation (with N₂O emissions)
@@ -817,11 +794,12 @@ if __name__ == "__main__":
     cluster_lookup = (
         cluster_map_df.set_index("country_iso3")["health_cluster"].astype(int).to_dict()
     )
-    cluster_pop: dict[int, float] = {}
-    for iso3, pop in population.items():
-        cluster = cluster_lookup.get(iso3.upper())
-        if cluster is not None:
-            cluster_pop[cluster] = cluster_pop.get(cluster, 0.0) + pop
+    pop_df = population.reset_index()
+    pop_df.columns = ["iso3", "population"]
+    pop_df["cluster"] = pop_df["iso3"].str.upper().map(cluster_lookup)
+    pop_df = pop_df.dropna(subset=["cluster"])
+    pop_df["cluster"] = pop_df["cluster"].astype(int)
+    cluster_pop = pop_df.groupby("cluster")["population"].sum().to_dict()
     n.meta["population"]["health_cluster"] = cluster_pop
 
     # ═══════════════════════════════════════════════════════════════

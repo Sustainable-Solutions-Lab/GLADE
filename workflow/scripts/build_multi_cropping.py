@@ -178,6 +178,8 @@ if __name__ == "__main__":
     use_actual_yields = bool(getattr(snakemake.params, "use_actual_yields", False))  # type: ignore[attr-defined]
 
     for name, entry in snakemake.params.combinations.items():  # type: ignore[attr-defined,name-defined]
+        if entry is None:
+            continue
         crops = [str(c) for c in entry["crops"]]
         water_supplies = entry.get("water_supplies", ["r"])
         if isinstance(water_supplies, str):

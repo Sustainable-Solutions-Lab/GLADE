@@ -63,6 +63,9 @@ def add_regional_crop_production_links(
 
         # Process available water supplies (rainfed always first for stability)
         for ws in available_supplies:
+            water_code = ws  # "i" or "r"
+            water_label = "irrigated" if ws == "i" else "rainfed"
+
             key = f"{crop}_yield_{ws}"
             crop_yields = yields_data[key].copy()
 
@@ -78,15 +81,20 @@ def add_regional_crop_production_links(
                         how="left",
                     )
 
-            # Add a unique name per link including water supply and class
-            crop_yields["name"] = crop_yields.index.map(
-                lambda x,
-                crop=crop,
-                ws=ws: f"produce:{crop}_{'irrigated' if ws == 'i' else 'rainfed'}:{x[0]}_c{x[1]}"
-            )
-
             # Make index levels columns
             df = crop_yields.reset_index()
+
+            # Add a unique name per link including water supply and class
+            df["name"] = (
+                "produce:"
+                + crop
+                + "_"
+                + water_label
+                + ":"
+                + df["region"]
+                + "_c"
+                + df["resource_class"].astype(int).astype(str)
+            )
 
             # Set index to "name"
             df.set_index("name", inplace=True)
@@ -116,10 +124,13 @@ def add_regional_crop_production_links(
             if df.empty:
                 continue
 
-            bus0_series = df.apply(
-                lambda r,
-                ws=ws: f"land:cropland:{r['region']}_c{int(r['resource_class'])}_{'i' if ws == 'i' else 'r'}",
-                axis=1,
+            bus0_series = (
+                "land:cropland:"
+                + df["region"]
+                + "_c"
+                + df["resource_class"].astype(int).astype(str)
+                + "_"
+                + water_code
             )
             missing_bus_mask = ~bus0_series.isin(n.buses.static.index)
             if missing_bus_mask.any():
@@ -160,7 +171,6 @@ def add_regional_crop_production_links(
             # Land is now tracked in Mha, so scale yields and areas accordingly
             resource_classes = df["resource_class"].astype(int).to_numpy()
             regions = df["region"].astype(str).to_numpy()
-            water_code = "i" if ws == "i" else "r"
             # Cost is per hectare; convert to per Mha in bnUSD/Mha
             base_cost = cost_per_ha * 1e6 * constants.USD_TO_BNUSD
 
@@ -170,10 +180,10 @@ def add_regional_crop_production_links(
                 "name": df.index,
                 "carrier": "crop_production",
                 "bus0": bus0_series,
-                "bus1": df["country"].apply(lambda c, crop=crop: f"crop:{crop}:{c}"),
+                "bus1": "crop:" + crop + ":" + df["country"],
                 # Output: Mt crop per Mha land (already Mt-aware)
                 "efficiency": df["yield"],
-                "bus3": df["country"].apply(lambda c: f"fertilizer:{c}"),
+                "bus3": "fertilizer:" + df["country"],
                 "efficiency3": -fert_n_rate_kg_per_ha
                 * 1e6
                 * constants.KG_TO_MEGATONNE,  # kg N/ha → Mt N/Mha
@@ -186,7 +196,7 @@ def add_regional_crop_production_links(
                 "country": df["country"],
                 "region": df["region"],
                 "resource_class": df["resource_class"].astype(int),
-                "water_supply": "irrigated" if ws == "i" else "rainfed",
+                "water_supply": water_label,
             }
 
             if use_actual_production:
@@ -201,7 +211,7 @@ def add_regional_crop_production_links(
                     df["water_requirement_m3_per_ha"], errors="coerce"
                 )
 
-                link_params["bus2"] = df["region"].apply(lambda r: f"water:{r}")
+                link_params["bus2"] = "water:" + df["region"]
                 # Convert m³/ha to Mm³/Mha for compatibility with scaled water units
                 link_params["efficiency2"] = -water_requirement
 
@@ -217,29 +227,29 @@ def add_regional_crop_production_links(
                     }
                 )
                 if residue_feed_items:
-                    countries_for_rows = df["country"].astype(str).tolist()
+                    # Build a lookup dict keyed by (region, resource_class)
+                    # for vectorized efficiency assignment
                     for feed_item in residue_feed_items:
-                        efficiencies = np.zeros(len(df), dtype=float)
-                        for idx_row, (region, resource_class) in enumerate(
-                            zip(regions, resource_classes)
-                        ):
-                            residue_dict = residue_lookup.get(
-                                (crop, water_code, region, int(resource_class))
-                            )
-                            if not residue_dict:
-                                continue
-                            residue_yield = residue_dict.get(feed_item)
-                            if residue_yield is None:
-                                continue
-                            efficiencies[idx_row] = residue_yield
+                        lookup_map = {
+                            (r, int(rc)): residue_lookup.get(
+                                (crop, water_code, r, int(rc)), {}
+                            ).get(feed_item, 0.0)
+                            for r, rc in zip(regions, resource_classes)
+                        }
+                        efficiencies = np.array(
+                            [
+                                lookup_map.get((r, int(rc)), 0.0)
+                                for r, rc in zip(regions, resource_classes)
+                            ],
+                            dtype=float,
+                        )
                         if np.allclose(efficiencies, 0.0):
                             continue
                         bus_key = f"bus{next_bus_idx}"
                         eff_key = f"efficiency{next_bus_idx}"
-                        link_params[bus_key] = [
-                            f"residue:{feed_item}:{country}"
-                            for country in countries_for_rows
-                        ]
+                        link_params[bus_key] = (
+                            "residue:" + feed_item + ":" + df["country"]
+                        )
                         link_params[eff_key] = efficiencies
                         next_bus_idx += 1
 
@@ -271,7 +281,7 @@ def add_regional_crop_production_links(
                 values = emission_outputs[emission_type]
                 key_bus = f"bus{next_bus_idx}"
                 key_eff = f"efficiency{next_bus_idx}"
-                link_params[key_bus] = [f"emission:{emission_type}"] * len(values)
+                link_params[key_bus] = f"emission:{emission_type}"
                 link_params[key_eff] = values
                 next_bus_idx += 1
 
@@ -759,27 +769,16 @@ def add_spared_land_links(
         logger.info("No eligible spared land entries; skipping spared links")
         return
 
-    def _bus0(row: pd.Series) -> str:
-        return (
-            f"land:existing_cropland:{row['region']}_c{int(row['resource_class'])}_"
-            f"{row['water_supply']}"
-        )
-
-    def _sink_bus(row: pd.Series) -> str:
-        return (
-            f"land:spared:{row['region']}_c{int(row['resource_class'])}_"
-            f"{row['water_supply']}"
-        )
-
-    def _link_name(row: pd.Series) -> str:
-        return (
-            f"spare:land:{row['region']}_c{int(row['resource_class'])}_"
-            f"{row['water_supply']}"
-        )
-
-    df["bus0"] = df.apply(_bus0, axis=1)
-    df["sink_bus"] = df.apply(_sink_bus, axis=1)
-    df["link_name"] = df.apply(_link_name, axis=1)
+    suffix = (
+        df["region"]
+        + "_c"
+        + df["resource_class"].astype(str)
+        + "_"
+        + df["water_supply"]
+    )
+    df["bus0"] = "land:existing_cropland:" + suffix
+    df["sink_bus"] = "land:spared:" + suffix
+    df["link_name"] = "spare:land:" + suffix
     df["area_mha"] = df["area_ha"] / 1e6
 
     # Filter out links where bus0 doesn't exist (due to area filtering)
@@ -897,38 +896,36 @@ def add_residue_soil_incorporation_links(
         return
 
     # Build lookup for N content from both ruminant and monogastric feed data
-    n_content_lookup = {}
 
     # First, try ruminant feed categories
-    for _, row in ruminant_feed_mapping[
+    residue_mapping = ruminant_feed_mapping[
         ruminant_feed_mapping["source_type"] == "residue"
-    ].iterrows():
-        item = row["feed_item"]
-        category = row["category"]
-        # Look up N content for this category
-        cat_data = ruminant_feed_categories[
-            ruminant_feed_categories["category"] == category
-        ]
-        if not cat_data.empty and "N_g_per_kg_DM" in cat_data.columns:
-            n_content = cat_data.iloc[0]["N_g_per_kg_DM"]
-            if pd.notna(n_content):
-                n_content_lookup[item] = float(n_content)
+    ]
+    merged = residue_mapping.merge(
+        ruminant_feed_categories[["category", "N_g_per_kg_DM"]],
+        on="category",
+        how="left",
+    )
+    valid = merged.dropna(subset=["N_g_per_kg_DM"])
+    n_content_lookup = dict(
+        zip(valid["feed_item"], valid["N_g_per_kg_DM"].astype(float))
+    )
 
-    # Then try monogastric feed categories (may override or add new entries)
-    for _, row in monogastric_feed_mapping[
+    # Then try monogastric feed categories (only adding items not already present)
+    mono_residue_mapping = monogastric_feed_mapping[
         monogastric_feed_mapping["source_type"] == "residue"
-    ].iterrows():
-        item = row["feed_item"]
-        if item in n_content_lookup:
-            continue  # Already have N content from ruminant data
-        category = row["category"]
-        cat_data = monogastric_feed_categories[
-            monogastric_feed_categories["category"] == category
-        ]
-        if not cat_data.empty and "N_g_per_kg_DM" in cat_data.columns:
-            n_content = cat_data.iloc[0]["N_g_per_kg_DM"]
-            if pd.notna(n_content):
-                n_content_lookup[item] = float(n_content)
+    ]
+    mono_merged = mono_residue_mapping.merge(
+        monogastric_feed_categories[["category", "N_g_per_kg_DM"]],
+        on="category",
+        how="left",
+    )
+    mono_valid = mono_merged.dropna(subset=["N_g_per_kg_DM"])
+    for item, n_val in zip(
+        mono_valid["feed_item"], mono_valid["N_g_per_kg_DM"].astype(float)
+    ):
+        if item not in n_content_lookup:
+            n_content_lookup[item] = n_val
 
     if not n_content_lookup:
         logger.info(
@@ -936,63 +933,58 @@ def add_residue_soil_incorporation_links(
         )
         return
 
-    # Build links for all residue x country combinations
-    all_names = []
-    all_bus0 = []
-    all_efficiency = []
-
     # Fallback N content for residues without data (g N/kg DM)
     # Conservative estimate based on typical crop straw/stover N content
     fallback_n_content = 8.0
 
-    for item in residue_feed_items:
-        # Use fallback if we don't have N content data for this residue
-        if item not in n_content_lookup:
-            logger.info(
-                "No N content data for residue %s; using fallback value %.1f g N/kg DM",
-                item,
-                fallback_n_content,
-            )
-            n_content_g_per_kg = fallback_n_content
-        else:
-            n_content_g_per_kg = n_content_lookup[item]
+    # Build per-item N₂O efficiency via vectorized computation
+    items_df = pd.DataFrame({"item": residue_feed_items})
+    items_df["n_content_g_per_kg"] = items_df["item"].map(n_content_lookup)
 
-        # Calculate N₂O emission efficiency (direct + indirect leaching)
-        # N content (kg N / kg DM)
-        n_content_kg_per_kg = n_content_g_per_kg / 1000.0
-
-        # Direct N₂O (Equation 11.1): kg N₂O-N per kg N
-        direct_n2o_n = incorporation_n2o_factor
-
-        # Indirect N₂O from leaching (Equation 11.10): kg N₂O-N per kg N
-        indirect_leach_n2o_n = frac_leach * indirect_ef5
-
-        # Total N₂O-N per kg N, converted to N₂O
-        total_n2o_n = direct_n2o_n + indirect_leach_n2o_n
-
-        # Total efficiency: tonnes N₂O per Mt residue DM
-        # = (kg N / kg DM) * (kg N₂O-N / kg N) * (44/28) * (tonnes per Mt)
-        n2o_efficiency = (
-            n_content_kg_per_kg
-            * total_n2o_n
-            * (44.0 / 28.0)
-            * constants.MEGATONNE_TO_TONNE
+    # Log fallback usage for items without N content data
+    missing_mask = items_df["n_content_g_per_kg"].isna()
+    for item in items_df.loc[missing_mask, "item"]:
+        logger.info(
+            "No N content data for residue %s; using fallback value %.1f g N/kg DM",
+            item,
+            fallback_n_content,
         )
+    items_df["n_content_g_per_kg"] = items_df["n_content_g_per_kg"].fillna(
+        fallback_n_content
+    )
 
-        for country in countries:
-            bus_name = f"residue:{item}:{country}"
+    # Calculate N₂O emission efficiency (direct + indirect leaching)
+    # N content (kg N / kg DM)
+    n_content_kg_per_kg = items_df["n_content_g_per_kg"] / 1000.0
 
-            # Only add link if the residue bus exists in the network
-            if bus_name not in n.buses.static.index:
-                continue
+    # Direct N₂O (Equation 11.1): kg N₂O-N per kg N
+    direct_n2o_n = incorporation_n2o_factor
 
-            all_names.append(f"incorporate:residue_{item}:{country}")
-            all_bus0.append(bus_name)
-            all_efficiency.append(n2o_efficiency)
+    # Indirect N₂O from leaching (Equation 11.10): kg N₂O-N per kg N
+    indirect_leach_n2o_n = frac_leach * indirect_ef5
 
-    if not all_names:
+    # Total N₂O-N per kg N, converted to N₂O
+    total_n2o_n = direct_n2o_n + indirect_leach_n2o_n
+
+    # Total efficiency: tonnes N₂O per Mt residue DM
+    # = (kg N / kg DM) * (kg N₂O-N / kg N) * (44/28) * (tonnes per Mt)
+    items_df["n2o_efficiency"] = (
+        n_content_kg_per_kg * total_n2o_n * (44.0 / 28.0) * constants.MEGATONNE_TO_TONNE
+    )
+
+    # Build links for all residue x country combinations via cross product
+    countries_df = pd.DataFrame({"country": countries})
+    cross = items_df.merge(countries_df, how="cross")
+    cross["bus_name"] = "residue:" + cross["item"] + ":" + cross["country"]
+
+    # Only add link if the residue bus exists in the network
+    cross = cross[cross["bus_name"].isin(n.buses.static.index)]
+
+    if cross.empty:
         logger.info("No valid residue buses found; skipping soil incorporation links")
         return
+
+    cross["link_name"] = "incorporate:residue_" + cross["item"] + ":" + cross["country"]
 
     # Add the carrier
     carrier = "residue_incorporation"
@@ -1001,17 +993,17 @@ def add_residue_soil_incorporation_links(
 
     # Add the links
     n.links.add(
-        all_names,
-        bus0=all_bus0,
+        cross["link_name"].tolist(),
+        bus0=cross["bus_name"].tolist(),
         bus1="emission:n2o",
         carrier=carrier,
-        efficiency=all_efficiency,
+        efficiency=cross["n2o_efficiency"].tolist(),
         marginal_cost=0.0,  # No cost to incorporate residues
         p_nom_extendable=True,
     )
 
     logger.info(
         "Created %d residue soil incorporation links for %d residue types",
-        len(all_names),
+        len(cross),
         len(n_content_lookup),
     )

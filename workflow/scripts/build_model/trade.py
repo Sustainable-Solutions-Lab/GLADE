@@ -8,10 +8,12 @@ This module handles the creation of hierarchical trade networks for crops
 and foods, using clustering-based hub systems for efficient trade routing.
 """
 
+import itertools
 import logging
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pypsa
 from sklearn.cluster import KMeans
 
@@ -100,7 +102,7 @@ def _add_trade_hubs_and_links(
         logger.info("Skipping %s trade hubs: no regions/countries available", log_label)
         return
 
-    items = list(dict.fromkeys(items))
+    items = [str(i) for i in dict.fromkeys(items)]
     if len(items) == 0:
         logger.info("Skipping %s trade hubs: no items configured", log_label)
         return
@@ -141,13 +143,13 @@ def _add_trade_hubs_and_links(
     centers = km.cluster_centers_
 
     hub_ids = list(range(n_hubs))
-    hub_bus_names: list[str] = []
-    hub_bus_carriers: list[str] = []
-    for item in tradable_items:
-        item_label = str(item)
-        for h in hub_ids:
-            hub_bus_names.append(f"{hub_name_prefix}:{h}_{item_label}")
-            hub_bus_carriers.append(f"{carrier_prefix}{item_label}")
+
+    pairs = pd.MultiIndex.from_product([tradable_items, hub_ids], names=["item", "hub"])
+    pairs_df = pairs.to_frame(index=False)
+    hub_bus_names = (
+        hub_name_prefix + ":" + pairs_df["hub"].astype(str) + "_" + pairs_df["item"]
+    ).tolist()
+    hub_bus_carriers = (carrier_prefix + pairs_df["item"]).tolist()
 
     if hub_bus_names:
         n.buses.add(hub_bus_names, carrier=hub_bus_carriers)
@@ -162,46 +164,71 @@ def _add_trade_hubs_and_links(
     nearest_hub_dist_km = dch[np.arange(len(country_coords)), nearest_hub_idx] / 1000.0
 
     country_index = gdf_countries.index.to_list()
-    country_to_hub = {c: int(h) for c, h in zip(country_index, nearest_hub_idx)}
-    country_to_dist_km = {
-        c: float(d) for c, d in zip(country_index, nearest_hub_dist_km)
-    }
+    country_to_hub = pd.Series(nearest_hub_idx.astype(int), index=country_index)
+    country_to_dist_km = pd.Series(nearest_hub_dist_km, index=country_index)
 
-    valid_countries = [c for c in countries if c in country_to_hub]
+    valid_countries = [c for c in countries if c in country_to_hub.index]
 
     link_names: list[str] = []
     link_bus0: list[str] = []
     link_bus1: list[str] = []
     link_costs: list[float] = []
-
     link_items: list[str] = []
 
     if valid_countries:
-        for item in tradable_items:
-            item_label = str(item)
-            item_cost = item_costs[item_label]
-            for c in valid_countries:
-                hub_idx = country_to_hub[c]
-                cost = country_to_dist_km[c] * item_cost
+        pairs = pd.DataFrame(
+            list(itertools.product(tradable_items, valid_countries)),
+            columns=["item", "country"],
+        )
+        pairs["hub_idx"] = pairs["country"].map(country_to_hub)
+        pairs["dist_km"] = pairs["country"].map(country_to_dist_km)
+        pairs["item_cost"] = pairs["item"].map(item_costs)
+        pairs["cost"] = pairs["dist_km"] * pairs["item_cost"]
 
-                country_bus = f"{bus_prefix}:{item_label}:{c}"
-                hub_bus = f"{hub_name_prefix}:{hub_idx}_{item_label}"
+        hub_idx_str = pairs["hub_idx"].astype(str)
 
-                link_names.append(
-                    f"{link_name_prefix}:{item_label}:{c}_to_hub{hub_idx}"
-                )
-                link_bus0.append(country_bus)
-                link_bus1.append(hub_bus)
-                link_costs.append(cost)
-                link_items.append(item_label)
+        # Build to-hub direction
+        pairs["name_to"] = (
+            link_name_prefix
+            + ":"
+            + pairs["item"]
+            + ":"
+            + pairs["country"]
+            + "_to_hub"
+            + hub_idx_str
+        )
+        pairs["bus0_to"] = bus_prefix + ":" + pairs["item"] + ":" + pairs["country"]
+        pairs["bus1_to"] = hub_name_prefix + ":" + hub_idx_str + "_" + pairs["item"]
 
-                link_names.append(
-                    f"{link_name_prefix}:{item_label}:hub{hub_idx}_to_{c}"
-                )
-                link_bus0.append(hub_bus)
-                link_bus1.append(country_bus)
-                link_costs.append(cost)
-                link_items.append(item_label)
+        # Build from-hub direction
+        pairs["name_from"] = (
+            link_name_prefix
+            + ":"
+            + pairs["item"]
+            + ":hub"
+            + hub_idx_str
+            + "_to_"
+            + pairs["country"]
+        )
+        pairs["bus0_from"] = pairs["bus1_to"]  # hub bus
+        pairs["bus1_from"] = pairs["bus0_to"]  # country bus
+
+        # Interleave to-hub and from-hub rows to match original ordering
+        link_names = list(
+            itertools.chain.from_iterable(zip(pairs["name_to"], pairs["name_from"]))
+        )
+        link_bus0 = list(
+            itertools.chain.from_iterable(zip(pairs["bus0_to"], pairs["bus0_from"]))
+        )
+        link_bus1 = list(
+            itertools.chain.from_iterable(zip(pairs["bus1_to"], pairs["bus1_from"]))
+        )
+        link_costs = list(
+            itertools.chain.from_iterable(zip(pairs["cost"], pairs["cost"]))
+        )
+        link_items = list(
+            itertools.chain.from_iterable(zip(pairs["item"], pairs["item"]))
+        )
 
     if link_names:
         # Add trade carrier if not present
@@ -232,17 +259,37 @@ def _add_trade_hubs_and_links(
 
         if len(ii) > 0:
             dists_km = hub_distances[ii, jj]
-            for item in tradable_items:
-                item_label = str(item)
-                item_cost = item_costs[item_label]
-                for i, j, dist in zip(ii, jj, dists_km):
-                    hub_link_names.append(
-                        f"{link_name_prefix}:{item_label}:hub{i}_to_hub{j}"
-                    )
-                    hub_link_bus0.append(f"{hub_name_prefix}:{i}_{item_label}")
-                    hub_link_bus1.append(f"{hub_name_prefix}:{j}_{item_label}")
-                    hub_link_costs.append(float(dist) * item_cost)
-                    hub_link_items.append(item_label)
+            hub_pairs_list = list(zip(ii, jj, dists_km))
+            pairs = pd.DataFrame(
+                list(itertools.product(tradable_items, hub_pairs_list)),
+                columns=["item", "hub_pair"],
+            )
+            pairs[["i", "j", "dist"]] = pd.DataFrame(
+                pairs["hub_pair"].tolist(), index=pairs.index
+            )
+            pairs = pairs.drop(columns="hub_pair")
+            pairs["item_cost"] = pairs["item"].map(item_costs)
+
+            i_str = pairs["i"].astype(int).astype(str)
+            j_str = pairs["j"].astype(int).astype(str)
+
+            hub_link_names = (
+                link_name_prefix
+                + ":"
+                + pairs["item"]
+                + ":hub"
+                + i_str
+                + "_to_hub"
+                + j_str
+            ).tolist()
+            hub_link_bus0 = (
+                hub_name_prefix + ":" + i_str + "_" + pairs["item"]
+            ).tolist()
+            hub_link_bus1 = (
+                hub_name_prefix + ":" + j_str + "_" + pairs["item"]
+            ).tolist()
+            hub_link_costs = (pairs["dist"] * pairs["item_cost"]).tolist()
+            hub_link_items = pairs["item"].tolist()
 
         if hub_link_names:
             n.links.add(

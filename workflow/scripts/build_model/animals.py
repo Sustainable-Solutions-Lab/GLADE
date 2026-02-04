@@ -15,7 +15,11 @@ import pandas as pd
 import pypsa
 
 from .. import constants
-from .utils import _calculate_ch4_per_feed_intake, _calculate_manure_n_outputs
+from .utils import (
+    _build_loss_waste_lookup,
+    _calculate_ch4_per_feed_intake,
+    _calculate_manure_n_outputs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +49,16 @@ def add_feed_slack_generators(
         Cost per Mt of slack (billion USD/Mt)
     """
     # Find all feed buses (named feed:{category}:{country})
-    feed_buses = [bus for bus in n.buses.static.index if bus.startswith("feed:")]
+    feed_mask = n.buses.static.index.str.startswith("feed:")
+    feed_buses = n.buses.static.index[feed_mask]
 
-    if not feed_buses:
+    if feed_buses.empty:
         logger.info("No feed buses found; skipping feed slack")
         return
 
     # Only add positive slack for ruminant grassland (to avoid inflating N2O via protein feed)
-    grassland_buses = [bus for bus in feed_buses if "ruminant_grassland" in bus]
+    grassland_mask = feed_buses.str.contains("ruminant_grassland")
+    grassland_buses = feed_buses[grassland_mask].tolist()
 
     # Add carriers for slack
     n.carriers.add(
@@ -62,7 +68,6 @@ def add_feed_slack_generators(
 
     # Add positive slack generators only for grassland (provide feed when insufficient)
     if grassland_buses:
-        # Extract country from bus name (feed:ruminant_grassland:{country})
         gen_pos_names = [
             f"slack:feed_positive:{bus.split(':')[-1]}" for bus in grassland_buses
         ]
@@ -79,16 +84,16 @@ def add_feed_slack_generators(
         )
 
     # Add negative slack stores for non-grassland feed buses (absorb excess feed)
-    non_grassland_buses = [bus for bus in feed_buses if "ruminant_grassland" not in bus]
+    non_grassland_buses = feed_buses[~grassland_mask].tolist()
     if non_grassland_buses:
-        # Build unique names based on feed category and country
-        gen_neg_names = []
-        for bus in non_grassland_buses:
-            # bus format: feed:{category}:{country}
-            parts = bus.split(":")
-            category = parts[1]
-            country = parts[2]
-            gen_neg_names.append(f"slack:feed_negative_{category}:{country}")
+        # Build unique names: extract category and country from index
+        # Convention exception: using str.extract on bus names for category/country
+        _ng = pd.Index(non_grassland_buses).str.extract(
+            r"^feed:(?P<category>[^:]+):(?P<country>.+)$"
+        )
+        gen_neg_names = (
+            "slack:feed_negative_" + _ng["category"] + ":" + _ng["country"]
+        ).tolist()
         n.generators.add(
             gen_neg_names,
             bus=non_grassland_buses,
@@ -186,13 +191,7 @@ def add_feed_to_animal_product_links(
         return
 
     # Build food loss/waste lookup: (country, food_group) -> (loss_fraction, waste_fraction)
-    loss_waste_pairs: dict[tuple[str, str], tuple[float, float]] = {}
-    for _, row in loss_waste.iterrows():
-        key = (str(row["country"]), str(row["food_group"]))
-        loss_waste_pairs[key] = (
-            float(row["loss_fraction"]),
-            float(row["waste_fraction"]),
-        )
+    loss_waste_pairs = _build_loss_waste_lookup(loss_waste)
 
     # Build enteric methane yield lookup from ruminant feed categories
     enteric_my_lookup = (
@@ -216,49 +215,37 @@ def add_feed_to_animal_product_links(
     frac_gasm = emissions_config["fertilizer"]["frac_gasm"]
     frac_leach = emissions_config["fertilizer"]["frac_leach"]
 
-    # Build all link names and buses (expand each row for all countries)
-    all_names = []
-    all_bus0 = []
-    all_bus1 = []
-    all_bus3 = []
-    all_carrier = []
-    all_efficiency = []
-    all_ch4 = []
-    all_n_fert = []
-    all_n2o = []
-    all_marginal_cost = []
-    all_country = []
-    all_product = []
-    all_feed_category = []
-    all_manure_ch4_share = []
-    all_pasture_n2o_share = []
+    # Pre-filter to rows where country is in the configured list
+    df = df[df["country"].isin(countries)].copy()
 
-    skipped_count = 0
+    # Pre-build bus names as columns and filter by bus existence in one operation
+    df["feed_bus"] = "feed:" + df["feed_category"] + ":" + df["country"]
+    df["food_bus"] = "food:" + df["product"] + ":" + df["country"]
+    bus_index = n.buses.static.index
+    bus_exists = df["feed_bus"].isin(bus_index) & df["food_bus"].isin(bus_index)
+    skipped_count = int((~bus_exists).sum())
+    df = df[bus_exists].copy()
+
+    if df.empty:
+        if skipped_count > 0:
+            logger.info("Skipped %d links due to missing buses", skipped_count)
+        return
+
+    # Compute CH4 and N2O/manure-N per row (helpers are complex; keep per-row calls
+    # but benefit from pre-indexed DataFrames for the inner lookups)
+    ch4_results = []
+    n2o_results = []
     for _, row in df.iterrows():
-        country = row["country"]
-        if country not in countries:
-            continue
-
-        # Check if required buses exist
-        feed_bus = f"feed:{row['feed_category']}:{country}"
-        food_bus = f"food:{row['product']}:{country}"
-        if feed_bus not in n.buses.static.index or food_bus not in n.buses.static.index:
-            skipped_count += 1
-            continue
-
         # Calculate total CH4 (enteric + manure) per tonne feed intake
         # This is relative to bus0 (feed), so it can be used directly as efficiency2
         ch4_per_t_feed, manure_ch4_per_t_feed = _calculate_ch4_per_feed_intake(
             product=row["product"],
             feed_category=row["feed_category"],
-            country=country,
+            country=row["country"],
             enteric_my_lookup=enteric_my_lookup,
             manure_emissions=manure_emissions,
         )
-        if ch4_per_t_feed > 0:
-            manure_ch4_share = manure_ch4_per_t_feed / ch4_per_t_feed
-        else:
-            manure_ch4_share = 0.0
+        ch4_results.append((ch4_per_t_feed, manure_ch4_per_t_feed))
 
         # Calculate manure N fertilizer and N2O outputs per tonne feed intake
         n_fert_per_t_feed, n2o_per_t_feed, pasture_n2o_share = (
@@ -277,46 +264,54 @@ def add_feed_to_animal_product_links(
                 frac_leach=frac_leach,
             )
         )
+        n2o_results.append((n_fert_per_t_feed, n2o_per_t_feed, pasture_n2o_share))
 
-        # Calculate marginal cost (cost per Mt feed input)
-        # animal_costs is in USD per Mt product, efficiency is Mt product per Mt feed
-        # So: cost per Mt feed = (cost per Mt product) / (Mt product per Mt feed)
-        if animal_costs is not None and row["product"] in animal_costs.index:
-            cost_per_mt_product = float(animal_costs.loc[row["product"]])
-            if row["efficiency"] > 0:
-                # Convert from USD/Mt to billion USD/Mt
-                marginal_cost = (
-                    cost_per_mt_product / row["efficiency"] * constants.USD_TO_BNUSD
-                )
-            else:
-                marginal_cost = 0.0
-        else:
-            marginal_cost = 0.0
+    # Unpack results into columns
+    df["ch4_per_t_feed"] = [r[0] for r in ch4_results]
+    df["manure_ch4_per_t_feed"] = [r[1] for r in ch4_results]
+    df["manure_ch4_share"] = df.apply(
+        lambda r: r["manure_ch4_per_t_feed"] / r["ch4_per_t_feed"]
+        if r["ch4_per_t_feed"] > 0
+        else 0.0,
+        axis=1,
+    )
+    df["n_fert_per_t_feed"] = [r[0] for r in n2o_results]
+    df["n2o_per_t_feed"] = [r[1] for r in n2o_results]
+    df["pasture_n2o_share"] = [r[2] for r in n2o_results]
 
-        # Calculate FLW-adjusted efficiency
-        base_efficiency = row["efficiency"]
-        group = food_to_group[row["product"]]
-        loss_frac, waste_frac = loss_waste_pairs[(country, group)]
-        flw_multiplier = (1.0 - loss_frac) * (1.0 - waste_frac)
-        adjusted_efficiency = base_efficiency * flw_multiplier
+    # Calculate marginal cost (cost per Mt feed input)
+    # animal_costs is in USD per Mt product, efficiency is Mt product per Mt feed
+    # So: cost per Mt feed = (cost per Mt product) / (Mt product per Mt feed)
+    if animal_costs is not None:
+        cost_series = df["product"].map(animal_costs).fillna(0.0)
+        df["marginal_cost"] = (
+            cost_series.where(df["efficiency"] > 0, 0.0)
+            / df["efficiency"].where(df["efficiency"] > 0, 1.0)
+            * constants.USD_TO_BNUSD
+        )
+    else:
+        df["marginal_cost"] = 0.0
 
-        all_names.append(f"animal:{row['product']}_{row['feed_category']}:{country}")
-        all_bus0.append(feed_bus)
-        all_bus1.append(food_bus)
-        all_bus3.append(f"fertilizer:{country}")
-        all_carrier.append("animal_production")
-        all_efficiency.append(adjusted_efficiency)
-        # Convert per-tonne emissions to per-Mt flows (CH4, N2O in t; feed in Mt)
-        # Manure N needs no conversion: t N / t feed = Mt N / Mt feed (ratio is scale-invariant)
-        all_ch4.append(ch4_per_t_feed * constants.MEGATONNE_TO_TONNE)
-        all_n_fert.append(n_fert_per_t_feed)
-        all_n2o.append(n2o_per_t_feed * constants.MEGATONNE_TO_TONNE)
-        all_marginal_cost.append(marginal_cost)
-        all_country.append(country)
-        all_product.append(row["product"])
-        all_feed_category.append(row["feed_category"])
-        all_manure_ch4_share.append(manure_ch4_share)
-        all_pasture_n2o_share.append(pasture_n2o_share)
+    # Calculate FLW-adjusted efficiency
+    df["group"] = df["product"].map(food_to_group)
+    lw_keys = list(zip(df["country"], df["group"]))
+    df["loss_frac"] = [loss_waste_pairs[k][0] for k in lw_keys]
+    df["waste_frac"] = [loss_waste_pairs[k][1] for k in lw_keys]
+    df["flw_multiplier"] = (1.0 - df["loss_frac"]) * (1.0 - df["waste_frac"])
+    df["adjusted_efficiency"] = df["efficiency"] * df["flw_multiplier"]
+
+    # Build all link data with vectorized string ops
+    all_names = (
+        "animal:" + df["product"] + "_" + df["feed_category"] + ":" + df["country"]
+    ).tolist()
+    all_bus0 = df["feed_bus"].tolist()
+    all_bus1 = df["food_bus"].tolist()
+    all_bus3 = ("fertilizer:" + df["country"]).tolist()
+    # Convert per-tonne emissions to per-Mt flows (CH4, N2O in t; feed in Mt)
+    # Manure N needs no conversion: t N / t feed = Mt N / Mt feed (ratio is scale-invariant)
+    all_ch4 = (df["ch4_per_t_feed"] * constants.MEGATONNE_TO_TONNE).tolist()
+    all_n_fert = df["n_fert_per_t_feed"].tolist()
+    all_n2o = (df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE).tolist()
 
     # All animal production links now have multiple outputs:
     # bus1: animal product, bus2: CH4, bus3: manure N fertilizer (country-specific), bus4: N2O
@@ -324,9 +319,9 @@ def add_feed_to_animal_product_links(
         all_names,
         bus0=all_bus0,
         bus1=all_bus1,
-        carrier=all_carrier,
-        efficiency=all_efficiency,
-        marginal_cost=all_marginal_cost,
+        carrier="animal_production",
+        efficiency=df["adjusted_efficiency"].tolist(),
+        marginal_cost=df["marginal_cost"].tolist(),
         p_nom_extendable=True,
         bus2="emission:ch4",
         efficiency2=all_ch4,
@@ -334,11 +329,11 @@ def add_feed_to_animal_product_links(
         efficiency3=all_n_fert,
         bus4="emission:n2o",
         efficiency4=all_n2o,
-        country=all_country,
-        product=all_product,
-        feed_category=all_feed_category,
-        manure_ch4_share=all_manure_ch4_share,
-        pasture_n2o_share=all_pasture_n2o_share,
+        country=df["country"].tolist(),
+        product=df["product"].tolist(),
+        feed_category=df["feed_category"].tolist(),
+        manure_ch4_share=df["manure_ch4_share"].tolist(),
+        pasture_n2o_share=df["pasture_n2o_share"].tolist(),
     )
 
     logger.info(

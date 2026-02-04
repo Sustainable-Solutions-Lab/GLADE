@@ -22,6 +22,7 @@ trade:
 
 crops:
   - wheat
+  - wetland-rice
   - maize
   - soybean
   - groundnut

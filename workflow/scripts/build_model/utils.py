@@ -18,6 +18,16 @@ from .. import constants
 logger = logging.getLogger(__name__)
 
 
+def _build_loss_waste_lookup(
+    loss_waste: pd.DataFrame,
+) -> dict[tuple[str, str], tuple[float, float]]:
+    lw = loss_waste.set_index(["country", "food_group"])
+    return {
+        idx: (float(r["loss_fraction"]), float(r["waste_fraction"]))
+        for idx, r in lw.iterrows()
+    }
+
+
 def _per_capita_mass_to_mt_per_year(
     value_per_person_per_day: float, population: float
 ) -> float:
@@ -94,8 +104,7 @@ def _load_crop_yield_table(path: str) -> tuple[pd.DataFrame, dict[str, str | flo
     )
 
     # Ensure numeric columns
-    for column in pivot.columns:
-        pivot[column] = pd.to_numeric(pivot[column], errors="coerce")
+    pivot = pivot.apply(pd.to_numeric, errors="coerce")
 
     return pivot, units
 
@@ -121,41 +130,46 @@ def _fresh_mass_conversion_factors(
         moisture["moisture_fraction"], errors="coerce"
     )
 
-    factors: dict[str, float] = {}
-    missing_edible: list[str] = []
-    missing_moisture: list[str] = []
-    for crop in sorted(crops):
-        if crop not in df.index:
-            missing_edible.append(crop)
-            continue
-        if crop not in moisture.index:
-            missing_moisture.append(crop)
-            continue
-        edible_coeff = df.at[crop, "edible_portion_coefficient"]
-        moisture_fraction = moisture.at[crop, "moisture_fraction"]
-        if pd.isna(edible_coeff):
-            missing_edible.append(crop)
-            continue
-        if pd.isna(moisture_fraction):
-            missing_moisture.append(crop)
-            continue
+    # Join edible portion and moisture data, then compute factors vectorized
+    sorted_crops = sorted(crops)
+    crop_idx = pd.Index(sorted_crops, name="crop")
 
-        dry_fraction = 1 - moisture_fraction
-        factor = edible_coeff / dry_fraction
-        factors[crop] = factor
-
+    missing_edible = crop_idx.difference(df.index).tolist()
     if missing_edible:
         raise ValueError(
             "Missing edible portion data for crops: "
             + ", ".join(sorted(missing_edible))
         )
+
+    missing_moisture = crop_idx.difference(moisture.index).tolist()
     if missing_moisture:
         raise ValueError(
             "Missing moisture fraction data for crops: "
             + ", ".join(sorted(missing_moisture))
         )
 
-    return factors
+    joined = df.loc[crop_idx, ["edible_portion_coefficient"]].join(
+        moisture.loc[crop_idx, ["moisture_fraction"]]
+    )
+
+    na_edible = joined["edible_portion_coefficient"].isna()
+    if na_edible.any():
+        raise ValueError(
+            "Missing edible portion data for crops: "
+            + ", ".join(sorted(joined.index[na_edible].tolist()))
+        )
+
+    na_moisture = joined["moisture_fraction"].isna()
+    if na_moisture.any():
+        raise ValueError(
+            "Missing moisture fraction data for crops: "
+            + ", ".join(sorted(joined.index[na_moisture].tolist()))
+        )
+
+    dry_fraction = 1 - joined["moisture_fraction"]
+    factor_series = joined["edible_portion_coefficient"] / dry_fraction
+
+    return factor_series.to_dict()
 
 
 def _build_luc_lef_lookup(df: pd.DataFrame) -> pd.DataFrame:
@@ -241,7 +255,7 @@ def _calculate_manure_n_outputs(
     indirect_ef5: float,
     frac_gasm: float,
     frac_leach: float,
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:
     """Calculate manure N fertilizer and N₂O outputs per tonne feed intake.
 
     Uses MMS-weighted N2O emission factors that account for the distribution of
@@ -306,7 +320,7 @@ def _calculate_manure_n_outputs(
     try:
         protein_g_per_100g = nutrition.loc[(product, "protein"), "value"]
     except KeyError:
-        logger.warning(f"No protein data for {product}, assuming 0 N in product")
+        logger.warning("No protein data for %s, assuming 0 N in product", product)
         protein_g_per_100g = 0.0
 
     # Convert protein to N using factor 6.25 (protein = N * 6.25)
@@ -330,7 +344,9 @@ def _calculate_manure_n_outputs(
         mask = manure_emissions["product"] == product
         if mask.sum() == 0:
             logger.warning(
-                f"No manure emission data for {product}/{feed_category}, using defaults"
+                "No manure emission data for %s/%s, using defaults",
+                product,
+                feed_category,
             )
             pasture_fraction = 1.0 if feed_category.endswith("_grassland") else 0.0
             pasture_n2o_ef = 0.02 if "cattle" in product or "dairy" in product else 0.01

@@ -8,7 +8,6 @@ This module handles the creation of links that produce ruminant feed from
 the pasture pool.
 """
 
-from collections.abc import Callable
 import logging
 
 import numpy as np
@@ -128,12 +127,10 @@ def add_grassland_feed_links(
         n.carriers.add("grassland_production", unit="Mt")
 
     grass_df = grassland.copy()
-    grass_df = grass_df[np.isfinite(grass_df["yield"]) & (grass_df["yield"] > 0)]
-
-    # Filter low yields for numerical stability
-    if min_yield_t_per_ha > 0:
-        low_yield_mask = grass_df["yield"] < min_yield_t_per_ha
-        grass_df = grass_df[~low_yield_mask]
+    # Filter invalid yields and low yields for numerical stability in one pass
+    grass_df = grass_df[
+        np.isfinite(grass_df["yield"]) & (grass_df["yield"] >= min_yield_t_per_ha)
+    ]
 
     if grass_df.empty:
         logger.warning("No valid grassland yield data available; skipping")
@@ -156,9 +153,9 @@ def add_grassland_feed_links(
         base_df = base_df.join(observed_area, how="left")
 
     candidate_area = base_df["suitable_area"].fillna(base_df["land_area"])
-    land_cap = np.minimum(candidate_area.to_numpy(), base_df["land_area"].to_numpy())
+    # candidate_area and base_df["land_area"] share the same index
+    land_cap_series = np.minimum(candidate_area, base_df["land_area"])
     idx = base_df.index
-    land_cap_series = pd.Series(land_cap, index=idx, dtype=float)
 
     # Compute total available area per region/class: cropland-eligible + marginal
     if pasture_land_area is not None and not pasture_land_area.empty:
@@ -176,84 +173,68 @@ def add_grassland_feed_links(
         observed_aligned = observed_series.reindex(idx)
         # Total available = observed, capped by combined land potential
         total_cap = land_cap_series + marginal_cap_series
-        base_df["available_area"] = np.minimum(
-            observed_aligned.to_numpy(), total_cap.to_numpy()
-        )
+        base_df["available_area"] = np.minimum(observed_aligned, total_cap)
     else:
         # Total available = cropland-eligible cap + marginal cap
-        base_df["available_area"] = (
-            (land_cap_series + marginal_cap_series).reindex(base_df.index).to_numpy()
+        base_df["available_area"] = (land_cap_series + marginal_cap_series).reindex(
+            base_df.index
         )
 
     production_df = base_df[base_df["available_area"] > 0].copy()
 
-    def _add_links(
-        df: pd.DataFrame,
-        name_prefix: str,
-        bus0_builder: Callable[[pd.Series], str],
-    ) -> bool:
-        """Convert a per-region/class DataFrame into grassland production links."""
-        if df is None or df.empty:
-            return False
-        work = df.reset_index()
-        work["country"] = work["region"].map(region_to_country)
-        work = work[work["country"].isin(allowed_countries)]
-        work = work.dropna(subset=["country"])
-        if work.empty:
-            return False
-        work["name"] = work.apply(
-            lambda r: f"{name_prefix}:{r['region']}_c{int(r['resource_class'])}",
-            axis=1,
-        )
-        work["bus0"] = work.apply(bus0_builder, axis=1)
-        work["bus1"] = work["country"].apply(lambda c: f"feed:ruminant_grassland:{c}")
+    if production_df is None or production_df.empty:
+        logger.info("Grassland entries have zero available area; skipping")
+        return
 
-        available_mha = work["available_area"].to_numpy() / HA_PER_MHA
-
-        # Calculate efficiency (Mt/Mha) applying pasture utilization rate.
-        # Yields are in t/ha, which equals Mt/Mha numerically.
-        yields = work["yield"].to_numpy()  # t/ha = Mt/Mha numerically
-        efficiencies = yields * pasture_utilization_rate  # Mt/Mha
-
-        # Calculate marginal cost per Mha (bnUSD/Mha).
-        # In PyPSA, marginal_cost is per unit of bus0 (land in Mha).
-        # To get cost per unit output (feed in Mt), we need:
-        #   cost_per_output = marginal_cost_pypsa / efficiency
-        # We want: cost_per_output = marginal_cost (USD/t) * conversion to bnUSD/Mt
-        # Therefore: marginal_cost_pypsa = marginal_cost * conversion * efficiency
-        cost_per_mha_bnusd = (
-            marginal_cost * efficiencies * MEGATONNE_TO_TONNE * USD_TO_BNUSD
-        )
-
-        # Index by name for proper alignment with PyPSA component names
-        work_indexed = work.set_index("name")
-        params = {
-            "carrier": "grassland_production",
-            "bus0": work_indexed["bus0"],
-            "bus1": work_indexed["bus1"],
-            "efficiency": efficiencies,
-            "p_nom_max": available_mha,
-            "p_nom_extendable": not use_actual_production,
-            "marginal_cost": cost_per_mha_bnusd,
-            "region": work_indexed["region"],
-            "resource_class": work_indexed["resource_class"],
-            "country": work_indexed["country"],
-            "crop": "grassland",
-            "water_supply": "rainfed",
-        }
-        if use_actual_production:
-            params["p_nom"] = available_mha
-
-        n.links.add(work_indexed.index, **params)
-        return True
+    work = production_df.reset_index()
+    work["country"] = work["region"].map(region_to_country)
+    work = work[work["country"].isin(allowed_countries)]
+    work = work.dropna(subset=["country"])
+    if work.empty:
+        logger.info("Grassland entries have zero available area; skipping")
+        return
 
     # All grassland links consume from the pasture pool, which aggregates
     # land from existing cropland, new land conversion, and marginal grazing land.
-    link_added = _add_links(
-        production_df,
-        "produce:grassland",
-        lambda r: f"land:pasture:{r['region']}_c{int(r['resource_class'])}",
+    suffix = work["region"] + "_c" + work["resource_class"].astype(str)
+    work["name"] = "produce:grassland:" + suffix
+    work["bus0"] = "land:pasture:" + suffix
+    work["bus1"] = "feed:ruminant_grassland:" + work["country"]
+
+    available_mha = work["available_area"].to_numpy() / HA_PER_MHA
+
+    # Calculate efficiency (Mt/Mha) applying pasture utilization rate.
+    # Yields are in t/ha, which equals Mt/Mha numerically.
+    yields = work["yield"].to_numpy()  # t/ha = Mt/Mha numerically
+    efficiencies = yields * pasture_utilization_rate  # Mt/Mha
+
+    # Calculate marginal cost per Mha (bnUSD/Mha).
+    # In PyPSA, marginal_cost is per unit of bus0 (land in Mha).
+    # To get cost per unit output (feed in Mt), we need:
+    #   cost_per_output = marginal_cost_pypsa / efficiency
+    # We want: cost_per_output = marginal_cost (USD/t) * conversion to bnUSD/Mt
+    # Therefore: marginal_cost_pypsa = marginal_cost * conversion * efficiency
+    cost_per_mha_bnusd = (
+        marginal_cost * efficiencies * MEGATONNE_TO_TONNE * USD_TO_BNUSD
     )
 
-    if not link_added:
-        logger.info("Grassland entries have zero available area; skipping")
+    # Index by name for proper alignment with PyPSA component names
+    work_indexed = work.set_index("name")
+    params = {
+        "carrier": "grassland_production",
+        "bus0": work_indexed["bus0"],
+        "bus1": work_indexed["bus1"],
+        "efficiency": efficiencies,
+        "p_nom_max": available_mha,
+        "p_nom_extendable": not use_actual_production,
+        "marginal_cost": cost_per_mha_bnusd,
+        "region": work_indexed["region"],
+        "resource_class": work_indexed["resource_class"],
+        "country": work_indexed["country"],
+        "crop": "grassland",
+        "water_supply": "rainfed",
+    }
+    if use_actual_production:
+        params["p_nom"] = available_mha
+
+    n.links.add(work_indexed.index, **params)

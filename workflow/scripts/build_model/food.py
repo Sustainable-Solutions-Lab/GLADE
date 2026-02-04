@@ -47,21 +47,26 @@ def add_food_conversion_links(
     if "food_processing" not in n.carriers.static.index:
         n.carriers.add("food_processing", unit="Mt")
 
-    # Load loss/waste data (already validated by prepare_food_loss_waste.py)
-    loss_waste_pairs: dict[tuple[str, str], tuple[float, float]] = {}
-    for _, row in loss_waste.iterrows():
-        key = (str(row["country"]), str(row["food_group"]))
-        loss_waste_pairs[key] = (
-            float(row["loss_fraction"]),
-            float(row["waste_fraction"]),
-        )
-
     missing_group_foods: set[str] = set()
     byproduct_foods: set[str] = set(byproduct_list or [])
     excessive_losses: set[tuple[str, str]] = set()
     invalid_pathways: list[str] = []
 
     normalized_countries = [str(c).upper() for c in countries]
+
+    # Pre-compute FLW multipliers for vectorized lookup
+    _lw = loss_waste.copy()
+    _lw["loss_fraction"] = _lw["loss_fraction"].clip(0.0, 1.0)
+    _lw["waste_fraction"] = _lw["waste_fraction"].clip(0.0, 1.0)
+    _lw["multiplier"] = (1 - _lw["loss_fraction"]) * (1 - _lw["waste_fraction"])
+    _lw.loc[_lw["multiplier"] <= 0, "multiplier"] = 0.01
+    multiplier_lookup = _lw.set_index(["country", "food_group"])["multiplier"]
+    # Track extreme values for warnings
+    _extreme = _lw[
+        ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
+        | (_lw["multiplier"] <= 0.01)
+    ]
+    _extreme_pairs = set(zip(_extreme["country"], _extreme["food_group"]))
 
     # Group foods by pathway and crop
     pathway_groups = foods.groupby(["pathway", "crop"])
@@ -76,11 +81,8 @@ def add_food_conversion_links(
             continue
 
         # Get output foods and factors
-        output_foods = []
-        output_factors = []
-        for _, row in pathway_df.iterrows():
-            output_foods.append(str(row["food"]))
-            output_factors.append(float(row["factor"]))
+        output_foods = pathway_df["food"].astype(str).tolist()
+        output_factors = pathway_df["factor"].astype(float).tolist()
 
         # Verify mass balance (sum of factors should be ≤ 1.0)
         total_factor = sum(output_factors)
@@ -116,29 +118,24 @@ def add_food_conversion_links(
             link_params[bus_key] = [f"food:{food}:{c}" for c in normalized_countries]
 
             # Calculate efficiencies per country (including loss/waste adjustments)
-            efficiencies: list[float] = []
             group = food_to_group.get(food)
-            for country in normalized_countries:
-                multiplier = 1.0
-                if group is None:
-                    # Food has no group mapping - no loss/waste adjustment
-                    if food not in byproduct_foods:
-                        missing_group_foods.add(food)
-                else:
-                    # Look up loss/waste fractions (guaranteed to exist by preprocessing)
-                    raw_loss, raw_waste = loss_waste_pairs[(country, group)]
-                    loss_fraction = max(0.0, min(1.0, float(raw_loss)))
-                    waste_fraction = max(0.0, min(1.0, float(raw_waste)))
-
-                    if loss_fraction > 0.99 or waste_fraction > 0.99:
-                        excessive_losses.add((country, group))
-
-                    multiplier = (1.0 - loss_fraction) * (1.0 - waste_fraction)
-                    if multiplier <= 0.0:
-                        excessive_losses.add((country, group))
-                        multiplier = 0.01  # Small positive to avoid division issues
-
-                efficiencies.append(factor * conversion_factor * multiplier)
+            if group is None:
+                # Food has no group mapping - no loss/waste adjustment
+                if food not in byproduct_foods:
+                    missing_group_foods.add(food)
+                efficiencies = [factor * conversion_factor] * len(normalized_countries)
+            else:
+                # Vectorized lookup of multipliers for all countries at once
+                keys = pd.MultiIndex.from_arrays(
+                    [normalized_countries, [group] * len(normalized_countries)]
+                )
+                multipliers = multiplier_lookup.reindex(keys).values
+                excessive_losses.update(
+                    (c, group)
+                    for c in normalized_countries
+                    if (c, group) in _extreme_pairs
+                )
+                efficiencies = (factor * conversion_factor * multipliers).tolist()
 
             link_params[eff_key] = efficiencies
 
@@ -168,6 +165,17 @@ def add_food_conversion_links(
         )
 
 
+def _filter_feed_mapping(mapping, crop_list, food_list, residue_items):
+    return mapping[
+        ((mapping["source_type"] == "crop") & mapping["feed_item"].isin(crop_list))
+        | ((mapping["source_type"] == "food") & mapping["feed_item"].isin(food_list))
+        | (
+            (mapping["source_type"] == "residue")
+            & mapping["feed_item"].isin(residue_items)
+        )
+    ].copy()
+
+
 def add_feed_supply_links(
     n: pypsa.Network,
     ruminant_categories: pd.DataFrame,
@@ -185,103 +193,66 @@ def add_feed_supply_links(
     feed pools (4 ruminant + 4 monogastric quality classes).
     """
     # Process ruminant feeds
-    ruminant_feeds = ruminant_mapping[
-        (
-            (ruminant_mapping["source_type"] == "crop")
-            & ruminant_mapping["feed_item"].isin(crop_list)
-        )
-        | (
-            (ruminant_mapping["source_type"] == "food")
-            & ruminant_mapping["feed_item"].isin(food_list)
-        )
-        | (
-            (ruminant_mapping["source_type"] == "residue")
-            & ruminant_mapping["feed_item"].isin(residue_items)
-        )
-    ].copy()
+    ruminant_feeds = _filter_feed_mapping(
+        ruminant_mapping, crop_list, food_list, residue_items
+    )
 
     # Process monogastric feeds
-    monogastric_feeds = monogastric_mapping[
-        (
-            (monogastric_mapping["source_type"] == "crop")
-            & monogastric_mapping["feed_item"].isin(crop_list)
-        )
-        | (
-            (monogastric_mapping["source_type"] == "food")
-            & monogastric_mapping["feed_item"].isin(food_list)
-        )
-        | (
-            (monogastric_mapping["source_type"] == "residue")
-            & monogastric_mapping["feed_item"].isin(residue_items)
-        )
-    ].copy()
+    monogastric_feeds = _filter_feed_mapping(
+        monogastric_mapping, crop_list, food_list, residue_items
+    )
 
     # Feed buses are expressed in tonnes of dry matter intake (tDM).
     # Conversion links therefore use efficiency=1.0; digestibility is accounted
     # for downstream in feed-to-animal efficiencies and emissions.
 
-    # Build ruminant links
-    all_names = []
-    all_bus0 = []
-    all_bus1 = []
-    all_countries = []
-    all_feed_categories = []
-    all_crops = []
+    # Concatenate ruminant + monogastric feeds with animal_type column
+    ruminant_feeds["animal_type"] = "ruminant"
+    monogastric_feeds["animal_type"] = "monogastric"
+    all_feeds = pd.concat([ruminant_feeds, monogastric_feeds], ignore_index=True)
 
-    for _, row in ruminant_feeds.iterrows():
-        item = row["feed_item"]
-        category = row["category"]
-        source_type = row["source_type"]
+    if all_feeds.empty:
+        logger.info("No feed supply links to create; check crop/food lists")
+        return
 
-        if source_type == "crop":
-            bus_prefix = "crop"
-            link_prefix = "convert"
-            crop_value = item
-        elif source_type == "food":
-            bus_prefix = "food"
-            link_prefix = "convert_food"
-            crop_value = pd.NA
-        else:
-            bus_prefix = "residue"
-            link_prefix = "convert_residue"
-            crop_value = pd.NA
+    # Derive bus/link prefixes and crop values vectorized
+    source_type_map = {
+        "crop": ("crop", "convert"),
+        "food": ("food", "convert_food"),
+        "residue": ("residue", "convert_residue"),
+    }
+    all_feeds["bus_prefix"] = all_feeds["source_type"].map(
+        lambda s: source_type_map[s][0]
+    )
+    all_feeds["link_prefix"] = all_feeds["source_type"].map(
+        lambda s: source_type_map[s][1]
+    )
+    all_feeds["crop_value"] = all_feeds.apply(
+        lambda r: r["feed_item"] if r["source_type"] == "crop" else pd.NA, axis=1
+    )
 
-        for country in countries:
-            all_names.append(f"{link_prefix}:{item}_to_ruminant_{category}:{country}")
-            all_bus0.append(f"{bus_prefix}:{item}:{country}")
-            all_bus1.append(f"feed:ruminant_{category}:{country}")
-            all_countries.append(country)
-            all_feed_categories.append(f"ruminant_{category}")
-            all_crops.append(crop_value)
+    # Cross-merge with countries
+    countries_df = pd.DataFrame({"country": countries})
+    expanded = all_feeds.merge(countries_df, how="cross")
 
-    # Build monogastric links
-    for _, row in monogastric_feeds.iterrows():
-        item = row["feed_item"]
-        category = row["category"]
-        source_type = row["source_type"]
-
-        if source_type == "crop":
-            bus_prefix = "crop"
-            link_prefix = "convert"
-            crop_value = item
-        elif source_type == "food":
-            bus_prefix = "food"
-            link_prefix = "convert_food"
-            crop_value = pd.NA
-        else:
-            bus_prefix = "residue"
-            link_prefix = "convert_residue"
-            crop_value = pd.NA
-
-        for country in countries:
-            all_names.append(
-                f"{link_prefix}:{item}_to_monogastric_{category}:{country}"
-            )
-            all_bus0.append(f"{bus_prefix}:{item}:{country}")
-            all_bus1.append(f"feed:monogastric_{category}:{country}")
-            all_countries.append(country)
-            all_feed_categories.append(f"monogastric_{category}")
-            all_crops.append(crop_value)
+    # Build all name/bus columns with vectorized string ops
+    feed_cat = expanded["animal_type"] + "_" + expanded["category"]
+    all_names = (
+        expanded["link_prefix"]
+        + ":"
+        + expanded["feed_item"]
+        + "_to_"
+        + feed_cat
+        + ":"
+        + expanded["country"]
+    ).tolist()
+    all_bus0 = (
+        expanded["bus_prefix"] + ":" + expanded["feed_item"] + ":" + expanded["country"]
+    ).tolist()
+    all_bus1 = ("feed:" + feed_cat + ":" + expanded["country"]).tolist()
+    all_countries = expanded["country"].tolist()
+    all_feed_categories = feed_cat.tolist()
+    all_crops = expanded["crop_value"].tolist()
 
     if not all_names:
         logger.info("No feed supply links to create; check crop/food lists")

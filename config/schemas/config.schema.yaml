@@ -458,23 +458,25 @@ properties:
     type: object
     patternProperties:
       "^[a-z0-9_]+$":
-        type: object
-        required: [crops, water_supplies]
-        additionalProperties: false
-        properties:
-          crops:
-            type: array
-            minItems: 2
-            maxItems: 3
-            items:
-              type: string
-          water_supplies:
-            type: array
-            minItems: 2
-            maxItems: 3
-            items:
-              type: string
-              enum: [r, i]
+        oneOf:
+          - type: "null"
+          - type: object
+            required: [crops, water_supplies]
+            additionalProperties: false
+            properties:
+              crops:
+                type: array
+                minItems: 2
+                maxItems: 3
+                items:
+                  type: string
+              water_supplies:
+                type: array
+                minItems: 2
+                maxItems: 3
+                items:
+                  type: string
+                  enum: [r, i]
     description: "Multiple cropping systems (double cropping)"
 
   macronutrients:

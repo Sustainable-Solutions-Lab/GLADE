@@ -24,7 +24,8 @@ def _add_land_slack_generators(
 
     if "land_slack" not in n.carriers.static.index:
         n.carriers.add("land_slack", unit="Mha")
-    # Extract suffix from bus name (e.g., "land:cropland:usa_c1_r" -> "usa_c1_r")
+    # Convention exception: parse bus names since only string identifiers are
+    # available here (e.g., "land:cropland:usa_c1_r" -> "usa_c1_r")
     slack_names = [f"slack:land:{bus.split(':')[-1]}" for bus in bus_names]
     n.generators.add(
         slack_names,
@@ -153,10 +154,12 @@ def add_fertilizer_distribution_links(
 
     n.carriers.add("fertilizer_distribution", unit="Mt")
 
-    names = [f"distribute:fertilizer:{country}" for country in country_list]
+    countries_idx = pd.Index(country_list)
+    fertilizer_buses = ("fertilizer:" + countries_idx).tolist()
+    names = ("distribute:fertilizer:" + countries_idx).tolist()
     params: dict[str, object] = {
         "bus0": "fertilizer:supply",
-        "bus1": [f"fertilizer:{country}" for country in country_list],
+        "bus1": fertilizer_buses,
         "carrier": "fertilizer_distribution",
         "efficiency": 1.0,
         "p_nom_extendable": True,
@@ -187,8 +190,8 @@ def add_fertilizer_distribution_links(
     # Add extendable stores to absorb excess fertilizer (primarily manure nitrogen
     # from animal production when crop demand is insufficient)
     n.stores.add(
-        [f"store:fertilizer:{country}" for country in country_list],
-        bus=[f"fertilizer:{country}" for country in country_list],
+        ("store:fertilizer:" + countries_idx).tolist(),
+        bus=fertilizer_buses,
         carrier="fertilizer",
         e_nom_extendable=True,
         country=country_list,

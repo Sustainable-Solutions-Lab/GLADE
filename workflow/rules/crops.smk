@@ -102,6 +102,8 @@ def multi_cropping_inputs(_wildcards):
     combos_cfg = config["multiple_cropping"]
     crops_by_supply: dict[str, set[str]] = {"r": set(), "i": set()}
     for combo_name, entry in combos_cfg.items():
+        if entry is None:
+            continue
         water_supplies = entry.get("water_supplies", ["r"])
         if isinstance(water_supplies, str):
             water_supplies = [water_supplies]

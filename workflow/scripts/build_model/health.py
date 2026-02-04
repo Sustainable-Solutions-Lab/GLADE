@@ -14,9 +14,9 @@ instead of a manual objective adjustment.
 
 from collections.abc import Mapping
 import logging
-import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -114,20 +114,21 @@ def add_health_stores(
         return
 
     # Build Series indexed by store names for bulk add
+    cluster_str = filtered["health_cluster"].astype(str).str.zfill(3)
+    cause_values = filtered["cause"].values
+    cluster_str_values = cluster_str.values
+
     store_names = pd.Index(
-        [
-            f"store:yll:{cause}:cluster{cluster:03d}"
-            for cause, cluster in zip(filtered["cause"], filtered["health_cluster"])
-        ]
+        "store:yll:" + cause_values + ":cluster" + cluster_str_values
     )
 
     # Create Series with store_names as index
     store_buses = pd.Series(
-        [f"health:cluster:{c:03d}" for c in filtered["health_cluster"]],
+        "health:cluster:" + cluster_str_values,
         index=store_names,
     )
     carriers = pd.Series(
-        [f"yll_{cause}" for cause in filtered["cause"]],
+        "yll_" + cause_values,
         index=store_names,
     )
     health_cluster = pd.Series(
@@ -147,7 +148,7 @@ def add_health_stores(
         index=store_names,
     )
     rr_ref = pd.Series(
-        [math.exp(lr) for lr in filtered["log_rr_total_ref"].astype(float)],
+        np.exp(filtered["log_rr_total_ref"].astype(float).values),
         index=store_names,
     )
 

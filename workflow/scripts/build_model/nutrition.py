@@ -57,27 +57,25 @@ def _build_food_group_equals_from_baseline(
         filtered.groupby(["country", "item"])["value"].mean().unstack(fill_value=np.nan)
     )
 
-    result: dict[str, dict[str, float]] = {}
-    missing_entries: list[str] = []
-    for group in groups:
-        values = {}
-        for country in countries:
-            value = pivot.get(group, pd.Series(dtype=float)).get(country)
-            if pd.isna(value):
-                missing_entries.append(f"{country}:{group}")
-                continue
-            # Floor at 1g/person/day to avoid numerical issues with consumer
-            # values when baseline intake is very small or zero.
-            values[country] = max(1.0, float(value))
-        if values:
-            result[str(group)] = values
-
-    if missing_entries:
+    # Floor at 1g/person/day to avoid numerical issues with consumer
+    # values when baseline intake is very small or zero.
+    clipped = pivot.reindex(index=countries, columns=groups).clip(lower=1.0)
+    missing_mask = clipped.isna()
+    if missing_mask.any().any():
+        missing_pairs = missing_mask.stack()
+        missing_pairs = missing_pairs[missing_pairs]
+        missing_entries = [f"{idx[0]}:{idx[1]}" for idx in missing_pairs.index]
         logger.warning(
             "Missing baseline diet values for %d country/group pairs (examples: %s)",
             len(missing_entries),
             ", ".join(sorted(missing_entries)[:5]),
         )
+
+    result: dict[str, dict[str, float]] = {}
+    for group in groups:
+        col = clipped[group].dropna()
+        if not col.empty:
+            result[str(group)] = col.to_dict()
 
     return result
 
@@ -114,54 +112,104 @@ def add_food_group_buses_and_loads(
     """
 
     countries_index = pd.Index(countries, dtype="object")
+    pop_values = population.loc[countries].values
+
+    # Batch all store names/buses/carriers/metadata across groups
+    all_store_names = []
+    all_store_buses = []
+    all_store_carriers = []
+    all_store_e_nom_max = []
+    all_store_countries = []
+    all_store_food_groups = []
+
+    all_pos_gen_names = []
+    all_pos_gen_buses = []
+    all_pos_gen_carriers = []
+    all_pos_gen_countries = []
+    all_pos_gen_food_groups = []
+
+    all_neg_gen_names = []
+    all_neg_gen_buses = []
+    all_neg_gen_carriers = []
+    all_neg_gen_countries = []
+    all_neg_gen_food_groups = []
 
     logger.info("Adding food group stores for nutrition requirements...")
     for group in food_group_list:
         buses = "group:" + group + ":" + countries_index
-        carriers = f"group_{group}"
+        carrier = f"group_{group}"
 
         # Compute e_nom_max from per-capita cap if specified
         # Convert g/person/day -> Mt/year: cap_g * pop * 365 / 1e12
         if max_per_capita and group in max_per_capita:
             cap_g = max_per_capita[group]
-            e_nom_max_values = cap_g * population.loc[countries].values * 365 / 1e12
+            e_nom_max_values = cap_g * pop_values * 365 / 1e12
         else:
-            e_nom_max_values = np.inf
+            e_nom_max_values = np.full(len(countries), np.inf)
 
         store_names = "store:group:" + group + ":" + countries_index
-        n.stores.add(
-            store_names,
-            bus=buses,
-            carrier=carriers,
-            e_nom_extendable=True,
-            e_nom_max=e_nom_max_values,
-            country=countries,
-            food_group=group,
-        )
+
+        all_store_names.extend(store_names)
+        all_store_buses.extend(buses)
+        all_store_carriers.extend([carrier] * len(countries))
+        all_store_e_nom_max.extend(e_nom_max_values)
+        all_store_countries.extend(countries)
+        all_store_food_groups.extend([group] * len(countries))
 
         if add_slack_for_fixed_consumption:
             n.carriers.add("slack_positive_group_" + group, unit="Mt")
             n.carriers.add("slack_negative_group_" + group, unit="Mt")
-            n.generators.add(
-                "slack:group_positive:" + group + ":" + countries_index,
-                bus=buses,
-                carrier=f"slack_positive_group_{group}",
-                p_nom_extendable=True,
-                marginal_cost=slack_marginal_cost,
-                country=countries,
-                food_group=group,
+
+            pos_names = "slack:group_positive:" + group + ":" + countries_index
+            neg_names = "slack:group_negative:" + group + ":" + countries_index
+
+            all_pos_gen_names.extend(pos_names)
+            all_pos_gen_buses.extend(buses)
+            all_pos_gen_carriers.extend(
+                [f"slack_positive_group_{group}"] * len(countries)
             )
-            n.generators.add(
-                "slack:group_negative:" + group + ":" + countries_index,
-                bus=buses,
-                carrier=f"slack_negative_group_{group}",
-                p_nom_extendable=True,
-                p_min_pu=-1.0,
-                p_max_pu=0.0,
-                marginal_cost=-slack_marginal_cost,
-                country=countries,
-                food_group=group,
+            all_pos_gen_countries.extend(countries)
+            all_pos_gen_food_groups.extend([group] * len(countries))
+
+            all_neg_gen_names.extend(neg_names)
+            all_neg_gen_buses.extend(buses)
+            all_neg_gen_carriers.extend(
+                [f"slack_negative_group_{group}"] * len(countries)
             )
+            all_neg_gen_countries.extend(countries)
+            all_neg_gen_food_groups.extend([group] * len(countries))
+
+    n.stores.add(
+        all_store_names,
+        bus=all_store_buses,
+        carrier=all_store_carriers,
+        e_nom_extendable=True,
+        e_nom_max=all_store_e_nom_max,
+        country=all_store_countries,
+        food_group=all_store_food_groups,
+    )
+
+    if all_pos_gen_names:
+        n.generators.add(
+            all_pos_gen_names,
+            bus=all_pos_gen_buses,
+            carrier=all_pos_gen_carriers,
+            p_nom_extendable=True,
+            marginal_cost=slack_marginal_cost,
+            country=all_pos_gen_countries,
+            food_group=all_pos_gen_food_groups,
+        )
+        n.generators.add(
+            all_neg_gen_names,
+            bus=all_neg_gen_buses,
+            carrier=all_neg_gen_carriers,
+            p_nom_extendable=True,
+            p_min_pu=-1.0,
+            p_max_pu=0.0,
+            marginal_cost=-slack_marginal_cost,
+            country=all_neg_gen_countries,
+            food_group=all_neg_gen_food_groups,
+        )
 
 
 def add_macronutrient_loads(
@@ -181,11 +229,12 @@ def add_macronutrient_loads(
 
     logger.info("Adding macronutrient stores and constraints per country...")
 
+    countries_index = pd.Index(countries, dtype="object")
     for nutrient in all_nutrients:
-        buses = [f"nutrient:{nutrient}:{c}" for c in countries]
+        buses = "nutrient:" + nutrient + ":" + countries_index
         carriers = nutrient
 
-        store_names = [f"store:nutrient:{nutrient}:{c}" for c in countries]
+        store_names = "store:nutrient:" + nutrient + ":" + countries_index
 
         n.stores.add(
             store_names,
@@ -231,46 +280,52 @@ def add_food_nutrition_links(
         n.carriers.add("food_consumption", unit="Mt")
 
     nutrients = list(nutrition.index.get_level_values("nutrient").unique())
+
+    # Pre-compute efficiency factors and the full efficiency matrix
+    nutrient_factors = {
+        nt: _nutrition_efficiency_factor(nutrient_units[nt]) for nt in nutrients
+    }
+    eff_matrix = (
+        nutrition.reset_index()
+        .pivot(index="food", columns="nutrient", values="value")
+        .reindex(index=consumable_foods, columns=nutrients)
+        .fillna(0.0)
+    )
+    for nutrient in nutrients:
+        eff_matrix[nutrient] *= nutrient_factors[nutrient]
+
+    countries_index = pd.Index(countries, dtype="object")
+
+    # Food bus flows are Mt/year, so efficiencies below represent nutrient fractions.
     for food in consumable_foods:
-        group_val = food_to_group.get(food, None)
-        names = [f"consume:{food}:{c}" for c in countries]
-        bus0 = [f"food:{food}:{c}" for c in countries]
+        group_val = food_to_group.get(food)
+        has_group = group_val is not None and pd.notna(group_val)
 
-        # macronutrient outputs
-        out_bus_lists = []
-        eff_values = []
-        for _i, nutrient in enumerate(nutrients, start=1):
-            unit = nutrient_units[nutrient]
-            factor = _nutrition_efficiency_factor(unit)
-            out_bus_lists.append([f"nutrient:{nutrient}:{c}" for c in countries])
-            eff_val = (
-                float(nutrition.loc[(food, nutrient), "value"])
-                if (food, nutrient) in nutrition.index
-                else 0.0
-            )
-            eff_values.append(eff_val * factor)
+        names = list("consume:" + food + ":" + countries_index)
+        bus0 = list("food:" + food + ":" + countries_index)
 
-        # Food bus flows are Mt/year, so efficiencies below represent nutrient fractions.
         params = {
             "bus0": bus0,
             "carrier": "food_consumption",
             "marginal_cost": _LOW_DEFAULT_MARGINAL_COST,
         }
-        for i, buses in enumerate(out_bus_lists, start=1):
-            params[f"bus{i}"] = buses
+
+        # macronutrient outputs
+        for i, nutrient in enumerate(nutrients, start=1):
+            params[f"bus{i}"] = list("nutrient:" + nutrient + ":" + countries_index)
             eff_key = "efficiency" if i == 1 else f"efficiency{i}"
-            params[eff_key] = eff_values[i - 1]
+            params[eff_key] = eff_matrix.at[food, nutrient]
 
         # optional food group output as last leg
-        if group_val is not None and pd.notna(group_val):
+        if has_group:
             idx = len(nutrients) + 1
-            params[f"bus{idx}"] = [f"group:{group_val}:{c}" for c in countries]
+            params[f"bus{idx}"] = list("group:" + group_val + ":" + countries_index)
             params[f"efficiency{idx}"] = 1.0
 
         # Add metadata attributes
         params["food"] = food
         params["country"] = countries
-        if group_val is not None and pd.notna(group_val):
+        if has_group:
             params["food_group"] = group_val
 
         n.links.add(names, p_nom_extendable=True, **params)
