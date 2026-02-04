@@ -103,8 +103,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title("Health Clusters", fontsize=FONT_SIZES["title"], pad=10)
-
     # Add text annotation with cluster count
     ax.text(
         0.02,

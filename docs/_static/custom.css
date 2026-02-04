@@ -13,3 +13,24 @@
 .sidebar-brand {
     text-align: center;
 }
+
+/* Give figures a card-like appearance */
+figure {
+    border: 2px solid var(--color-background-border);
+    border-radius: 4px;
+    padding: 0.8em;
+    margin: 1.5em 0;
+}
+
+/* Ensure spacing between consecutive figures */
+figure + figure {
+    margin-top: 2em;
+}
+
+/* Style figure captions to stand apart from body text */
+figcaption p {
+    font-size: 0.88em;
+    color: var(--color-foreground-secondary);
+    border-top: 1px solid var(--color-background-border);
+    padding-top: 0.5em;
+}

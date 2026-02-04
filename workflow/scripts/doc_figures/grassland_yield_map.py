@@ -118,10 +118,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        "Managed Grassland Yield Potential", fontsize=FONT_SIZES["title"], pad=10
-    )
-
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, fraction=0.046)
     cbar.set_label(

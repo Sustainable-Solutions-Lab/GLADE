@@ -122,14 +122,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    # Format crop name for title
-    crop_display_name = crop_name.replace("-", " ").title()
-    ax.set_title(
-        f"{crop_display_name} Yield Potential (Rainfed)",
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-    )
-
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.05, fraction=0.046)
     cbar.set_label("Yield (tonnes/hectare)", fontsize=FONT_SIZES["colorbar_label"])

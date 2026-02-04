@@ -74,12 +74,6 @@ def main(regions_path: str, svg_output_path: str, png_output_path: str):
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        "Global Model Coverage and Regional Aggregation",
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-    )
-
     # Add text annotation with region count
     n_regions = len(regions)
     ax.text(

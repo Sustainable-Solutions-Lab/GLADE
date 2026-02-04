@@ -122,10 +122,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        "Diet-attributable disease burden", fontsize=FONT_SIZES["title"], pad=10
-    )
-
     # Colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])

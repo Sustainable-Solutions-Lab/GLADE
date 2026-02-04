@@ -97,11 +97,6 @@ Utility Modules
 Visualization Scripts
 ---------------------
 
-.. automodule:: workflow.scripts.plotting.plot_results
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 .. automodule:: workflow.scripts.plotting.plot_regions_map
    :members:
    :undoc-members:

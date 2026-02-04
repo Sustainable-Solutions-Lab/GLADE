@@ -99,12 +99,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        "Growing Season Water Availability by Region",
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-    )
-
     # Add colorbar
     sm = plt.cm.ScalarMappable(
         cmap=COLORMAPS["water"],

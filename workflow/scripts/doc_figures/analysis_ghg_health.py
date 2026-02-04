@@ -157,12 +157,6 @@ def plot_ghg_bar(
     ax.set_xlabel(
         r"GHG intensity (kg CO$_2$eq / kg food)", fontsize=FONT_SIZES["label"]
     )
-    ax.set_title(
-        "Global average GHG intensity by food group\n(consumption-weighted)",
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-    )
-
     # Style
     ax.grid(axis="x", alpha=0.3, linestyle="--")
     ax.axvline(0, color="black", linewidth=0.8)
@@ -225,13 +219,6 @@ def plot_yll_bar(
     ax.set_yticks(range(len(groups)))
     ax.set_yticklabels(labels, fontsize=FONT_SIZES["tick"])
     ax.set_xlabel("Health impact (YLL / kg food)", fontsize=FONT_SIZES["label"])
-    ax.set_title(
-        "Global average health impact by food group\n"
-        "(consumption-weighted; negative = protective)",
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-    )
-
     # Style
     ax.grid(axis="x", alpha=0.3, linestyle="--")
     ax.axvline(0, color="black", linewidth=0.8)

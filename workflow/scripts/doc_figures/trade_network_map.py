@@ -251,10 +251,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        f"Trade Network ({n_hubs_actual} Hubs)", fontsize=FONT_SIZES["title"], pad=10
-    )
-
     # Add legend
     from matplotlib.lines import Line2D
 

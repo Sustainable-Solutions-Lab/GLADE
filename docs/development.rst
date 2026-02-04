@@ -45,6 +45,7 @@ Installation
    See `prek <https://github.com/j178/prek>`_ for details. You can also use pre-commit.
 
    Hooks are defined in ``.pre-commit-config.yaml``.
+
 Code Conventions
 ----------------
 

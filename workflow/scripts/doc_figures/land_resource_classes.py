@@ -198,17 +198,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    # Add title
-    region_name = example_region.get("region", "Example Region")
-    country_name = example_region.get("country", "")
-    title_text = f"Resource Class Stratification: {country_name} {region_name}"
-    ax.set_title(
-        title_text,
-        fontsize=FONT_SIZES["title"],
-        pad=10,
-        weight="bold",
-    )
-
     # Add categorical colorbar
     cbar = plt.colorbar(
         im,

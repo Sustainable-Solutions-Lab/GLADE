@@ -117,10 +117,6 @@ def main(
         else:
             spine.set_visible(False)
 
-    ax.set_title(
-        "Annual Blue Water Availability by Basin", fontsize=FONT_SIZES["title"], pad=10
-    )
-
     # Add colorbar
     sm = plt.cm.ScalarMappable(
         cmap=COLORMAPS["water"],

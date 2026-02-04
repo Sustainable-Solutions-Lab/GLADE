@@ -101,44 +101,48 @@ specific items (crops, foods, products) are stored in metadata columns.
   - ``biomass_byproduct``: Byproduct to biomass (use ``food`` column)
   - ``fertilizer_distribution``: Fertilizer distribution
   - ``emission_aggregation``: GHG emission aggregation
-  - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``,
-    ``marginal_to_pasture``, ``spare_land``, ``spare_marginal``, ``residue_incorporation``
+  - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``, ``marginal_to_pasture``, ``spare_land``, ``spare_marginal``, ``residue_incorporation``
 
 Custom Columns
 --------------
 
 All components have consistent domain-specific columns for filtering:
 
-**Buses**:
-    - ``country``: str | NaN - country code (NaN for global/regional)
-    - ``region``: str | NaN - region name (for land/water buses)
+- **Buses**:
 
-**Links**:
-    - ``country``: str | NaN - country code
-    - ``region``: str | NaN - region name
-    - ``crop``: str | NaN - crop name
-    - ``food``: str | NaN - food name
-    - ``food_group``: str | NaN - food group name
-    - ``product``: str | NaN - animal product name
-    - ``feed_category``: str | NaN - feed category
-    - ``resource_class``: int | NaN - land quality class
-    - ``water_supply``: str | NaN - "irrigated" or "rainfed"
+  - ``country``: str | NaN - country code (NaN for global/regional)
+  - ``region``: str | NaN - region name (for land/water buses)
 
-**Stores**:
-    - ``country``: str | NaN - country code
-    - ``food_group``: str | NaN - food group name
-    - ``nutrient``: str | NaN - nutrient name
+- **Links**:
 
-**Generators**:
-    - ``country``: str | NaN - country code
-    - ``region``: str | NaN - region name
+  - ``country``: str | NaN - country code
+  - ``region``: str | NaN - region name
+  - ``crop``: str | NaN - crop name
+  - ``food``: str | NaN - food name
+  - ``food_group``: str | NaN - food group name
+  - ``product``: str | NaN - animal product name
+  - ``feed_category``: str | NaN - feed category
+  - ``resource_class``: int | NaN - land quality class
+  - ``water_supply``: str | NaN - "irrigated" or "rainfed"
 
-**Global Constraints**:
-    - ``country``: str | NaN - country code
-    - ``food_group``: str | NaN - food group name
-    - ``nutrient``: str | NaN - nutrient name
-    - ``product``: str | NaN - product name
-    - ``crop``: str | NaN - crop name
+- **Stores**:
+
+  - ``country``: str | NaN - country code
+  - ``food_group``: str | NaN - food group name
+  - ``nutrient``: str | NaN - nutrient name
+
+- **Generators**:
+
+  - ``country``: str | NaN - country code
+  - ``region``: str | NaN - region name
+
+- **Global Constraints**:
+
+  - ``country``: str | NaN - country code
+  - ``food_group``: str | NaN - food group name
+  - ``nutrient``: str | NaN - nutrient name
+  - ``product``: str | NaN - product name
+  - ``crop``: str | NaN - crop name
 
 Accessing Components
 --------------------
