@@ -28,6 +28,7 @@ Provide clear expectations and a safe, efficient workflow so agents can make sma
 - `processing/`: Intermediate datasets that feed the modeled workflow.
 - `notebooks/`: Exploratory analyses and sanity-check visualisations.
 - `results/`: Auto-generated artifacts organized as `results/{config_name}/`; never hand-edit. Rerun the relevant target instead.
+- `tests/`: pytest integration tests using the Snakemake Python API; run via `pixi run -e dev test`.
 - `vendor/`: Custom branches of PyPSA and linopy for reference, though not used as local dependencies.
 
 ## Model Structure
@@ -233,6 +234,38 @@ Notes:
 - Retrieval / downloading rules and scripts make network calls; when running such rules you will need to ask for permission to run outside the sandbox in order to get network access.
 - Never rerun retrieval rules without explicitly being instructed to do so. This includes implicit calls like an indiscriminate use of the `--forceall` Snakemake argument.
 
+## Testing
+
+Integration tests live in `tests/` and use pytest with the Snakemake Python API. They exercise the full workflow pipeline using a lightweight configuration (`config/test.yaml`) with reduced spatial resolution and a small crop subset, outputting to `results/test/`.
+
+### Test Configuration
+
+- **`config/test.yaml`**: 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Overrides `default.yaml`.
+- **`config/test_scenarios.yaml`**: Two scenarios (`default` and `G`) — enough to exercise the scenario mechanism and GHG pricing.
+
+### Running Tests
+
+```bash
+pixi run -e dev test              # all tests
+pixi run -e dev test-integration  # dryrun + build/solve/analysis only
+pixi run -e dev test-no-plots     # skip plot generation tests
+pixi run -e dev pytest -v         # verbose output
+```
+
+### Test Markers
+
+| Marker | Description |
+|--------|-------------|
+| `integration` | Full Snakemake workflow tests (dryrun + build/solve/analysis) |
+| `plots` | Figure generation tests (optional, slower) |
+
+### Notes
+
+- The **dryrun test** (`test_workflow_dryrun`) validates full DAG construction with `forceall=True` without executing anything — it does not require credentials or data.
+- The **execution test** (`test_build_solve_analyze`) runs the actual pipeline and requires USDA/ECMWF credentials for data downloads on first run.
+- Tests never delete `results/test/` or `.snakemake/`; Snakemake detects up-to-date outputs and skips them automatically. Subsequent runs are near-instant when code hasn't changed.
+- New unit tests go in `tests/test_*.py` alongside integration tests.
+
 ## Repository Conventions
 
 - Scripts used by the workflow live in `workflow/scripts/`.
@@ -353,6 +386,7 @@ tools/update-figure-refs --to-remote  # Switch back before committing
 ## Validation Checklist
 
 - Narrow target runs clean via Snakemake for at least one `config_name`.
+- Integration tests pass: `pixi run -e dev test-integration` (at minimum, the dryrun test should pass).
 - No new linter errors; no unused imports.
 - Results land under the expected `results/{config_name}/...` path(s).
 - Documentation updated when changing user-visible behavior (check `docs/*.rst` for relevant sections).

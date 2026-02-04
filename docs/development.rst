@@ -154,6 +154,68 @@ When adding new configuration options:
 
 For more information on JSON Schema syntax, see https://json-schema.org/understanding-json-schema/.
 
+Testing
+-------
+
+The project uses **pytest** for integration testing via the Snakemake Python API. Tests live in ``tests/`` and exercise the full workflow pipeline using a lightweight configuration with reduced spatial resolution.
+
+Test Configuration
+~~~~~~~~~~~~~~~~~~
+
+Two dedicated config files drive the test suite:
+
+* **``config/test.yaml``**: Minimal overrides on top of ``default.yaml`` — 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Outputs to ``results/test/``.
+* **``config/test_scenarios.yaml``**: Two scenarios (``default`` and ``G``) to exercise the scenario mechanism and GHG pricing code path.
+
+Running Tests
+~~~~~~~~~~~~~
+
+Tests require the ``dev`` environment::
+
+    pixi run -e dev test              # all tests
+    pixi run -e dev test-integration  # dryrun + build/solve/analysis
+    pixi run -e dev test-no-plots     # skip figure generation tests
+    pixi run -e dev pytest -v         # verbose output
+
+Test Markers
+~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Marker
+     - Description
+   * - ``integration``
+     - Full Snakemake workflow tests (DAG dryrun + build/solve/analysis)
+   * - ``plots``
+     - Figure generation tests (optional, slower)
+
+How It Works
+~~~~~~~~~~~~
+
+Tests call a shared helper ``run_snakemake_target()`` in ``tests/conftest.py`` that invokes the Snakemake Python API directly (no subprocess). The helper layers ``config/test.yaml`` on top of ``config/default.yaml`` and targets specific output files.
+
+* **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing anything. Does not require credentials or downloaded data. Catches missing inputs, broken rules, and invalid wildcard patterns.
+* **Execution test** (``test_build_solve_analyze``): Runs the actual pipeline through analysis for the default scenario. Requires USDA/ECMWF credentials for data downloads on first run.
+* **Plot test** (``test_plots``): Generates representative plots from solved model outputs.
+
+Tests never delete ``results/test/`` or ``.snakemake/``; Snakemake detects up-to-date outputs and skips them automatically, so subsequent runs are near-instant when code hasn't changed.
+
+Writing New Tests
+~~~~~~~~~~~~~~~~~
+
+Add new test files as ``tests/test_*.py``. Use the ``run_snakemake_target()`` helper for workflow-level tests and standard pytest patterns for unit tests::
+
+    # tests/test_my_feature.py
+    import pytest
+    from conftest import run_snakemake_target, RESULTS_DIR
+
+    @pytest.mark.integration
+    def test_my_new_output():
+        run_snakemake_target("results/test/analysis/scen-default/my_output.csv")
+        assert (RESULTS_DIR / "analysis" / "scen-default" / "my_output.csv").exists()
+
 Repository Structure
 --------------------
 
@@ -165,6 +227,7 @@ Repository Structure
     ├── docs/                # Documentation (Sphinx)
     ├── processing/          # Intermediate outputs (not committed)
     ├── results/             # Model results (not committed)
+    ├── tests/               # pytest integration tests
     ├── workflow/            # Snakemake workflow
     │   ├── Snakefile        # Main workflow definition
     │   ├── rules/           # Modular rule files
@@ -343,9 +406,10 @@ Before Submitting a Pull Request
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Run linter**: ``pixi run --environment dev ruff check . && pixi run --environment dev ruff format .`` (this is taken care of automatically if you set up ``prek``)
-2. **Test workflow**: Verify that the default configuration runs successfully
-3. **Update documentation**: If changing user-facing behavior
-4. **Write commit messages**: Descriptive and following conventions
+2. **Run tests**: ``pixi run -e dev test-integration`` (at minimum the dryrun test should pass)
+3. **Test workflow**: Verify that the default configuration runs successfully
+4. **Update documentation**: If changing user-facing behavior
+5. **Write commit messages**: Descriptive and following conventions
 
 Pull Request Process
 ~~~~~~~~~~~~~~~~~~~~~

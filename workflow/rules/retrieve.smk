@@ -21,7 +21,7 @@ rule extract_adm1:
     input:
         zip="data/downloads/gadm_410-levels.zip",
     output:
-        protected("data/downloads/gadm.gpkg"),
+        "data/downloads/gadm.gpkg",
     log:
         "logs/shared/extract_adm1.log",
     shell:
@@ -465,7 +465,7 @@ rule extract_huang_irrigation_water:
     input:
         "data/downloads/huang_irrigation_water_v2.7z",
     output:
-        protected("data/downloads/huang_irrigation_water.nc"),
+        "data/downloads/huang_irrigation_water.nc",
     params:
         filename="withd_irr_watergap.nc",
     log:
@@ -482,7 +482,7 @@ rule extract_huang_irrigation_water:
 
 rule download_fao_nutrient_conversion_table:
     output:
-        protected("data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx"),
+        "data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx",
     params:
         url="https://www.fao.org/3/CC9678EN/Nutrient_conversion_table_for_SUA_2024.xlsx",
     log:
@@ -528,7 +528,7 @@ rule extract_land_cover_class:
     input:
         "data/downloads/land_cover.zip",
     output:
-        protected("data/downloads/land_cover_lccs_class.nc"),
+        "data/downloads/land_cover_lccs_class.nc",
     log:
         "logs/shared/extract_land_cover_class.log",
     script:
@@ -537,7 +537,7 @@ rule extract_land_cover_class:
 
 rule download_biomass_cci:
     output:
-        protected("data/downloads/esa_biomass_cci_v6_0.nc"),
+        "data/downloads/esa_biomass_cci_v6_0.nc",
     params:
         url="https://dap.ceda.ac.uk/neodc/esacci/biomass/data/agb/maps/v6.0/netcdf/ESACCI-BIOMASS-L4-AGB-MERGED-10000m-fv6.0.nc?download=1",
     log:
@@ -551,7 +551,7 @@ rule download_biomass_cci:
 
 rule download_soilgrids_ocs:
     output:
-        protected("data/downloads/soilgrids_ocs_0-30cm_mean.tif"),
+        "data/downloads/soilgrids_ocs_0-30cm_mean.tif",
     params:
         coverage_id="ocs_0-30cm_mean",
         target_resolution_m=config["data"]["soilgrids"]["target_resolution_m"],

@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Minimal test configuration for pytest integration tests.
+# Inherits from default.yaml but uses reduced resolution for fast execution.
+
+name: "test"
+
+scenario_defs: "config/test_scenarios.yaml"
+
+aggregation:
+  regions:
+    target_count: 200
+  resource_class_quantiles: [0.5]
+  irrigated_area_source: "current"
+
+trade:
+  crop_hubs: 14
+  food_hubs: 14
+  feed_hubs: 14
+
+crops:
+  - wheat
+  - maize
+  - soybean
+  - groundnut
+  - rapeseed
+  - white-potato
+  - tomato
+  - banana
+  - sugarcane

@@ -13,7 +13,7 @@ and crop residue processing.
 rule prepare_fao_edible_portion:
     input:
         table="data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx",
-        mapping="data/faostat_item_map.csv",
+        mapping="data/faostat_crop_item_map.csv",
     params:
         crops=config["crops"],
     output:

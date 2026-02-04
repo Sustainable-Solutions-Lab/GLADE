@@ -95,6 +95,7 @@ make = ">=4.4,<5"                    # Build tool for Sphinx Makefile
 
 [feature.dev.pypi-dependencies]
 snakefmt = ">=0.11.2, <0.12"         # Snakemake code formatter
+pytest = ">=8.0.0, <9"              # Test framework
 
 [activation.env]
 # Enable new PyPSA components API globally
@@ -108,6 +109,11 @@ lint = { cmd = "ruff check ." }
 format = { cmd = "ruff format ." }
 
 [feature.dev.tasks]
+# Testing tasks
+test = { cmd = "pytest" }
+test-integration = { cmd = "pytest -m integration" }
+test-no-plots = { cmd = "pytest -m 'not plots'" }
+
 # Formatting tasks
 format-snakemake = { cmd = "snakefmt workflow/" }
 format-all = { depends-on = ["format", "format-snakemake"] }

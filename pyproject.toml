@@ -22,3 +22,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["workflow*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: full Snakemake workflow integration tests",
+    "plots: figure generation tests (optional, slow)",
+]
