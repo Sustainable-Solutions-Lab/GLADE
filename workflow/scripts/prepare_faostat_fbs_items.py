@@ -24,44 +24,15 @@ import logging
 import pandas as pd
 
 from workflow.scripts.faostat_bulk import (
+    FBS_COUNTRY_FALLBACKS,
     add_iso3_column,
     filter_bulk,
-    get_element_map,
     load_bulk_csv,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
-
-# Proxy mapping for missing countries
-FALLBACK_MAPPING = {
-    "ASM": ["WSM", "USA"],  # American Samoa -> Samoa / USA
-    "BEN": ["TGO", "BFA", "NGA"],  # Benin -> Togo / Burkina Faso / Nigeria
-    "BRN": ["MYS", "SGP"],  # Brunei -> Malaysia
-    "BTN": ["NPL", "IND"],  # Bhutan -> Nepal
-    "CAF": ["TCD", "CMR", "COG"],  # Central African Republic -> Chad / Cameroon / Congo
-    "ERI": ["ETH"],  # Eritrea -> Ethiopia
-    "GNQ": ["GAB", "CMR"],  # Eq. Guinea -> Gabon
-    "GUF": ["GUY", "SUR", "FRA"],  # Fr. Guiana
-    "PRI": ["USA", "DOM"],  # Puerto Rico
-    "PSE": ["JOR", "ISR"],  # Palestine
-    "SDN": ["EGY", "ETH"],  # Sudan -> Egypt / Ethiopia
-    "SSD": ["SDN", "ETH"],  # South Sudan
-    "SOM": ["ETH"],  # Somalia
-    "TWN": ["CHN"],  # Taiwan
-    "XKX": ["SRB", "ALB"],  # Kosovo
-    "ESH": ["MAR", "MRT"],  # Western Sahara
-    "JPN": ["KOR", "CHN"],  # Japan -> South Korea / China
-    "MLI": ["SEN", "BFA", "NER"],  # Mali -> Senegal / Burkina Faso / Niger
-    "BDI": ["RWA", "TZA"],  # Burundi
-    "COD": ["COG", "AGO"],  # DR Congo
-    "SYR": ["JOR", "LBN"],  # Syria
-    "TCD": ["SDN", "NER", "CMR"],  # Chad -> Sudan / Niger / Cameroon
-    "TGO": ["GHA", "BFA"],  # Togo -> Ghana / Burkina Faso
-    "VEN": ["COL", "BRA"],  # Venezuela
-    "YEM": ["OMN", "SAU"],  # Yemen
-}
 
 
 def main():
@@ -85,18 +56,7 @@ def main():
     logger.info("Loading FAOSTAT FBS bulk CSV")
     bulk = load_bulk_csv(fbs_csv)
 
-    # Find element code for food supply quantity
-    element_map = get_element_map(bulk)
-    elem_code = None
-    for label, code in element_map.items():
-        if "food supply quantity" in label.lower() and "kg" in label.lower():
-            elem_code = code
-            break
-    if elem_code is None:
-        logger.warning(
-            "Element 'Food supply quantity (kg/capita/yr)' not found. Using 645."
-        )
-        elem_code = "645"
+    elem_code = str(snakemake.params.fbs_element_code)
 
     # Add ISO3 column
     m49_to_iso3 = load_m49_to_iso3(m49_codes)
@@ -104,7 +64,7 @@ def main():
 
     # Include proxy countries in the filter so we can use them as fallbacks
     all_proxies = set()
-    for proxies in FALLBACK_MAPPING.values():
+    for proxies in FBS_COUNTRY_FALLBACKS.values():
         all_proxies.update(proxies)
     filter_countries = list(set(countries) | all_proxies)
 
@@ -128,9 +88,9 @@ def main():
 
     df["country"] = df["iso3"].astype(str).str.upper()
     df["supply_kg_per_capita_year"] = df["Value"].fillna(0.0)
-    df["item_code"] = (
-        pd.to_numeric(df["Item Code"], errors="coerce").fillna(0).astype(int)
-    )
+    df["item_code"] = pd.to_numeric(df["Item Code"], errors="coerce")
+    df = df.dropna(subset=["item_code"])
+    df["item_code"] = df["item_code"].astype(int)
     df["item_name"] = df["Item"].astype(str)
 
     # Build result DataFrame
@@ -150,7 +110,7 @@ def main():
 
         proxy_rows = []
         for iso in missing:
-            proxies = FALLBACK_MAPPING.get(iso, [])
+            proxies = FBS_COUNTRY_FALLBACKS.get(iso, [])
             filled = False
             for proxy in proxies:
                 proxy_data = results[results["country"] == proxy]
@@ -162,11 +122,11 @@ def main():
                     filled = True
                     break
             if not filled:
-                available_proxies = ", ".join(FALLBACK_MAPPING.get(iso, []))
+                available_proxies = ", ".join(FBS_COUNTRY_FALLBACKS.get(iso, []))
                 raise ValueError(
                     f"Missing FAOSTAT FBS data for country {iso}. "
                     f"Attempted proxies ({available_proxies}) had no data. "
-                    f"Please add valid proxy countries to FALLBACK_MAPPING."
+                    f"Please add valid proxy countries to FBS_COUNTRY_FALLBACKS."
                 )
 
         if proxy_rows:

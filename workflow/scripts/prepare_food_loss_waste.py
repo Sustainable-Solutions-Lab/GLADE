@@ -4,11 +4,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """
-Retrieve and process SDG 12.3.1 food loss and waste data from UNSD API.
+Process SDG 12.3.1 food loss and waste data from UNSD bulk CSV.
 
-Queries the UN Statistics Division API for:
-- SDG 12.3.1(a): Food loss percentage by country and product type
-- SDG 12.3.1(b): Food waste per capita by country and sector
+Reads pre-filtered bulk CSV from the UNSD SDG Indicators Database for:
+- SDG 12.3.1(a): Food loss percentage by country and product type (AG_FLS_PCT)
+- SDG 12.3.1(b): Food waste per capita by country and sector (AG_FOOD_WST_PC)
 
 Maps UN SDG food categories to internal model food groups, and converts
 food waste from kg/person/year to fractions relative to food supply.
@@ -17,6 +17,7 @@ For dairy specifically, the SDG "animal products" loss rate is too high,
 so we calculate implicit loss from FAOSTAT production vs food supply data.
 
 Input:
+    - SDG bulk CSV (pre-filtered to food loss/waste series)
     - M49 codes (for regional mapping)
     - FAOSTAT animal production data (for dairy loss calculation)
     - FAOSTAT food supply data (for dairy loss calculation)
@@ -33,12 +34,10 @@ import sys
 
 import pandas as pd
 import pycountry
-import requests
 
 from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
-    get_element_map,
     load_bulk_csv,
     load_m49_to_iso3,
 )
@@ -133,51 +132,26 @@ def iso3_to_m49(iso3: str) -> str | None:
         return None
 
 
-def query_unsd_series(series_code: str) -> pd.DataFrame:
-    """Query UNSD SDG API for a given series code with pagination support.
+def load_sdg_series(csv_path: str, series_code: str) -> pd.DataFrame:
+    """Load a specific SDG series from the pre-filtered bulk CSV.
 
     Args:
+        csv_path: Path to the extracted SDG CSV (filtered to food loss/waste series)
         series_code: UNSD series code (e.g., "AG_FLS_PCT")
 
     Returns:
         DataFrame with all observations for the series
     """
-    url = "https://unstats.un.org/sdgapi/v1/sdg/Series/Data"
-    all_data = []
-    page = 1
+    logger.info("Loading SDG series %s from %s", series_code, csv_path)
 
-    logger.info("Querying UNSD API: %s", series_code)
+    df = pd.read_csv(csv_path, low_memory=False)
+    df = df[df["SeriesCode"] == series_code].copy()
 
-    while True:
-        params = {"seriesCode": series_code, "page": page}
-
-        try:
-            response = requests.get(url, params=params, timeout=60)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logger.error("Failed to query UNSD API for %s: %s", series_code, e)
-            sys.exit(1)
-
-        data = response.json()
-
-        if "data" not in data or not data["data"]:
-            break
-
-        all_data.extend(data["data"])
-
-        # Check if we have all pages
-        total_pages = data.get("totalPages", 1)
-        if page >= total_pages:
-            break
-
-        page += 1
-
-    if not all_data:
-        logger.error("No data returned for series %s", series_code)
+    if df.empty:
+        logger.error("No data found for series %s in %s", series_code, csv_path)
         sys.exit(1)
 
-    df = pd.DataFrame(all_data)
-    logger.info("Retrieved %d observations for %s", len(df), series_code)
+    logger.info("Loaded %d observations for %s", len(df), series_code)
 
     return df
 
@@ -202,19 +176,17 @@ def process_food_loss_data(
     Returns:
         DataFrame with columns: country, food_group, loss_fraction, year
     """
-    # Extract product type from dimensions
-    df["product_type"] = df["dimensions"].apply(
-        lambda x: x.get("Type of product") if isinstance(x, dict) else None
-    )
+    # Product type is a direct column in the bulk CSV
+    df["product_type"] = df["Type of product"]
 
     # Parse year and value
-    df["year"] = pd.to_numeric(df["timePeriodStart"], errors="coerce")
-    df["value_numeric"] = pd.to_numeric(df["value"], errors="coerce")
+    df["year"] = pd.to_numeric(df["TimePeriod"], errors="coerce")
+    df["value_numeric"] = pd.to_numeric(df["Value"], errors="coerce")
 
     # Build lookup of available regional data: {region_code: {product_type: {year: value}}}
     regional_data = {}
     for _, row in df.iterrows():
-        region_code = str(row["geoAreaCode"])
+        region_code = str(row["GeoAreaCode"])
         product_type = row["product_type"]
         year = row["year"]
         value = row["value_numeric"]
@@ -261,7 +233,7 @@ def process_food_loss_data(
     # Derive world-level product correction factors for disaggregation
     global_shares: dict[str, float] = {}
     world_alp_value: float | None = None
-    world_data = df[df["geoAreaCode"].astype(str) == "1"]
+    world_data = df[df["GeoAreaCode"].astype(str) == "1"]
     if not world_data.empty:
         latest_world_year = world_data["year"].max()
         world_latest = world_data[world_data["year"] == latest_world_year]
@@ -366,6 +338,7 @@ def fetch_faostat_food_supply(
     reference_year: int,
     fbs_csv: str,
     m49_csv: str,
+    fbs_element_code: int | str,
 ) -> pd.DataFrame:
     """Read total food supply per capita from FAOSTAT FBS bulk CSV.
 
@@ -374,6 +347,7 @@ def fetch_faostat_food_supply(
         reference_year: Year for which to retrieve data
         fbs_csv: Path to extracted FAOSTAT FBS bulk CSV
         m49_csv: Path to M49 codes CSV for ISO3 mapping
+        fbs_element_code: FAOSTAT element code for food supply quantity
 
     Returns:
         DataFrame with columns: country (ISO3), food_supply_g_day
@@ -382,17 +356,7 @@ def fetch_faostat_food_supply(
 
     bulk = load_bulk_csv(fbs_csv)
 
-    # Find element code for food supply quantity
-    element_map = get_element_map(bulk)
-    elem_code = None
-    for label, code in element_map.items():
-        if "food supply quantity" in label.lower() and "kg" in label.lower():
-            elem_code = code
-            break
-    if elem_code is None:
-        raise RuntimeError(
-            "Element 'Food supply quantity (kg/capita/yr)' not found in FBS bulk data"
-        )
+    elem_code = str(fbs_element_code)
 
     # Add ISO3 column
     m49_to_iso3 = load_m49_to_iso3(m49_csv)
@@ -514,18 +478,16 @@ def process_food_waste_data(
         DataFrame with columns: country, food_group, waste_fraction, year
     """
     # Note: Data is classified as "Global" or "Estimated" reporting type but contains country-level estimates
-    # We'll match by geoAreaCode instead of filtering by Reporting Type
+    # We'll match by GeoAreaCode instead of filtering by Reporting Type
 
-    # Extract sector from dimensions
-    df["sector"] = df["dimensions"].apply(
-        lambda x: x.get("Food Waste Sector") if isinstance(x, dict) else None
-    )
+    # Sector is a direct column in the bulk CSV
+    df["sector"] = df["Food Waste Sector"]
 
     # Filter to "ALL" sector totals
     df_total = df[df["sector"] == "ALL"].copy()
 
-    df_total["year"] = pd.to_numeric(df_total["timePeriodStart"], errors="coerce")
-    df_total["waste_kg_year"] = pd.to_numeric(df_total["value"], errors="coerce")
+    df_total["year"] = pd.to_numeric(df_total["TimePeriod"], errors="coerce")
+    df_total["waste_kg_year"] = pd.to_numeric(df_total["Value"], errors="coerce")
 
     results = []
 
@@ -536,7 +498,7 @@ def process_food_waste_data(
             continue
 
         # Get waste data for this country using M49 code
-        country_waste = df_total[df_total["geoAreaCode"] == m49_code]
+        country_waste = df_total[df_total["GeoAreaCode"].astype(str) == str(m49_code)]
 
         if country_waste.empty:
             continue
@@ -717,13 +679,15 @@ def main():
     population = pd.read_csv(population_file)
 
     # Read FAOSTAT food supply data from bulk CSV
+    fbs_element_code = snakemake.params["fbs_element_code"]
     food_supply = fetch_faostat_food_supply(
-        countries, reference_year, fbs_csv, m49_file
+        countries, reference_year, fbs_csv, m49_file, fbs_element_code
     )
 
-    # Query UNSD API
-    loss_data = query_unsd_series("AG_FLS_PCT")
-    waste_data = query_unsd_series("AG_FOOD_WST_PC")
+    # Load SDG data from bulk CSV
+    sdg_csv = snakemake.input["sdg_csv"]
+    loss_data = load_sdg_series(sdg_csv, "AG_FLS_PCT")
+    waste_data = load_sdg_series(sdg_csv, "AG_FOOD_WST_PC")
 
     # Process food loss
     loss_df = process_food_loss_data(loss_data, countries, food_groups, m49_regions)

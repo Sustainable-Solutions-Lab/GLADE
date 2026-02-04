@@ -18,6 +18,7 @@ rule prepare_faostat_crop_production:
     params:
         countries=config["countries"],
         production_year=config["validation"]["production_year"],
+        qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "processing/{name}/faostat_crop_production.csv",
     log:

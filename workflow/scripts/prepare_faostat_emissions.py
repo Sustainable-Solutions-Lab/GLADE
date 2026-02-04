@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scripts.faostat_bulk import (
-    _int_str,
+    int_str,
     load_bulk_csv,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -46,15 +46,19 @@ if __name__ == "__main__":
     logger.info("Loading FAOSTAT GT bulk CSV")
     bulk = load_bulk_csv(gt_csv)
 
+    # Normalise code columns once for efficient filtering
+    for col in ["Area Code", "Item Code", "Element Code", "Year"]:
+        bulk[col] = bulk[col].map(int_str)
+
     # Filter for World (Area Code 5000), requested items, elements, and year
-    item_codes = {_int_str(c) for c in items.values()}
-    element_codes = {_int_str(c) for c in elements.values()}
+    item_codes = {int_str(c) for c in items.values()}
+    element_codes = {int_str(c) for c in elements.values()}
 
     mask = (
-        (bulk["Area Code"].map(_int_str) == "5000")
-        & (bulk["Item Code"].map(_int_str).isin(item_codes))
-        & (bulk["Element Code"].map(_int_str).isin(element_codes))
-        & (bulk["Year"].map(_int_str) == str(year))
+        (bulk["Area Code"] == "5000")
+        & bulk["Item Code"].isin(item_codes)
+        & bulk["Element Code"].isin(element_codes)
+        & (bulk["Year"] == str(year))
     )
     df = bulk.loc[mask].copy()
 

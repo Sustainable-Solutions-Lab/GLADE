@@ -28,9 +28,9 @@ import logging
 import pandas as pd
 
 from workflow.scripts.faostat_bulk import (
+    FBS_COUNTRY_FALLBACKS,
     add_iso3_column,
     filter_bulk,
-    get_element_map,
     load_bulk_csv,
     load_m49_to_iso3,
 )
@@ -64,35 +64,6 @@ AGE_GROUPS = [
     "All ages",
 ]
 
-# Proxy mapping for missing countries
-FALLBACK_MAPPING = {
-    "ASM": ["WSM", "USA"],
-    "BEN": ["TGO", "BFA", "NGA"],
-    "BRN": ["MYS", "SGP"],
-    "BTN": ["NPL", "IND"],
-    "CAF": ["TCD", "CMR", "COG"],
-    "ERI": ["ETH"],
-    "GNQ": ["GAB", "CMR"],
-    "GUF": ["GUY", "SUR", "FRA"],
-    "PRI": ["USA", "DOM"],
-    "PSE": ["JOR", "ISR"],
-    "SDN": ["EGY", "ETH"],
-    "SSD": ["SDN", "ETH"],
-    "SOM": ["ETH"],
-    "TWN": ["CHN"],
-    "XKX": ["SRB", "ALB"],
-    "ESH": ["MAR", "MRT"],
-    "JPN": ["KOR", "CHN"],
-    "MLI": ["SEN", "BFA", "NER"],
-    "BDI": ["RWA", "TZA"],
-    "COD": ["COG", "AGO"],
-    "SYR": ["JOR", "LBN"],
-    "TCD": ["SDN", "NER", "CMR"],
-    "TGO": ["GHA", "BFA"],
-    "VEN": ["COL", "BRA"],
-    "YEM": ["OMN", "SAU"],
-}
-
 
 def main():
     countries = snakemake.params.countries
@@ -105,18 +76,7 @@ def main():
     logger.info("Loading FAOSTAT FBS bulk CSV")
     bulk = load_bulk_csv(fbs_csv)
 
-    # Find element code for food supply quantity
-    element_map = get_element_map(bulk)
-    elem_code = None
-    for label, code in element_map.items():
-        if "food supply quantity" in label.lower() and "kg" in label.lower():
-            elem_code = code
-            break
-    if elem_code is None:
-        logger.warning(
-            "Element 'Food supply quantity (kg/capita/yr)' not found. Using 645."
-        )
-        elem_code = "645"
+    elem_code = str(snakemake.params.fbs_element_code)
 
     # Collect all item codes
     item_codes = []
@@ -129,13 +89,15 @@ def main():
 
     # Include proxy countries in the filter
     all_proxies = set()
-    for proxies in FALLBACK_MAPPING.values():
+    for proxies in FBS_COUNTRY_FALLBACKS.values():
         all_proxies.update(proxies)
     filter_countries = list(set(countries) | all_proxies)
 
     # Filter bulk data
     logger.info(
-        f"Filtering FAOSTAT FBS data for {len(countries)} countries, year {reference_year}"
+        "Filtering FAOSTAT FBS data for %d countries, year %s",
+        len(countries),
+        reference_year,
     )
     df = filter_bulk(
         bulk,
@@ -158,7 +120,7 @@ def main():
 
     # Process present countries
     present_countries = df["iso3"].unique()
-    logger.info(f"Processing data for {len(present_countries)} countries...")
+    logger.info("Processing data for %d countries...", len(present_countries))
 
     for country, group_df in df.groupby("iso3"):
         supplies = {}
@@ -199,7 +161,7 @@ def main():
     missing = set(countries) - set(present_countries)
     if missing:
         logger.info(
-            f"Attempting to fill {len(missing)} missing countries via proxies..."
+            "Attempting to fill %d missing countries via proxies...", len(missing)
         )
 
         # Build lookup
@@ -208,11 +170,11 @@ def main():
             data_by_country.setdefault(r["country"], []).append(r)
 
         for iso in missing:
-            proxies = FALLBACK_MAPPING.get(iso, [])
+            proxies = FBS_COUNTRY_FALLBACKS.get(iso, [])
             filled = False
             for proxy in proxies:
                 if proxy in data_by_country:
-                    logger.info(f"Filling {iso} using proxy {proxy}")
+                    logger.info("Filling %s using proxy %s", iso, proxy)
                     for row in data_by_country[proxy]:
                         new_row = row.copy()
                         new_row["country"] = iso
@@ -220,16 +182,16 @@ def main():
                     filled = True
                     break
             if not filled:
-                logger.error(f"Could not fill {iso} - no proxy data available.")
-                available_proxies = ", ".join(FALLBACK_MAPPING.get(iso, []))
+                logger.error("Could not fill %s - no proxy data available.", iso)
+                available_proxies = ", ".join(FBS_COUNTRY_FALLBACKS.get(iso, []))
                 raise ValueError(
                     f"Missing FAOSTAT data for country {iso}. "
                     f"Attempted proxies ({available_proxies}) had no data. "
-                    f"Please add valid proxy countries to FALLBACK_MAPPING or obtain data for {iso}."
+                    f"Please add valid proxy countries to FBS_COUNTRY_FALLBACKS."
                 )
 
     pd.DataFrame(results).to_csv(output_file, index=False)
-    logger.info(f"Wrote {len(results)} rows to {output_file}")
+    logger.info("Wrote %d rows to %s", len(results), output_file)
 
 
 if __name__ == "__main__":

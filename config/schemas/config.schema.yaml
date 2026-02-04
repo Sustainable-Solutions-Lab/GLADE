@@ -972,7 +972,7 @@ properties:
 
   data:
     type: object
-    required: [gaez, usda, land_cover, soilgrids]
+    required: [gaez, usda, land_cover, faostat, soilgrids]
     additionalProperties: false
     properties:
       gaez:
@@ -1048,6 +1048,17 @@ properties:
           version:
             type: string
             description: "Version of land cover dataset"
+      faostat:
+        type: object
+        required: [qcl_production_element_code, fbs_food_supply_element_code]
+        additionalProperties: false
+        properties:
+          qcl_production_element_code:
+            type: integer
+            description: "FAOSTAT element code for 'Production' in tonnes (QCL dataset)"
+          fbs_food_supply_element_code:
+            type: integer
+            description: "FAOSTAT element code for 'Food supply quantity (kg/capita/yr)' in FBS dataset"
       soilgrids:
         type: object
         required: [target_resolution_m]

@@ -74,6 +74,7 @@ rule prepare_faostat_fbs_items:
         reference_year=config["food_groups"]["fix_within_group_ratios"][
             "reference_year"
         ],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
     log:
@@ -94,6 +95,7 @@ rule prepare_faostat_gdd_supplements:
     params:
         countries=config["countries"],
         reference_year=config["health"]["reference_year"],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         supply="processing/{name}/faostat_gdd_supplements.csv",
     log:
@@ -122,10 +124,12 @@ rule prepare_food_loss_waste:
         faostat_gdd_supplements="processing/{name}/faostat_gdd_supplements.csv",
         population="processing/{name}/population.csv",
         fbs_csv="data/downloads/faostat/FBS.csv",
+        sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         health_reference_year=config["health"]["reference_year"],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
     log:

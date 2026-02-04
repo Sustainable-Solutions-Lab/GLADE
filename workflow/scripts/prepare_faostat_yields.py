@@ -14,8 +14,9 @@ import pandas as pd
 import yaml
 
 from workflow.scripts.faostat_bulk import (
-    _int_str,
+    filter_bulk,
     get_item_map,
+    int_str,
     load_bulk_csv,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -41,7 +42,7 @@ def map_items_to_codes(
                     item_name_to_code[name] = str(v)
                     break
             else:
-                logger.warning(f"Item '{name}' not found in FAOSTAT bulk data")
+                logger.warning("Item %r not found in FAOSTAT bulk data", name)
 
     if not item_name_to_code:
         raise RuntimeError("No valid items found")
@@ -63,6 +64,9 @@ def calculate_yields(
     if "area_code" in df.columns:
         df = df[pd.to_numeric(df["area_code"], errors="coerce") < aggregate_limit]
 
+    # Normalise element codes once upfront
+    df["element_code"] = df["element_code"].map(int_str)
+
     records = []
 
     # Group by Country, Year
@@ -79,11 +83,7 @@ def calculate_yields(
             if prod_item_name:
                 p_rows = group[
                     (group["item"].str.lower() == prod_item_name.lower())
-                    & (
-                        group["element_code"]
-                        .map(_int_str)
-                        .isin(element_codes["production"])
-                    )
+                    & (group["element_code"].isin(element_codes["production"]))
                 ]
                 if not p_rows.empty:
                     production = pd.to_numeric(p_rows["value"], errors="coerce").sum()
@@ -93,20 +93,12 @@ def calculate_yields(
             if use_producing:
                 s_rows = group[
                     (group["item"].str.lower() == prod_item_name.lower())
-                    & (
-                        group["element_code"]
-                        .map(_int_str)
-                        .isin(element_codes["producing_animals"])
-                    )
+                    & (group["element_code"].isin(element_codes["producing_animals"]))
                 ]
             elif stock_item_name:
                 s_rows = group[
                     (group["item"].str.lower() == stock_item_name.lower())
-                    & (
-                        group["element_code"]
-                        .map(_int_str)
-                        .isin(element_codes["stocks"])
-                    )
+                    & (group["element_code"].isin(element_codes["stocks"]))
                 ]
 
             if not s_rows.empty:
@@ -152,7 +144,7 @@ if __name__ == "__main__":
     element_codes = cost_params["element_codes"]
     # Convert all codes to strings to ensure matching works
     for key in element_codes:
-        element_codes[key] = [str(c) for c in element_codes[key]]
+        element_codes[key] = [int_str(c) for c in element_codes[key]]
 
     aggregate_limit = int(cost_params["aggregate_area_code_limit"])
 
@@ -185,8 +177,6 @@ if __name__ == "__main__":
 
     # Filter bulk data
     logger.info("Filtering FAOSTAT QCL data...")
-    from workflow.scripts.faostat_bulk import filter_bulk
-
     df = filter_bulk(
         bulk,
         element_codes=all_elem_codes,
@@ -206,4 +196,4 @@ if __name__ == "__main__":
     # Save results
     result_df = pd.DataFrame(records)
     result_df.to_csv(output_path, index=False)
-    logger.info(f"Saved yields for {len(result_df)} records")
+    logger.info("Saved yields for %d records", len(result_df))

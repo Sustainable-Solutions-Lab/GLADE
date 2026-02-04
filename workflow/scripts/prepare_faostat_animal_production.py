@@ -13,14 +13,13 @@ for validation mode.
 import logging
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from workflow.scripts.faostat_bulk import (
-    _int_str,
     add_iso3_column,
     filter_bulk,
     get_item_map,
+    int_str,
     load_bulk_csv,
     load_m49_to_iso3,
 )
@@ -64,9 +63,7 @@ def main() -> None:
     bulk = load_bulk_csv(qcl_csv)
     item_map = get_item_map(bulk)
 
-    # QCL element 5510 = "Production" in tonnes (covers crops and livestock).
-    # Note: element 5513 also has label "Production" but is eggs-only.
-    element_code = "5510"
+    element_code = str(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
     logger.info("Using FAOSTAT element 'Production' (code %s)", element_code)
 
     # Map FAOSTAT items to codes
@@ -147,42 +144,24 @@ def main() -> None:
             ", ".join(sorted(units_series.unique())),
         )
 
-    # Build country-level records
-    records: list[dict[str, object]] = []
-    for _, row in df.iterrows():
-        country = str(row["iso3"]).strip()
-        item_code = _int_str(row["Item Code"])
-        product = faostat_to_model.get(item_code)
-        if not product:
-            continue
+    # Map rows to model products and aggregate
+    df = df.assign(
+        item_code=df["Item Code"].map(int_str),
+        country=df["iso3"].astype(str).str.strip(),
+        year=pd.to_numeric(df["Year"], errors="coerce").astype(int),
+    )
+    df["product"] = df["item_code"].map(faostat_to_model)
+    df = df[df["product"].notna() & df["Value"].notna() & (df["Value"] >= 0)]
 
-        value = float(row["Value"])
-        if not np.isfinite(value) or value < 0:
-            continue
-
-        year = int(float(row["Year"]))
-        records.append(
-            {
-                "country": country,
-                "product": product,
-                "year": year,
-                "production_tonnes": value,
-            }
-        )
-
-    if not records:
+    if df.empty:
         raise RuntimeError(
             "No FAOSTAT production records matched the configured animal products"
         )
 
-    result = pd.DataFrame(records)
-
-    # Aggregate by country and product (in case of duplicates)
     result = (
-        result.groupby(["country", "product", "year"], as_index=False)[
-            "production_tonnes"
-        ]
+        df.groupby(["country", "product", "year"], as_index=False)["Value"]
         .sum()
+        .rename(columns={"Value": "production_tonnes"})
         .sort_values(["country", "product"])
     )
 
