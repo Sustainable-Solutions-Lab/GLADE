@@ -7,13 +7,14 @@ food-opt Documentation
 
 A global food systems optimization model that explores trade-offs between environmental sustainability and nutritional outcomes using linear programming.
 
-.. Note:: 🚧 This project is currently **under construction**! 🚧
+.. image:: _static/figures/production_pattern.gif
+   :alt: Animated map showing how optimal crop production patterns shift as trade friction increases from free trade to near-autarky.
+   :width: 100%
 
-          Documentation is kept up to date at a best effort basis. Certain model elements are still missing. Validation of model results has not yet been conducted. Expect frequent breaking changes.
+*Dominant crop group and land-use intensity under increasing trade friction. The animation sweeps from nearly free trade (0.25× baseline transport costs) through the baseline (1×) and costly trade (4×) to near-autarky (100×). As trade becomes more expensive, production disperses from comparative-advantage regions toward local self-sufficiency, and total land use rises.*
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
    introduction
    model_framework

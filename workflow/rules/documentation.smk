@@ -350,12 +350,67 @@ rule doc_fig_health_clusters:
         "../scripts/doc_figures/health_clusters_map.py"
 
 
+# --- Trade friction production pattern GIF ---
+
+TRADE_SCENARIOS = ["free_trade", "default_trade", "costly_trade", "autarky"]
+
+TRADE_SCENARIO_LABELS = {
+    "free_trade": "Free trade (0.25\u00d7 trade costs)",
+    "default_trade": "Baseline trade (1\u00d7 trade costs)",
+    "costly_trade": "Costly trade (4\u00d7 trade costs)",
+    "autarky": "Near-autarky (100\u00d7 trade costs)",
+}
+
+# Fixed bar-chart x-axis scale (Mha) shared across all frames for comparability.
+PRODUCTION_PATTERN_BAR_XMAX = 400
+
+
+rule doc_fig_production_pattern_frame:
+    """Generate one production-pattern PNG frame for a trade scenario."""
+    input:
+        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        resource_classes=f"processing/{DOC_FIG_NAME}/resource_classes.nc",
+        land_area_by_class=f"processing/{DOC_FIG_NAME}/land_area_by_class.csv",
+        land_grazing_only=f"processing/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
+        land_use=f"results/{DOC_FIG_NAME}/analysis/scen-{{trade_scenario}}/land_use.csv",
+    output:
+        png="docs/_static/figures/production_pattern_{trade_scenario}.png",
+    params:
+        frame_label=lambda w: TRADE_SCENARIO_LABELS[w.trade_scenario],
+        bar_xmax_mha=PRODUCTION_PATTERN_BAR_XMAX,
+    log:
+        "logs/shared/doc_fig_production_pattern_{trade_scenario}.log",
+    script:
+        "../scripts/doc_figures/production_pattern.py"
+
+
+rule doc_fig_production_pattern_gif:
+    """Collate trade-friction frames into an animated GIF."""
+    input:
+        frames=expand(
+            "docs/_static/figures/production_pattern_{ts}.png",
+            ts=TRADE_SCENARIOS,
+        ),
+    output:
+        gif="docs/_static/figures/production_pattern.gif",
+    log:
+        "logs/shared/doc_fig_production_pattern_gif.log",
+    script:
+        "../scripts/doc_figures/collate_production_gif.py"
+
+
 rule build_docs:
     """Build Sphinx documentation including all figures."""
     input:
         # Figures
         expand("docs/_static/figures/{fig}.svg", fig=DOC_FIGURES),
         expand("docs/_static/figures/{fig}.png", fig=DOC_FIGURES),
+        # Production pattern GIF (landing page)
+        "docs/_static/figures/production_pattern.gif",
+        expand(
+            "docs/_static/figures/production_pattern_{ts}.png",
+            ts=TRADE_SCENARIOS,
+        ),
         # Documentation source files
         "docs/conf.py",
         glob("docs/**/*.rst", recursive=True),

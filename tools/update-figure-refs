@@ -28,9 +28,12 @@ if [ "$MODE" = "--to-remote" ]; then
 
         # Replace local paths with GitHub URLs
         # Handle both /_static/figures/ and _static/figures/ with or without leading space
+        # Covers .png and .gif extensions
         sed -i.bak \
             -e "s|/_static/figures/\([^[:space:]]*\.png\)|${BASE_URL}/\1|g" \
             -e "s|\([[:space:]]\)_static/figures/\([^[:space:]]*\.png\)|\1${BASE_URL}/\2|g" \
+            -e "s|/_static/figures/\([^[:space:]]*\.gif\)|${BASE_URL}/\1|g" \
+            -e "s|\([[:space:]]\)_static/figures/\([^[:space:]]*\.gif\)|\1${BASE_URL}/\2|g" \
             "$rst_file"
 
         # Remove backup file

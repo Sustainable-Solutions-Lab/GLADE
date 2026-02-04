@@ -33,14 +33,14 @@ if [ ! -d "$FIGURES_DIR" ]; then
     exit 1
 fi
 
-PNG_COUNT=$(find "$FIGURES_DIR" -name "*.png" | wc -l)
-if [ "$PNG_COUNT" -eq 0 ]; then
-    echo "Error: No PNG files found in $FIGURES_DIR"
+FILE_COUNT=$(find "$FIGURES_DIR" \( -name "*.png" -o -name "*.gif" \) | wc -l)
+if [ "$FILE_COUNT" -eq 0 ]; then
+    echo "Error: No PNG/GIF files found in $FIGURES_DIR"
     echo "Generate figures first with: tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs"
     exit 1
 fi
 
-echo "Found $PNG_COUNT PNG files to upload"
+echo "Found $FILE_COUNT PNG/GIF files to upload"
 
 # Check if release exists, create if not
 if ! gh release view "$RELEASE_TAG" &> /dev/null; then
@@ -55,16 +55,16 @@ else
     # Delete existing assets to avoid duplicates
     echo "Removing existing figure assets..."
     gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while read -r asset; do
-        if [[ "$asset" == *.png ]]; then
+        if [[ "$asset" == *.png || "$asset" == *.gif ]]; then
             echo "  Deleting: $asset"
             gh release delete-asset "$RELEASE_TAG" "$asset" --yes 2>/dev/null || true
         fi
     done
 fi
 
-# Upload all PNG files
+# Upload all PNG and GIF files
 echo "Uploading figures to release $RELEASE_TAG..."
-find "$FIGURES_DIR" -name "*.png" | while read -r figure; do
+find "$FIGURES_DIR" \( -name "*.png" -o -name "*.gif" \) | while read -r figure; do
     filename=$(basename "$figure")
     echo "  Uploading: $filename"
     gh release upload "$RELEASE_TAG" "$figure" --clobber

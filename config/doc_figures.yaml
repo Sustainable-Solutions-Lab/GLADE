@@ -8,6 +8,8 @@
 
 name: "doc_figures"
 
+scenario_defs: "config/doc_figures_scenarios.yaml"
+
 # Use coarser spatial aggregation for faster processing
 aggregation:
   regions:
@@ -29,7 +31,10 @@ crops:
   - white-potato   # Major tuber
   - cassava        # Major tropical staple
   - tomato         # Vegetable
+  - cabbage        # Vegetable
+  - onion          # Vegetable
   - banana         # Fruit
+  - citrus         # Fruit
 
 # Add minimum consumption constraints to showcase animal products in figures
 # Values in g/person/day (modest minima to ensure some production)
