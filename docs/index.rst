@@ -85,5 +85,6 @@ Dietary constraints ensure that each country's population meets nutritional requ
    workflow
    results
    analysis
+   sensitivity_analysis
    api/index
    development

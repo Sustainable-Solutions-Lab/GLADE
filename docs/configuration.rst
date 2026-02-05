@@ -232,6 +232,46 @@ Generators can coexist with manually defined scenarios in the same file:
 
 When a placeholder is the entire value (e.g., ``"{param}"``), the numeric type is preserved. When embedded in a string (e.g., ``"prefix_{param}"``), values are converted to strings. This ensures configuration values have the correct types for downstream processing.
 
+Sensitivity analysis mode
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In addition to ``zip`` and ``grid`` modes, generators support ``mode: sensitivity`` for PCE-based global sensitivity analysis. In this mode, parameter values are drawn from a **space-filling Sobol sequence** transformed to specified probability distributions, rather than from fixed value lists.
+
+Each parameter specifies a distribution instead of a value range:
+
+.. code-block:: yaml
+
+   _generators:
+     - name: pce_{sample_id}
+       mode: sensitivity
+       samples: 256
+       slice_parameters: [ghg_price]
+       parameters:
+         yield_factor:
+           lower: 0.8
+           upper: 1.2
+         ch4_factor:
+           distribution: lognormal
+           mu: 0.0
+           sigma: 0.15
+         ghg_price:
+           lower: 0
+           upper: 300
+       template:
+         sensitivity:
+           crop_yields:
+             all: "{yield_factor}"
+           emission_factors:
+             ch4: "{ch4_factor}"
+         emissions:
+           ghg_price: "{ghg_price}"
+
+Supported distributions are ``uniform`` (default; requires ``lower``, ``upper``), ``normal`` (requires ``mean``, ``std``), and ``lognormal`` (requires ``mu``, ``sigma``).
+
+The ``samples`` field sets the number of quasi-random samples (should be a power of 2). The ``slice_parameters`` field designates parameters for conditional analysis — these are included in the PCE fit but can be analytically fixed at specific values to study how sensitivity changes with policy choices.
+
+See :doc:`sensitivity_analysis` for full methodology details, output file formats, and interpretation guidance.
+
 Configuration sections
 ----------------------
 
