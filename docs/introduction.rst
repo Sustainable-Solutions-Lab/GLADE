@@ -8,14 +8,14 @@ Introduction
 Overview
 --------
 
-**food-opt** is a global food systems optimization model designed to study trade-offs between positive health outcomes and desirable environmental outcomes. It can be used to answer questions like: *How could we feed the world's population while minimizing greenhouse gas emissions and diet-related disease burden? What are the trade-offs and synergies between environmental sustainability and food security?*
+``food-opt`` is a global food systems optimization model designed to study trade-offs between positive health outcomes and desirable environmental outcomes. It can be used to answer questions like: *How could we feed the world's population while minimizing greenhouse gas emissions and diet-related disease burden? What are the trade-offs and synergies between environmental sustainability and food security?*
 
 The model represents the global food system as a network of material flows—from land and water inputs, through crop production, livestock systems and trade, to processed foods and human consumption. It uses **linear programming** (a mathematical optimization technique) to find the combination of production, conversion, trade and consumption choices that best achieves specified objectives while respecting physical constraints like available land, water, and crop yields.
 
 .. admonition:: Technical Implementation
    :class: note
 
-   food-opt is built on `PyPSA <https://pypsa.org/>`_ (Python for Power System Analysis), an open-source framework originally designed for energy system modeling. We adapt PyPSA's flexible network structure to represent food flows instead of energy flows. PyPSA has built-in functionality helping translating a component and flow-based model to a set of equation representing a linear program. The workflow is orchestrated by `Snakemake <https://snakemake.readthedocs.io/>`_, which ensures reproducibility by automatically tracking dependencies between processing steps and only re-running what's necessary when inputs change.
+   ``food-opt`` is built on `PyPSA <https://pypsa.org/>`_ (Python for Power System Analysis), an open-source framework originally designed for energy system modeling. We adapt PyPSA's flexible network structure to represent food flows instead of energy flows. PyPSA has built-in functionality helping translating a component and flow-based model to a set of equation representing a linear program. The workflow is orchestrated by `Snakemake <https://snakemake.readthedocs.io/>`_, which ensures reproducibility by automatically tracking dependencies between processing steps and only re-running what's necessary when inputs change.
 
 Key Objectives
 ~~~~~~~~~~~~~~
@@ -81,18 +81,18 @@ Global Extent & Flexible Spatial Resolution
 Getting Started
 ---------------
 
-This section guides you through setting up food-opt on your computer. Familiarity with command-line tools and Python projects is an advantage, but the setup process is straightforward and most dependencies are handled automatically.
+This section guides you through setting up ``food-opt`` on your computer. Familiarity with command-line tools and Python projects is an advantage, but the setup process is straightforward and most dependencies are handled automatically.
 
 .. note::
 
-   **Disk space requirements**: The model downloads several large datasets (GAEZ crop yields, administrative boundaries, land cover, etc.); together with software dependencies, intermediate and final results, you should expect food-opt to take up some 30GB of disk space or more.
+   **Disk space requirements**: The model downloads several large datasets (GAEZ crop yields, administrative boundaries, land cover, etc.); together with software dependencies, intermediate and final results, you should expect ``food-opt`` to take up some 30GB of disk space or more.
 
    **Runtime estimates**: The first model run may take about an hour (depending on your internet speed and computer performance) as a large amount of data will be downloaded and pre-processed. Subsequent runs, where only the core model needs to be built and solved, will only take a few minutes.
 
 What You'll Need
 ~~~~~~~~~~~~~~~~
 
-**To install manually** (before running food-opt):
+**To install manually** (before running ``food-opt``):
 
 * `Git <https://git-scm.com/>`_ — version control system for downloading the code
 * `pixi <https://pixi.sh/>`_ — cross-platform package manager that handles all other dependencies

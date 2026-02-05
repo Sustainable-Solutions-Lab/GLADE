@@ -2,8 +2,8 @@
 ..
 .. SPDX-License-Identifier: CC-BY-4.0
 
-food-opt Documentation
-======================
+``food-opt`` Documentation
+==========================
 
 A global food systems optimization model that explores trade-offs between environmental sustainability and nutritional outcomes using linear programming.
 

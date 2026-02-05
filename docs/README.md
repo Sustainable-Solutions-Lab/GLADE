@@ -4,9 +4,9 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# food-opt Documentation
+# `food-opt` Documentation
 
-This directory contains the Sphinx documentation for the food-opt global food systems optimization model.
+This directory contains the Sphinx documentation for the `food-opt` global food systems optimization model.
 
 ## Building Documentation Locally
 
