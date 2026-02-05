@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# PCE Sensitivity Analysis Scenarios
+# -----------------------------------
+# Uses a scrambled Sobol sequence for space-filling design, transformed
+# via inverse CDF to each parameter's distribution. PCE is fitted to
+# model outputs, giving analytical Sobol indices.
+#
+# Parameters and their uncertainty ranges:
+#   - yield_factor: 0.8-1.2 (20% uncertainty in crop yields)
+#   - ch4_factor: 0.7-1.3 (30% uncertainty in CH4 emission factors)
+#   - n2o_factor: 0.7-1.3 (30% uncertainty in N2O emission factors)
+#   - luc_factor: 0.5-1.5 (50% uncertainty in LUC emissions)
+#   - rr_factor: 0.8-1.2 (20% uncertainty in health relative risks)
+#   - value_per_yll: 5000-500000 (YLL valuation, slice parameter)
+#   - ghg_price: 0-300 (GHG price, slice parameter)
+
+# Default scenario for reference (no sensitivity adjustments)
+default: {}
+
+_generators:
+  - name: pce_{sample_id}
+    mode: sensitivity
+    samples: 1024
+    slice_parameters: [value_per_yll, ghg_price]
+    parameters:
+      yield_factor:
+        lower: 0.8
+        upper: 1.2
+      ch4_factor:
+        lower: 0.7
+        upper: 1.3
+      n2o_factor:
+        lower: 0.7
+        upper: 1.3
+      luc_factor:
+        lower: 0.5
+        upper: 1.5
+      rr_factor:
+        lower: 0.8
+        upper: 1.2
+      value_per_yll:
+        lower: 5000
+        upper: 500000
+      ghg_price:
+        lower: 0
+        upper: 300
+    template:
+      sensitivity:
+        crop_yields:
+          all: "{yield_factor}"
+        emission_factors:
+          ch4: "{ch4_factor}"
+          n2o: "{n2o_factor}"
+          luc: "{luc_factor}"
+        health_relative_risk: "{rr_factor}"
+      health:
+        value_per_yll: "{value_per_yll}"
+      emissions:
+        ghg_price: "{ghg_price}"

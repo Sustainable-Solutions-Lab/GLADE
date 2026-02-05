@@ -71,8 +71,8 @@ gsutil = ">=5.35, <6"                # Google Cloud Storage CLI
 pandera = ">=0.27.0, <0.28"
 pydantic = ">=2.12.4, <3"
 
-# Sensitivity analysis
-SALib = ">=1.5, <2"
+# Sensitivity analysis (PCE-based)
+chaospy = ">=4.3, <5"
 
 [feature.gurobi.pypi-dependencies]
 gurobipy = ">=13.0.0, <14"           # Gurobi commercial MILP solver (requires license)

@@ -35,19 +35,21 @@ while keeping original values in the template. The format is a Python lambda:
           land:
             regional_limit: "{limit}"  # Uses original value 0.1
 
-Sampling modes for sensitivity analysis:
+Sensitivity analysis mode using space-filling Sobol sequences:
 
     _generators:
-      - name: sa_{sample_id}
-        mode: sobol  # or "lhs"
-        samples: 64  # Base sample count
+      - name: pce_{sample_id}
+        mode: sensitivity
+        samples: 1024
+        slice_parameters: [value_per_yll, ghg_price]
         parameters:
           yield_factor:
-            min: 0.8
-            max: 1.2
+            lower: 0.8
+            upper: 1.2
           ch4_factor:
-            min: 0.7
-            max: 1.3
+            distribution: lognormal
+            mu: 0.0
+            sigma: 0.15
         template:
           sensitivity:
             crop_yields:
@@ -59,9 +61,9 @@ Sampling modes for sensitivity analysis:
 import copy
 import itertools
 
+import chaospy as cp
 import numpy as np
-from SALib.sample import latin as salib_latin
-from SALib.sample import sobol as salib_sobol
+from scipy.stats.qmc import Sobol
 
 
 def expand_scenario_defs(raw_defs: dict) -> dict:
@@ -115,16 +117,20 @@ def _validate_generator(spec: dict) -> None:
 
     mode = spec.get("mode", "zip")
 
-    # Sobol and LHS modes require samples count and min/max bounds
-    if mode in ("sobol", "lhs"):
+    # Sensitivity mode requires samples count and valid distribution specs
+    if mode == "sensitivity":
         if "samples" not in spec:
             raise ValueError(
-                f"Generator '{spec['name']}' with mode '{mode}' requires 'samples'"
+                f"Generator '{spec['name']}' with mode 'sensitivity' requires 'samples'"
             )
         for param_name, param_spec in spec["parameters"].items():
-            if "min" not in param_spec or "max" not in param_spec:
+            _validate_distribution_spec(param_name, param_spec)
+        # Validate slice_parameters reference actual parameter names
+        slice_params = spec.get("slice_parameters", [])
+        for sp in slice_params:
+            if sp not in spec["parameters"]:
                 raise ValueError(
-                    f"Parameter '{param_name}' in mode '{mode}' requires 'min' and 'max'"
+                    f"Slice parameter '{sp}' not found in generator parameters"
                 )
         return
 
@@ -182,19 +188,105 @@ def _generate_values(param_spec: dict) -> list:
     return values.tolist()
 
 
-def _generate_sobol_samples(spec: dict) -> list[dict]:
-    """Generate Sobol quasi-random samples for sensitivity analysis.
+def _validate_distribution_spec(param_name: str, param_spec: dict) -> None:
+    """Validate distribution specification for a sensitivity parameter.
 
-    Uses SALib's Sobol sequence generator with Saltelli's sampling scheme.
-    For D parameters and N base samples, generates N*(D+2) total samples
-    (without second-order interactions) for computing first-order and
-    total-order Sobol indices.
+    Parameters
+    ----------
+    param_name : str
+        Parameter name for error messages
+    param_spec : dict
+        Parameter specification with distribution info
+
+    Raises
+    ------
+    ValueError
+        If the specification is invalid
+    """
+    dist = param_spec.get("distribution", "uniform")
+    if dist == "uniform":
+        if "lower" not in param_spec or "upper" not in param_spec:
+            raise ValueError(
+                f"Parameter '{param_name}' with uniform distribution "
+                "requires 'lower' and 'upper'"
+            )
+    elif dist == "normal":
+        if "mean" not in param_spec or "std" not in param_spec:
+            raise ValueError(
+                f"Parameter '{param_name}' with normal distribution "
+                "requires 'mean' and 'std'"
+            )
+    elif dist == "lognormal":
+        if "mu" not in param_spec or "sigma" not in param_spec:
+            raise ValueError(
+                f"Parameter '{param_name}' with lognormal distribution "
+                "requires 'mu' and 'sigma'"
+            )
+    else:
+        raise ValueError(
+            f"Parameter '{param_name}' has unsupported distribution '{dist}'. "
+            "Supported: uniform, normal, lognormal"
+        )
+
+
+def build_chaospy_distribution(param_spec: dict) -> cp.Distribution:
+    """Build a chaospy marginal distribution from a parameter spec.
+
+    Parameters
+    ----------
+    param_spec : dict
+        Parameter specification with distribution info
+
+    Returns
+    -------
+    cp.Distribution
+        Chaospy marginal distribution
+    """
+    dist = param_spec.get("distribution", "uniform")
+    if dist == "uniform":
+        return cp.Uniform(param_spec["lower"], param_spec["upper"])
+    elif dist == "normal":
+        return cp.Normal(param_spec["mean"], param_spec["std"])
+    elif dist == "lognormal":
+        return cp.LogNormal(param_spec["mu"], param_spec["sigma"])
+    else:
+        raise ValueError(f"Unsupported distribution: {dist}")
+
+
+def build_joint_distribution(
+    generator_spec: dict,
+) -> tuple[cp.Distribution, list[str]]:
+    """Build a chaospy joint distribution from a generator spec.
+
+    Parameters
+    ----------
+    generator_spec : dict
+        Generator specification with parameters
+
+    Returns
+    -------
+    tuple[cp.Distribution, list[str]]
+        Joint distribution and ordered parameter names
+    """
+    param_names = list(generator_spec["parameters"].keys())
+    marginals = [
+        build_chaospy_distribution(generator_spec["parameters"][name])
+        for name in param_names
+    ]
+    return cp.J(*marginals), param_names
+
+
+def _generate_sensitivity_samples(spec: dict) -> list[dict]:
+    """Generate space-filling samples for sensitivity analysis.
+
+    Uses a scrambled Sobol sequence in [0,1]^d, transformed to physical
+    space via the inverse CDF of each parameter's distribution.
 
     Parameters
     ----------
     spec : dict
-        Generator specification with 'samples' and 'parameters' containing
-        min/max bounds for each parameter. Optional 'seed' for reproducibility.
+        Generator specification with 'samples', 'parameters' containing
+        distribution specs, and optional 'seed'.
 
     Returns
     -------
@@ -202,62 +294,24 @@ def _generate_sobol_samples(spec: dict) -> list[dict]:
         List of dicts, each mapping parameter names to sampled values.
     """
     param_names = list(spec["parameters"].keys())
-    bounds = [
-        [spec["parameters"][name]["min"], spec["parameters"][name]["max"]]
-        for name in param_names
-    ]
-
-    problem = {
-        "num_vars": len(param_names),
-        "names": param_names,
-        "bounds": bounds,
-    }
-
+    d = len(param_names)
     n_samples = spec["samples"]
-    seed = spec.get("seed", 42)  # Default seed for reproducibility
-    samples = salib_sobol.sample(problem, n_samples, calc_second_order=False, seed=seed)
+    seed = spec.get("seed", 42)
+
+    # Build joint distribution for inverse CDF transform
+    joint_dist, _ = build_joint_distribution(spec)
+
+    # Generate Sobol sequence in [0,1]^d
+    sampler = Sobol(d, scramble=True, seed=seed)
+    unit_samples = sampler.random(n_samples)  # shape (n_samples, d)
+
+    # Transform to physical space via inverse CDF
+    # chaospy inv expects shape (d, n_samples)
+    physical_samples = joint_dist.inv(unit_samples.T)  # shape (d, n_samples)
 
     result = []
-    for row in samples:
-        result.append(dict(zip(param_names, row.tolist())))
-    return result
-
-
-def _generate_lhs_samples(spec: dict) -> list[dict]:
-    """Generate Latin Hypercube samples for sensitivity analysis.
-
-    Uses SALib's Latin Hypercube sampler for space-filling designs.
-
-    Parameters
-    ----------
-    spec : dict
-        Generator specification with 'samples' and 'parameters' containing
-        min/max bounds for each parameter. Optional 'seed' for reproducibility.
-
-    Returns
-    -------
-    list[dict]
-        List of dicts, each mapping parameter names to sampled values.
-    """
-    param_names = list(spec["parameters"].keys())
-    bounds = [
-        [spec["parameters"][name]["min"], spec["parameters"][name]["max"]]
-        for name in param_names
-    ]
-
-    problem = {
-        "num_vars": len(param_names),
-        "names": param_names,
-        "bounds": bounds,
-    }
-
-    n_samples = spec["samples"]
-    seed = spec.get("seed", 42)  # Default seed for reproducibility
-    samples = salib_latin.sample(problem, n_samples, seed=seed)
-
-    result = []
-    for row in samples:
-        result.append(dict(zip(param_names, row.tolist())))
+    for j in range(n_samples):
+        result.append(dict(zip(param_names, physical_samples[:, j].tolist())))
     return result
 
 
@@ -389,11 +443,9 @@ def _expand_generator(spec: dict) -> dict:
     template = spec["template"]
     mode = spec.get("mode", "zip")
 
-    # Sampling modes (sobol, lhs) generate combinations directly
-    if mode == "sobol":
-        combinations = _generate_sobol_samples(spec)
-    elif mode == "lhs":
-        combinations = _generate_lhs_samples(spec)
+    # Sensitivity mode generates combinations directly
+    if mode == "sensitivity":
+        combinations = _generate_sensitivity_samples(spec)
     else:
         # Standard modes: generate values per parameter, then combine
         param_values = {}

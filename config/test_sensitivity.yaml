@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Small test configuration for sensitivity analysis
+# Uses test config base (reduced resolution) with minimal PCE samples
+
+name: "test_sensitivity"
+scenario_defs: "config/test_sensitivity_scenarios.yaml"
+
+# Inherit from test config for fast execution
+aggregation:
+  regions:
+    target_count: 200
+  resource_class_quantiles: [0.5]
+  irrigated_area_source: "current"
+
+trade:
+  crop_hubs: 14
+  food_hubs: 14
+  feed_hubs: 14
+
+crops:
+  - wheat
+  - maize
+  - soybean
+  - white-potato
+
+# Disable multi-cropping (requires wetland-rice which is not in test crop list)
+multiple_cropping:
+  double_rice: null
+  rice_wheat: null
+
+# Enable health for RR sensitivity testing
+health:
+  enabled: true
+  value_per_yll: 50000
+
+# Enable GHG pricing
+emissions:
+  ghg_pricing_enabled: true
+  ghg_price: 100
+
+# Use actual yields for more realistic results
+validation:
+  use_actual_yields: true
+
+solving:
+  solver: "highs"
+  threads: 4

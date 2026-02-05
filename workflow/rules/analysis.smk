@@ -87,24 +87,50 @@ rule extract_objective_breakdown:
         "../scripts/analysis/extract_objective_breakdown.py"
 
 
-def _sobol_scenario_inputs(wildcards):
-    """Generate input files for all Sobol-sampled scenarios.
+def _sensitivity_generator(wildcards):
+    """Extract the single sensitivity generator from scenario_defs."""
+    import yaml
 
-    Looks for scenarios matching the prefix pattern in scenario_defs and
-    returns the analysis CSVs needed for sensitivity index computation.
-    """
+    scenario_defs_path = config.get("scenario_defs")
+    if not scenario_defs_path:
+        raise ValueError(
+            "scenario_defs not configured; cannot compute sensitivity indices"
+        )
+
+    with open(scenario_defs_path, "r", encoding="utf-8") as f:
+        raw_defs = yaml.safe_load(f) or {}
+
+    generators = [
+        gen
+        for gen in raw_defs.get("_generators", [])
+        if gen.get("mode") == "sensitivity"
+    ]
+    if not generators:
+        raise ValueError("No sensitivity generator found in scenario_defs")
+    if len(generators) > 1:
+        raise ValueError(
+            "Multiple sensitivity generators found in scenario_defs. "
+            "Only one sensitivity generator per config is currently supported."
+        )
+    return generators[0]
+
+
+def _sensitivity_scenario_names(wildcards):
+    """Return sensitivity scenario names matching the prefix in expansion order."""
     prefix = wildcards.prefix
     all_scenarios = list_scenarios()
-
-    # Preserve scenario_defs expansion order; Sobol analysis needs this exact ordering.
     matching = [s for s in all_scenarios if s.startswith(prefix)]
-
     if not matching:
         raise ValueError(
             f"No scenarios found with prefix '{prefix}'. "
             f"Available scenarios: {all_scenarios}"
         )
+    return matching
 
+
+def _sensitivity_scenario_inputs(wildcards):
+    """Generate input files for all sensitivity-sampled scenarios."""
+    matching = _sensitivity_scenario_names(wildcards)
     inputs = []
     for scenario in matching:
         inputs.extend(
@@ -118,82 +144,52 @@ def _sobol_scenario_inputs(wildcards):
     return inputs
 
 
-def _sobol_scenario_names(wildcards):
-    """Return Sobol scenario names matching the requested prefix in expansion order."""
-    prefix = wildcards.prefix
-    all_scenarios = list_scenarios()
-    matching = [s for s in all_scenarios if s.startswith(prefix)]
-    if not matching:
-        raise ValueError(
-            f"No scenarios found with prefix '{prefix}'. "
-            f"Available scenarios: {all_scenarios}"
-        )
-    return matching
+def _sensitivity_slice_grid(wildcards):
+    """Build a conditioning grid for slice parameters.
+
+    Returns a dict mapping each slice parameter name to a list of 7
+    linearly-spaced values between its min and max.
+    """
+    import numpy as _np
+
+    from scenario_generators import build_chaospy_distribution
+
+    generator = _sensitivity_generator(wildcards)
+    slice_params = generator.get("slice_parameters", [])
+    grid = {}
+    for sp in slice_params:
+        spec = generator["parameters"][sp]
+        dist = build_chaospy_distribution(spec)
+        lo, hi = float(dist.lower[0]), float(dist.upper[0])
+        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 7)]
+    return grid
 
 
-def _sobol_generator(wildcards):
-    """Extract the single Sobol generator from scenario_defs."""
-    import yaml
+rule compute_pce_sensitivity:
+    """Compute PCE-based global sensitivity indices from ensemble scenario runs.
 
-    scenario_defs_path = config.get("scenario_defs")
-    if not scenario_defs_path:
-        raise ValueError(
-            "scenario_defs not configured; cannot compute sensitivity indices"
-        )
+    Fits Polynomial Chaos Expansions to model outputs and computes Sobol
+    indices analytically. Supports conditional analysis on slice parameters.
 
-    with open(scenario_defs_path, "r", encoding="utf-8") as f:
-        raw_defs = yaml.safe_load(f) or {}
-
-    sobol_generators = [
-        gen for gen in raw_defs.get("_generators", []) if gen.get("mode") == "sobol"
-    ]
-    if not sobol_generators:
-        raise ValueError("No Sobol generator found in scenario_defs")
-    if len(sobol_generators) > 1:
-        raise ValueError(
-            "Multiple Sobol generators found in scenario_defs. "
-            "Only one Sobol generator per config is currently supported."
-        )
-    return sobol_generators[0]
-
-
-def _sobol_parameter_bounds(wildcards):
-    """Extract parameter bounds from the Sobol generator in scenario_defs."""
-    generator = _sobol_generator(wildcards)
-    return {
-        name: {"min": spec["min"], "max": spec["max"]}
-        for name, spec in generator["parameters"].items()
-    }
-
-
-def _sobol_base_samples(wildcards):
-    """Extract base sample count from the Sobol generator."""
-    return _sobol_generator(wildcards)["samples"]
-
-
-rule compute_sensitivity_indices:
-    """Compute global Sobol sensitivity indices from ensemble scenario runs.
-
-    This rule aggregates outputs from Sobol-sampled scenarios and computes
-    first-order (S1) and total-order (ST) sensitivity indices.
-
-    To use, ensure your scenarios file has a generator with mode: sobol,
+    To use, ensure your scenarios file has a generator with mode: sensitivity,
     then run:
-        tools/smk --configfile config/global_sensitivity.yaml -- results/{name}/analysis/sobol_indices_sa_.csv
+        tools/smk --configfile config/pce_sensitivity.yaml -- results/{name}/analysis/pce_global_indices_{prefix}.csv
 
-    The {prefix} wildcard matches the scenario name prefix (e.g., "sa_" for scenarios sa_0, sa_1, ...).
+    The {prefix} wildcard matches the scenario name prefix (e.g., "pce_" for
+    scenarios pce_0, pce_1, ...).
     """
     input:
-        _sobol_scenario_inputs,
+        _sensitivity_scenario_inputs,
     params:
         analysis_dir=lambda w: f"results/{w.name}/analysis",
-        scenario_prefix=lambda w: w.prefix,
-        scenario_names=_sobol_scenario_names,
-        base_samples=_sobol_base_samples,
-        parameter_bounds=_sobol_parameter_bounds,
+        scenario_names=_sensitivity_scenario_names,
+        generator_spec=lambda w: _sensitivity_generator(w),
+        slice_grid=_sensitivity_slice_grid,
     output:
-        indices="results/{name}/analysis/sobol_indices_{prefix}.csv",
+        global_indices="results/{name}/analysis/pce_global_indices_{prefix}.csv",
+        conditional_indices="results/{name}/analysis/pce_conditional_indices_{prefix}.csv",
+        validation="results/{name}/analysis/pce_validation_{prefix}.csv",
     log:
-        "logs/{name}/compute_sensitivity_indices_{prefix}.log",
+        "logs/{name}/compute_pce_sensitivity_{prefix}.log",
     script:
-        "../scripts/analysis/compute_sensitivity_indices.py"
+        "../scripts/analysis/compute_pce_sensitivity.py"

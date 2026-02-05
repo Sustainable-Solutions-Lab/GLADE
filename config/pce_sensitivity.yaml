@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# PCE-Based Global Sensitivity Analysis Configuration
+# ----------------------------------------------------
+# This configuration uses a space-filling Sobol sequence to generate scenarios
+# for PCE-based sensitivity analysis. Polynomial Chaos Expansions are fitted
+# to model outputs, yielding analytical Sobol indices (first-order and
+# total-order) as well as conditional indices for designated slice parameters.
+
+name: "pce_sensitivity"
+scenario_defs: "config/pce_sensitivity_scenarios.yaml"
+
+# Use validation mode for more realistic production patterns
+validation:
+  use_actual_yields: true
+
+# Enable health modeling for RR sensitivity
+health:
+  enabled: true
+  value_per_yll: 50000
+
+# Enable GHG pricing
+emissions:
+  ghg_pricing_enabled: true
+  ghg_price: 100
+
+# Use regionalized feed efficiency values
+animal_products:
+  feed_efficiency_regions: null
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+# Solver configuration
+solving:
+  solver: "highs"
+  threads: 4

@@ -2,17 +2,17 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Validation checks for Sobol scenario generator assumptions."""
+"""Validation checks for sensitivity scenario generator assumptions."""
 
 from pathlib import Path
 
 import yaml
 
 
-def validate_sobol_generator(config: dict, project_root: Path) -> None:
-    """Ensure scenario_defs contains at most one Sobol generator.
+def validate_sensitivity_generator(config: dict, project_root: Path) -> None:
+    """Ensure scenario_defs contains at most one sensitivity generator.
 
-    The current global sensitivity analysis implementation assumes one Sobol
+    The current PCE sensitivity analysis implementation assumes one sensitivity
     generator per config file.
     """
     scenario_defs_path = config.get("scenario_defs")
@@ -28,13 +28,13 @@ def validate_sobol_generator(config: dict, project_root: Path) -> None:
     with open(scenario_defs_file, encoding="utf-8") as f:
         scenario_defs = yaml.safe_load(f) or {}
 
-    sobol_generators = [
+    sensitivity_generators = [
         generator
         for generator in scenario_defs.get("_generators", [])
-        if generator.get("mode") == "sobol"
+        if generator.get("mode") == "sensitivity"
     ]
-    if len(sobol_generators) > 1:
+    if len(sensitivity_generators) > 1:
         raise ValueError(
-            "scenario_defs has multiple Sobol generators. "
-            "Only one Sobol generator per config is currently supported."
+            "scenario_defs has multiple sensitivity generators. "
+            "Only one sensitivity generator per config is currently supported."
         )

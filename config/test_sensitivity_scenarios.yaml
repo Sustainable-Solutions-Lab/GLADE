@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Small sensitivity test scenarios
+# 3 parameters x 32 samples for fast PCE testing
+
+# Default scenario for reference
+default: {}
+
+_generators:
+  - name: pce_{sample_id}
+    mode: sensitivity
+    samples: 32
+    parameters:
+      yield_factor:
+        lower: 0.8
+        upper: 1.2
+      ch4_factor:
+        lower: 0.7
+        upper: 1.3
+      luc_factor:
+        lower: 0.5
+        upper: 1.5
+    template:
+      sensitivity:
+        crop_yields:
+          all: "{yield_factor}"
+        emission_factors:
+          ch4: "{ch4_factor}"
+          luc: "{luc_factor}"
