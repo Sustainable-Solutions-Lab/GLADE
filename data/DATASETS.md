@@ -137,6 +137,17 @@ Brief descriptions of key external datasets used by this project, with links and
 - Citation (mortality): Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2023 (GBD 2023) Results. Seattle, United States: Institute for Health Metrics and Evaluation (IHME), 2023. Available from https://vizhub.healthdata.org/gbd-results/.
 - Citation (relative risks): Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Results. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2020.
 
+## IHME GBD — Dietary Risk Exposure Estimates 1990–2019
+
+- Description: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2019, covering 15 dietary risk factors with mean exposure, uncertainty, and summary exposure values (SEVs) by country, age, sex, and year. This project uses these estimates to supplement the Global Dietary Database (GDD) baseline dietary intake data.
+- Website: https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019
+- Download: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip
+- Version/format: GBD 2019; ZIP archive containing per-risk-factor CSVs (one CSV per dietary risk factor, ~47 MB each). Risk factors include: calcium, fiber, fruit, legumes, milk, nuts, omega-3, processed meat, PUFA, red meat, sodium, sugar-sweetened beverages, trans fat, vegetables, whole grains.
+- Coverage: 204 countries and territories, 1990–2019, by age group and sex.
+- License/terms (summary): Free for non-commercial use with attribution; GBD data is made available under the IHME Free-of-Charge Non-commercial User Agreement.
+  - Terms: https://www.healthdata.org/data-tools-practices/data-practices/ihme-free-charge-non-commercial-user-agreement
+- Citation: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
+
 ## GDD — Global Dietary Database (Tufts University)
 
 - Description: Country-level estimates of dietary intake for major food groups and dietary risk factors based on systematic review and meta-analysis of national dietary surveys. This project uses GDD data to establish baseline dietary intake patterns by country for health risk assessment.

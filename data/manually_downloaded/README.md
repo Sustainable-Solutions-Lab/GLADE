@@ -83,6 +83,38 @@ Downloading requires free user registration and acceptance of terms of use.
 
 ---
 
+### IHME_GBD_2019_DIET_RISK_1990_2019_DATA (directory)
+
+**Source:** IHME Global Burden of Disease Study 2019
+**Download:** https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019
+
+Direct file link: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip
+
+Downloading requires an IHME account.
+
+**Dataset details:**
+- **Content:** Country-level dietary risk exposure estimates (mean exposure, uncertainty bounds, summary exposure values) for 15 dietary risk factors
+- **Risk factors:** Calcium, fiber, fruit, legumes, milk, nuts, omega-3, processed meat, PUFA, red meat, sodium, sugar-sweetened beverages, trans fat, vegetables, whole grains
+- **Coverage:** 204 countries and territories, 1990–2019, by age group and sex
+- **Format:** ZIP archive (~700 MB) containing one CSV per risk factor (~47 MB each), named `IHME_GBD_2019_DIET_RISK_1990_2019_{RISK}_Y2021M09D27.CSV`
+- **Use case:** Supplements GDD baseline dietary intake data with GBD exposure estimates
+
+**Download steps:**
+1. Visit https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019
+2. Log in to your IHME account
+3. Download `IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip`
+4. Extract the ZIP file to get the individual CSV files
+5. Place the extracted directory as `data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA`
+
+**Processing:** Not yet integrated into the Snakemake workflow.
+
+**License:** IHME Free-of-Charge Non-commercial User Agreement
+
+**Citation:**
+> Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
+
+---
+
 ### IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX
 
 **Source:** IHME Global Burden of Disease Study 2019
@@ -134,6 +166,15 @@ When updating GDD data:
 4. Replace `GDD-dietary-intake.csv` in this directory
 5. Update access date in citations and documentation
 6. Rerun workflow: `tools/smk processing/{name}/dietary_intake_baseline.csv`
+
+### IHME GBD Dietary Risk Exposure Estimates
+
+When new GBD dietary risk exposure data is released:
+
+1. Visit https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019
+2. Log in and download the ZIP file
+3. Extract and replace `IHME_GBD_2019_DIET_RISK_1990_2019_DATA` directory in this directory
+4. Update filenames in workflow rules if naming convention changes
 
 ### IHME GBD Relative Risks
 

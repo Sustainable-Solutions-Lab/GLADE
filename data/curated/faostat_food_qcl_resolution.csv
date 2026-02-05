@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Maps model foods that share a single FAOSTAT FBS item code to individual
+# QCL item codes, enabling production-based resolution of within-group shares.
+#
+# When multiple model foods map to the same FBS item (e.g., cowpea and chickpea
+# both map to FBS "Beans" 2546), this file provides the QCL item code for each
+# food so that country-level production data can split the FBS supply.
+#
+# chickpea and gram both map to QCL "Chick peas, dry" (191) and will be split
+# equally after the QCL-based resolution.
+food,fbs_item_code,qcl_item_name,qcl_item_code
+cowpea,2546,"Cow peas, dry",195
+phaseolus-bean,2546,"Beans, dry",176
+pigeon-pea,2546,"Pigeon peas, dry",197
+chickpea,2546,"Chick peas, dry",191
+gram,2546,"Chick peas, dry",191
+carrot,2605,"Carrots and turnips",426
+cabbage,2605,"Cabbages",358
+dairy,2848,"Raw milk of cattle",882
+dairy-buffalo,2848,"Raw milk of buffalo",951

@@ -23,11 +23,12 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 
 1. Create an account with IHME and download ``IHME-GBD_2023-dealth-rates.csv`` as described in :ref:`ihme-gbd-mortality`.
 2. Download the IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`).
-3. Register at the Global Dietary Database portal and download the dataset, placed locally as the directory ``GDD-dietary-intake`` (:ref:`gdd-dietary-intake`).
+3. Download the IHME 2019 dietary risk exposure estimates ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA`` (:ref:`ihme-diet-risk-exposure`).
+4. Register at the Global Dietary Database portal and download the dataset, placed locally as the directory ``GDD-dietary-intake`` (:ref:`gdd-dietary-intake`).
 
 **Required API key setup:**
 
-4. Register for a Copernicus Climate Data Store account and configure your API key to enable automatic retrieval of land cover data (:ref:`copernicus-land-cover`).
+5. Register for a Copernicus Climate Data Store account and configure your API key to enable automatic retrieval of land cover data (:ref:`copernicus-land-cover`).
 
 
 Agricultural Production Data
@@ -528,6 +529,32 @@ IHME GBD 2019 — Relative Risk Curves
 1. Navigate to https://ghdx.healthdata.org/record/ihme-data/gbd-2019-relative-risks.
 2. Under the Files tab, locate and download the "Relative risks: all risk factors except for ambient air pollution, alcohol, smoking, and temperature [XLSX]" file; it will be named ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX``. Log in to your IHME account when requested.
 3. Place the downloaded file under ``data/manually_downloaded``; no need to rename.
+
+.. _ihme-diet-risk-exposure:
+
+IHME GBD 2019 — Dietary Risk Exposure Estimates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: Institute for Health Metrics and Evaluation (IHME)
+
+**Description**: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2019, covering 15 dietary risk factors with mean exposure, uncertainty, and summary exposure values (SEVs) by country, age, sex, and year. Supplements the Global Dietary Database (GDD) baseline dietary intake data.
+
+**Risk factors**: Calcium, fiber, fruit, legumes, milk, nuts, omega-3, processed meat, PUFA, red meat, sodium, sugar-sweetened beverages, trans fat, vegetables, whole grains
+
+**Coverage**: 204 countries and territories, 1990–2019, by age group and sex
+
+**License**: Free for non-commercial use with attribution (IHME Free-of-Charge Non-commercial User Agreement)
+
+**Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
+
+**Workflow integration**: Not yet integrated into the Snakemake workflow. Data is available under ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
+
+**Manual download steps**:
+
+1. Navigate to https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019.
+2. Log in to your IHME account.
+3. Download ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip`` (direct link: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip).
+4. Extract the ZIP file and place the resulting directory as ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA``.
 
 .. _gdd-dietary-intake:
 
