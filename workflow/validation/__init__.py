@@ -20,6 +20,7 @@ from .health_map import validate_health_map
 from .multi_cropping import validate_multi_cropping
 from .optimal_taxes import validate_optimal_taxes
 from .secrets import load_secrets_with_env_fallback
+from .sobol_generator import validate_sobol_generator
 
 Validator = Callable[[dict, Path], None]
 
@@ -33,6 +34,7 @@ _CHECKS: dict[str, Validator] = {
     "gaez_crop_mapping": validate_gaez_crop_mapping,
     "health_map": validate_health_map,
     "multi_cropping": validate_multi_cropping,
+    "sobol_generator": validate_sobol_generator,
 }
 
 

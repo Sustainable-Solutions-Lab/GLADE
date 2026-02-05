@@ -34,12 +34,34 @@ while keeping original values in the template. The format is a Python lambda:
         template:
           land:
             regional_limit: "{limit}"  # Uses original value 0.1
+
+Sampling modes for sensitivity analysis:
+
+    _generators:
+      - name: sa_{sample_id}
+        mode: sobol  # or "lhs"
+        samples: 64  # Base sample count
+        parameters:
+          yield_factor:
+            min: 0.8
+            max: 1.2
+          ch4_factor:
+            min: 0.7
+            max: 1.3
+        template:
+          sensitivity:
+            crop_yields:
+              all: "{yield_factor}"
+            emission_factors:
+              ch4: "{ch4_factor}"
 """
 
 import copy
 import itertools
 
 import numpy as np
+from SALib.sample import latin as salib_latin
+from SALib.sample import sobol as salib_sobol
 
 
 def expand_scenario_defs(raw_defs: dict) -> dict:
@@ -91,6 +113,22 @@ def _validate_generator(spec: dict) -> None:
     if "template" not in spec:
         raise ValueError(f"Generator '{spec['name']}' must have a 'template' field")
 
+    mode = spec.get("mode", "zip")
+
+    # Sobol and LHS modes require samples count and min/max bounds
+    if mode in ("sobol", "lhs"):
+        if "samples" not in spec:
+            raise ValueError(
+                f"Generator '{spec['name']}' with mode '{mode}' requires 'samples'"
+            )
+        for param_name, param_spec in spec["parameters"].items():
+            if "min" not in param_spec or "max" not in param_spec:
+                raise ValueError(
+                    f"Parameter '{param_name}' in mode '{mode}' requires 'min' and 'max'"
+                )
+        return
+
+    # Standard modes: zip, grid
     for param_name, param_spec in spec["parameters"].items():
         if "values" in param_spec:
             # Explicit values mode
@@ -142,6 +180,85 @@ def _generate_values(param_spec: dict) -> list:
         values = np.round(values).astype(int)
 
     return values.tolist()
+
+
+def _generate_sobol_samples(spec: dict) -> list[dict]:
+    """Generate Sobol quasi-random samples for sensitivity analysis.
+
+    Uses SALib's Sobol sequence generator with Saltelli's sampling scheme.
+    For D parameters and N base samples, generates N*(D+2) total samples
+    (without second-order interactions) for computing first-order and
+    total-order Sobol indices.
+
+    Parameters
+    ----------
+    spec : dict
+        Generator specification with 'samples' and 'parameters' containing
+        min/max bounds for each parameter. Optional 'seed' for reproducibility.
+
+    Returns
+    -------
+    list[dict]
+        List of dicts, each mapping parameter names to sampled values.
+    """
+    param_names = list(spec["parameters"].keys())
+    bounds = [
+        [spec["parameters"][name]["min"], spec["parameters"][name]["max"]]
+        for name in param_names
+    ]
+
+    problem = {
+        "num_vars": len(param_names),
+        "names": param_names,
+        "bounds": bounds,
+    }
+
+    n_samples = spec["samples"]
+    seed = spec.get("seed", 42)  # Default seed for reproducibility
+    samples = salib_sobol.sample(problem, n_samples, calc_second_order=False, seed=seed)
+
+    result = []
+    for row in samples:
+        result.append(dict(zip(param_names, row.tolist())))
+    return result
+
+
+def _generate_lhs_samples(spec: dict) -> list[dict]:
+    """Generate Latin Hypercube samples for sensitivity analysis.
+
+    Uses SALib's Latin Hypercube sampler for space-filling designs.
+
+    Parameters
+    ----------
+    spec : dict
+        Generator specification with 'samples' and 'parameters' containing
+        min/max bounds for each parameter. Optional 'seed' for reproducibility.
+
+    Returns
+    -------
+    list[dict]
+        List of dicts, each mapping parameter names to sampled values.
+    """
+    param_names = list(spec["parameters"].keys())
+    bounds = [
+        [spec["parameters"][name]["min"], spec["parameters"][name]["max"]]
+        for name in param_names
+    ]
+
+    problem = {
+        "num_vars": len(param_names),
+        "names": param_names,
+        "bounds": bounds,
+    }
+
+    n_samples = spec["samples"]
+    seed = spec.get("seed", 42)  # Default seed for reproducibility
+    samples = salib_latin.sample(problem, n_samples, seed=seed)
+
+    result = []
+    for row in samples:
+        result.append(dict(zip(param_names, row.tolist())))
+    return result
 
 
 def _zip_parameters(param_values: dict) -> list[dict]:
@@ -272,25 +389,32 @@ def _expand_generator(spec: dict) -> dict:
     template = spec["template"]
     mode = spec.get("mode", "zip")
 
-    # Generate values for each parameter
-    param_values = {}
-    for param_name, param_spec in spec["parameters"].items():
-        param_values[param_name] = _generate_values(param_spec)
+    # Sampling modes (sobol, lhs) generate combinations directly
+    if mode == "sobol":
+        combinations = _generate_sobol_samples(spec)
+    elif mode == "lhs":
+        combinations = _generate_lhs_samples(spec)
+    else:
+        # Standard modes: generate values per parameter, then combine
+        param_values = {}
+        for param_name, param_spec in spec["parameters"].items():
+            param_values[param_name] = _generate_values(param_spec)
+
+        if mode == "grid":
+            combinations = _grid_parameters(param_values)
+        else:  # zip mode (default)
+            combinations = _zip_parameters(param_values)
 
     # Build name formatters
     name_formatters = _get_name_formatters(spec["parameters"])
 
-    # Combine parameters according to mode
-    if mode == "grid":
-        combinations = _grid_parameters(param_values)
-    else:  # zip mode (default)
-        combinations = _zip_parameters(param_values)
-
     # Generate scenarios
     scenarios = {}
-    for values in combinations:
+    for idx, values in enumerate(combinations):
         # Format values for scenario name
+        # For sampling modes, include sample_id placeholder
         name_values = {k: name_formatters[k](v) for k, v in values.items()}
+        name_values["sample_id"] = idx
         scenario_name = name_template.format(**name_values)
         # Substitute values into template (using original values)
         scenario_config = _substitute_values(copy.deepcopy(template), values)

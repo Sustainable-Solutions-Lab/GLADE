@@ -216,6 +216,11 @@ macronutrients: {}
   # cal:
   #   min: 2000    # kcal/person/day
 
+# --- section: sensitivity ---
+# Multiplicative adjustment factors for sensitivity analysis. Applied after
+# model construction. See config/schemas/config.schema.yaml for structure.
+sensitivity: {}
+
 # --- section: byproducts ---
 # Foods that are not for direct human consumption (excluded from food group tracking)
 byproducts:

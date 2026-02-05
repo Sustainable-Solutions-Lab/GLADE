@@ -1388,6 +1388,61 @@ properties:
             minLength: 1
             description: "ECMWF datastores API key (or set ECMWF_DATASTORES_KEY env var)"
 
+  sensitivity:
+    type: object
+    additionalProperties: false
+    description: "Sensitivity analysis adjustment factors applied to network components"
+    properties:
+      crop_yields:
+        type: object
+        additionalProperties: false
+        description: "Multiplicative factors for crop production yields"
+        properties:
+          all:
+            type: number
+            minimum: 0
+            description: "Factor applied to all crops"
+          by_crop:
+            type: object
+            additionalProperties:
+              type: number
+              minimum: 0
+            description: "Per-crop factors (applied after 'all')"
+      emission_factors:
+        type: object
+        additionalProperties: false
+        description: "Multiplicative factors for emission efficiencies"
+        properties:
+          ch4:
+            type: number
+            minimum: 0
+            description: "Factor for CH4 emissions from animal production"
+          n2o:
+            type: number
+            minimum: 0
+            description: "Factor for N2O emissions from animal production"
+          luc:
+            type: number
+            minimum: 0
+            description: "Factor for CO2 from land-use change"
+      costs:
+        type: object
+        additionalProperties: false
+        description: "Multiplicative factors for production costs"
+        properties:
+          crop:
+            type: number
+            minimum: 0
+            description: "Factor for crop production marginal costs"
+          animal:
+            type: number
+            minimum: 0
+            description: "Factor for animal production marginal costs"
+      health_relative_risk:
+        type: number
+        minimum: 0
+        description: "Multiplicative factor for health relative risk reference values"
+
 # Disallow enabling the health objective while also enforcing fixed baseline diet
 allOf:
   - not:

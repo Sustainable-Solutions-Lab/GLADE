@@ -127,6 +127,7 @@ rule build_model:
                 "nutrition.py",
                 "primary_resources.py",
                 "production_stability.py",
+                "sensitivity.py",
                 "trade.py",
                 "utils.py",
             ],
@@ -165,6 +166,7 @@ rule build_model:
             "production_stability"
         ],
         netcdf=lambda w: get_effective_config(w.scenario)["netcdf"],
+        sensitivity=lambda w: get_effective_config(w.scenario)["sensitivity"],
         # Only used to force correct reruns when scenario_defs changes.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:

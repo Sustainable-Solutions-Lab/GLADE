@@ -27,6 +27,7 @@ from workflow.scripts.build_model import (
     nutrition,
     primary_resources,
     production_stability,
+    sensitivity,
     trade,
     utils,
 )
@@ -801,6 +802,15 @@ if __name__ == "__main__":
     pop_df["cluster"] = pop_df["cluster"].astype(int)
     cluster_pop = pop_df.groupby("cluster")["population"].sum().to_dict()
     n.meta["population"]["health_cluster"] = cluster_pop
+
+    # ═══════════════════════════════════════════════════════════════
+    # SENSITIVITY ADJUSTMENTS
+    # ═══════════════════════════════════════════════════════════════
+
+    sensitivity_cfg = snakemake.params.sensitivity
+    if sensitivity_cfg:
+        logger.info("Applying sensitivity adjustments...")
+        sensitivity.apply_sensitivity_factors(n, sensitivity_cfg)
 
     # ═══════════════════════════════════════════════════════════════
     # EXPORT

@@ -85,3 +85,115 @@ rule extract_objective_breakdown:
         "logs/{name}/extract_objective_breakdown_scen-{scenario}.log",
     script:
         "../scripts/analysis/extract_objective_breakdown.py"
+
+
+def _sobol_scenario_inputs(wildcards):
+    """Generate input files for all Sobol-sampled scenarios.
+
+    Looks for scenarios matching the prefix pattern in scenario_defs and
+    returns the analysis CSVs needed for sensitivity index computation.
+    """
+    prefix = wildcards.prefix
+    all_scenarios = list_scenarios()
+
+    # Preserve scenario_defs expansion order; Sobol analysis needs this exact ordering.
+    matching = [s for s in all_scenarios if s.startswith(prefix)]
+
+    if not matching:
+        raise ValueError(
+            f"No scenarios found with prefix '{prefix}'. "
+            f"Available scenarios: {all_scenarios}"
+        )
+
+    inputs = []
+    for scenario in matching:
+        inputs.extend(
+            [
+                f"results/{wildcards.name}/analysis/scen-{scenario}/objective_breakdown.csv",
+                f"results/{wildcards.name}/analysis/scen-{scenario}/ghg_totals.csv",
+                f"results/{wildcards.name}/analysis/scen-{scenario}/land_use.csv",
+                f"results/{wildcards.name}/analysis/scen-{scenario}/health_totals.csv",
+            ]
+        )
+    return inputs
+
+
+def _sobol_scenario_names(wildcards):
+    """Return Sobol scenario names matching the requested prefix in expansion order."""
+    prefix = wildcards.prefix
+    all_scenarios = list_scenarios()
+    matching = [s for s in all_scenarios if s.startswith(prefix)]
+    if not matching:
+        raise ValueError(
+            f"No scenarios found with prefix '{prefix}'. "
+            f"Available scenarios: {all_scenarios}"
+        )
+    return matching
+
+
+def _sobol_generator(wildcards):
+    """Extract the single Sobol generator from scenario_defs."""
+    import yaml
+
+    scenario_defs_path = config.get("scenario_defs")
+    if not scenario_defs_path:
+        raise ValueError(
+            "scenario_defs not configured; cannot compute sensitivity indices"
+        )
+
+    with open(scenario_defs_path, "r", encoding="utf-8") as f:
+        raw_defs = yaml.safe_load(f) or {}
+
+    sobol_generators = [
+        gen for gen in raw_defs.get("_generators", []) if gen.get("mode") == "sobol"
+    ]
+    if not sobol_generators:
+        raise ValueError("No Sobol generator found in scenario_defs")
+    if len(sobol_generators) > 1:
+        raise ValueError(
+            "Multiple Sobol generators found in scenario_defs. "
+            "Only one Sobol generator per config is currently supported."
+        )
+    return sobol_generators[0]
+
+
+def _sobol_parameter_bounds(wildcards):
+    """Extract parameter bounds from the Sobol generator in scenario_defs."""
+    generator = _sobol_generator(wildcards)
+    return {
+        name: {"min": spec["min"], "max": spec["max"]}
+        for name, spec in generator["parameters"].items()
+    }
+
+
+def _sobol_base_samples(wildcards):
+    """Extract base sample count from the Sobol generator."""
+    return _sobol_generator(wildcards)["samples"]
+
+
+rule compute_sensitivity_indices:
+    """Compute global Sobol sensitivity indices from ensemble scenario runs.
+
+    This rule aggregates outputs from Sobol-sampled scenarios and computes
+    first-order (S1) and total-order (ST) sensitivity indices.
+
+    To use, ensure your scenarios file has a generator with mode: sobol,
+    then run:
+        tools/smk --configfile config/global_sensitivity.yaml -- results/{name}/analysis/sobol_indices_sa_.csv
+
+    The {prefix} wildcard matches the scenario name prefix (e.g., "sa_" for scenarios sa_0, sa_1, ...).
+    """
+    input:
+        _sobol_scenario_inputs,
+    params:
+        analysis_dir=lambda w: f"results/{w.name}/analysis",
+        scenario_prefix=lambda w: w.prefix,
+        scenario_names=_sobol_scenario_names,
+        base_samples=_sobol_base_samples,
+        parameter_bounds=_sobol_parameter_bounds,
+    output:
+        indices="results/{name}/analysis/sobol_indices_{prefix}.csv",
+    log:
+        "logs/{name}/compute_sensitivity_indices_{prefix}.log",
+    script:
+        "../scripts/analysis/compute_sensitivity_indices.py"
