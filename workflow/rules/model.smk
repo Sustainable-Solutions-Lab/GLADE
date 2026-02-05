@@ -193,16 +193,16 @@ def solve_model_inputs(w):
         "health_clusters": f"processing/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
         "health_derived_tmrel": f"processing/{w.name}/health/scen-{w.scenario}/derived_tmrel.csv",
         "food_groups": "data/curated/food_groups.csv",
-        "baseline_diet": f"processing/{w.name}/dietary_intake.csv",
+        "baseline_diet": f"processing/{w.name}/baseline_diet.csv",
     }
 
-    # Add food-group incentives input if enabled for this scenario
+    # Add food incentives input if enabled for this scenario
     eff_cfg = get_effective_config(w.scenario)
-    if eff_cfg["food_group_incentives"]["enabled"]:
-        sources = eff_cfg["food_group_incentives"]["sources"]
+    if eff_cfg["food_incentives"]["enabled"]:
+        sources = eff_cfg["food_incentives"]["sources"]
         if not sources:
-            raise ValueError("food_group_incentives enabled but sources is empty")
-        inputs["food_group_incentives"] = [
+            raise ValueError("food_incentives enabled but sources is empty")
+        inputs["food_incentives"] = [
             source.format(name=w.name, scenario=w.scenario) for source in sources
         ]
     equal_source = eff_cfg["food_groups"]["equal_by_country_source"]
@@ -234,33 +234,7 @@ def solve_model_inputs(w):
             )
             inputs["food_loss_waste"] = f"processing/{w.name}/food_loss_waste.csv"
 
-    # Add within-group food ratio inputs
-    ratio_cfg = eff_cfg["food_groups"]["fix_within_group_ratios"]
-    if ratio_cfg["enabled"]:
-        inputs["food_group_ratios"] = f"processing/{w.name}/food_group_ratios.csv"
-
     return inputs
-
-
-rule calculate_food_group_ratios:
-    """Calculate within-group food consumption ratios from FAOSTAT FBS data.
-
-    For each (country, food_group), calculates the fraction of total group
-    supply contributed by each food. These ratios are used to constrain
-    relative food contributions within each group during optimization.
-    """
-    input:
-        fbs_items="processing/{name}/faostat_fbs_items.csv",
-        food_item_map="data/curated/faostat_food_item_map.csv",
-        food_groups="data/curated/food_groups.csv",
-    params:
-        byproducts=config["byproducts"],
-    output:
-        ratios="processing/{name}/food_group_ratios.csv",
-    log:
-        "logs/{name}/calculate_food_group_ratios.log",
-    script:
-        "../scripts/calculate_food_group_ratios.py"
 
 
 def get_solver_threads(cfg: dict) -> int:
@@ -316,9 +290,8 @@ rule solve_model:
         food_group_constraints=lambda w: get_effective_config(w.scenario)[
             "food_groups"
         ]["constraints"],
-        diet=lambda w: get_effective_config(w.scenario)["diet"],
         enforce_baseline=lambda w: get_effective_config(w.scenario)["validation"][
-            "enforce_gdd_baseline"
+            "enforce_baseline_diet"
         ],
         production_stability=lambda w: get_effective_config(w.scenario)["validation"][
             "production_stability"

@@ -6,7 +6,7 @@ name: "current_yields"
 scenario_defs: "config/current_yields_scenarios.yaml"
 
 # Consumer values derived from baseline consumption patterns
-food_group_incentives:
+food_incentives:
   sources:
     - "results/{name}/consumer_values/values.csv"
 

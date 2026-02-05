@@ -5,14 +5,12 @@
 import logging
 
 from linopy.constraints import print_single_constraint
+import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
 
 from workflow.scripts import constants
-from workflow.scripts.build_model.nutrition import (
-    _build_food_group_equals_from_baseline,
-)
 from workflow.scripts.build_model.utils import _per_capita_mass_to_mt_per_year
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_country_population
@@ -230,6 +228,121 @@ def add_food_group_constraints(
             )
 
 
+def add_food_consumption_constraints(
+    n: pypsa.Network,
+    baseline_df: pd.DataFrame,
+    population: dict[str, float],
+    slack_cost: float,
+) -> None:
+    """Add per-food equality constraints on food consumption links.
+
+    For each (food, country), constrains Link-p to the baseline
+    consumption value from baseline_diet.csv, with slack variables
+    to ensure feasibility.
+    """
+    m = n.model
+    link_p = m.variables["Link-p"].sel(snapshot="now")
+    links_df = n.links.static
+    consume_links = links_df[links_df["carrier"] == "food_consumption"]
+
+    # Build target dict from baseline_diet.csv
+    df = baseline_df.copy()
+    df["country"] = df["country"].str.upper()
+
+    # Filter to foods/countries that exist in the model
+    model_keys = set(zip(consume_links["food"], consume_links["country"]))
+    df = df[df.apply(lambda r: (r["food"], r["country"]) in model_keys, axis=1)].copy()
+
+    # Floor at 0.1 g/day to avoid numerical issues with very small values
+    df["consumption_g_per_day"] = df["consumption_g_per_day"].clip(lower=0.1)
+
+    # Build link name → target mapping
+    consume_links_keyed = consume_links.copy()
+    consume_links_keyed["key"] = (
+        consume_links_keyed["food"] + ":" + consume_links_keyed["country"]
+    )
+    df["key"] = df["food"] + ":" + df["country"]
+
+    # Match baseline to links
+    matched = df.merge(
+        consume_links_keyed[["key"]].reset_index(),
+        on="key",
+    )
+
+    if matched.empty:
+        logger.warning("No matching food consumption links for baseline diet data")
+        return
+
+    link_names = matched["name"].values
+    targets_g = matched["consumption_g_per_day"].values
+    countries = matched["country"].values
+
+    # Convert g/person/day → Mt/year per country
+    targets_mt = np.array(
+        [
+            _per_capita_mass_to_mt_per_year(g, population[c])
+            for g, c in zip(targets_g, countries)
+        ]
+    )
+
+    target_arr = xr.DataArray(
+        targets_mt, coords={"name": list(link_names)}, dims="name"
+    )
+    food_var = link_p.sel(name=list(link_names))
+
+    # Linopy slack variables
+    slack_pos = m.add_variables(
+        lower=0, coords={"name": list(link_names)}, name="food_slack_pos"
+    )
+    slack_neg = m.add_variables(
+        lower=0, coords={"name": list(link_names)}, name="food_slack_neg"
+    )
+
+    # Constraint: food_var + slack_neg - slack_pos == target
+    m.add_constraints(
+        food_var + slack_neg - slack_pos == target_arr,
+        name="GlobalConstraint-food_equal",
+    )
+
+    # Slack penalty in objective
+    m.objective += slack_cost * (slack_pos.sum() + slack_neg.sum())
+
+    # Register global constraints for dual extraction
+    foods = matched["food"].values
+    gc_names = [f"food_equal_{f}_{c}" for f, c in zip(foods, countries)]
+    food_groups = matched["food_group"].values
+    n.global_constraints.add(
+        gc_names,
+        sense="==",
+        constant=targets_mt,
+        type="food_consumption",
+        food=foods,
+        food_group=food_groups,
+        country=countries,
+    )
+
+    logger.info(
+        "Added %d per-food consumption equality constraints (slack cost=%.1f)",
+        len(matched),
+        slack_cost,
+    )
+
+
+def _build_ratios_from_baseline(baseline_df: pd.DataFrame) -> pd.DataFrame:
+    """Derive within-group food ratios from baseline diet data."""
+    df = baseline_df.copy()
+    df["country"] = df["country"].str.upper()
+    totals = df.groupby(["country", "food_group"])["consumption_g_per_day"].transform(
+        "sum"
+    )
+    df["ratio"] = 0.0
+    nonzero = totals > 0
+    df.loc[nonzero, "ratio"] = (
+        df.loc[nonzero, "consumption_g_per_day"] / totals[nonzero]
+    )
+    return df[["country", "food_group", "food", "ratio"]].copy()
+
+
 def _apply_solver_threads_option(
     solver_options: dict, solver_name: str, threads: int
 ) -> dict:
@@ -268,13 +381,13 @@ def add_ghg_pricing_to_objective(n: pypsa.Network, ghg_price_usd_per_t: float) -
     )
 
 
-def add_food_group_incentives_to_objective(
+def add_food_incentives_to_objective(
     n: pypsa.Network, incentives_paths: list[str]
 ) -> None:
-    """Add food-group incentives/penalties to the objective function.
+    """Add food-level incentives/penalties to the objective function.
 
-    Incentives are applied as adjustments to marginal storage costs of
-    food group stores. Positive values penalize consumption; negative
+    Incentives are applied as adjustments to marginal costs of food
+    consumption links. Positive values penalize consumption; negative
     values subsidize consumption.
 
     Parameters
@@ -282,15 +395,15 @@ def add_food_group_incentives_to_objective(
     n : pypsa.Network
         The network containing the model.
     incentives_paths : list[str]
-        Paths to CSVs with columns: group, country, adjustment_bnusd_per_mt
+        Paths to CSVs with columns: food, country, adjustment_bnusd_per_mt
     """
     if not incentives_paths:
-        raise ValueError("food_group_incentives enabled but no sources are configured")
+        raise ValueError("food_incentives enabled but no sources are configured")
 
     combined = []
     for path in incentives_paths:
         incentives_df = pd.read_csv(path)
-        required = {"group", "country", "adjustment_bnusd_per_mt"}
+        required = {"food", "country", "adjustment_bnusd_per_mt"}
         missing = required - set(incentives_df.columns)
         if missing:
             missing_text = ", ".join(sorted(missing))
@@ -299,49 +412,41 @@ def add_food_group_incentives_to_objective(
             )
 
         incentives_df["country"] = incentives_df["country"].astype(str).str.upper()
-        incentives_df["store_name"] = (
-            "store:group:" + incentives_df["group"] + ":" + incentives_df["country"]
+        combined.append(
+            incentives_df[["food", "country", "adjustment_bnusd_per_mt"]].copy()
         )
-        combined.append(incentives_df[["store_name", "adjustment_bnusd_per_mt"]].copy())
 
     all_incentives = pd.concat(combined, ignore_index=True)
     summed = (
-        all_incentives.groupby("store_name")["adjustment_bnusd_per_mt"]
+        all_incentives.groupby(["food", "country"])["adjustment_bnusd_per_mt"]
         .sum()
         .reset_index()
     )
 
-    if "marginal_cost_storage" not in n.stores.static.columns:
-        n.stores.static["marginal_cost_storage"] = 0.0
+    consume_links = n.links.static[n.links.static["carrier"] == "food_consumption"]
 
-    store_index = n.stores.static.index
-    missing_stores = summed[~summed["store_name"].isin(store_index)]
-    if not missing_stores.empty:
-        sample = ", ".join(missing_stores["store_name"].head(5))
-        logger.warning(
-            "Missing %d food group stores for incentives (examples: %s)",
-            len(missing_stores),
-            sample,
+    applied = 0
+    for _, row in summed.iterrows():
+        mask = (consume_links["food"] == row["food"]) & (
+            consume_links["country"] == row["country"]
         )
+        link_names = consume_links[mask].index
+        if not link_names.empty:
+            n.links.static.loc[link_names, "marginal_cost"] += row[
+                "adjustment_bnusd_per_mt"
+            ]
+            applied += len(link_names)
 
-    applicable = summed[summed["store_name"].isin(store_index)]
-    if applicable.empty:
+    if applied == 0:
         logger.info(
-            "No applicable food group incentives found in %d sources",
+            "No applicable food incentives found in %d sources",
             len(incentives_paths),
         )
         return
 
-    n.stores.static.loc[applicable["store_name"], "marginal_cost_storage"] = (
-        n.stores.static.loc[applicable["store_name"], "marginal_cost_storage"].astype(
-            float
-        )
-        + applicable["adjustment_bnusd_per_mt"].astype(float).values
-    )
-
     logger.info(
-        "Applied food-group incentives to %d stores from %d sources",
-        len(applicable),
+        "Applied food incentives to %d consumption links from %d sources",
+        applied,
         len(incentives_paths),
     )
 
@@ -812,10 +917,10 @@ def _run_solve() -> None:
         ghg_price = float(snakemake.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
 
-    # Add food-group incentives to the objective if enabled
-    if snakemake.config["food_group_incentives"]["enabled"]:
-        incentives_paths = list(snakemake.input.food_group_incentives)
-        add_food_group_incentives_to_objective(n, incentives_paths)
+    # Add food-level incentives to the objective if enabled
+    if snakemake.config["food_incentives"]["enabled"]:
+        incentives_paths = list(snakemake.input.food_incentives)
+        add_food_incentives_to_objective(n, incentives_paths)
 
     # Create the linopy model
     logger.info("Creating linopy model...")
@@ -842,22 +947,20 @@ def _run_solve() -> None:
     # Get population from network metadata
     population_map = get_country_population(n)
 
-    # Food group baseline equals (optional)
+    # Load baseline diet data (used for food-level enforcement and/or ratio constraints)
+    baseline_df = pd.read_csv(snakemake.input.baseline_diet)
+
+    # Food-level baseline enforcement (per-food equality constraints)
     per_country_equal: dict[str, dict[str, float]] | None = None
     equal_source = snakemake.config["food_groups"]["equal_by_country_source"]
-    if bool(snakemake.params.enforce_baseline) and equal_source:
+    enforce_baseline = bool(snakemake.params.enforce_baseline)
+    if enforce_baseline and equal_source:
         raise ValueError(
-            "Cannot combine enforce_gdd_baseline with food_groups.equal_by_country_source"
+            "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
         )
-    if bool(snakemake.params.enforce_baseline):
-        baseline_df = pd.read_csv(snakemake.input.baseline_diet)
-        per_country_equal = _build_food_group_equals_from_baseline(
-            baseline_df,
-            list(population_map.keys()),
-            pd.read_csv(snakemake.input.food_groups)["group"].unique(),
-            baseline_age=str(snakemake.params.diet["baseline_age"]),
-            reference_year=int(snakemake.params.diet["baseline_reference_year"]),
-        )
+    if enforce_baseline:
+        slack_cost = float(snakemake.config["validation"]["slack_marginal_cost"])
+        add_food_consumption_constraints(n, baseline_df, population_map, slack_cost)
     elif equal_source:
         equal_df = pd.read_csv(snakemake.input.food_group_equal)
         required = {"group", "country", "consumption_g_per_day"}
@@ -962,11 +1065,15 @@ def _run_solve() -> None:
             slack_marginal_cost,
         )
 
-    # Add within-group food ratio constraints if enabled
+    # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = snakemake.params.fix_within_group_ratios
-    if ratio_cfg["enabled"]:
-        ratios_df = pd.read_csv(snakemake.input.food_group_ratios)
+    if ratio_cfg["enabled"] and not enforce_baseline:
+        ratios_df = _build_ratios_from_baseline(baseline_df)
         add_within_group_ratio_constraints(n, ratios_df)
+    elif ratio_cfg["enabled"] and enforce_baseline:
+        logger.info(
+            "Skipping fix_within_group_ratios: redundant when enforce_baseline_diet=true"
+        )
 
     # Add health impacts if enabled
     health_enabled = bool(snakemake.params.health_enabled)

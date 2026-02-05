@@ -10,8 +10,8 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
   emissions:
     ghg_price: 0
@@ -24,7 +24,7 @@ _generators:
       n:
         values: [3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 50, 70, 100]
     template:
-      food_group_incentives:
+      food_incentives:
         enabled: true
       health:
         intake_grid_points: "{n}"

@@ -14,14 +14,14 @@ def _consumer_values_enabled(config: dict, scenario_defs: dict) -> bool:
         sources = [str(src) for src in cfg.get("sources", [])]
         return any("consumer_values" in src for src in sources)
 
-    base_cfg = config["food_group_incentives"]
+    base_cfg = config["food_incentives"]
     if has_consumer_values_sources(base_cfg) and bool(base_cfg["enabled"]):
         return True
 
     for overrides in scenario_defs.values():
         if not isinstance(overrides, dict):
             continue
-        cv_cfg = overrides.get("food_group_incentives", {})
+        cv_cfg = overrides.get("food_incentives", {})
         if not isinstance(cv_cfg, dict) or not bool(cv_cfg.get("enabled", False)):
             continue
         merged_sources = cv_cfg.get("sources", base_cfg.get("sources", []))

@@ -6,7 +6,7 @@
 
 This workflow:
 1. Extracts "consumer values" (dual variables) from a baseline model with fixed
-   consumption (enforce_gdd_baseline=True)
+   consumption (enforce_baseline_diet=True)
 2. Uses these values in subsequent solves to explore how health/environmental
    pricing affects consumption while accounting for revealed consumer preferences
 """

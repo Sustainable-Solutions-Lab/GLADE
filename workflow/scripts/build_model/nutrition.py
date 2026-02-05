@@ -8,7 +8,6 @@ This module handles food groups, macronutrients, and the links that
 convert foods into nutritional outputs for human consumption.
 """
 
-from collections.abc import Iterable
 import logging
 
 import numpy as np
@@ -23,61 +22,6 @@ logger = logging.getLogger(__name__)
 _LOW_DEFAULT_MARGINAL_COST = (
     0.01 * constants.USD_TO_BNUSD / constants.TONNE_TO_MEGATONNE
 )
-
-
-def _build_food_group_equals_from_baseline(
-    diet_df: pd.DataFrame,
-    countries: Iterable[str],
-    groups: Iterable[str],
-    *,
-    baseline_age: str,
-    reference_year: int | None,
-) -> dict[str, dict[str, float]]:
-    """Map baseline diet table to per-country equality targets for food groups."""
-
-    df = diet_df.copy()
-    df["country"] = df["country"].str.upper()
-    if baseline_age:
-        df = df[df["age"] == baseline_age]
-    if reference_year is not None and "year" in df.columns:
-        sel = df[df["year"] == reference_year]
-        if sel.empty:
-            raise ValueError(
-                f"No baseline diet records for year {reference_year} and age '{baseline_age}'"
-            )
-        df = sel
-
-    filtered = df[df["country"].isin(countries) & df["item"].isin(groups)]
-    if filtered.empty:
-        raise ValueError(
-            "Baseline diet table is empty after filtering by countries/groups"
-        )
-
-    pivot = (
-        filtered.groupby(["country", "item"])["value"].mean().unstack(fill_value=np.nan)
-    )
-
-    # Floor at 1g/person/day to avoid numerical issues with consumer
-    # values when baseline intake is very small or zero.
-    clipped = pivot.reindex(index=countries, columns=groups).clip(lower=1.0)
-    missing_mask = clipped.isna()
-    if missing_mask.any().any():
-        missing_pairs = missing_mask.stack()
-        missing_pairs = missing_pairs[missing_pairs]
-        missing_entries = [f"{idx[0]}:{idx[1]}" for idx in missing_pairs.index]
-        logger.warning(
-            "Missing baseline diet values for %d country/group pairs (examples: %s)",
-            len(missing_entries),
-            ", ".join(sorted(missing_entries)[:5]),
-        )
-
-    result: dict[str, dict[str, float]] = {}
-    for group in groups:
-        col = clipped[group].dropna()
-        if not col.empty:
-            result[str(group)] = col.to_dict()
-
-    return result
 
 
 def add_food_group_buses_and_loads(

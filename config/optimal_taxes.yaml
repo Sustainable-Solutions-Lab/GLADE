@@ -17,7 +17,7 @@ optimal_taxes:
   enabled: true
 
 # Food-group incentives derived from optimal taxes
-food_group_incentives:
+food_incentives:
   enabled: false
   sources: []
 

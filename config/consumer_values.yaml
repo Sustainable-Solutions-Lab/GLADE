@@ -26,11 +26,17 @@ emissions:
   ghg_pricing_enabled: false
   ghg_price: 200
 
+validation:
+  use_actual_yields: true
+
+animal_products:
+  feed_efficiency_regions: null
+
 biomass:
   marginal_cost: 0
 
 # Food-group incentives derived from consumer values
-food_group_incentives:
+food_incentives:
   enabled: false
   sources:
   - "results/{name}/consumer_values/values.csv"

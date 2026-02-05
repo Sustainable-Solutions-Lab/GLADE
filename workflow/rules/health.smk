@@ -71,9 +71,7 @@ rule prepare_faostat_fbs_items:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        reference_year=config["food_groups"]["fix_within_group_ratios"][
-            "reference_year"
-        ],
+        reference_year=config["diet"]["baseline_reference_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
@@ -136,6 +134,52 @@ rule prepare_food_loss_waste:
         "logs/{name}/prepare_food_loss_waste.log",
     script:
         "../scripts/prepare_food_loss_waste.py"
+
+
+rule prepare_gbd_dietary_risk_exposure:
+    """Process GBD 2019 dietary risk exposure data for food group intake estimates.
+
+    Extracts country-level dietary intake (g/day) for adults 25+ from GBD risk
+    factor CSVs. Used to average with GDD estimates and for cross-validation.
+    """
+    input:
+        gbd_dir="data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA",
+    params:
+        reference_year=config["diet"]["baseline_reference_year"],
+    output:
+        exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
+    log:
+        "logs/{name}/prepare_gbd_dietary_risk_exposure.log",
+    script:
+        "../scripts/prepare_gbd_dietary_risk_exposure.py"
+
+
+rule estimate_baseline_diet:
+    """Estimate per-food, per-country baseline diet from multiple sources.
+
+    Combines food group totals (GDD + GBD averaged) with FAOSTAT item-level
+    supply data to disaggregate group totals into per-food consumption estimates.
+    """
+    input:
+        dietary_intake="processing/{name}/dietary_intake.csv",
+        gbd_exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
+        fbs_items="processing/{name}/faostat_fbs_items.csv",
+        crop_production="processing/{name}/faostat_crop_production.csv",
+        animal_production="processing/{name}/faostat_animal_production.csv",
+        food_item_map="data/curated/faostat_food_item_map.csv",
+        qcl_resolution="data/curated/faostat_food_qcl_resolution.csv",
+        food_groups="data/curated/food_groups.csv",
+    params:
+        reference_year=config["diet"]["baseline_reference_year"],
+        baseline_age=config["diet"]["baseline_age"],
+        food_groups_included=config["food_groups"]["included"],
+        byproducts=config["byproducts"],
+    output:
+        baseline_diet="processing/{name}/baseline_diet.csv",
+    log:
+        "logs/{name}/estimate_baseline_diet.log",
+    script:
+        "../scripts/estimate_baseline_diet.py"
 
 
 rule prepare_relative_risks:

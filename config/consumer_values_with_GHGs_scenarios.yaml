@@ -18,8 +18,8 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
   health:
     enabled: false
@@ -29,8 +29,8 @@ baseline:
 cv:
   # Consumer values in objective, no fixed demands (verification)
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
   health:
     enabled: false
@@ -40,8 +40,8 @@ cv:
 cv_H:
   # Consumer values + health
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
   macronutrients:
     cal:
@@ -54,8 +54,8 @@ cv_H:
 # cv_G:
 #   # Consumer values + GHG pricing
 #   validation:
-#     enforce_gdd_baseline: false
-#   food_group_incentives:
+#     enforce_baseline_diet: false
+#   food_incentives:
 #     enabled: true
 #   macronutrients:
 #     cal:
@@ -68,8 +68,8 @@ cv_H:
 # cv_HG:
 #   # Consumer values + health + GHG
 #   validation:
-#     enforce_gdd_baseline: false
-#   food_group_incentives:
+#     enforce_baseline_diet: false
+#   food_incentives:
 #     enabled: true
 #   macronutrients:
 #     cal:
@@ -82,8 +82,8 @@ cv_H:
 no_cv:
   # No consumer values, no fixed demands
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
   macronutrients:
     cal:
@@ -96,8 +96,8 @@ no_cv:
 no_cv_H:
   # No consumer values + health
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
   macronutrients:
     cal:
@@ -110,8 +110,8 @@ no_cv_H:
 # no_cv_G:
 #   # No consumer values + GHG pricing
 #   validation:
-#     enforce_gdd_baseline: false
-#   food_group_incentives:
+#     enforce_baseline_diet: false
+#   food_incentives:
 #     enabled: false
 #   macronutrients:
 #     cal:
@@ -124,8 +124,8 @@ no_cv_H:
 # no_cv_HG:
 #   # No consumer values + health + GHG
 #   validation:
-#     enforce_gdd_baseline: false
-#   food_group_incentives:
+#     enforce_baseline_diet: false
+#   food_incentives:
 #     enabled: false
 #   macronutrients:
 #     cal:

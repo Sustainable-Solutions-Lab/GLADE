@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     validation_cfg = snakemake.config["validation"]  # type: ignore[attr-defined]
     use_actual_production = bool(validation_cfg["use_actual_production"])
-    enforce_baseline = bool(validation_cfg["enforce_gdd_baseline"])
+    enforce_baseline = bool(validation_cfg["enforce_baseline_diet"])
     # Enable land slack if explicitly requested or when using actual production
     enable_land_slack = bool(validation_cfg["land_slack"]) or use_actual_production
     validation_slack_cost = float(
@@ -662,6 +662,11 @@ if __name__ == "__main__":
         cfg_countries,
     )
 
+    # Compute trade hub positions once (shared across crop, food, and feed trade)
+    hub_centers = trade.compute_trade_hubs(
+        regions_df, int(snakemake.params.trade["hubs"])
+    )
+
     # Feed trade networks (between countries via hubs)
     trade.add_feed_trade_hubs_and_links(
         n,
@@ -669,6 +674,7 @@ if __name__ == "__main__":
         regions_df,
         cfg_countries,
         FEED_CATEGORIES,
+        hub_centers=hub_centers,
     )
 
     # Crop residue soil incorporation (with N₂O emissions)
@@ -717,7 +723,7 @@ if __name__ == "__main__":
         cfg_countries,
         population,
         max_per_capita=snakemake.params.food_group_max_per_capita,
-        add_slack_for_fixed_consumption=enforce_baseline,
+        add_slack_for_fixed_consumption=False,  # Slack handled in solve_model via linopy variables
         slack_marginal_cost=validation_slack_cost,
     )
     nutrition.add_macronutrient_loads(
@@ -740,7 +746,12 @@ if __name__ == "__main__":
 
     # Trade networks
     trade.add_crop_trade_hubs_and_links(
-        n, snakemake.params.trade, regions_df, cfg_countries, list(crop_list)
+        n,
+        snakemake.params.trade,
+        regions_df,
+        cfg_countries,
+        list(crop_list),
+        hub_centers=hub_centers,
     )
     trade.add_food_trade_hubs_and_links(
         n,
@@ -748,6 +759,7 @@ if __name__ == "__main__":
         regions_df,
         cfg_countries,
         food_list,
+        hub_centers=hub_centers,
     )
 
     health.add_health_stores(

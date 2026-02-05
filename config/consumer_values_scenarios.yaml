@@ -18,9 +18,12 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   health:
     enabled: false
   emissions:
@@ -29,8 +32,22 @@ baseline:
 cv:
   # Consumer values in objective, no fixed demands (verification)
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
+    enabled: true
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
+  health:
+    enabled: false
+  emissions:
+    ghg_pricing_enabled: false
+
+cv_no_ratios:
+  # Consumer values in objective, no fixed demands, no within-group ratio constraints
+  validation:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
   health:
     enabled: false
@@ -40,9 +57,12 @@ cv:
 cv_H:
   # Consumer values + health
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -54,9 +74,12 @@ cv_H:
 cv_G:
   # Consumer values + GHG pricing
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -68,9 +91,12 @@ cv_G:
 cv_HG:
   # Consumer values + health + GHG
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: true
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -82,9 +108,12 @@ cv_HG:
 no_cv:
   # No consumer values, no fixed demands
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -96,9 +125,12 @@ no_cv:
 no_cv_H:
   # No consumer values + health
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -110,9 +142,12 @@ no_cv_H:
 no_cv_G:
   # No consumer values + GHG pricing
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400
@@ -124,9 +159,12 @@ no_cv_G:
 no_cv_HG:
   # No consumer values + health + GHG
   validation:
-    enforce_gdd_baseline: false
-  food_group_incentives:
+    enforce_baseline_diet: false
+  food_incentives:
     enabled: false
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
   macronutrients:
     cal:
       equal: 2400

@@ -30,7 +30,7 @@ biomass:
   marginal_cost: 0
 
 # Food-group incentives derived from consumer values
-food_group_incentives:
+food_incentives:
   enabled: false
   sources:
   - "results/{name}/consumer_values/values.csv"

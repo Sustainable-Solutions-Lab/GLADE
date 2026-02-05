@@ -222,12 +222,30 @@ BNUSD_PER_MT_TO_USD_PER_KG = 1.0
 
 
 def _prepare_consumer_values_distribution(cv_df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare per-country consumer values in USD/kg for plotting."""
-    prepared = cv_df.copy()
-    prepared["value_usd_per_kg"] = (
-        prepared["value_bnusd_per_mt"] * BNUSD_PER_MT_TO_USD_PER_KG
+    """Prepare per-country consumer values in USD/kg for plotting.
+
+    Aggregates food-level values to food group level for comparison plots
+    by taking the mean per (country, food_group).
+    """
+    # Support both food-level (food, food_group) and legacy group-level (group) formats
+    if "food_group" in cv_df.columns and "food" in cv_df.columns:
+        # Aggregate food-level values to group level
+        grouped = (
+            cv_df.groupby(["country", "food_group"])["value_bnusd_per_mt"]
+            .mean()
+            .reset_index()
+        )
+        grouped = grouped.rename(columns={"food_group": "group"})
+    elif "group" in cv_df.columns:
+        grouped = cv_df[["country", "group", "value_bnusd_per_mt"]].copy()
+    else:
+        raise ValueError(
+            "Consumer values CSV must have either (food, food_group) or (group) columns"
+        )
+    grouped["value_usd_per_kg"] = (
+        grouped["value_bnusd_per_mt"] * BNUSD_PER_MT_TO_USD_PER_KG
     )
-    return prepared
+    return grouped
 
 
 def _plot_consumer_values_distribution(
@@ -281,20 +299,9 @@ def _plot_consumer_values_distribution(
 
 def _write_consumer_values_csv(cv_df: pd.DataFrame, output_path: Path) -> None:
     """Write per-country consumer values data to CSV."""
-    # Per-country values
-    records = []
-    for _, row in cv_df.iterrows():
-        records.append(
-            {
-                "country": row["country"],
-                "group": row["group"],
-                "value_bnusd_per_mt": float(row["value_bnusd_per_mt"]),
-                "value_usd_per_kg": float(row["value_bnusd_per_mt"])
-                * BNUSD_PER_MT_TO_USD_PER_KG,
-            }
-        )
-
-    pd.DataFrame.from_records(records).to_csv(output_path, index=False)
+    out = cv_df.copy()
+    out["value_usd_per_kg"] = out["value_bnusd_per_mt"] * BNUSD_PER_MT_TO_USD_PER_KG
+    out.to_csv(output_path, index=False)
 
 
 def _write_consumption_csv(

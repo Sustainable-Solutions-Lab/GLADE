@@ -14,12 +14,19 @@ health:
   value_per_yll: 0
 
 # Consumer values derived from baseline consumption patterns
-food_group_incentives:
+food_incentives:
   sources:
     - "results/{name}/consumer_values/values.csv"
 
 biomass:
   marginal_cost: 0
+
+validation:
+  use_actual_yields: true
+
+animal_products:
+  # Use regionalized feed efficiency values
+  feed_efficiency_regions: null
 
 # Compare all GHG scenarios in plots
 plotting:

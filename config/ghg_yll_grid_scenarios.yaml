@@ -11,8 +11,8 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
   emissions:
     ghg_price: 0
@@ -20,7 +20,7 @@ baseline:
     value_per_yll: 0
 
 ghg0_yll0:
-  food_group_incentives:
+  food_incentives:
     enabled: true
   emissions:
     ghg_price: 0
@@ -29,46 +29,11 @@ ghg0_yll0:
   macronutrients:
     cal:
       equal: 2400
+  food_groups:
+    fix_within_group_ratios:
+      enabled: true
 
 _generators:
-  # - name: ghg0_yll{yll}
-  #   parameters:
-  #     yll:
-  #       space: log
-  #       start: 50
-  #       stop: 100000
-  #       num: 10
-  #       round: true
-  #   template:
-  #     food_group_incentives:
-  #       enabled: true
-  #     emissions:
-  #       ghg_price: 0
-  #     health:
-  #       value_per_yll: "{yll}"
-  #     macronutrients:
-  #       cal:
-  #         equal: 2400
-
-  # - name: ghg{ghg}_yll0
-  #   parameters:
-  #     ghg:
-  #       space: log
-  #       start: 5
-  #       stop: 500
-  #       num: 10
-  #       round: true
-  #   template:
-  #     food_group_incentives:
-  #       enabled: true
-  #     emissions:
-  #       ghg_price: "{ghg}"
-  #     health:
-  #       value_per_yll: 0
-  #     macronutrients:
-  #       cal:
-  #         equal: 2400
-
   - name: ghg{ghg}_yll{yll}
     mode: grid
     parameters:
@@ -85,12 +50,15 @@ _generators:
         num: 10
         round: true
     template:
-      food_group_incentives:
-        enabled: true
       emissions:
         ghg_price: "{ghg}"
       health:
         value_per_yll: "{yll}"
+      food_incentives:
+        enabled: true
       macronutrients:
         cal:
           equal: 2400
+      food_groups:
+        fix_within_group_ratios:
+          enabled: true

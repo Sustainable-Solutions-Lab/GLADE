@@ -11,8 +11,8 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
   emissions:
     ghg_price: 0
@@ -20,7 +20,7 @@ baseline:
     value_per_yll: 0
 
 ghg_yll_0:
-  food_group_incentives:
+  food_incentives:
     enabled: true
   emissions:
     ghg_price: 0
@@ -47,7 +47,7 @@ _generators:
         num: 10
         round: true
     template:
-      food_group_incentives:
+      food_incentives:
         enabled: true
       emissions:
         ghg_price: "{ghg}"

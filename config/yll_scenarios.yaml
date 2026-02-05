@@ -10,14 +10,14 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
-  food_group_incentives:
+    enforce_baseline_diet: true
+  food_incentives:
     enabled: false
   health:
     value_per_yll: 0
 
 yll_0:
-  food_group_incentives:
+  food_incentives:
     enabled: true
   health:
     value_per_yll: 0
@@ -35,7 +35,7 @@ _generators:
         num: 10
         round: true
     template:
-      food_group_incentives:
+      food_incentives:
         enabled: true
       health:
         value_per_yll: "{yll}"

@@ -24,7 +24,7 @@ netcdf:
 validation:
   use_actual_yields: false
   use_actual_production: false
-  enforce_gdd_baseline: false # Set food consumption equal to current day values
+  enforce_baseline_diet: false # Set food consumption equal to current day values
   land_slack: false # Enable land slack generators (allows exceeding regional land limits at cost)
   disable_new_cropland: false # If true, no new land can supply the cropland pool
   disable_new_pasture: false # If true, no new land can supply the pasture pool
@@ -45,9 +45,9 @@ validation:
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
 
-# --- section: food_group_incentives ---
-food_group_incentives:
-  enabled: false  # When true, food-group incentives are applied to the objective
+# --- section: food_incentives ---
+food_incentives:
+  enabled: false  # When true, food-level incentives are applied to the objective
   sources: []
 
 # --- section: optimal_taxes ---
@@ -340,7 +340,6 @@ food_groups:
   # ratio is preserved) while allowing total group consumption to vary.
   fix_within_group_ratios:
     enabled: false
-    reference_year: 2018
 
 # --- section: diet ---
 diet:
@@ -358,7 +357,7 @@ biomass:
 
 # --- section: trade ---
 trade:
-  crop_hubs: 20
+  hubs: 20
   crop_default_trade_cost_per_km: 0.01  # USD_2024 per tonne per km (1e-2)
   crop_trade_cost_categories:
     bulk_dry_goods:
@@ -399,7 +398,6 @@ trade:
     - alfalfa
     - biomass-sorghum
     - silage-maize
-  food_hubs: 20
   food_default_trade_cost_per_km: 0.021  # USD_2024 per tonne per km (2.1e-2)
   food_trade_cost_categories:
     chilled_meat:
@@ -414,7 +412,6 @@ trade:
       - dairy
       - eggs
   non_tradable_foods: []
-  feed_hubs: 15
   feed_default_trade_cost_per_km: 0.012  # USD_2024 per tonne per km (1.2e-2)
   feed_trade_cost_categories:
     grain_protein:

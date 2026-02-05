@@ -10,7 +10,7 @@ planning_horizon: 2020
 validation:
   use_actual_yields: true
   use_actual_production: true
-  enforce_gdd_baseline: true
+  enforce_baseline_diet: true
   slack_marginal_cost: 10
 
 water:
@@ -31,9 +31,9 @@ grazing:
 land:
   regional_limit: 1.
 
-macronutrients:
-  cal:
-    min: 2400
+# macronutrients:
+#   cal:
+#     min: 2400
 
 health:
   enabled: false

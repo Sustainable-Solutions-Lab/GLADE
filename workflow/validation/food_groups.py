@@ -26,12 +26,12 @@ def validate_food_groups(config: dict, project_root: Path) -> None:
     by the JSON Schema. This validator only checks against the data file.
     """
     if (
-        bool(config["validation"]["enforce_gdd_baseline"])
+        bool(config["validation"]["enforce_baseline_diet"])
         and config["food_groups"]["equal_by_country_source"]
     ):
         raise ValueError(
             "food_groups.equal_by_country_source cannot be set when "
-            "validation.enforce_gdd_baseline is true"
+            "validation.enforce_baseline_diet is true"
         )
 
     # JSON Schema already validated structure; we can safely access included

@@ -13,7 +13,7 @@
 baseline:
   # Fixed consumption to extract consumer values (dual variables)
   validation:
-    enforce_gdd_baseline: true
+    enforce_baseline_diet: true
   health:
     enabled: false
   emissions:
@@ -22,7 +22,7 @@ baseline:
 optimize:
   # Stage 1: Free consumption optimization with health/GHG enabled
   # Resulting consumption patterns represent the health/GHG-optimal diet
-  food_group_incentives:
+  food_incentives:
     enabled: true
     sources:
     - "results/{name}/consumer_values/values.csv"
@@ -38,7 +38,7 @@ extract_taxes:
   # Stage 2: Production costs only with fixed consumption from Stage 1
   # Dual variables of consumption constraints = optimal Pigouvian taxes/subsidies
   # Note: consumption is fixed via food_groups.equal_by_country_source
-  food_group_incentives:
+  food_incentives:
     enabled: true
     sources:
     - "results/{name}/consumer_values/values.csv"
@@ -52,7 +52,7 @@ extract_taxes:
 apply_taxes:
   # Stage 3: Production costs only with taxes/subsidies applied in objective
   # Uses the same calorie constraint as Stage 1 to make diets comparable.
-  food_group_incentives:
+  food_incentives:
     enabled: true
     sources:
     - "results/{name}/consumer_values/values.csv"

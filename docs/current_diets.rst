@@ -219,11 +219,10 @@ Workflow Integration
   * ``workflow/scripts/merge_dietary_sources.py``
 
 Baseline diet enforcement in the optimization can be toggled via
-``config.validation.enforce_gdd_baseline``. When enabled, the builder reads
-``processing/{name}/dietary_intake.csv`` (``All ages`` by default) and adds
-per-country equality loads for matching food groups, forcing the solution to
-replicate observed intake. ``diet.baseline_age`` and ``diet.baseline_reference_year``
-override which cohort/year slice the model locks to.
+``config.validation.enforce_baseline_diet``. When enabled, the solver reads
+``processing/{name}/baseline_diet.csv`` and adds per-food, per-country equality
+constraints on food consumption links, forcing the solution to replicate
+observed intake at the individual food level.
 
 References
 ----------
