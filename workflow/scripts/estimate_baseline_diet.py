@@ -80,9 +80,9 @@ def load_group_totals(
     intake = intake[intake["food_group"].isin(food_groups_included)]
     gdd_totals = intake.set_index(["country", "food_group"])["value"]
 
-    # Load GBD dietary risk exposure
+    # Load GBD dietary risk exposure (aggregate duplicates if any)
     gbd = pd.read_csv(gbd_exposure_path)
-    gbd_totals = gbd.set_index(["country", "food_group"])["consumption_g_per_day"]
+    gbd_totals = gbd.groupby(["country", "food_group"])["consumption_g_per_day"].mean()
 
     # Build combined group totals
     results = []
@@ -301,8 +301,10 @@ def build_within_group_shares(
     # Use a fixed global split as proxy
     _apply_millet_split(shares_df)
 
-    # Now compute per-food supply from FBS supply x share
-    # First build per-food FBS supply
+    # Convert from per-FBS-item shares to per-food-group shares.
+    # Currently each food's share sums to 1.0 within its FBS item, but food
+    # groups span multiple FBS items. Weight by FBS supply to get the correct
+    # proportion of each food within its food group.
     shares_df["fbs_item_code"] = shares_df["food"].map(fbs_map)
     shares_df["fbs_supply_kg"] = shares_df.apply(
         lambda r: fbs_supply.get((r["country"], int(r["fbs_item_code"])), 0.0)
@@ -310,6 +312,20 @@ def build_within_group_shares(
         else 0.0,
         axis=1,
     )
+    shares_df["supply_weight"] = shares_df["share"] * shares_df["fbs_supply_kg"]
+    group_total_weight = shares_df.groupby(["country", "food_group"])[
+        "supply_weight"
+    ].transform("sum")
+    nonzero = group_total_weight > 0
+    shares_df.loc[nonzero, "share"] = (
+        shares_df.loc[nonzero, "supply_weight"] / group_total_weight[nonzero]
+    )
+    # Where total weight is zero (no FBS supply), use equal shares within group
+    if (~nonzero).any():
+        group_counts = shares_df.groupby(["country", "food_group"])["food"].transform(
+            "count"
+        )
+        shares_df.loc[~nonzero, "share"] = 1.0 / group_counts[~nonzero]
 
     return shares_df[["country", "food", "food_group", "share"]].copy()
 

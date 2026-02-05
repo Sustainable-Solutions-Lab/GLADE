@@ -222,9 +222,15 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     # Filter out negligible categories
     total = total[total.abs() > 1e-9]
 
-    # Production stability penalties are now captured via PyPSA statistics
+    # Production stability penalties are captured via PyPSA statistics
     # through the marginal_cost_storage (L1) or marginal_cost_quadratic (quadratic)
     # attributes on stability stores with carrier="production_stability"
+
+    # Food slack penalties are linopy-level variables not visible as PyPSA
+    # components; their total cost is stored in n.meta by solve_model.
+    food_slack_cost = n.meta.get("food_slack_cost", 0.0)
+    if food_slack_cost:
+        total["Slack penalties"] = total.get("Slack penalties", 0.0) + food_slack_cost
 
     extracted_sum = total.sum()
     model_objective = n.objective

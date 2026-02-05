@@ -135,11 +135,12 @@ def main():
 
         df = pd.read_csv(csv_path)
 
-        # Filter: year, sex=Both, age=25 plus
+        # Filter: year, sex=Both, age=25 plus, country-level only
         df = df[
             (df["year_id"] == reference_year)
             & (df["sex_name"] == "Both")
             & (df["age_group_name"] == "25 plus")
+            & (df["location_set"] == "GBD")
         ].copy()
 
         if df.empty:

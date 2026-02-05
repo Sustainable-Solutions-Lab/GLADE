@@ -325,7 +325,7 @@ class TestApplyMilletSplit:
 class TestBuildWithinGroupShares:
     """Tests for the full within-group share computation."""
 
-    def test_unique_fbs_items_get_full_share(
+    def test_shares_reflect_fbs_supply_within_group(
         self,
         food_groups_df,
         food_item_map_df,
@@ -334,7 +334,7 @@ class TestBuildWithinGroupShares:
         crop_production_df,
         animal_production_df,
     ):
-        """Foods uniquely mapped to an FBS item get share=1.0."""
+        """Within-group shares are proportional to FBS supply."""
         shares = build_within_group_shares(
             food_groups_df,
             food_item_map_df,
@@ -345,17 +345,22 @@ class TestBuildWithinGroupShares:
             food_groups_included=["grain", "vegetables"],
             byproducts=[],
         )
-        # flour-white maps uniquely to FBS 2511
+        # grain group: flour-white (FBS 2511, supply=100) + rice-white (FBS 2807, supply=50)
+        # flour-white share = 100/150, rice-white share = 50/150
         flour = shares[(shares["food"] == "flour-white") & (shares["country"] == "USA")]
         assert len(flour) == 1
-        assert flour["share"].iloc[0] == pytest.approx(1.0)
+        assert flour["share"].iloc[0] == pytest.approx(100.0 / 150.0)
 
-        # tomato maps uniquely to FBS 2601
+        rice = shares[(shares["food"] == "rice-white") & (shares["country"] == "USA")]
+        assert len(rice) == 1
+        assert rice["share"].iloc[0] == pytest.approx(50.0 / 150.0)
+
+        # tomato is sole food in vegetables group → share=1.0
         tomato = shares[(shares["food"] == "tomato") & (shares["country"] == "USA")]
         assert len(tomato) == 1
         assert tomato["share"].iloc[0] == pytest.approx(1.0)
 
-    def test_shares_sum_to_one_per_fbs_item(
+    def test_shares_sum_to_one_per_food_group(
         self,
         food_groups_df,
         food_item_map_df,
@@ -364,7 +369,7 @@ class TestBuildWithinGroupShares:
         crop_production_df,
         animal_production_df,
     ):
-        """Within each FBS item, food shares sum to 1.0 per country."""
+        """Within each food group, food shares sum to 1.0 per country."""
         shares = build_within_group_shares(
             food_groups_df,
             food_item_map_df,
@@ -381,20 +386,15 @@ class TestBuildWithinGroupShares:
             ],
             byproducts=[],
         )
-        # Check legumes (FBS 2546: cowpea, chickpea, gram)
         for country in ["USA", "IND"]:
-            legume_shares = shares[
-                (shares["country"] == country)
-                & (shares["food"].isin(["cowpea", "chickpea", "gram"]))
-            ]
-            assert legume_shares["share"].sum() == pytest.approx(1.0, abs=0.01)
-
-            # Check dairy (FBS 2848: dairy, dairy-buffalo)
-            dairy_shares = shares[
-                (shares["country"] == country)
-                & (shares["food"].isin(["dairy", "dairy-buffalo"]))
-            ]
-            assert dairy_shares["share"].sum() == pytest.approx(1.0, abs=0.01)
+            for fg in ["legumes", "dairy", "whole_grains", "grain", "vegetables"]:
+                group_shares = shares[
+                    (shares["country"] == country) & (shares["food_group"] == fg)
+                ]
+                if not group_shares.empty:
+                    assert group_shares["share"].sum() == pytest.approx(
+                        1.0, abs=0.01
+                    ), f"Shares for {country}/{fg} don't sum to 1.0"
 
     def test_byproducts_excluded(
         self,

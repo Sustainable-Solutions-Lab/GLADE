@@ -291,11 +291,13 @@ def add_food_consumption_constraints(
     food_var = link_p.sel(name=list(link_names))
 
     # Linopy slack variables
+    link_coords = [list(link_names)]
+    link_dims = ["name"]
     slack_pos = m.add_variables(
-        lower=0, coords={"name": list(link_names)}, name="food_slack_pos"
+        lower=0, coords=link_coords, dims=link_dims, name="food_slack_pos"
     )
     slack_neg = m.add_variables(
-        lower=0, coords={"name": list(link_names)}, name="food_slack_neg"
+        lower=0, coords=link_coords, dims=link_dims, name="food_slack_neg"
     )
 
     # Constraint: food_var + slack_neg - slack_pos == target
@@ -1153,6 +1155,22 @@ def _run_solve() -> None:
                 )
         if production_slack:
             n.meta["production_stability_slack"] = production_slack
+
+        # Store food slack cost for objective breakdown extraction
+        if "food_slack_pos" in n.model.variables:
+            slack_pos_sol = n.model.variables["food_slack_pos"].solution
+            slack_neg_sol = n.model.variables["food_slack_neg"].solution
+            food_slack_total = float(slack_pos_sol.sum() + slack_neg_sol.sum())
+            food_slack_cost_val = float(
+                snakemake.config["validation"]["slack_marginal_cost"]
+            )
+            n.meta["food_slack_cost"] = food_slack_total * food_slack_cost_val
+            if food_slack_total > 1e-6:
+                logger.info(
+                    "Food slack used: %.4f Mt total (cost: %.2f bnUSD)",
+                    food_slack_total,
+                    n.meta["food_slack_cost"],
+                )
 
         n.export_to_netcdf(
             snakemake.output.network,
