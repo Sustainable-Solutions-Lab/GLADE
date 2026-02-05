@@ -19,7 +19,7 @@ aggregation:
 
 # Fewer trade hubs for simpler network visualization
 trade:
-  crop_hubs: 10  # Reduced from 20
+  hubs: 10  # Reduced from 20
 
 # Override the full crop list with a limited subset for fast execution
 # This replaces the default crops list entirely

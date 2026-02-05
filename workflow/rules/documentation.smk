@@ -300,7 +300,7 @@ rule doc_fig_trade_network:
         svg="docs/_static/figures/trade_network.svg",
         png="docs/_static/figures/trade_network.png",
     params:
-        n_hubs=config["trade"]["crop_hubs"],
+        n_hubs=config["trade"]["hubs"],
     log:
         "logs/shared/doc_fig_trade_network.log",
     script:

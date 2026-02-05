@@ -16,9 +16,7 @@ aggregation:
   irrigated_area_source: "current"
 
 trade:
-  crop_hubs: 14
-  food_hubs: 14
-  feed_hubs: 14
+  hubs: 14
 
 crops:
   - wheat

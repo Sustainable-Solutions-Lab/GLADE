@@ -22,6 +22,32 @@ from .. import constants
 logger = logging.getLogger(__name__)
 
 
+def compute_trade_hubs(regions_gdf: gpd.GeoDataFrame, n_hubs: int) -> np.ndarray:
+    """Run KMeans once and return cluster centers in EPSG:6933 coordinates.
+
+    Args:
+        regions_gdf: GeoDataFrame with regional geometries.
+        n_hubs: Desired number of trade hubs.
+
+    Returns:
+        Array of shape (k, 2) with hub center coordinates in EPSG:6933.
+    """
+    gdf_ee = regions_gdf.to_crs(6933)
+    cent = gdf_ee.geometry.centroid
+    region_coords = np.column_stack([cent.x.values, cent.y.values])
+    k = min(max(1, n_hubs), len(region_coords))
+    if k < n_hubs:
+        logger.info(
+            "Reducing hub count from %d to %d (regions=%d)",
+            n_hubs,
+            k,
+            len(region_coords),
+        )
+    km = KMeans(n_clusters=k, n_init=10, random_state=0)
+    km.fit_predict(region_coords)
+    return km.cluster_centers_
+
+
 def _resolve_trade_costs(
     trade_config: dict,
     items: list,
@@ -72,7 +98,7 @@ def _add_trade_hubs_and_links(
     countries: list,
     items: list,
     *,
-    hub_count_key: str,
+    hub_centers: np.ndarray,
     marginal_cost_key: str,
     cost_categories_key: str | None,
     default_cost_key: str | None,
@@ -88,7 +114,7 @@ def _add_trade_hubs_and_links(
 ) -> None:
     """Shared implementation for adding trade hubs and links for a set of items."""
 
-    n_hubs = int(trade_config[hub_count_key])
+    n_hubs = len(hub_centers)
     item_costs, _default_cost = _resolve_trade_costs(
         trade_config,
         items,
@@ -122,26 +148,7 @@ def _add_trade_hubs_and_links(
         logger.info("Skipping %s trade hubs: no tradable items available", log_label)
         return
 
-    gdf = regions_gdf.copy()
-    gdf_ee = gdf.to_crs(6933)
-
-    cent = gdf_ee.geometry.centroid
-    region_coords = np.column_stack([cent.x.values, cent.y.values])
-    k = min(max(1, n_hubs), len(region_coords))
-    if k < n_hubs:
-        logger.info(
-            "Reducing %s hub count from %d to %d (regions=%d)",
-            log_label,
-            n_hubs,
-            k,
-            len(region_coords),
-        )
-        n_hubs = k
-
-    km = KMeans(n_clusters=n_hubs, n_init=10, random_state=0)
-    km.fit_predict(region_coords)
-    centers = km.cluster_centers_
-
+    centers = hub_centers
     hub_ids = list(range(n_hubs))
 
     pairs = pd.MultiIndex.from_product([tradable_items, hub_ids], names=["item", "hub"])
@@ -154,6 +161,7 @@ def _add_trade_hubs_and_links(
     if hub_bus_names:
         n.buses.add(hub_bus_names, carrier=hub_bus_carriers)
 
+    gdf_ee = regions_gdf.to_crs(6933)
     gdf_countries = gdf_ee[gdf_ee["country"].isin(countries)].dissolve(
         by="country", as_index=True
     )
@@ -309,6 +317,8 @@ def add_crop_trade_hubs_and_links(
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     crop_list: list,
+    *,
+    hub_centers: np.ndarray,
 ) -> None:
     """Add crop trading hubs and connect crop buses via hubs."""
 
@@ -318,7 +328,7 @@ def add_crop_trade_hubs_and_links(
         regions_gdf,
         countries,
         crop_list,
-        hub_count_key="crop_hubs",
+        hub_centers=hub_centers,
         marginal_cost_key="crop_trade_marginal_cost_per_km",
         cost_categories_key="crop_trade_cost_categories",
         default_cost_key="crop_default_trade_cost_per_km",
@@ -340,6 +350,8 @@ def add_food_trade_hubs_and_links(
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     food_list: list,
+    *,
+    hub_centers: np.ndarray,
 ) -> None:
     """Add trading hubs and links for foods (including byproducts)."""
 
@@ -349,7 +361,7 @@ def add_food_trade_hubs_and_links(
         regions_gdf,
         countries,
         food_list,
-        hub_count_key="food_hubs",
+        hub_centers=hub_centers,
         marginal_cost_key="food_trade_marginal_cost_per_km",
         cost_categories_key="food_trade_cost_categories",
         default_cost_key="food_default_trade_cost_per_km",
@@ -371,12 +383,14 @@ def add_feed_trade_hubs_and_links(
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     feed_categories: list,
+    *,
+    hub_centers: np.ndarray,
 ) -> None:
     """Add trading hubs and links for animal feed categories.
 
-    Creates a hierarchical trade network for feed categories using K-means
-    clustering to position regional hubs. Feed buses follow the naming
-    convention feed_{category}_{country}.
+    Creates a hierarchical trade network for feed categories using pre-computed
+    hub positions. Feed buses follow the naming convention
+    feed_{category}_{country}.
 
     Grassland feed is excluded from trading (fresh, location-specific).
     Other feeds are tradable with costs reflecting bulkiness:
@@ -390,6 +404,7 @@ def add_feed_trade_hubs_and_links(
         regions_gdf: GeoDataFrame with regional geometries for hub placement
         countries: List of country codes to connect
         feed_categories: List of feed category names (from infrastructure)
+        hub_centers: Pre-computed hub center coordinates in EPSG:6933.
     """
     _add_trade_hubs_and_links(
         n,
@@ -397,7 +412,7 @@ def add_feed_trade_hubs_and_links(
         regions_gdf,
         countries,
         feed_categories,
-        hub_count_key="feed_hubs",
+        hub_centers=hub_centers,
         marginal_cost_key="feed_default_trade_cost_per_km",
         cost_categories_key="feed_trade_cost_categories",
         default_cost_key="feed_default_trade_cost_per_km",
