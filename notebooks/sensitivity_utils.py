@@ -825,19 +825,21 @@ def load_objective_from_statistics(
 
 def _load_health_tables(
     processing_dir: Path,
+    scenario_name: str,
     network: pypsa.Network | None = None,
 ) -> tuple[dict, dict, pd.DataFrame, pd.DataFrame, dict]:
     """Load health data tables from processing directory.
 
     Args:
         processing_dir: Path to processing directory
+        scenario_name: Name of the scenario (e.g., "yll_0", "ghg_0")
         network: Optional network to get cluster population from embedded metadata
 
     Returns:
         Tuple of (cluster_lookup, cluster_population, risk_breakpoints,
                   cluster_cause_baseline, tmrel_g_per_day)
     """
-    health_dir = processing_dir / "health"
+    health_dir = processing_dir / "health" / f"scen-{scenario_name}"
 
     # Country to cluster mapping
     country_clusters = pd.read_csv(health_dir / "country_clusters.csv")
@@ -931,6 +933,7 @@ def _extract_health_by_risk_factor_worker(args):
     (
         network_path,
         processing_dir,
+        scenario_name,
         grams_per_mt,
         days_per_year,
     ) = args
@@ -945,7 +948,7 @@ def _extract_health_by_risk_factor_worker(args):
         risk_breakpoints,
         cluster_cause_baseline,
         tmrel_g_per_day,
-    ) = _load_health_tables(processing_dir, network=n)
+    ) = _load_health_tables(processing_dir, scenario_name, network=n)
 
     # Get unique risk factors from breakpoints
     risk_factors = risk_breakpoints["risk_factor"].unique().tolist()
@@ -1122,8 +1125,14 @@ def extract_health_data(
     print(f"Extracting health data using {n_workers} workers...")
 
     worker_args = [
-        (network_path, processing_dir, GRAMS_PER_MEGATONNE, DAYS_PER_YEAR)
-        for _, _, network_path in scenarios
+        (
+            network_path,
+            processing_dir,
+            scenario_name,
+            GRAMS_PER_MEGATONNE,
+            DAYS_PER_YEAR,
+        )
+        for _, scenario_name, network_path in scenarios
     ]
     param_values = [pv for pv, _, _ in scenarios]
 
