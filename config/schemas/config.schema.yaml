@@ -1439,9 +1439,14 @@ properties:
             minimum: 0
             description: "Factor for animal production marginal costs"
       health_relative_risk:
-        type: number
-        minimum: 0
-        description: "Multiplicative factor for health relative risk reference values"
+        type: object
+        additionalProperties:
+          type: number
+          minimum: 0
+          maximum: 1
+        description: >
+          Per-risk-factor quantile values in [0, 1] interpolating between GBD
+          rr_low (q=0) and rr_high (q=1) for each dose-response curve.
 
 # Disallow enabling the health objective while also enforcing fixed baseline diet
 allOf:

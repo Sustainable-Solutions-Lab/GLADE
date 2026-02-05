@@ -1023,6 +1023,108 @@ def _add_stage2_delta(
 # =============================================================================
 
 
+def _apply_rr_quantiles(
+    risk_breakpoints: pd.DataFrame,
+    rr_quantiles: dict[str, float],
+) -> pd.DataFrame:
+    """Interpolate log_rr using per-risk-factor quantiles between GBD bounds.
+
+    For each risk factor with a quantile value q in [0, 1]:
+        log_rr(q) = (1 - q) * log_rr_low + q * log_rr_high
+
+    Parameters
+    ----------
+    risk_breakpoints
+        DataFrame with columns: risk_factor, log_rr, log_rr_low, log_rr_high.
+    rr_quantiles
+        Mapping from risk factor name to quantile value in [0, 1].
+
+    Returns
+    -------
+    pd.DataFrame
+        Modified risk_breakpoints with interpolated log_rr values.
+    """
+    risk_breakpoints = risk_breakpoints.copy()
+    for risk, q in rr_quantiles.items():
+        mask = risk_breakpoints["risk_factor"] == risk
+        if not mask.any():
+            logger.warning(
+                "RR quantile specified for unknown risk factor '%s'; skipping", risk
+            )
+            continue
+        risk_breakpoints.loc[mask, "log_rr"] = (1 - q) * risk_breakpoints.loc[
+            mask, "log_rr_low"
+        ] + q * risk_breakpoints.loc[mask, "log_rr_high"]
+    logger.info(
+        "Applied RR quantiles for %d risk factors: %s",
+        len(rr_quantiles),
+        ", ".join(f"{r}={q:.3f}" for r, q in rr_quantiles.items()),
+    )
+    return risk_breakpoints
+
+
+def _recompute_rr_ref(
+    risk_breakpoints: pd.DataFrame,
+    tmrel: dict[str, float],
+    risk_cause_map: dict[str, list[str]],
+    cluster_cause_metadata: pd.DataFrame,
+) -> pd.DataFrame:
+    """Recompute log_rr_total_ref from interpolated breakpoints at TMREL.
+
+    After quantile interpolation changes the log_rr values, the reference
+    RR at TMREL must be recomputed to maintain consistency.
+
+    Parameters
+    ----------
+    risk_breakpoints
+        DataFrame with columns: risk_factor, cause, intake_g_per_day, log_rr.
+    tmrel
+        TMREL intake per risk factor (g/day).
+    risk_cause_map
+        Mapping from risk factor to list of affected causes.
+    cluster_cause_metadata
+        DataFrame indexed by (health_cluster, cause) with log_rr_total_ref column.
+
+    Returns
+    -------
+    pd.DataFrame
+        Modified cluster_cause_metadata with recomputed log_rr_total_ref.
+    """
+    cluster_cause_metadata = cluster_cause_metadata.copy()
+
+    # Compute log_rr at TMREL for each (risk_factor, cause) pair
+    log_rr_at_tmrel: dict[tuple[str, str], float] = {}
+    for risk, causes in risk_cause_map.items():
+        tmrel_intake = tmrel.get(risk, 0.0)
+        for cause in causes:
+            bp = risk_breakpoints[
+                (risk_breakpoints["risk_factor"] == risk)
+                & (risk_breakpoints["cause"] == cause)
+            ].sort_values("intake_g_per_day")
+            if bp.empty:
+                continue
+            log_rr_val = float(
+                np.interp(
+                    tmrel_intake,
+                    bp["intake_g_per_day"].values,
+                    bp["log_rr"].values,
+                )
+            )
+            log_rr_at_tmrel[(risk, cause)] = log_rr_val
+
+    # Sum per (cluster, cause) — same log_rr_total_ref for all clusters
+    # since the RR curve and TMREL are cluster-independent
+    for cluster, cause in cluster_cause_metadata.index:
+        cause = str(cause)
+        total = 0.0
+        for risk, causes in risk_cause_map.items():
+            if cause in causes:
+                total += log_rr_at_tmrel.get((risk, cause), 0.0)
+        cluster_cause_metadata.at[(cluster, cause), "log_rr_total_ref"] = total
+
+    return cluster_cause_metadata
+
+
 def add_health_objective(
     n: pypsa.Network,
     risk_breakpoints_path: str,
@@ -1034,6 +1136,8 @@ def add_health_objective(
     risk_cause_map: dict[str, list[str]],
     solver_name: str,
     value_per_yll: float,
+    rr_quantiles: dict[str, float] | None = None,
+    tmrel_path: str | None = None,
 ) -> None:
     """Add health cost constraints to the optimization model.
 
@@ -1078,6 +1182,14 @@ def add_health_objective(
         Solver name ('gurobi', 'highs', etc.).
     value_per_yll
         Monetary value per year of life lost (USD).
+    rr_quantiles
+        Optional per-risk-factor quantile values in [0, 1] for interpolating
+        between GBD rr_low (q=0) and rr_high (q=1). When provided, log_rr
+        values in risk_breakpoints are replaced with interpolated values,
+        and rr_ref is recomputed at TMREL.
+    tmrel_path
+        Path to CSV with derived TMREL values (risk_factor, tmrel_g_per_day).
+        Required when rr_quantiles is provided.
     """
     m = n.model
 
@@ -1117,6 +1229,21 @@ def add_health_objective(
     if missing_pairs:
         text = ", ".join([f"{r}:{c}" for r, c in missing_pairs])
         raise ValueError(f"Risk breakpoints missing required pairs: {text}")
+
+    # --- Apply RR Quantile Interpolation (Sensitivity) ---
+    if rr_quantiles:
+        if tmrel_path is None:
+            raise ValueError("tmrel_path is required when rr_quantiles is provided")
+        risk_breakpoints = _apply_rr_quantiles(risk_breakpoints, rr_quantiles)
+
+        # Load TMREL and recompute rr_ref in cluster_cause_metadata
+        tmrel_df = pd.read_csv(tmrel_path)
+        tmrel = dict(
+            zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"].astype(float))
+        )
+        cluster_cause_metadata = _recompute_rr_ref(
+            risk_breakpoints, tmrel, risk_cause_map, cluster_cause_metadata
+        )
 
     # --- Build Store Map ---
     # Map food group stores to health clusters with per-capita coefficients.

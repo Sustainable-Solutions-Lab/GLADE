@@ -243,9 +243,24 @@ distributions rather than fixed value lists.
          luc_factor:
            lower: 0.5
            upper: 1.5
-         rr_factor:
-           lower: 0.8
-           upper: 1.2
+         rr_fruits:
+           lower: 0
+           upper: 1
+         rr_vegetables:
+           lower: 0
+           upper: 1
+         rr_whole_grains:
+           lower: 0
+           upper: 1
+         rr_legumes:
+           lower: 0
+           upper: 1
+         rr_nuts_seeds:
+           lower: 0
+           upper: 1
+         rr_red_meat:
+           lower: 0
+           upper: 1
          value_per_yll:
            lower: 5000
            upper: 500000
@@ -260,11 +275,32 @@ distributions rather than fixed value lists.
              ch4: "{ch4_factor}"
              n2o: "{n2o_factor}"
              luc: "{luc_factor}"
-           health_relative_risk: "{rr_factor}"
+           health_relative_risk:
+             fruits: "{rr_fruits}"
+             vegetables: "{rr_vegetables}"
+             whole_grains: "{rr_whole_grains}"
+             legumes: "{rr_legumes}"
+             nuts_seeds: "{rr_nuts_seeds}"
+             red_meat: "{rr_red_meat}"
          health:
            value_per_yll: "{value_per_yll}"
          emissions:
            ghg_price: "{ghg_price}"
+
+Health relative risk parameters use a **quantile parameterization**: each
+``rr_<risk_factor>`` value is a quantile :math:`q \in [0, 1]` that interpolates
+between the GBD confidence bounds at every dose-response breakpoint:
+
+.. math::
+
+   \log(\text{RR}(q)) = (1 - q) \cdot \log(\text{RR}_{\text{low}})
+   + q \cdot \log(\text{RR}_{\text{high}})
+
+- :math:`q = 0`: GBD lower bound (strongest protective effect for beneficial foods)
+- :math:`q = 1`: GBD upper bound (weakest protective effect for beneficial foods)
+
+This is applied per (risk factor, cause, exposure) point, so a single quantile
+parameter per risk factor produces cause-specific adjustments automatically.
 
 **Field reference**:
 

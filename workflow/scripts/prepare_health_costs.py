@@ -371,10 +371,14 @@ def _build_rr_tables(
         if len(exposures) == 0:
             continue
         log_rr_mean = np.log(grp["rr_mean"].astype(float).values)
+        log_rr_low = np.log(grp["rr_low"].astype(float).values)
+        log_rr_high = np.log(grp["rr_high"].astype(float).values)
 
         table[(risk, cause)] = {
             "exposures": exposures,
             "log_rr_mean": log_rr_mean,
+            "log_rr_low": log_rr_low,
+            "log_rr_high": log_rr_high,
         }
         max_exposure_g_per_day[risk] = max(
             max_exposure_g_per_day[risk], float(exposures.max())
@@ -421,12 +425,16 @@ def _derive_tmrel_from_rr(
 
 
 def _evaluate_rr(
-    table: RelativeRiskTable, risk: str, cause: str, intake: float
+    table: RelativeRiskTable,
+    risk: str,
+    cause: str,
+    intake: float,
+    key: str = "log_rr_mean",
 ) -> float:
     """Interpolate relative risk for given intake using log-linear interpolation."""
     data = table[(risk, cause)]
     exposures: npt.NDArray[np.floating] = data["exposures"]
-    log_rr: npt.NDArray[np.floating] = data["log_rr_mean"]
+    log_rr: npt.NDArray[np.floating] = data[key]
 
     if intake <= exposures[0]:
         return float(math.exp(log_rr[0]))
@@ -851,21 +859,38 @@ def _generate_breakpoint_tables(
             if key not in rr_lookup:
                 continue
             log_values: list[float] = []
+            log_values_low: list[float] = []
+            log_values_high: list[float] = []
             for intake in grid:
                 rr_val = _evaluate_rr(rr_lookup, risk, cause, intake)
                 log_rr = math.log(rr_val)
+                rr_val_low = _evaluate_rr(
+                    rr_lookup, risk, cause, intake, key="log_rr_low"
+                )
+                log_rr_low = math.log(rr_val_low)
+                rr_val_high = _evaluate_rr(
+                    rr_lookup, risk, cause, intake, key="log_rr_high"
+                )
+                log_rr_high = math.log(rr_val_high)
                 log_values.append(log_rr)
+                log_values_low.append(log_rr_low)
+                log_values_high.append(log_rr_high)
                 risk_breakpoint_rows.append(
                     {
                         "risk_factor": risk,
                         "cause": cause,
                         "intake_g_per_day": float(intake),
                         "log_rr": log_rr,
+                        "log_rr_low": log_rr_low,
+                        "log_rr_high": log_rr_high,
                     }
                 )
             if log_values:
-                cause_log_min[cause] += min(log_values)
-                cause_log_max[cause] += max(log_values)
+                # Use the most extreme bounds across mean, low, and high
+                # to ensure cause breakpoints cover the full uncertainty range
+                all_log = log_values + log_values_low + log_values_high
+                cause_log_min[cause] += min(all_log)
+                cause_log_max[cause] += max(all_log)
 
     risk_breakpoints = pd.DataFrame(risk_breakpoint_rows)
 

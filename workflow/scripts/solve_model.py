@@ -971,6 +971,10 @@ def _run_solve() -> None:
     # Add health impacts if enabled
     health_enabled = bool(snakemake.params.health_enabled)
     if health_enabled:
+        # Extract per-risk-factor RR quantiles from sensitivity config
+        sensitivity_cfg = snakemake.params.sensitivity or {}
+        rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
+
         add_health_objective(
             n,
             snakemake.input.health_risk_breakpoints,
@@ -982,6 +986,8 @@ def _run_solve() -> None:
             snakemake.params.health_risk_cause_map,
             solver_name,
             float(snakemake.params.health_value_per_yll),
+            rr_quantiles=rr_quantiles,
+            tmrel_path=snakemake.input.health_derived_tmrel,
         )
 
     status, condition = n.model.solve(

@@ -12,7 +12,10 @@ Supported adjustments:
 - Crop yields (efficiency on crop_production links)
 - Emission factors (CH4, N2O on animal_production; CO2 on land_conversion)
 - Production costs (marginal_cost on crop_production, animal_production)
-- Health relative risks (rr_ref on YLL stores)
+
+Health relative risk sensitivity is handled at solve time in
+workflow/scripts/solve_model/health.py via per-risk-factor quantile
+interpolation between GBD confidence bounds.
 """
 
 import logging
@@ -34,7 +37,6 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
         - crop_yields: {all: float, by_crop: {crop: float}}
         - emission_factors: {ch4: float, n2o: float, luc: float}
         - costs: {crop: float, animal: float}
-        - health_relative_risk: float
     """
     if not sensitivity_cfg:
         return
@@ -50,10 +52,6 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
     costs_cfg = sensitivity_cfg.get("costs", {})
     if costs_cfg:
         _apply_cost_factors(n, costs_cfg)
-
-    health_rr_factor = sensitivity_cfg.get("health_relative_risk")
-    if health_rr_factor is not None:
-        _apply_health_rr_factors(n, health_rr_factor)
 
 
 def _apply_crop_yield_factors(n: pypsa.Network, cfg: dict) -> None:
@@ -203,34 +201,3 @@ def _apply_cost_factors(n: pypsa.Network, cfg: dict) -> None:
             )
         else:
             logger.debug("No animal_production links found for cost adjustment")
-
-
-def _apply_health_rr_factors(n: pypsa.Network, factor: float) -> None:
-    """Apply multiplicative factor to health relative risk reference values.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-        Network to modify.
-    factor : float
-        Multiplicative factor for rr_ref on YLL stores.
-    """
-    if factor == 1.0:
-        return
-
-    # YLL stores have carriers starting with "yll_"
-    yll_mask = n.stores.static["carrier"].str.startswith("yll_")
-    if not yll_mask.any():
-        logger.debug("No YLL stores found for health RR adjustment")
-        return
-
-    if "rr_ref" not in n.stores.static.columns:
-        logger.warning("YLL stores do not have 'rr_ref' column; skipping adjustment")
-        return
-
-    n.stores.static.loc[yll_mask, "rr_ref"] *= factor
-    logger.info(
-        "Applied health RR factor %.3f to %d YLL stores",
-        factor,
-        yll_mask.sum(),
-    )

@@ -191,6 +191,7 @@ def solve_model_inputs(w):
         "health_cause_log": f"processing/{w.name}/health/scen-{w.scenario}/cause_log_breakpoints.csv",
         "health_cluster_summary": f"processing/{w.name}/health/scen-{w.scenario}/cluster_summary.csv",
         "health_clusters": f"processing/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
+        "health_derived_tmrel": f"processing/{w.name}/health/scen-{w.scenario}/derived_tmrel.csv",
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": f"processing/{w.name}/dietary_intake.csv",
     }
@@ -325,6 +326,7 @@ rule solve_model:
         fix_within_group_ratios=lambda w: get_effective_config(w.scenario)[
             "food_groups"
         ]["fix_within_group_ratios"],
+        sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
         # Only used to force correct reruns when scenario_defs changes.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:

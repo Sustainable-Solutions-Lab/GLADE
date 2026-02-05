@@ -13,7 +13,6 @@ from workflow.scripts.build_model.sensitivity import (
     _apply_cost_factors,
     _apply_crop_yield_factors,
     _apply_emission_factors,
-    _apply_health_rr_factors,
     apply_sensitivity_factors,
 )
 
@@ -224,36 +223,6 @@ class TestApplyCostFactors:
         np.testing.assert_allclose(result, original * 2.0)
 
 
-class TestApplyHealthRRFactors:
-    def test_rr_factor(self, mock_network):
-        """Test applying health relative risk factor."""
-        n = mock_network
-        original = n.stores.static.loc[
-            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
-        ].copy()
-
-        _apply_health_rr_factors(n, 1.1)
-
-        result = n.stores.static.loc[
-            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
-        ]
-        np.testing.assert_allclose(result.values, original.values * 1.1)
-
-    def test_factor_of_one_is_noop(self, mock_network):
-        """Test that factor of 1.0 doesn't change values."""
-        n = mock_network
-        original = n.stores.static.loc[
-            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
-        ].copy()
-
-        _apply_health_rr_factors(n, 1.0)
-
-        result = n.stores.static.loc[
-            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
-        ]
-        np.testing.assert_allclose(result.values, original.values)
-
-
 class TestApplySensitivityFactors:
     def test_full_config(self, mock_network):
         """Test applying a complete sensitivity configuration."""
@@ -262,22 +231,40 @@ class TestApplySensitivityFactors:
             "produce:wheat_rainfed:region1", "efficiency"
         ]
         original_ch4 = n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"]
-        original_rr = n.stores.static.loc["store:yll:B01:cluster001", "rr_ref"]
 
         cfg = {
             "crop_yields": {"all": 0.95},
             "emission_factors": {"ch4": 1.1},
-            "health_relative_risk": 1.05,
         }
         apply_sensitivity_factors(n, cfg)
 
         result_yield = n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
         result_ch4 = n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"]
-        result_rr = n.stores.static.loc["store:yll:B01:cluster001", "rr_ref"]
 
         np.testing.assert_allclose(result_yield, original_yield * 0.95)
         np.testing.assert_allclose(result_ch4, original_ch4 * 1.1)
-        np.testing.assert_allclose(result_rr, original_rr * 1.05)
+
+    def test_health_rr_config_ignored_at_build_time(self, mock_network):
+        """Test that health_relative_risk in config is ignored at build time.
+
+        Health RR sensitivity is now applied at solve time via per-risk-factor
+        quantile interpolation, not at build time.
+        """
+        n = mock_network
+        original_rr = n.stores.static.loc[
+            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
+        ].copy()
+
+        cfg = {
+            "health_relative_risk": {"fruits": 0.5, "vegetables": 0.8},
+        }
+        apply_sensitivity_factors(n, cfg)
+
+        # rr_ref should be unchanged — health RR is now handled at solve time
+        result_rr = n.stores.static.loc[
+            n.stores.static["carrier"].str.startswith("yll_"), "rr_ref"
+        ]
+        np.testing.assert_allclose(result_rr.values, original_rr.values)
 
     def test_empty_config_is_noop(self, mock_network):
         """Test that empty config doesn't modify network."""
