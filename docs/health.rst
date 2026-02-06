@@ -129,7 +129,7 @@ where :math:`r` indexes risk factors and :math:`x_r` is the intake for each.
 Health Cost Formulation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-In food-opt, we define the health cost as the monetised value of years
+In ``food-opt``, we define the health cost as the monetised value of years
 of life lost that could have been avoided by eating optimally. For a
 population cluster :math:`c` and disease :math:`d`:
 
@@ -285,7 +285,7 @@ The core challenge is that relative risks **multiply** across risk factors :math
    \mathrm{RR}_d = \prod_{r} \mathrm{RR}_{r,d}(x_r)
 
 This product is nonlinear in the intake variables :math:`x_r`. This is
-a problem since food-opt is nominally formulated as a *linear*
+a problem since ``food-opt`` is nominally formulated as a *linear*
 optimization model. Non-linear constraints such as the above cannot
 directly be incorporated into the overall linear program formulation,
 and generally make the optimization program more difficult to solve

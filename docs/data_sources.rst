@@ -619,7 +619,7 @@ Food Processing Data
 --------------------
 
 data/curated/foods.csv — Crop-to-Food Processing Pathways
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Type**: Hand-written configuration file (maintained in repository)
 
@@ -714,7 +714,7 @@ data/feed_to_animal_products.csv
 Data License Summary
 --------------------
 
-Most datasets used in this project require attribution. Some disallow redistribution, meaning that food-opt cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
+Most datasets used in this project require attribution. Some disallow redistribution, meaning that ``food-opt`` cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
 
 * **CC0 1.0 (Public Domain)** (USDA FoodData Central): Public domain, no restrictions; attribution requested
 * **CC BY 4.0** (GAEZ, FAOSTAT): Requires attribution

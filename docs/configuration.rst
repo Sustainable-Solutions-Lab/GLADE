@@ -8,7 +8,7 @@ Configuration
 Overview
 --------
 
-The food-opt model is configuration-driven: all scenario parameters, crop selections, constraints, and solver options are defined in YAML configuration files under ``config/``. This allows exploring different scenarios without modifying code.
+The ``food-opt`` model is configuration-driven: all scenario parameters, crop selections, constraints, and solver options are defined in YAML configuration files under ``config/``. This allows exploring different scenarios without modifying code.
 
 The default configuration is ``config/default.yaml``, structured into thematic sections.
 

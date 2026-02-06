@@ -8,7 +8,7 @@ Workflow & Execution
 Overview
 --------
 
-The food-opt model uses `Snakemake <https://snakemake.readthedocs.io/>`__ for workflow orchestration. If you have never used Snakemake before, consider having a look at the official `tutotial <https://snakemake.readthedocs.io/en/stable/tutorial/tutorial.html>`__ to get familiar with the basic concepts. The workflow follows these main stages:
+The ``food-opt`` model uses `Snakemake <https://snakemake.readthedocs.io/>`__ for workflow orchestration. If you have never used Snakemake before, consider having a look at the official `tutotial <https://snakemake.readthedocs.io/en/stable/tutorial/tutorial.html>`__ to get familiar with the basic concepts. The workflow follows these main stages:
 
 1. **Downloads** (GAEZ, GADM, UN WPP, FAOSTAT)
 2. **Preprocessing** (regions, resource classes, yields, population, health)
