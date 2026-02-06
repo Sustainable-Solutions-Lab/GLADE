@@ -446,3 +446,18 @@ rule plot_luc_emissions:
         "logs/{name}/plot_luc_emissions_scen-{scenario}.log",
     script:
         "../scripts/plotting/plot_luc_emissions.py"
+
+
+rule plot_pce_conditional_sensitivity:
+    """Plot stacked conditional Sobol shares vs policy slice parameters."""
+    input:
+        conditional_indices="results/{name}/analysis/pce_conditional_indices_{prefix}.csv",
+    output:
+        value_per_yll_pdf="results/{name}/plots/pce_conditional_s1_vs_value_per_yll_{prefix}.pdf",
+        ghg_price_pdf="results/{name}/plots/pce_conditional_s1_vs_ghg_price_{prefix}.pdf",
+    params:
+        metric="S1_cond",
+    log:
+        "logs/{name}/plot_pce_conditional_sensitivity_{prefix}.log",
+    script:
+        "../scripts/plotting/plot_pce_conditional_sensitivity.py"
