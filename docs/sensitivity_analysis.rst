@@ -400,6 +400,25 @@ conditioning-value combination).
 
 One row per output metric.
 
+**Conditional sensitivity area plots**
+
+You can visualize how conditional first-order Sobol shares change with policy
+slice parameters using:
+
+.. code-block:: bash
+
+   tools/smk -j4 --configfile config/pce_sensitivity.yaml -- \
+       results/pce_sensitivity/plots/pce_conditional_s1_vs_value_per_yll_pce_.pdf
+
+This rule also generates:
+
+- ``results/{name}/plots/pce_conditional_s1_vs_ghg_price_{prefix}.pdf``
+- ``results/{name}/plots/pce_conditional_s1_vs_value_per_yll_{prefix}.pdf``
+
+Each figure contains one panel per model output (for example ``total_cost``,
+``ghg_emissions``, ``land_use``, ``yll``) with stacked areas for non-slice
+parameters showing conditional first-order Sobol shares.
+
 
 Interpreting Results
 --------------------
