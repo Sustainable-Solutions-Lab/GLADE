@@ -732,6 +732,8 @@ def add_spared_land_links(
     n: pypsa.Network,
     baseline_land_df: pd.DataFrame,
     lef_df: pd.DataFrame,
+    *,
+    disable_spared_cropland: bool = False,
 ) -> None:
     """Add optional links to allocate spared land and credit CO2 sinks.
 
@@ -747,7 +749,13 @@ def add_spared_land_links(
     lef_df : pd.DataFrame
         LEF lookup from ``_build_luc_lef_lookup`` (columns: region,
         resource_class, water_supply, use, lef).
+    disable_spared_cropland : bool, optional
+        If True, skip creation of spared-cropland links.
     """
+
+    if disable_spared_cropland:
+        logger.info("Spared cropland disabled; skipping spared land links")
+        return
 
     if lef_df.empty:
         logger.info("No LUC LEF entries available for spared land; skipping")

@@ -11,6 +11,8 @@ validation:
   use_actual_yields: true
   use_actual_production: true
   enforce_baseline_diet: true
+  disable_spared_cropland: true
+  disable_spared_grassland: true
   slack_marginal_cost: 10
 
 water:

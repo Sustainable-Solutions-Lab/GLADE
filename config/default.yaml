@@ -28,6 +28,8 @@ validation:
   land_slack: false # Enable land slack generators (allows exceeding regional land limits at cost)
   disable_new_cropland: false # If true, no new land can supply the cropland pool
   disable_new_pasture: false # If true, no new land can supply the pasture pool
+  disable_spared_cropland: false # If true, existing cropland cannot be spared
+  disable_spared_grassland: false # If true, existing grassland cannot be spared
   slack_marginal_cost: 50. # bn USD per Mt/Mha for validation slack (food groups, feed, land)
   production_year: 2018 # To match with GDD baseline year
   production_stability:

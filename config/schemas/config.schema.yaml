@@ -108,6 +108,8 @@ properties:
       - land_slack
       - disable_new_cropland
       - disable_new_pasture
+      - disable_spared_cropland
+      - disable_spared_grassland
       - slack_marginal_cost
       - production_year
       - production_stability
@@ -131,6 +133,12 @@ properties:
       disable_new_pasture:
         type: boolean
         description: "If true, no new land can supply the pasture pool"
+      disable_spared_cropland:
+        type: boolean
+        description: "If true, existing cropland cannot be allocated to spared-land sinks"
+      disable_spared_grassland:
+        type: boolean
+        description: "If true, existing grassland cannot be allocated to spared-land sinks"
       slack_marginal_cost:
         type: number
         minimum: 0

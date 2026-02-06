@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 def add_feed_slack_generators(
     n: pypsa.Network,
     marginal_cost: float,
+    allow_negative_grassland_slack: bool = False,
 ) -> None:
     """Add slack generators and stores to feed buses for validation mode feasibility.
 
@@ -38,8 +39,10 @@ def add_feed_slack_generators(
 
     Note: Positive slack is only added for ruminant grassland feeds to prevent the model
     from filling feed gaps with high-protein feeds (which would overestimate N2O emissions).
-    Negative slack is only added for non-grassland feeds, since grassland use is capped
-    rather than fixed.
+    Negative slack is only added for non-grassland feeds by default. When
+    ``allow_negative_grassland_slack`` is True (validation mode with fixed
+    grassland dispatch), grassland buses also get negative slack to absorb
+    unavoidable overproduction.
 
     Parameters
     ----------
@@ -47,6 +50,8 @@ def add_feed_slack_generators(
         The network to add slack components to
     marginal_cost : float
         Cost per Mt of slack (billion USD/Mt)
+    allow_negative_grassland_slack : bool, optional
+        Whether negative slack should also be added to grassland feed buses.
     """
     # Find all feed buses (named feed:{category}:{country})
     feed_mask = n.buses.static.index.str.startswith("feed:")
@@ -83,12 +88,16 @@ def add_feed_slack_generators(
             len(gen_pos_names),
         )
 
-    # Add negative slack stores for non-grassland feed buses (absorb excess feed)
-    non_grassland_buses = feed_buses[~grassland_mask].tolist()
-    if non_grassland_buses:
+    # Add negative slack stores to absorb excess feed.
+    if allow_negative_grassland_slack:
+        negative_slack_buses = feed_buses.tolist()
+    else:
+        negative_slack_buses = feed_buses[~grassland_mask].tolist()
+
+    if negative_slack_buses:
         # Build unique names: extract category and country from index
         # Convention exception: using str.extract on bus names for category/country
-        _ng = pd.Index(non_grassland_buses).str.extract(
+        _ng = pd.Index(negative_slack_buses).str.extract(
             r"^feed:(?P<category>[^:]+):(?P<country>.+)$"
         )
         gen_neg_names = (
@@ -96,7 +105,7 @@ def add_feed_slack_generators(
         ).tolist()
         n.generators.add(
             gen_neg_names,
-            bus=non_grassland_buses,
+            bus=negative_slack_buses,
             carrier="slack_negative_feed",
             p_nom_extendable=True,
             p_min_pu=-1.0,

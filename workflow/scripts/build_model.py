@@ -493,6 +493,37 @@ if __name__ == "__main__":
     )
 
     land_cfg = snakemake.params.land
+    disable_new_cropland = bool(validation_cfg["disable_new_cropland"])
+    disable_new_pasture = bool(validation_cfg["disable_new_pasture"])
+    disable_spared_cropland = bool(validation_cfg["disable_spared_cropland"])
+    disable_spared_grassland = bool(validation_cfg["disable_spared_grassland"])
+    if use_actual_production:
+        # Validation mode should reproduce today's system: no new land conversion.
+        if not disable_new_cropland:
+            logger.info(
+                "Validation mode active: forcing disable_new_cropland=true "
+                "to prevent expansion during baseline replication"
+            )
+        if not disable_new_pasture:
+            logger.info(
+                "Validation mode active: forcing disable_new_pasture=true "
+                "to prevent expansion during baseline replication"
+            )
+        disable_new_cropland = True
+        disable_new_pasture = True
+        if not disable_spared_cropland:
+            logger.info(
+                "Validation mode active: forcing disable_spared_cropland=true "
+                "to prevent sequestration credits during baseline replication"
+            )
+        if not disable_spared_grassland:
+            logger.info(
+                "Validation mode active: forcing disable_spared_grassland=true "
+                "to prevent sequestration credits during baseline replication"
+            )
+        disable_spared_cropland = True
+        disable_spared_grassland = True
+
     reg_limit = float(land_cfg["regional_limit"])
     filtering_cfg = land_cfg["filtering"]
     min_crop_yield = float(filtering_cfg["min_crop_yield_t_per_ha"])
@@ -507,8 +538,9 @@ if __name__ == "__main__":
         land_slack_cost=validation_slack_cost,  # Use unified validation slack cost
         enable_land_slack=enable_land_slack,
         min_area_ha=min_area_ha,
-        disable_new_cropland=bool(validation_cfg["disable_new_cropland"]),
-        disable_new_pasture=bool(validation_cfg["disable_new_pasture"]),
+        disable_new_cropland=disable_new_cropland,
+        disable_new_pasture=disable_new_pasture,
+        disable_spared_grassland=disable_spared_grassland,
         existing_grassland_convertible_area=convertible_grassland_area_series,
         existing_grassland_marginal_area=marginal_grassland_area_series,
     )
@@ -526,7 +558,12 @@ if __name__ == "__main__":
     )
 
     # Crop production
-    crops.add_spared_land_links(n, baseline_land_df, luc_lef_lookup)
+    crops.add_spared_land_links(
+        n,
+        baseline_land_df,
+        luc_lef_lookup,
+        disable_spared_cropland=disable_spared_cropland,
+    )
     crops.add_regional_crop_production_links(
         n,
         crop_list,
@@ -577,6 +614,10 @@ if __name__ == "__main__":
             pasture_utilization_rate=float(
                 snakemake.params.grazing["pasture_utilization_rate"]
             ),
+            use_current_grazing_intensity=bool(
+                snakemake.params.grazing["use_current_grazing_intensity"]
+            ),
+            fix_current_production=use_actual_production,
             min_yield_t_per_ha=min_grassland_yield,
         )
 
@@ -658,7 +699,11 @@ if __name__ == "__main__":
 
     # Add feed slack generators for validation mode feasibility
     if use_actual_production:
-        animals.add_feed_slack_generators(n, marginal_cost=validation_slack_cost)
+        animals.add_feed_slack_generators(
+            n,
+            marginal_cost=validation_slack_cost,
+            allow_negative_grassland_slack=True,
+        )
 
     # Nutrition constraints
     nutrition.add_food_group_buses_and_loads(

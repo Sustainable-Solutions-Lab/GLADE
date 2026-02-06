@@ -90,6 +90,7 @@ def add_land_components(
     min_area_ha: float,
     disable_new_cropland: bool = False,
     disable_new_pasture: bool = False,
+    disable_spared_grassland: bool = False,
     existing_grassland_convertible_area: pd.Series | None = None,
     existing_grassland_marginal_area: pd.Series | None = None,
 ) -> None:
@@ -125,6 +126,8 @@ def add_land_components(
         If True, no new land can supply the cropland pool.
     disable_new_pasture : bool
         If True, no new land can supply the pasture pool.
+    disable_spared_grassland : bool
+        If True, existing grassland cannot be allocated to spared-land sinks.
     existing_grassland_convertible_area : pd.Series | None
         Current grassland area that is suitable for crop growth (GAEZ suitable),
         indexed by (region, resource_class) in hectares.
@@ -597,53 +600,54 @@ def add_land_components(
             land_type=to_pasture_df["land_type"],
         )
 
-        spared_bus_df = grassland_supply[
-            ["spared_bus", "region", "resource_class", "land_type"]
-        ].drop_duplicates(subset=["spared_bus"])
-        spared_bus_df = spared_bus_df.set_index("spared_bus")
-        n.buses.add(
-            spared_bus_df.index,
-            carrier="spared_grassland",
-            region=spared_bus_df["region"],
-            resource_class=spared_bus_df["resource_class"],
-            land_type=spared_bus_df["land_type"],
-        )
+        if not disable_spared_grassland:
+            spared_bus_df = grassland_supply[
+                ["spared_bus", "region", "resource_class", "land_type"]
+            ].drop_duplicates(subset=["spared_bus"])
+            spared_bus_df = spared_bus_df.set_index("spared_bus")
+            n.buses.add(
+                spared_bus_df.index,
+                carrier="spared_grassland",
+                region=spared_bus_df["region"],
+                resource_class=spared_bus_df["resource_class"],
+                land_type=spared_bus_df["land_type"],
+            )
 
-        store_df = grassland_supply.set_index("spared_store")
-        n.stores.add(
-            store_df.index,
-            bus=store_df["spared_bus"],
-            carrier="spared_grassland",
-            e_nom_extendable=True,
-            region=store_df["region"],
-            resource_class=store_df["resource_class"],
-            water_supply="rainfed",
-            land_type=store_df["land_type"],
-        )
+            store_df = grassland_supply.set_index("spared_store")
+            n.stores.add(
+                store_df.index,
+                bus=store_df["spared_bus"],
+                carrier="spared_grassland",
+                e_nom_extendable=True,
+                region=store_df["region"],
+                resource_class=store_df["resource_class"],
+                water_supply="rainfed",
+                land_type=store_df["land_type"],
+            )
 
-        spare_lef_input = grassland_supply[["region", "resource_class"]].copy()
-        spare_lef_input["water_supply"] = "r"
-        grassland_supply["spare_lef"] = merge_lef(
-            spare_lef_input,
-            lef_df,
-            "spared",
-            allow_missing=True,
-        ).to_numpy()
+            spare_lef_input = grassland_supply[["region", "resource_class"]].copy()
+            spare_lef_input["water_supply"] = "r"
+            grassland_supply["spare_lef"] = merge_lef(
+                spare_lef_input,
+                lef_df,
+                "spared",
+                allow_missing=True,
+            ).to_numpy()
 
-        spare_df = grassland_supply.set_index("spare_name")
-        n.links.add(
-            spare_df.index,
-            carrier="spare_existing_grassland",
-            bus0=spare_df["existing_bus"],
-            bus1=spare_df["spared_bus"],
-            efficiency=1.0,
-            bus2="emission:co2",
-            # tCO2/ha = MtCO2/Mha numerically; spared LEFs are negative
-            efficiency2=spare_df["spare_lef"],
-            p_nom_extendable=True,
-            p_nom_max=spare_df["area_mha"],
-            region=spare_df["region"],
-            resource_class=spare_df["resource_class"],
-            water_supply="rainfed",
-            land_type=spare_df["land_type"],
-        )
+            spare_df = grassland_supply.set_index("spare_name")
+            n.links.add(
+                spare_df.index,
+                carrier="spare_existing_grassland",
+                bus0=spare_df["existing_bus"],
+                bus1=spare_df["spared_bus"],
+                efficiency=1.0,
+                bus2="emission:co2",
+                # tCO2/ha = MtCO2/Mha numerically; spared LEFs are negative
+                efficiency2=spare_df["spare_lef"],
+                p_nom_extendable=True,
+                p_nom_max=spare_df["area_mha"],
+                region=spare_df["region"],
+                resource_class=spare_df["resource_class"],
+                water_supply="rainfed",
+                land_type=spare_df["land_type"],
+            )

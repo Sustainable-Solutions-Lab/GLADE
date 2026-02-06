@@ -66,6 +66,8 @@ For validation scenarios, new land supply can be disabled independently:
 
 - ``validation.disable_new_cropland``: Prevents new land from supplying cropland pools
 - ``validation.disable_new_pasture``: Prevents new land from supplying pasture pools
+- ``validation.disable_spared_cropland``: Prevents baseline cropland from being spared
+- ``validation.disable_spared_grassland``: Prevents existing grassland pools from being spared
 
 This allows validating against historical production patterns without spurious land-use-change from the optimizer reallocating land.
 
