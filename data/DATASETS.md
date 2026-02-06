@@ -250,6 +250,20 @@ Brief descriptions of key external datasets used by this project, with links and
 - Citation: Ludemann, C., Gruere, A., Heffer, P., & Dobermann, A. (2022). Global data on fertilizer use by crop and by country [Dataset]. Dryad. https://doi.org/10.5061/dryad.2rbnzs7qh
 - Workflow integration: Bundled dataset (CC0 licensed) included directly in the repository due to Dryad API access restrictions. Data includes nitrogen (N), phosphate (P₂O₅), and potash (K₂O) application rates and quantities by crop, country, and year, enabling calculation of crop-specific fertilizer application rates for N₂O emissions modeling.
 
+## LUIcube — Global Land-Use Intensity Data (Matej et al. 2025)
+
+- Description: Global gridded dataset of land-use intensity indicators at 30 arcsec resolution, covering multiple land-use classes including grasslands. Provides area, harvested HANPP (Human Appropriation of Net Primary Production), and remaining NPP (NPP_eco) per grid cell, enabling computation of grassland yields and grazing intensity. This project uses the GL-owl (grassland with scattered trees) and GL-notrees (open grassland) classes to derive total grassland area, productivity, and utilisation intensity.
+- Website: https://doi.org/10.1038/s41597-025-04788-1
+- Download: Zenodo records 14137284 (GL-owl) and 14013964 (GL-notrees)
+- Version/format: v1.0 (2025); GeoTIFF files within ZIP archives on Zenodo, accessed via HTTP range requests (remotezip).
+- Resolution: 30 arcsec (~1 km) spatial resolution; annual temporal resolution.
+- Coverage: Global; year 2020 (configurable via `config['data']['luicube']['year']`).
+- Variables: Area (km²), HANPP_harv (tC/yr), NPP_eco (tC/yr) per grid cell and land-use class.
+- License/terms (summary): Creative Commons Attribution 4.0 International (CC BY 4.0).
+  - License: https://creativecommons.org/licenses/by/4.0/
+- Citation: Matej, S., et al. (2025). LUIcube — a global gridded dataset of land-use intensity for 2000–2020 at 30 arcsec resolution. *Scientific Data*, 12, 289. https://doi.org/10.1038/s41597-025-04788-1
+- Workflow integration: Retrieved via the `download_luicube_grassland` rule using `remotezip` to extract individual GeoTIFFs from Zenodo ZIP archives without downloading the full archive. Six GeoTIFFs are downloaded (area, HANPPharv, NPPeco for GL-owl and GL-notrees). The `resample_luicube_grassland` rule sums the two grassland classes, reprojects to the model grid using sum resampling, and outputs `processing/shared/luc/luicube_grassland.nc` with area, HANPP, NPP_act, and grassland_fraction variables. The `build_luicube_grassland_yields` rule computes per-region/class yields (tDM/ha) and grazing intensity.
+
 ## FADN — Farm Accountancy Data Network (EU)
 
 - Description: European Union farm-level accounting database providing economic and structural data for agricultural holdings across EU member states. This project uses the LAMASUS-processed NUTS-level agricultural dataset derived from the FADN Public Database, which aggregates farm accounting data (crop outputs, production costs, areas) into standard results by country, year, and farm typology. FADN collects detailed cost breakdowns including seeds, crop protection, machinery, energy, labor, and other production expenses.

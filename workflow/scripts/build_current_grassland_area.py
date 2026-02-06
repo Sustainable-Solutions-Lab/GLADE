@@ -12,19 +12,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from workflow.scripts.raster_utils import calculate_all_cell_areas, raster_bounds
-
-
-def _build_dummy_raster(transform: Affine, width: int, height: int):
-    class _DummyRaster:
-        def __init__(self, transform: Affine, width: int, height: int) -> None:
-            self.transform = transform
-            self.shape = (height, width)
-            xmin, ymin, xmax, ymax = raster_bounds(transform, width, height)
-            self.bounds = (xmin, ymin, xmax, ymax)
-
-    return _DummyRaster(transform, width, height)
-
 
 def _transform_from_attrs(ds: xr.Dataset) -> Affine:
     try:
@@ -37,7 +24,7 @@ def _transform_from_attrs(ds: xr.Dataset) -> Affine:
 
 if __name__ == "__main__":
     classes_path: str = snakemake.input.classes  # type: ignore[name-defined]
-    lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
+    luicube_path: str = snakemake.input.luicube  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
 
@@ -47,19 +34,18 @@ if __name__ == "__main__":
     transform = _transform_from_attrs(classes_ds)
     height, width = region_id.shape
 
-    lc_ds = xr.load_dataset(lc_masks_path)
-    grass_frac = lc_ds["grassland_fraction"].astype(np.float32).values
-    if grass_frac.shape != region_id.shape:
+    luicube_ds = xr.load_dataset(luicube_path)
+    area_km2 = luicube_ds["area_km2"].astype(np.float32).values
+    if area_km2.shape != region_id.shape:
         raise ValueError(
-            "Grassland fraction grid does not match the resource_classes grid"
+            "LUIcube grassland grid does not match the resource_classes grid"
         )
 
-    np.copyto(grass_frac, 0.0, where=~np.isfinite(grass_frac))
-    np.clip(grass_frac, 0.0, 1.0, out=grass_frac)
+    np.copyto(area_km2, 0.0, where=~np.isfinite(area_km2))
+    np.clip(area_km2, 0.0, None, out=area_km2)
 
-    dummy_raster = _build_dummy_raster(transform, width, height)
-    cell_area = calculate_all_cell_areas(dummy_raster)
-    grass_area = grass_frac * cell_area
+    # Convert km² to hectares: 1 km² = 100 ha
+    grass_area = area_km2 * 100.0
 
     valid = (
         np.isfinite(grass_area)

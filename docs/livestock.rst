@@ -85,10 +85,11 @@ Aggregation follows the same resource class structure as crops:
 Pasture Utilization
 ~~~~~~~~~~~~~~~~~~~
 
-The model assumes that only a portion of the total grassland biomass production is available for grazing livestock. This reflects the need to leave biomass for regrowth, soil protection, and ecosystem function ("take half, leave half" principle).
+The model assumes that only a portion of the total grassland biomass production is available for grazing livestock. This reflects the need to leave biomass for regrowth, soil protection, and ecosystem function ("take half, leave half" principle). The correction is applied upstream in the ``merge_grassland_yields`` step so that the ``yield`` column in the merged output is already effective feed yield:
 
-* **Utilization Rate**: 50% (0.50)
-* **Parameter**: ``grazing.pasture_utilization_rate`` in configuration
+* **LUIcube rows**: yield is multiplied by the per-cell ``grazing_intensity`` from LUIcube data.
+* **ISIMIP rows**: yield is multiplied by a fixed utilization rate (default 50%).
+* **Parameter**: ``grazing.isimip_utilization_rate`` in configuration (applied to ISIMIP fallback yields).
 
 This value is consistent with the **GLOBIOM** model, which assumes a 50% grazing efficiency for grass in native grasslands [3]_. While intensive dairy systems can achieve higher utilization (up to 70-80%), global rangeland management guidelines typically recommend utilization rates below 50% to prevent degradation.
 

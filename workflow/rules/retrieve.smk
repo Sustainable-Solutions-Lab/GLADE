@@ -565,6 +565,19 @@ rule download_gleam_supplement:
         """
 
 
+rule download_luicube_grassland:
+    params:
+        lu_class=lambda w: w.lu_class,
+        variable=lambda w: w.variable,
+        year=config["data"]["luicube"]["year"],
+    output:
+        "data/downloads/luicube/{lu_class}_{variable}.tif",
+    log:
+        "logs/shared/download_luicube_{lu_class}_{variable}.log",
+    script:
+        "../scripts/download_luicube_raster.py"
+
+
 rule download_land_cover:
     output:
         temp("data/downloads/land_cover.zip"),

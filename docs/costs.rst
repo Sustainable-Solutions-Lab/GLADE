@@ -434,8 +434,8 @@ Grazing costs are applied to links that produce grassland feed from land:
    # Grazing cost (USD per tonne DM)
    grazing_cost_per_tonne_dm = calculate_grazing_cost_per_tonne_dm(...)
 
-   # Grassland yield (Mt DM per Mha)
-   efficiency = grassland_yield * pasture_utilization_rate
+   # Grassland yield (Mt DM per Mha) — already effective feed yield
+   efficiency = grassland_yield
 
    # Convert to cost per Mha (bnUSD/Mha)
    marginal_cost = (grazing_cost_per_tonne_dm * efficiency *
@@ -444,7 +444,7 @@ Grazing costs are applied to links that produce grassland feed from land:
 **Interpretation**:
   * The marginal cost represents the economic cost of producing grassland feed from one Mha of pasture
   * Higher-yielding grassland has higher costs per Mha (but the cost per tonne DM is constant)
-  * The pasture utilization rate adjusts for the fraction of biomass actually consumed by grazing animals
+  * Grassland yields are already corrected for utilization in the merge step (see :doc:`livestock`)
 
 Model Units and Conversions
 ----------------------------

@@ -53,6 +53,9 @@ p7zip = ">=16.02,<17"                # 7z archive extraction for Huang water dat
 # Workflow engine
 snakemake = ">=9.13.7, <10"
 
+# Data retrieval (HTTP range-based ZIP extraction for LUIcube)
+remotezip = ">=0.12, <1"
+
 # Editable install of workflow package for cross-script imports
 food-opt-workflow = { path = ".", editable = true }
 

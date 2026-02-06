@@ -82,6 +82,23 @@ rule build_luc_grid:
         "../scripts/build_luc_grid.py"
 
 
+rule resample_luicube_grassland:
+    input:
+        grid=rules.build_luc_grid.output.grid,
+        owl_area="data/downloads/luicube/GL-owl_area.tif",
+        owl_hanpp="data/downloads/luicube/GL-owl_HANPPharv.tif",
+        owl_nppeco="data/downloads/luicube/GL-owl_NPPeco.tif",
+        notrees_area="data/downloads/luicube/GL-notrees_area.tif",
+        notrees_hanpp="data/downloads/luicube/GL-notrees_HANPPharv.tif",
+        notrees_nppeco="data/downloads/luicube/GL-notrees_NPPeco.tif",
+    output:
+        f"{shared_luc_dir}/luicube_grassland.nc",
+    log:
+        "logs/shared/resample_luicube_grassland.log",
+    script:
+        "../scripts/resample_luicube_grassland.py"
+
+
 rule resample_land_cover:
     input:
         grid=rules.build_luc_grid.output.grid,
@@ -129,7 +146,7 @@ rule prepare_luc_inputs:
 rule build_current_grassland_area:
     input:
         classes="processing/{name}/resource_classes.nc",
-        lc_masks=rules.prepare_luc_inputs.output.lc_masks,
+        luicube=rules.resample_luicube_grassland.output[0],
         regions="processing/{name}/regions.geojson",
     output:
         current_area="processing/{name}/luc/current_grassland_area_by_class.csv",
@@ -183,6 +200,7 @@ rule build_grazing_only_land:
         classes="processing/{name}/resource_classes.nc",
         regions="processing/{name}/regions.geojson",
         lc_masks=rules.prepare_luc_inputs.output.lc_masks,
+        luicube=rules.resample_luicube_grassland.output[0],
         suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
     output:
         grazing_area="processing/{name}/land_grazing_only_by_class.csv",

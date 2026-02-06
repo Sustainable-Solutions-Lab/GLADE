@@ -598,17 +598,17 @@ properties:
 
   grazing:
     type: object
-    required: [enabled, pasture_utilization_rate]
+    required: [enabled, isimip_utilization_rate]
     additionalProperties: false
     properties:
       enabled:
         type: boolean
         description: "Whether to enable grazing in the model"
-      pasture_utilization_rate:
+      isimip_utilization_rate:
         type: number
         minimum: 0
         maximum: 1
-        description: "Fraction of pasture biomass that can be utilized by grazing animals"
+        description: "Utilization rate applied to ISIMIP grassland yields in the merge step"
 
   food_groups:
     type: object
@@ -967,7 +967,7 @@ properties:
 
   data:
     type: object
-    required: [gaez, usda, land_cover, faostat, soilgrids]
+    required: [gaez, usda, land_cover, faostat, luicube, soilgrids]
     additionalProperties: false
     properties:
       gaez:
@@ -1054,6 +1054,15 @@ properties:
           fbs_food_supply_element_code:
             type: integer
             description: "FAOSTAT element code for 'Food supply quantity (kg/capita/yr)' in FBS dataset"
+      luicube:
+        type: object
+        required: [year]
+        additionalProperties: false
+        properties:
+          year:
+            type: string
+            pattern: "^[0-9]{4}$"
+            description: "Year for LUIcube grassland data (Matej et al. 2025)"
       soilgrids:
         type: object
         required: [target_resolution_m]

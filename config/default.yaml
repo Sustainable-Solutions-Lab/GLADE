@@ -299,7 +299,7 @@ animal_products:
 
 grazing:
   enabled: true
-  pasture_utilization_rate: 0.50 # Fraction of grassland yield available for grazing
+  isimip_utilization_rate: 0.50 # Applied to ISIMIP yields in merge step
 
 # --- section: food_groups ---
 food_groups:
@@ -788,6 +788,8 @@ data:
   faostat:
     qcl_production_element_code: 5510  # "Production" in tonnes (QCL dataset, covers crops and livestock)
     fbs_food_supply_element_code: 645  # "Food supply quantity (kg/capita/yr)" in FBS dataset
+  luicube:
+    year: "2020"
   soilgrids:
     target_resolution_m: 10000  # Target resolution in meters (10000m = 10km)
 

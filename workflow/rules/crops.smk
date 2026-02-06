@@ -161,11 +161,38 @@ rule build_grassland_yields:
         classes="processing/{name}/resource_classes.nc",
         regions="processing/{name}/regions.geojson",
     output:
-        "processing/{name}/grassland_yields.csv",
+        "processing/{name}/isimip_grassland_yields.csv",
     log:
         "logs/{name}/build_grassland_yields.log",
     script:
         "../scripts/build_grassland_yields.py"
+
+
+rule build_luicube_grassland_yields:
+    input:
+        luicube="processing/shared/luc/luicube_grassland.nc",
+        classes="processing/{name}/resource_classes.nc",
+        regions="processing/{name}/regions.geojson",
+    output:
+        "processing/{name}/luicube_grassland_yields.csv",
+    log:
+        "logs/{name}/build_luicube_grassland_yields.log",
+    script:
+        "../scripts/build_luicube_grassland_yields.py"
+
+
+rule merge_grassland_yields:
+    input:
+        luicube="processing/{name}/luicube_grassland_yields.csv",
+        isimip="processing/{name}/isimip_grassland_yields.csv",
+    params:
+        isimip_utilization_rate=config["grazing"]["isimip_utilization_rate"],
+    output:
+        "processing/{name}/grassland_yields.csv",
+    log:
+        "logs/{name}/merge_grassland_yields.log",
+    script:
+        "../scripts/merge_grassland_yields.py"
 
 
 rule build_crop_residue_yields:

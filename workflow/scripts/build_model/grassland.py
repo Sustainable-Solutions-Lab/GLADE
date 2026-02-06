@@ -92,8 +92,6 @@ def add_grassland_feed_links(
     current_grassland_area: pd.DataFrame | None = None,
     marginal_grassland_area: pd.Series | None = None,
     use_actual_production: bool = False,
-    pasture_utilization_rate: float = 1.0,
-    use_current_grazing_intensity: bool = False,
     fix_current_production: bool = False,
     *,
     min_yield_t_per_ha: float,
@@ -105,7 +103,7 @@ def add_grassland_feed_links(
     n : pypsa.Network
         The network to add links to.
     grassland : pd.DataFrame
-        Grassland yield data.
+        Grassland yield data with pre-corrected effective feed yields.
     land_rainfed : pd.DataFrame
         Rainfed land area availability.
     region_to_country : pd.Series
@@ -122,12 +120,6 @@ def add_grassland_feed_links(
         (region, resource_class), by default None.
     use_actual_production : bool, optional
         Whether to cap production at observed values, by default False.
-    pasture_utilization_rate : float, optional
-        Fraction of grassland biomass actually consumed by animals, by default 1.0.
-    use_current_grazing_intensity : bool, optional
-        If True, use per-row ``grazing_intensity`` from LUIcube data instead of
-        the fixed ``pasture_utilization_rate``.  Falls back to
-        ``pasture_utilization_rate`` for rows where grazing_intensity is NaN.
     fix_current_production : bool, optional
         If True and ``use_actual_production`` is enabled, force grassland links
         to dispatch at their observed area (instead of only capping them).
@@ -213,14 +205,10 @@ def add_grassland_feed_links(
 
     available_mha = work["available_area"].to_numpy() / HA_PER_MHA
 
-    # Calculate efficiency (Mt/Mha) applying pasture utilization rate.
+    # Efficiency (Mt/Mha): yields are already effective feed yields
+    # (corrected in merge_grassland_yields.py), so use directly.
     # Yields are in t/ha, which equals Mt/Mha numerically.
-    yields = work["yield"].to_numpy()  # t/ha = Mt/Mha numerically
-    if use_current_grazing_intensity and "grazing_intensity" in work.columns:
-        gi = work["grazing_intensity"].fillna(pasture_utilization_rate).to_numpy()
-        efficiencies = yields * gi
-    else:
-        efficiencies = yields * pasture_utilization_rate  # Mt/Mha
+    efficiencies = work["yield"].to_numpy()  # t/ha = Mt/Mha numerically
 
     # Calculate marginal cost per Mha (bnUSD/Mha).
     # In PyPSA, marginal_cost is per unit of bus0 (land in Mha).

@@ -611,12 +611,6 @@ if __name__ == "__main__":
             current_grassland_area=current_grassland_area_df,
             marginal_grassland_area=marginal_grassland_area_series,
             use_actual_production=use_actual_production,
-            pasture_utilization_rate=float(
-                snakemake.params.grazing["pasture_utilization_rate"]
-            ),
-            use_current_grazing_intensity=bool(
-                snakemake.params.grazing["use_current_grazing_intensity"]
-            ),
             fix_current_production=use_actual_production,
             min_yield_t_per_ha=min_grassland_yield,
         )

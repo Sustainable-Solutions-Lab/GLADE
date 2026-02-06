@@ -133,6 +133,7 @@ if __name__ == "__main__":
     classes_path: str = snakemake.input.classes  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
     lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
+    luicube_path: str = snakemake.input.luicube  # type: ignore[name-defined]
     suitability_paths: list[str] = list(snakemake.input.suitability)  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
 
@@ -143,14 +144,18 @@ if __name__ == "__main__":
     height, width = region_id.shape
     crs_wkt = classes_ds.attrs.get("crs_wkt")
 
+    # Grassland fraction from LUIcube
+    luicube_ds = xr.load_dataset(luicube_path)
+    grass_frac = _safe_fraction(
+        luicube_ds["grassland_fraction"].astype(np.float32).values
+    )
+
+    # Cropland and forest fractions from ESA CCI land cover
     lc_ds = xr.load_dataset(lc_masks_path)
-    grass_frac = _safe_fraction(lc_ds["grassland_fraction"].astype(np.float32).values)
     crop_frac = _safe_fraction(lc_ds["cropland_fraction"].astype(np.float32).values)
     forest_frac = _safe_fraction(lc_ds["forest_fraction"].astype(np.float32).values)
     if grass_frac.shape != (height, width):
-        raise ValueError(
-            "Land-cover fractions grid does not match resource_classes grid"
-        )
+        raise ValueError("Grassland fraction grid does not match resource_classes grid")
 
     suitability, suit_transform, suit_crs = _max_suitability(suitability_paths)
     suitability = np.nan_to_num(suitability, nan=0.0, posinf=0.0, neginf=0.0)

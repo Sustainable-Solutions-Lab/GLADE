@@ -28,7 +28,7 @@ animal_products:
 
 grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
-  pasture_utilization_rate: 0.60
+  isimip_utilization_rate: 0.60
 
 land:
   regional_limit: 1.
