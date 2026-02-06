@@ -57,7 +57,7 @@ def _extract_luc_emissions_by_country(
         expansion[country] = expansion.get(country, 0.0) + emission
 
     # Spare land links (negative emissions from sequestration)
-    sl_mask = links_static["carrier"].isin(["spare_land", "spare_marginal"])
+    sl_mask = links_static["carrier"].isin(["spare_land", "spare_existing_grassland"])
     sl_links = links_static[sl_mask]
     for link in sl_links.index:
         region = sl_links.at[link, "region"]
@@ -120,7 +120,7 @@ def _extract_luc_intensity_by_cell(
     _process_links("land_conversion")
     _process_links("new_to_pasture")
     _process_links("spare_land")
-    _process_links("spare_marginal")
+    _process_links("spare_existing_grassland")
 
     # Compute intensity: MtCO2/yr / Mha = tCO2/ha/yr
     intensity: dict[tuple[int, int], float] = {}

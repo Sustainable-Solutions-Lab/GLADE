@@ -154,6 +154,22 @@ rule plot_crop_production_map:
         "../scripts/plotting/plot_crop_production_map.py"
 
 
+rule plot_crop_trade_map:
+    input:
+        land_use="results/{name}/analysis/scen-{scenario}/land_use.csv",
+        regions="processing/{name}/regions.geojson",
+        resource_classes="processing/{name}/resource_classes.nc",
+        land_area_by_class="processing/{name}/land_area_by_class.csv",
+        land_grazing_only="processing/{name}/land_grazing_only_by_class.csv",
+        network="results/{name}/solved/model_scen-{scenario}.nc",
+    output:
+        pdf="results/{name}/plots/scen-{scenario}/crop_trade_map.pdf",
+    log:
+        "logs/{name}/plot_crop_trade_map_scen-{scenario}.log",
+    script:
+        "../scripts/plotting/plot_crop_trade_map.py"
+
+
 rule plot_crop_use_breakdown:
     input:
         network="results/{name}/solved/model_scen-{scenario}.nc",

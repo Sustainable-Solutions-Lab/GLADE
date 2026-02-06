@@ -44,7 +44,7 @@ def categorize_emission_carrier(carrier: str, bus_carrier: str) -> str:
     carrier_map = {
         "residue_incorporation": "Crop residue incorporation",
         "spare_land": "Carbon sequestration",  # Link carrier (not "spared_land" which is bus/store)
-        "spare_marginal": "Carbon sequestration",  # Sparing marginal grazing land
+        "spare_existing_grassland": "Carbon sequestration",  # Sparing existing grassland
         "fertilizer_distribution": "Synthetic fertilizer application",
         "land_conversion": "Land Use Change",  # Link carrier for cropland expansion
         "new_to_pasture": "Land Use Change",  # Link carrier for pasture expansion

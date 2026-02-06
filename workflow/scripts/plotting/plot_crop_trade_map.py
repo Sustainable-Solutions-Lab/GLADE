@@ -58,8 +58,8 @@ _BEND_KM = 400
 # palette where possible, but some warm tones (Cereals gold vs Roots &
 # tubers brown) are nearly identical as thin lines, so we override a few
 # with more saturated / distinct hues.
-_TAB10 = plt.get_cmap("tab10").colors
 TRADE_CATEGORY_COLORS = {
+    # Crop trade categories (from CROP_TO_GROUP)
     "Cereals": "#d4a017",  # saturated gold
     "Legumes": CROP_GROUP_COLORS["Legumes"],
     "Roots & tubers": "#c44e52",  # muted red - distinct from gold
@@ -68,8 +68,35 @@ TRADE_CATEGORY_COLORS = {
     "Oilseeds": CROP_GROUP_COLORS["Oilseeds"],
     "Sugar crops": CROP_GROUP_COLORS["Sugar crops"],
     "Feed crops": CROP_GROUP_COLORS["Feed crops"],
-    "Processed foods": _TAB10[0],  # blue
+    # Food trade categories (by food group)
+    "Grain": "#C49C94",
+    "Whole grains": "#8C564B",
+    "Dairy": "#9EDAE5",
+    "Red meat": "#D62728",
+    "Poultry": "#FF9896",
+    "Eggs": "#FFE377",
+    "Starchy vegetables": "#F28E2C",
+    "Oil": "#FFBE7D",
+    "Sugar": "#E377C2",
+    # Feed trade
     "Animal feed": "#8c6d31",  # earthy brown
+}
+
+# Display names for internal food group identifiers.
+_FOOD_GROUP_DISPLAY = {
+    "grain": "Grain",
+    "whole_grains": "Whole grains",
+    "fruits": "Fruits",
+    "vegetables": "Vegetables",
+    "legumes": "Legumes",
+    "nuts_seeds": "Oilseeds",
+    "starchy_vegetable": "Starchy vegetables",
+    "oil": "Oil",
+    "red_meat": "Red meat",
+    "poultry": "Poultry",
+    "dairy": "Dairy",
+    "eggs": "Eggs",
+    "sugar": "Sugar",
 }
 
 
@@ -224,6 +251,16 @@ def _get_top_trade_flows(
     Returned DataFrame has columns:
         lon_from, lat_from, lon_to, lat_to, category, flow_mt
     """
+    # Build food-to-group mapping from food_consumption links in the network
+    consume = n.links.static[n.links.static["carrier"] == "food_consumption"]
+    food_to_group: dict[str, str] = {}
+    if "food_group" in consume.columns:
+        for food, group in zip(consume["food"], consume["food_group"]):
+            if pd.notna(food) and pd.notna(group):
+                food_to_group[str(food)] = _FOOD_GROUP_DISPLAY.get(
+                    str(group), str(group)
+                )
+
     trade_specs = [
         (
             "trade_crop",
@@ -231,7 +268,12 @@ def _get_top_trade_flows(
             "hub:crop:",
             lambda item: CROP_TO_GROUP.get(item, "Other"),
         ),
-        ("trade_food", "food", "hub:food:", lambda _: "Processed foods"),
+        (
+            "trade_food",
+            "food",
+            "hub:food:",
+            lambda item: food_to_group.get(item, "Other"),
+        ),
         ("trade_feed", "feed_category", "hub:feed:", lambda _: "Animal feed"),
     ]
 
@@ -551,7 +593,11 @@ def _plot_map(
 
         # Determine which categories are actually present
         active_cats = trade_flows["category"].unique()
-        ordered = [*CROP_GROUP_COLORS.keys(), "Processed foods", "Animal feed"]
+        ordered = [
+            *CROP_GROUP_COLORS.keys(),
+            *_FOOD_GROUP_DISPLAY.values(),
+            "Animal feed",
+        ]
         legend_cats = [c for c in ordered if c in active_cats]
 
         # Category colour entries
@@ -606,7 +652,8 @@ def _plot_map(
 
         ax.legend(
             handles=cat_handles + vol_handles,
-            loc="lower right",
+            loc="upper left",
+            bbox_to_anchor=(0.65, 0.32),
             fontsize=5.5,
             frameon=True,
             fancybox=False,
