@@ -242,19 +242,63 @@ if __name__ == "__main__":
     land_rainfed_df = land_class_df.xs("r", level="water_supply").copy()
     grassland_df = pd.DataFrame()
     current_grassland_area_df: pd.DataFrame | None = None
-    grazing_only_area_series: pd.Series | None = None
+    current_grassland_area_series: pd.Series | None = None
+    marginal_grassland_area_series: pd.Series | None = None
+    convertible_grassland_area_series: pd.Series | None = None
     if snakemake.params.grazing["enabled"]:
         grassland_df = read_csv(
             snakemake.input.grassland_yields, index_col=["region", "resource_class"]
         ).sort_index()
-        if use_actual_production:
-            current_grassland_area_df = read_csv(snakemake.input.current_grassland_area)
+        current_grassland_area_df = read_csv(snakemake.input.current_grassland_area)
+        if not current_grassland_area_df.empty:
+            current_grassland_area_series = (
+                current_grassland_area_df.set_index(["region", "resource_class"])[
+                    "area_ha"
+                ]
+                .astype(float)
+                .sort_index()
+            )
         grazing_only_area_df = read_csv(snakemake.input.grazing_only_land)
         if not grazing_only_area_df.empty:
-            grazing_only_area_series = (
+            marginal_grassland_area_series = (
                 grazing_only_area_df.set_index(["region", "resource_class"])["area_ha"]
                 .astype(float)
                 .sort_index()
+            )
+
+        if current_grassland_area_series is not None:
+            current_aligned = current_grassland_area_series.copy()
+            if marginal_grassland_area_series is not None:
+                combined_index = current_aligned.index.union(
+                    marginal_grassland_area_series.index
+                )
+                current_aligned = current_aligned.reindex(
+                    combined_index, fill_value=0.0
+                )
+                marginal_aligned = marginal_grassland_area_series.reindex(
+                    combined_index, fill_value=0.0
+                )
+                overshoot_mask = marginal_aligned > current_aligned
+                if overshoot_mask.any():
+                    logger.warning(
+                        "Clipping %d (region, class) entries where grazing-only area "
+                        "exceeds current grassland area",
+                        int(overshoot_mask.sum()),
+                    )
+                marginal_aligned = marginal_aligned.clip(upper=current_aligned)
+                marginal_grassland_area_series = marginal_aligned[
+                    marginal_aligned > 0.0
+                ].sort_index()
+                convertible = current_aligned - marginal_aligned
+            else:
+                convertible = current_aligned
+
+            convertible = convertible[convertible > 0.0].sort_index()
+            if not convertible.empty:
+                convertible_grassland_area_series = convertible
+        elif marginal_grassland_area_series is not None:
+            raise ValueError(
+                "Grazing-only land data is available but current grassland area is empty"
             )
 
     blue_water_availability_df = read_csv(snakemake.input.blue_water_availability)
@@ -465,114 +509,14 @@ if __name__ == "__main__":
         min_area_ha=min_area_ha,
         disable_new_cropland=bool(validation_cfg["disable_new_cropland"]),
         disable_new_pasture=bool(validation_cfg["disable_new_pasture"]),
+        existing_grassland_convertible_area=convertible_grassland_area_series,
+        existing_grassland_marginal_area=marginal_grassland_area_series,
     )
 
     # Apply the same min_area_ha filter to land_rainfed_df so that grassland
     # links are only created for regions that have corresponding land pool buses.
     if min_area_ha > 0:
         land_rainfed_df = land_rainfed_df[land_rainfed_df["area_ha"] >= min_area_ha]
-
-    # Existing pasture buses (grazing-only land)
-    existing_pasture_bus_names: list[str] = []
-    if grazing_only_area_series is not None and not grazing_only_area_series.empty:
-        g_df = pd.DataFrame(
-            [(r, int(c)) for r, c in grazing_only_area_series.index],
-            columns=["region", "cls"],
-        )
-        suffix = g_df["region"] + "_c" + g_df["cls"].astype(str)
-        existing_pasture_bus_names = ("land:existing_pasture:" + suffix).tolist()
-        pasture_gen_names = ("supply:land_existing_pasture:" + suffix).tolist()
-        pasture_pool_buses = ("land:pasture:" + suffix).tolist()
-        marginal_to_pasture_names = ("use:marginal_to_pasture:" + suffix).tolist()
-        spare_marginal_names = ("spare:marginal:" + suffix).tolist()
-        spared_marginal_buses = ("land:spared_marginal:" + suffix).tolist()
-        pasture_regions = g_df["region"].tolist()
-
-        n.carriers.add("land_existing_pasture", unit="Mha")
-        n.buses.add(
-            existing_pasture_bus_names,
-            carrier="land_existing_pasture",
-            region=pasture_regions,
-        )
-        n.generators.add(
-            pasture_gen_names,
-            bus=existing_pasture_bus_names,
-            carrier="land_existing_pasture",
-            p_nom_extendable=True,
-            p_nom_max=(reg_limit * grazing_only_area_series.values / 1e6),
-            region=pasture_regions,
-        )
-        if enable_land_slack:
-            primary_resources._add_land_slack_generators(
-                n, existing_pasture_bus_names, validation_slack_cost
-            )
-
-        # Add marginal_to_pasture links: existing_pasture → pasture pool
-        # Ensure pasture pool buses exist for regions that only have marginal land
-        n.carriers.add("marginal_to_pasture", unit="Mha")
-        missing_pasture = [
-            (bus, region)
-            for bus, region in zip(pasture_pool_buses, pasture_regions)
-            if bus not in n.buses.static.index
-        ]
-        if missing_pasture:
-            missing_names, missing_regions = zip(*missing_pasture)
-            if "land_pasture" not in n.carriers.static.index:
-                n.carriers.add("land_pasture", unit="Mha")
-            n.buses.add(
-                list(missing_names),
-                carrier="land_pasture",
-                region=list(missing_regions),
-            )
-        marginal_area_mha = reg_limit * grazing_only_area_series.values / 1e6
-        n.links.add(
-            marginal_to_pasture_names,
-            carrier="marginal_to_pasture",
-            bus0=existing_pasture_bus_names,
-            bus1=pasture_pool_buses,
-            efficiency=1.0,
-            p_nom_extendable=True,
-            p_nom_max=marginal_area_mha,
-            region=pasture_regions,
-        )
-
-        # Add spare_marginal links: existing_pasture → spared (with sequestration)
-        n.carriers.add("spare_marginal", unit="Mha")
-        n.carriers.add("spared_marginal", unit="Mha")
-        n.buses.add(
-            spared_marginal_buses, carrier="spared_marginal", region=pasture_regions
-        )
-        # Get spared LEF for each region/class (use rainfed water supply)
-        spare_df = pd.DataFrame(
-            {
-                "region": g_df["region"].tolist(),
-                "resource_class": g_df["cls"].tolist(),
-                "water_supply": "r",
-            }
-        )
-        spare_lefs = utils.merge_lef(
-            spare_df, luc_lef_lookup, "spared", allow_missing=True
-        ).to_numpy()
-        n.links.add(
-            spare_marginal_names,
-            carrier="spare_marginal",
-            bus0=existing_pasture_bus_names,
-            bus1=spared_marginal_buses,
-            efficiency=1.0,
-            bus2="emission:co2",
-            # tCO2/ha = MtCO2/Mha numerically; spared LEFs are negative
-            efficiency2=spare_lefs,
-            p_nom_extendable=True,
-            p_nom_max=marginal_area_mha,
-            region=pasture_regions,
-        )
-        n.stores.add(
-            spared_marginal_buses,
-            bus=spared_marginal_buses,
-            carrier="spared_marginal",
-            e_nom_extendable=True,
-            region=pasture_regions,
-        )
 
     # Rice methane factor and scaling factor for rainfed wetland rice
     rice_cfg = snakemake.params.emissions["rice"]
@@ -628,7 +572,7 @@ if __name__ == "__main__":
             set(cfg_countries),
             marginal_cost=grazing_cost_per_tonne_dm,
             current_grassland_area=current_grassland_area_df,
-            pasture_land_area=grazing_only_area_series,
+            marginal_grassland_area=marginal_grassland_area_series,
             use_actual_production=use_actual_production,
             pasture_utilization_rate=float(
                 snakemake.params.grazing["pasture_utilization_rate"]

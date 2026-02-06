@@ -62,10 +62,20 @@ def build_land_flow_diagram() -> graphviz.Digraph:
         with s.subgraph() as inner:
             inner.attr(rank="same")
             inner.node("existing", "Existing\nCropland\nBaseline", **supply_style)
-            inner.node("marginal", "Existing\nMarginal\nGrazing Land", **supply_style)
+            inner.node(
+                "grassland_convertible",
+                "Current Grassland\n(Cropland-suitable)",
+                **supply_style,
+            )
+            inner.node(
+                "grassland_marginal",
+                "Current Grassland\n(Marginal)",
+                **supply_style,
+            )
             inner.node("new", "New Land\n(Expansion\nPotential)", **supply_style)
-            inner.edge("existing", "marginal", style="invis")
-            inner.edge("marginal", "new", style="invis")
+            inner.edge("existing", "grassland_convertible", style="invis")
+            inner.edge("grassland_convertible", "grassland_marginal", style="invis")
+            inner.edge("grassland_marginal", "new", style="invis")
 
     # Pools cluster
     with dot.subgraph(name="cluster_pools") as p:
@@ -88,9 +98,9 @@ def build_land_flow_diagram() -> graphviz.Digraph:
         )
         with k.subgraph() as inner:
             inner.attr(rank="same")
-            inner.node("spared_marg", "Spared\nMarginal", **sink_style)
+            inner.node("spared_grass", "Spared\nGrassland", **sink_style)
             inner.node("spared_crop", "Spared\nCropland", **sink_style)
-            inner.edge("spared_marg", "spared_crop", style="invis")
+            inner.edge("spared_grass", "spared_crop", style="invis")
 
     # Production cluster
     with dot.subgraph(name="cluster_demand") as d:
@@ -111,8 +121,19 @@ def build_land_flow_diagram() -> graphviz.Digraph:
     )
     dot.edge("new", "pasture_pool", "new_to_pasture\n(+LUC emissions)", color=NEW_LAND)
 
-    # Edges: Marginal land to pasture pool (green, solid)
-    dot.edge("marginal", "pasture_pool", "marginal_to_pasture", color=EXISTING_LAND)
+    # Edges: Current grassland pools to pasture pool (green, solid)
+    dot.edge(
+        "grassland_convertible",
+        "pasture_pool",
+        "existing_grassland\n(convertible)\n_to_pasture",
+        color=EXISTING_LAND,
+    )
+    dot.edge(
+        "grassland_marginal",
+        "pasture_pool",
+        "existing_grassland\n(marginal)\n_to_pasture",
+        color=EXISTING_LAND,
+    )
 
     # Edges: Supply to sparing sinks (purple, dashed)
     dot.edge(
@@ -123,9 +144,16 @@ def build_land_flow_diagram() -> graphviz.Digraph:
         style="dashed",
     )
     dot.edge(
-        "marginal",
-        "spared_marg",
-        "spare_marginal\n(-sequestration)",
+        "grassland_convertible",
+        "spared_grass",
+        "spare_existing_grassland\n(convertible)",
+        color=SPARING,
+        style="dashed",
+    )
+    dot.edge(
+        "grassland_marginal",
+        "spared_grass",
+        "spare_existing_grassland\n(marginal)",
         color=SPARING,
         style="dashed",
     )

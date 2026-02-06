@@ -25,8 +25,8 @@ def _add_land_slack_generators(
     if "land_slack" not in n.carriers.static.index:
         n.carriers.add("land_slack", unit="Mha")
     # Use bus carrier attribute to namespace slack names (avoids collisions between
-    # e.g. land:pasture:X and land:existing_pasture:X). Still parse suffix since
-    # buses don't have a dedicated attribute for the region/class identifier.
+    # e.g. land:pasture:X and land:existing_grassland_{type}:X). Still parse suffix
+    # since buses don't have a dedicated attribute for the region/class identifier.
     bus_carriers = n.buses.static.loc[bus_names, "carrier"]
     slack_names = [
         f"slack:{carrier}:{bus.split(':')[-1]}"

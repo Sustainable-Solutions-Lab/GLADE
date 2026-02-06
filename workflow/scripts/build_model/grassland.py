@@ -90,7 +90,7 @@ def add_grassland_feed_links(
     allowed_countries: set,
     marginal_cost: float = 0.0,
     current_grassland_area: pd.DataFrame | None = None,
-    pasture_land_area: pd.Series | None = None,
+    marginal_grassland_area: pd.Series | None = None,
     use_actual_production: bool = False,
     pasture_utilization_rate: float = 1.0,
     *,
@@ -115,8 +115,9 @@ def add_grassland_feed_links(
         Converted internally to bnUSD per Mha based on yield.
     current_grassland_area : pd.DataFrame | None, optional
         Observed grassland area for validation, by default None.
-    pasture_land_area : pd.Series | None, optional
-        Available pasture land area, by default None.
+    marginal_grassland_area : pd.Series | None, optional
+        Grazing-only current grassland area (not suitable for crops) indexed by
+        (region, resource_class), by default None.
     use_actual_production : bool, optional
         Whether to cap production at observed values, by default False.
     pasture_utilization_rate : float, optional
@@ -158,8 +159,8 @@ def add_grassland_feed_links(
     idx = base_df.index
 
     # Compute total available area per region/class: cropland-eligible + marginal
-    if pasture_land_area is not None and not pasture_land_area.empty:
-        marginal_cap_series = pasture_land_area.reindex(idx, fill_value=0.0)
+    if marginal_grassland_area is not None and not marginal_grassland_area.empty:
+        marginal_cap_series = marginal_grassland_area.reindex(idx, fill_value=0.0)
     else:
         marginal_cap_series = pd.Series(0.0, index=idx, dtype=float)
 

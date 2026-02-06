@@ -46,15 +46,16 @@ The pasture pool serves grassland production for ruminant feed. Pasture pools ar
 
 - **Existing cropland**: Baseline agricultural land diverted to pasture use
 - **New land conversion**: Expansion with LUC emissions
-- **Marginal grazing land**: Land suitable only for grazing, not crop production
+- **Current cropland-suitable grassland**: Existing grassland on land suitable for crops (GAEZ)
+- **Current marginal grassland**: Existing grazing-only grassland that is not suitable for crops
 
 Spared Land
 ~~~~~~~~~~~
 
-Both existing cropland and marginal grazing land can be **spared**—taken out of production to earn carbon sequestration credits from vegetation regrowth:
+Both existing cropland and both current grassland pools can be **spared**—taken out of production to earn carbon sequestration credits from vegetation regrowth:
 
 - ``spare_land`` links: Spare existing cropland (purple dashed arrows)
-- ``spare_marginal`` links: Spare marginal grazing land
+- ``spare_existing_grassland`` links: Spare existing grassland
 
 This enables the model to evaluate trade-offs between agricultural production and carbon sequestration. See :ref:`luc-emissions` for how land-use-change emissions are calculated, and :ref:`luc-spared-land-filtering` for details on sequestration credit eligibility.
 
@@ -157,26 +158,33 @@ The model distinguishes between irrigated and rainfed production:
 
 For each region and resource class, the model maintains separate land variables for rainfed and irrigated production.
 
-Marginal Grazing Land
----------------------
+Current Grassland: Convertible vs Marginal
+-------------------------------------------
 
-Not all grassland competes with cropland. **Marginal grazing land** is land that:
+The model splits current grassland into two explicit pools within each ``(region, resource_class)``:
 
-- Is currently grassland (from ESA CCI land cover)
-- Is unsuitable for any crop production (below GAEZ suitability thresholds)
-- Can support grazing without competing for cropland
+- **Cropland-suitable current grassland**: Current grassland area that lies on land suitable for crop growth (GAEZ suitable)
+- **Marginal current grassland**: Current grazing-only grassland that is not suitable for crop growth
+
+Data sources and split:
+
+- ``build_current_grassland_area`` provides total current grassland from ESA CCI land-cover fractions
+- ``build_grazing_only_land`` estimates the marginal (grazing-only) subset
+- Cropland-suitable current grassland is computed as ``max(current_grassland - grazing_only, 0)``
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/grazing_only_land_fraction.png
    :width: 100%
-   :alt: Fraction of each gridcell and region classified as grazing-only land
+   :alt: Fraction of each gridcell and region classified as grassland
 
-   Global grazing-only land availability. Left panel: gridcell fraction that is grassland yet unsuitable for crops. Right panel: share of each region's land budget in the grazing-only pool.
+   Global grassland availability. Left panel: gridcell fraction that is grassland. Right panel: share of each region's land budget in the grassland pool.
 
-Marginal land flows exclusively to the **pasture pool** via ``marginal_to_pasture`` links. It can also be spared for carbon sequestration via ``spare_marginal`` links, earning regrowth credits without affecting the cropland budget.
+Both current grassland pools flow to the **pasture pool** via ``existing_grassland_to_pasture`` links. Both can also be spared for carbon sequestration via ``spare_existing_grassland`` links.
+
+Only the **cropland-suitable current grassland** pool is subtracted from the rainfed new-land expansion potential, preventing double-counting while preserving the distinct marginal grassland pool.
 
 This separation ensures that:
 
-- Ruminant feed can expand on marginal pasture without depleting cropland
+- Ruminant feed has a realistic existing grassland supply without depleting cropland
 - Every hectare is accounted for exactly once
 - Sparing decisions reflect the actual opportunity cost of each land type
 

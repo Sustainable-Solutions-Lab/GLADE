@@ -43,7 +43,8 @@ Land is represented with a dual-pool structure per (region, resource class):
 * ``land:pasture:*`` buses hold the pasture area that grassland production links consume (per region/class, water-agnostic).
 * ``land:existing_cropland:*`` buses supply the baseline cropland area (from ``processing/{name}/cropland_baseline_by_class.csv``) via fixed-capacity generators and links into both pools.
 * ``land:new:*`` buses supply expansion land up to the configured regional limit; conversion links route this expansion into either pool and emit CO₂ according to the relevant LEFs.
-* ``land:existing_pasture:*`` buses supply grazing-only land that flows exclusively to the pasture pool.
+* ``land:existing_grassland_convertible:*`` buses supply current grassland on cropland-suitable land (GAEZ suitable).
+* ``land:existing_grassland_marginal:*`` buses supply current grazing-only grassland on land not suitable for crops.
 
 Crop production links draw from ``land:cropland:*``; grassland production links draw from ``land:pasture:*``. LUC emissions are carried on the conversion links, not on production links. When validation fixes harvested areas, optional slack generators attach to both pool types.
 
@@ -747,7 +748,8 @@ During model construction, ``build_model.py`` loads these inputs, converts LEFs 
 
 * Baseline cropland enters via fixed ``land_existing_cropland_*`` generators. It does **not** pay conversion costs but can be **spared** via ``spare_land_*`` links that earn regrowth credits.
 * Expansion cropland lives on ``land_new_*`` buses up to the suitability cap; ``convert_new_land_*`` links move this expansion into ``land:cropland:*`` (applying cropland LEFs), and ``convert_new_to_pasture_*`` links move it into ``land:pasture:*`` (applying pasture LEFs).
-* Existing grazing-only land enters via ``land_existing_pasture_*`` generators and flows to the pasture pool via ``marginal_to_pasture`` links, or can be spared via ``spare_marginal`` links.
+* Current grassland is split into ``land_existing_grassland_convertible_*`` and ``land_existing_grassland_marginal_*`` generators; both flow to the pasture pool via ``existing_grassland_to_pasture`` links and can be spared via ``spare_existing_grassland`` links.
+* Only the convertible grassland pool is deducted from rainfed conversion potential when computing ``land_new_*`` capacities.
 
 All LUC flows connect to the global ``co2`` bus, which feeds a priced CO₂ store (``emissions.ghg_price``). This keeps cropland expansion, pasture expansion, and regrowth credits on the same carbon price scale while avoiding double-charging existing land. The spatial pattern of the resulting LEFs is shown in :ref:`fig-luc-lef`.
 
@@ -801,9 +803,9 @@ This ensures:
 
 The threshold of 20 tC/ha is intermediate between typical agricultural land (0-10 tC/ha) and mature forest (50-200+ tC/ha). Areas above this threshold are assumed to represent established vegetation that would not exhibit the rapid early-successional regrowth rates quantified by Cook-Patton et al.
 
-Only baseline cropland (existing managed area) and existing grazing-only land can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
+Only baseline cropland (existing managed area) and current grassland pools (both convertible and marginal) can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
 
-Network links that implement this behaviour use the ``spare_*`` naming scheme: ``spare_land_*`` links pull from ``land:existing_cropland:*`` buses, and ``spare_marginal_*`` links pull from ``land:existing_pasture:*`` buses. Both produce to dedicated spared-land sinks with CO₂ outputs proportional to the spared LEF.
+Network links that implement this behaviour use the ``spare_*`` naming scheme: ``spare_land_*`` links pull from ``land:existing_cropland:*`` buses, and ``spare_existing_grassland_*`` links pull from ``land:existing_grassland_convertible:*`` and ``land:existing_grassland_marginal:*`` buses. Both produce to dedicated spared-land sinks with CO₂ outputs proportional to the spared LEF.
 
 .. _fig-luc-lef:
 

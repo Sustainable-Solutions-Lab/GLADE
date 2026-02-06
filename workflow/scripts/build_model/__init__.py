@@ -33,7 +33,8 @@ Buses::
     land:pasture:{region}_c{class}                    e.g., land:pasture:usa_east_c1
     land:existing_cropland:{region}_c{class}_{water}  e.g., land:existing_cropland:usa_east_c1_r
     land:new:{region}_c{class}_{water}                e.g., land:new:usa_east_c1_r
-    land:existing_pasture:{region}_c{class}           e.g., land:existing_pasture:usa_east_c1
+    land:existing_grassland_convertible:{region}_c{class}  e.g., land:existing_grassland_convertible:usa_east_c1
+    land:existing_grassland_marginal:{region}_c{class}     e.g., land:existing_grassland_marginal:usa_east_c1
     water:{region}                  e.g., water:usa_east
     fertilizer:supply               (global)
     fertilizer:{country}            e.g., fertilizer:USA
@@ -52,9 +53,9 @@ Links::
     use:existing_to_pasture:{region}_c{class}
     convert:new_land:{region}_c{class}_{water}
     convert:new_to_pasture:{region}_c{class}
-    use:marginal_to_pasture:{region}_c{class}
+    use:existing_grassland_{type}_to_pasture:{region}_c{class}
     spare:land:{region}_c{class}_{water}
-    spare:marginal:{region}_c{class}
+    spare:existing_grassland_{type}:{region}_c{class}
     distribute:fertilizer:{country}
     incorporate:residue_{item}:{country}
     aggregate:{from}_to_{to}                  e.g., aggregate:ch4_to_ghg
@@ -83,7 +84,8 @@ specific items (crops, foods, products) are stored in metadata columns.
 
 - Buses: ``crop_{crop}``, ``food_{food}``, ``feed_{category}``, ``residue_{item}``,
   ``group_{group}``, ``{nutrient}``, ``land_cropland``, ``land_pasture``,
-  ``land_existing_cropland``, ``land_existing_pasture``, ``land_new``,
+  ``land_existing_cropland``, ``land_existing_grassland_convertible``,
+  ``land_existing_grassland_marginal``, ``land_new``,
   ``water``, ``fertilizer``, ``co2``, ``ch4``, ``n2o``, ``ghg``
 
 - Links:
@@ -101,7 +103,7 @@ specific items (crops, foods, products) are stored in metadata columns.
   - ``biomass_byproduct``: Byproduct to biomass (use ``food`` column)
   - ``fertilizer_distribution``: Fertilizer distribution
   - ``emission_aggregation``: GHG emission aggregation
-  - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``, ``marginal_to_pasture``, ``spare_land``, ``spare_marginal``, ``residue_incorporation``
+  - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``, ``existing_grassland_to_pasture``, ``spare_land``, ``spare_existing_grassland``, ``residue_incorporation``
 
 Custom Columns
 --------------
@@ -124,6 +126,7 @@ All components have consistent domain-specific columns for filtering:
   - ``feed_category``: str | NaN - feed category
   - ``resource_class``: int | NaN - land quality class
   - ``water_supply``: str | NaN - "irrigated" or "rainfed"
+  - ``land_type``: str | NaN - e.g. "convertible" or "marginal" for grassland pools
 
 - **Stores**:
 

@@ -310,9 +310,9 @@ Grassland is routed to its own dedicated ``feed_ruminant_grassland`` pool. This 
 
    Validation runs that set ``validation.use_actual_production: true`` also pin grassland production to present-day managed areas. The dataset ``processing/{name}/luc/current_grassland_area_by_class.csv`` is derived from the land-cover fractions prepared for LUC calculations and caps each grazing link at the observed area, forcing the solver to reproduce current grazing output.
 
-In standard optimisation runs a dedicated pool of grazing-only hectares is also available. The preprocessing rule ``build_grazing_only_land`` combines the ESA CCI land-cover fractions with the GAEZ rainfed suitability maps to identify grassland that lies outside the cropland suitability envelope (after accounting for existing cropland and forest shares). These hectares become ``land:existing_pasture:*`` buses and flow into the ``land:pasture:*`` pool via ``marginal_to_pasture`` links. All grassland production links consume from the pasture pool, which aggregates land from existing cropland, new land conversion, and existing grazing-only land.
+In standard optimisation runs, current grassland is split into two pools per region/resource class: ``land:existing_grassland_convertible:*`` (cropland-suitable) and ``land:existing_grassland_marginal:*`` (grazing-only). The total current grassland comes from ``build_current_grassland_area``, while ``build_grazing_only_land`` provides the marginal subset. All hectares from both pools flow into the ``land:pasture:*`` pool via ``existing_grassland_to_pasture`` links. Grassland production links consume from that pooled pasture bus, together with land supplied from existing cropland and new conversion.
 
-When demand falls and grazing links release land, ``spare_marginal_*`` links allow the model to rewild formerly grazing-only hectares and credit the associated CO₂ removal using the same LUC emission factors that apply to cropland-suitable land.
+When demand falls and grazing links release land, ``spare_existing_grassland_*`` links allow the model to rewild formerly grazed hectares and credit the associated CO₂ removal using the same LUC emission factors that apply to cropland-suitable land.
 
 Crop Residue Feed Supply
 ~~~~~~~~~~~~~~~~~~~~~~~~
