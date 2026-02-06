@@ -70,6 +70,8 @@ if __name__ == "__main__":
     validation_slack_cost = float(
         validation_cfg["slack_marginal_cost"]
     )  # Already in bn USD
+    grassland_yield_multiplier = float(validation_cfg["grassland_yield_multiplier"])
+    feed_efficiency_multiplier = float(validation_cfg["feed_efficiency_multiplier"])
 
     # ═══════════════════════════════════════════════════════════════
     # DATA LOADING
@@ -152,6 +154,19 @@ if __name__ == "__main__":
 
     # Read feed requirements for animal products (feed pools -> foods)
     feed_to_products = read_csv(snakemake.input.feed_to_products)
+    feed_to_products["efficiency"] = pd.to_numeric(
+        feed_to_products["efficiency"], errors="coerce"
+    )
+    if feed_to_products["efficiency"].isna().any():
+        raise ValueError("feed_to_animal_products.csv contains non-numeric efficiency")
+    if feed_efficiency_multiplier != 1.0:
+        feed_to_products["efficiency"] = (
+            feed_to_products["efficiency"] * feed_efficiency_multiplier
+        )
+        logger.info(
+            "Applied validation feed efficiency multiplier: %.3f",
+            feed_efficiency_multiplier,
+        )
 
     # Read manure emission factors (CH4 and N2O)
     manure_emissions = read_csv(snakemake.input.manure_emissions)
@@ -249,6 +264,13 @@ if __name__ == "__main__":
         grassland_df = read_csv(
             snakemake.input.grassland_yields, index_col=["region", "resource_class"]
         ).sort_index()
+        grassland_df["yield"] = pd.to_numeric(grassland_df["yield"], errors="coerce")
+        if grassland_yield_multiplier != 1.0:
+            grassland_df["yield"] = grassland_df["yield"] * grassland_yield_multiplier
+            logger.info(
+                "Applied validation grassland yield multiplier: %.3f",
+                grassland_yield_multiplier,
+            )
         current_grassland_area_df = read_csv(snakemake.input.current_grassland_area)
         if not current_grassland_area_df.empty:
             current_grassland_area_series = (

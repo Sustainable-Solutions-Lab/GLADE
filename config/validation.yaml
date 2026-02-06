@@ -14,6 +14,8 @@ validation:
   disable_spared_cropland: true
   disable_spared_grassland: true
   slack_marginal_cost: 10
+  grassland_yield_multiplier: 1.2
+  feed_efficiency_multiplier: 1.2
 
 water:
   supply_scenario: current_use

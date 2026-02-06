@@ -31,6 +31,8 @@ validation:
   disable_spared_cropland: false # If true, existing cropland cannot be spared
   disable_spared_grassland: false # If true, existing grassland cannot be spared
   slack_marginal_cost: 50. # bn USD per Mt/Mha for validation slack (food groups, feed, land)
+  grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
+  feed_efficiency_multiplier: 1.0 # Multiplier applied to feed->animal conversion efficiency (product per feed)
   production_year: 2018 # To match with GDD baseline year
   production_stability:
     enabled: false

@@ -111,6 +111,8 @@ properties:
       - disable_spared_cropland
       - disable_spared_grassland
       - slack_marginal_cost
+      - grassland_yield_multiplier
+      - feed_efficiency_multiplier
       - production_year
       - production_stability
     additionalProperties: false
@@ -143,6 +145,14 @@ properties:
         type: number
         minimum: 0
         description: "bn USD per Mt/Mha for validation slack (food groups, feed, land)"
+      grassland_yield_multiplier:
+        type: number
+        exclusiveMinimum: 0
+        description: "Multiplier applied to effective grassland feed yields before adding grassland production links"
+      feed_efficiency_multiplier:
+        type: number
+        exclusiveMinimum: 0
+        description: "Multiplier applied to feed-to-animal efficiency values (product per feed)"
       production_year:
         type: integer
         minimum: 1990
