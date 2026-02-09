@@ -680,6 +680,14 @@ properties:
         minimum: 1990
         maximum: 2019
         description: "Reference year for baseline diet"
+      fbs_override_foods:
+        type: array
+        uniqueItems: true
+        default: []
+        items:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        description: "Foods whose consumption is overridden with waste-corrected FAOSTAT FBS supply data"
 
   biomass:
     type: object

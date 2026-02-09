@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     read_csv = functools.partial(pd.read_csv, comment="#")
 
-    validation_cfg = snakemake.config["validation"]  # type: ignore[attr-defined]
+    validation_cfg = snakemake.params.validation  # type: ignore[attr-defined]
     use_actual_production = bool(validation_cfg["use_actual_production"])
     enforce_baseline = bool(validation_cfg["enforce_baseline_diet"])
     # Enable land slack if explicitly requested or when using actual production

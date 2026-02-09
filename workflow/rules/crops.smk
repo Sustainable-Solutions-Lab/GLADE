@@ -90,6 +90,8 @@ rule build_harvested_area_gaez:
         regions="processing/{name}/regions.geojson",
         crop_mapping="data/curated/gaez_crop_code_mapping.csv",
         faostat_production="processing/{name}/faostat_crop_production.csv",
+    params:
+        non_food_crops=config["non_food_crops"],
     output:
         "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
     log:

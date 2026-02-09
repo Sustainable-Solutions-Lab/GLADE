@@ -9,7 +9,7 @@ Prepare FAOSTAT supply data to supplement GDD dietary intake.
 The Global Dietary Database (GDD) lacks data for certain food groups. This
 script reads supply data from a FAOSTAT FBS bulk CSV for:
 - Dairy (milk, butter, cream - converted to milk equivalents)
-- Poultry meat
+- Poultry meat (converted to model retail-meat basis)
 - Vegetable oils
 
 Values are converted to g/day per capita. These supplement GDD data in
@@ -42,7 +42,9 @@ logger = logging.getLogger(__name__)
 # FAOSTAT Item Codes (FBS)
 FAO_ITEMS = {
     "poultry": [2734],  # Poultry Meat
-    "oil": [2586],  # Vegetable Oils
+    # Aggregate vegetable oils intake; used as group total that is later
+    # distributed across modeled oil foods.
+    "oil": [2914],  # Vegetable Oils
     "dairy": [2848, 2740, 2743],  # Milk (excl butter), Butter/Ghee, Cream
 }
 
@@ -68,9 +70,20 @@ AGE_GROUPS = [
 def main():
     countries = snakemake.params.countries
     reference_year = snakemake.params.reference_year
+    poultry_carcass_to_retail = float(snakemake.params.poultry_carcass_to_retail)
     fbs_csv = snakemake.input.fbs_csv
     m49_codes = snakemake.input.m49_codes
     output_file = snakemake.output.supply
+
+    if not 0 < poultry_carcass_to_retail <= 1:
+        raise ValueError(
+            "poultry_carcass_to_retail must be in (0, 1], "
+            f"got {poultry_carcass_to_retail}"
+        )
+    logger.info(
+        "Using poultry carcass-to-retail factor: %.3f",
+        poultry_carcass_to_retail,
+    )
 
     # Load bulk CSV
     logger.info("Loading FAOSTAT FBS bulk CSV")
@@ -127,7 +140,8 @@ def main():
 
         # Poultry
         poultry_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["poultry"])]
-        supplies["poultry"] = poultry_rows["Value"].sum()
+        # Convert FBS carcass-equivalent poultry mass to model retail-meat basis.
+        supplies["poultry"] = poultry_rows["Value"].sum() * poultry_carcass_to_retail
 
         # Oil
         oil_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["oil"])]

@@ -270,11 +270,14 @@ animal_products:
   # Carcass-to-retail meat conversion factors
   carcass_to_retail_meat:
     meat-cattle: 0.67  # kg boneless retail beef per kg carcass (OECD-FAO 2023)
+    # meat-cattle: 0.7717 (would close validation gap)
     meat-pig: 0.73     # kg boneless retail pork per kg carcass (OECD-FAO 2023)
+    # meat-pig: 0.6403 (would close validation gap)
     meat-chicken: 0.60 # kg boneless retail chicken per kg carcass (OECD-FAO 2023)
     eggs: 1.00         # No conversion needed (whole egg = retail product)
     dairy: 1.00        # No conversion needed (whole milk = retail product)
     meat-sheep: 0.63   # kg boneless retail lamb per kg carcass (slightly lower than beef)
+    # meat-sheep: 0.8336 (would close validation gap)
     dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
   feed_proxy_map:
     dairy-buffalo: dairy
@@ -349,6 +352,12 @@ food_groups:
 diet:
   baseline_age: "All ages"
   baseline_reference_year: 2018 # Keeping this the same as the health reference year makes sense
+  # Foods whose group-level consumption is overridden with waste-corrected
+  # FAOSTAT Food Balance Sheet supply data. This addresses cases where GDD
+  # survey intake substantially underestimates actual consumption (e.g. yam
+  # in West Africa).
+  fbs_override_foods:
+  - yam
 
 # --- section: biomass ---
 biomass:

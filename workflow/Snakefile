@@ -29,6 +29,7 @@ validate(config, project_root=Path.cwd())
 include: "rules/common.smk"
 include: "rules/retrieve.smk"
 include: "rules/geography.smk"
+include: "rules/diet.smk"
 include: "rules/health.smk"
 include: "rules/animals.smk"
 include: "rules/crops.smk"

@@ -37,6 +37,18 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.vegetable_projection import (
+    NUTS_COUNTRY_SHARE_BLEND,
+    NUTS_PROJECTION_FOODS,
+    NUTS_RESIDUAL_ITEM_CODE,
+    OVG_COUNTRY_SHARE_BLEND,
+    OVG_CROPS,
+    STARCHY_COUNTRY_SHARE_BLEND,
+    STARCHY_PROJECTION_FOODS,
+    STARCHY_RESIDUAL_ITEM_CODE,
+    VEGETABLE_RESIDUAL_ITEM_CODE,
+    build_blended_crop_shares,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,8 +220,18 @@ def build_within_group_shares(
     # Build food → food_group mapping
     fg_map = food_groups_df.set_index("food")["group"].to_dict()
 
-    # Build food → FBS item_code mapping
-    fbs_map = food_item_map_df.set_index("food")["item_code"].to_dict()
+    # Build food → [FBS item_code, ...] mapping.
+    # Some foods (e.g., citrus) are represented by multiple FAOSTAT items.
+    map_df = food_item_map_df.copy()
+    map_df["food"] = map_df["food"].astype(str)
+    map_df["item_code"] = pd.to_numeric(map_df["item_code"], errors="coerce")
+    map_df = map_df[map_df["item_code"].notna()].copy()
+    map_df["item_code"] = map_df["item_code"].astype(int)
+    fbs_codes_by_food = (
+        map_df.groupby("food")["item_code"]
+        .apply(lambda s: sorted(set(s.tolist())))
+        .to_dict()
+    )
 
     # Get foods to include (exclude byproducts)
     byproduct_set = set(byproducts)
@@ -222,10 +244,8 @@ def build_within_group_shares(
     # Identify foods sharing FBS items
     fbs_code_to_foods: dict[int, list[str]] = {}
     for food in included_foods:
-        code = fbs_map.get(food)
-        if code is not None and pd.notna(code):
-            code = int(code)
-            fbs_code_to_foods.setdefault(code, []).append(food)
+        for code in fbs_codes_by_food.get(food, []):
+            fbs_code_to_foods.setdefault(int(code), []).append(food)
 
     # Build QCL resolution lookup: food → (qcl_item_code, qcl_item_name)
     qcl_lookup: dict[str, int] = {}
@@ -263,6 +283,7 @@ def build_within_group_shares(
                             "country": country,
                             "food": food,
                             "food_group": fg_map[food],
+                            "fbs_item_code": fbs_code,
                             "share": 1.0 / n,
                         }
                     )
@@ -275,6 +296,7 @@ def build_within_group_shares(
                         "country": country,
                         "food": foods[0],
                         "food_group": fg_map[foods[0]],
+                        "fbs_item_code": fbs_code,
                         "share": 1.0,
                     }
                 )
@@ -290,6 +312,7 @@ def build_within_group_shares(
                         "country": country,
                         "food": food,
                         "food_group": fg_map[food],
+                        "fbs_item_code": fbs_code,
                         "share": share,
                     }
                 )
@@ -302,17 +325,47 @@ def build_within_group_shares(
     _apply_millet_split(shares_df)
 
     # Convert from per-FBS-item shares to per-food-group shares.
-    # Currently each food's share sums to 1.0 within its FBS item, but food
-    # groups span multiple FBS items. Weight by FBS supply to get the correct
-    # proportion of each food within its food group.
-    shares_df["fbs_item_code"] = shares_df["food"].map(fbs_map)
+    # Each row carries an FBS item code. Weight by item-level supply, then
+    # aggregate back to (country, food, food_group).
     shares_df["fbs_supply_kg"] = shares_df.apply(
-        lambda r: fbs_supply.get((r["country"], int(r["fbs_item_code"])), 0.0)
-        if pd.notna(r["fbs_item_code"])
-        else 0.0,
+        lambda r: fbs_supply.get((r["country"], int(r["fbs_item_code"])), 0.0),
         axis=1,
     )
     shares_df["supply_weight"] = shares_df["share"] * shares_df["fbs_supply_kg"]
+    shares_df = (
+        shares_df.groupby(["country", "food_group", "food"], as_index=False)[
+            "supply_weight"
+        ]
+        .sum()
+        .copy()
+    )
+    shares_df = _project_vegetable_residual_supply(
+        shares_df,
+        included_foods=included_foods,
+        fg_map=fg_map,
+        fbs_codes_by_food=fbs_codes_by_food,
+        fbs_supply=fbs_supply,
+        countries=countries,
+        crop_production_df=crop_production_df,
+    )
+    shares_df = _project_nuts_residual_supply(
+        shares_df,
+        included_foods=included_foods,
+        fg_map=fg_map,
+        fbs_codes_by_food=fbs_codes_by_food,
+        fbs_supply=fbs_supply,
+        countries=countries,
+        crop_production_df=crop_production_df,
+    )
+    shares_df = _project_starchy_residual_supply(
+        shares_df,
+        included_foods=included_foods,
+        fg_map=fg_map,
+        fbs_codes_by_food=fbs_codes_by_food,
+        fbs_supply=fbs_supply,
+        countries=countries,
+        crop_production_df=crop_production_df,
+    )
     group_total_weight = shares_df.groupby(["country", "food_group"])[
         "supply_weight"
     ].transform("sum")
@@ -328,6 +381,219 @@ def build_within_group_shares(
         shares_df.loc[~nonzero, "share"] = 1.0 / group_counts[~nonzero]
 
     return shares_df[["country", "food", "food_group", "share"]].copy()
+
+
+def _project_vegetable_residual_supply(
+    shares_df: pd.DataFrame,
+    included_foods: list[str],
+    fg_map: dict[str, str],
+    fbs_codes_by_food: dict[str, list[int]],
+    fbs_supply: dict[tuple[str, int], float],
+    countries: list[str],
+    crop_production_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Project FAOSTAT residual vegetables (item 2605) onto modeled vegetables.
+
+    The residual item is distributed across OVG crops (onion/cabbage/carrot)
+    using blended country/global production shares. Tomato keeps its explicit
+    item-level supply only.
+    """
+    vegetable_foods = [
+        food for food in included_foods if fg_map.get(food) == "vegetables"
+    ]
+    if len(vegetable_foods) == 0:
+        return shares_df
+
+    ovg_foods = [food for food in OVG_CROPS if food in vegetable_foods]
+    if len(ovg_foods) == 0:
+        return shares_df
+
+    ovg_lookup, ovg_global = build_blended_crop_shares(
+        crop_production_df,
+        ovg_foods,
+        blend_weight=OVG_COUNTRY_SHARE_BLEND,
+    )
+
+    residual_code = VEGETABLE_RESIDUAL_ITEM_CODE
+    rebuilt_rows: list[dict[str, object]] = []
+    for country in countries:
+        residual_supply = float(fbs_supply.get((country, residual_code), 0.0))
+        for food in vegetable_foods:
+            explicit_codes = [
+                int(code)
+                for code in fbs_codes_by_food.get(food, [])
+                if int(code) != residual_code
+            ]
+            explicit_supply = float(
+                sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
+            )
+            projected_supply = 0.0
+            if food in ovg_foods and residual_supply > 0.0:
+                projected_supply = residual_supply * ovg_lookup.get(
+                    (country, food), ovg_global[food]
+                )
+            rebuilt_rows.append(
+                {
+                    "country": country,
+                    "food_group": "vegetables",
+                    "food": food,
+                    "supply_weight": explicit_supply + projected_supply,
+                }
+            )
+
+    if len(rebuilt_rows) == 0:
+        return shares_df
+
+    rebuilt = pd.DataFrame(rebuilt_rows)
+    non_vegetables = shares_df[shares_df["food_group"] != "vegetables"]
+    vegetables = pd.concat([rebuilt], ignore_index=True)
+    return pd.concat([non_vegetables, vegetables], ignore_index=True)
+
+
+def _project_nuts_residual_supply(
+    shares_df: pd.DataFrame,
+    included_foods: list[str],
+    fg_map: dict[str, str],
+    fbs_codes_by_food: dict[str, list[int]],
+    fbs_supply: dict[tuple[str, int], float],
+    countries: list[str],
+    crop_production_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Project FAOSTAT residual nuts item (2551) onto modeled nuts/seeds foods."""
+    nuts_foods = [food for food in included_foods if fg_map.get(food) == "nuts_seeds"]
+    if len(nuts_foods) == 0:
+        return shares_df
+
+    projection_foods = [food for food in NUTS_PROJECTION_FOODS if food in nuts_foods]
+    if len(projection_foods) == 0:
+        return shares_df
+
+    crop_to_food = {
+        "groundnut": "groundnut",
+        "sesame": "sesame-seed",
+        "coconut": "coconut",
+        "sunflower": "sunflower-seed",
+    }
+    projected_crop_prod = crop_production_df.copy()
+    projected_crop_prod["crop"] = (
+        projected_crop_prod["crop"].astype(str).str.strip().map(crop_to_food)
+    )
+    projected_crop_prod = projected_crop_prod[projected_crop_prod["crop"].notna()]
+
+    share_lookup, global_share = build_blended_crop_shares(
+        projected_crop_prod,
+        projection_foods,
+        blend_weight=NUTS_COUNTRY_SHARE_BLEND,
+    )
+
+    residual_code = NUTS_RESIDUAL_ITEM_CODE
+    rebuilt_rows: list[dict[str, object]] = []
+    for country in countries:
+        residual_supply = float(fbs_supply.get((country, residual_code), 0.0))
+        for food in nuts_foods:
+            explicit_codes = [
+                int(code)
+                for code in fbs_codes_by_food.get(food, [])
+                if int(code) != residual_code
+            ]
+            explicit_supply = float(
+                sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
+            )
+            projected_supply = 0.0
+            if food in projection_foods and residual_supply > 0.0:
+                projected_supply = residual_supply * share_lookup.get(
+                    (country, food), global_share[food]
+                )
+            rebuilt_rows.append(
+                {
+                    "country": country,
+                    "food_group": "nuts_seeds",
+                    "food": food,
+                    "supply_weight": explicit_supply + projected_supply,
+                }
+            )
+
+    if len(rebuilt_rows) == 0:
+        return shares_df
+
+    rebuilt = pd.DataFrame(rebuilt_rows)
+    non_nuts = shares_df[shares_df["food_group"] != "nuts_seeds"]
+    return pd.concat([non_nuts, rebuilt], ignore_index=True)
+
+
+def _project_starchy_residual_supply(
+    shares_df: pd.DataFrame,
+    included_foods: list[str],
+    fg_map: dict[str, str],
+    fbs_codes_by_food: dict[str, list[int]],
+    fbs_supply: dict[tuple[str, int], float],
+    countries: list[str],
+    crop_production_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Project FAOSTAT residual starchy vegetables (item 2534) to modeled foods."""
+    starchy_foods = [
+        food for food in included_foods if fg_map.get(food) == "starchy_vegetable"
+    ]
+    if len(starchy_foods) == 0:
+        return shares_df
+
+    projection_foods = [
+        food for food in STARCHY_PROJECTION_FOODS if food in starchy_foods
+    ]
+    if len(projection_foods) == 0:
+        return shares_df
+
+    crop_to_food = {
+        "white-potato": "potato",
+        "sweet-potato": "sweet-potato",
+        "yam": "yam",
+        "cassava": "cassava",
+    }
+    projected_crop_prod = crop_production_df.copy()
+    projected_crop_prod["crop"] = (
+        projected_crop_prod["crop"].astype(str).str.strip().map(crop_to_food)
+    )
+    projected_crop_prod = projected_crop_prod[projected_crop_prod["crop"].notna()]
+
+    share_lookup, global_share = build_blended_crop_shares(
+        projected_crop_prod,
+        projection_foods,
+        blend_weight=STARCHY_COUNTRY_SHARE_BLEND,
+    )
+
+    residual_code = STARCHY_RESIDUAL_ITEM_CODE
+    rebuilt_rows: list[dict[str, object]] = []
+    for country in countries:
+        residual_supply = float(fbs_supply.get((country, residual_code), 0.0))
+        for food in starchy_foods:
+            explicit_codes = [
+                int(code)
+                for code in fbs_codes_by_food.get(food, [])
+                if int(code) != residual_code
+            ]
+            explicit_supply = float(
+                sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
+            )
+            projected_supply = 0.0
+            if food in projection_foods and residual_supply > 0.0:
+                projected_supply = residual_supply * share_lookup.get(
+                    (country, food), global_share[food]
+                )
+            rebuilt_rows.append(
+                {
+                    "country": country,
+                    "food_group": "starchy_vegetable",
+                    "food": food,
+                    "supply_weight": explicit_supply + projected_supply,
+                }
+            )
+
+    if len(rebuilt_rows) == 0:
+        return shares_df
+
+    rebuilt = pd.DataFrame(rebuilt_rows)
+    non_starchy = shares_df[shares_df["food_group"] != "starchy_vegetable"]
+    return pd.concat([non_starchy, rebuilt], ignore_index=True)
 
 
 def _build_crop_production_lookup(
@@ -451,6 +717,95 @@ def _resolve_shared_fbs_item(
     return shares
 
 
+def _apply_fbs_overrides(
+    result: pd.DataFrame,
+    fbs_items_df: pd.DataFrame,
+    food_item_map_df: pd.DataFrame,
+    flw_df: pd.DataFrame,
+    override_foods: list[str],
+) -> pd.DataFrame:
+    """Override per-food consumption with waste-corrected FAOSTAT FBS supply.
+
+    For foods where GDD group totals substantially underestimate actual intake
+    (e.g. yam in West Africa), replace the disaggregated consumption with
+    FAOSTAT food supply x (1 - waste_fraction).
+
+    Parameters
+    ----------
+    result : DataFrame with columns country, food, food_group, consumption_g_per_day
+    fbs_items_df : FAOSTAT FBS item-level supply (country, item_code, supply_kg_per_capita_year)
+    food_item_map_df : Mapping from food → item_code(s)
+    flw_df : Food loss and waste fractions (country, food_group, waste_fraction)
+    override_foods : List of food names to override
+
+    Returns
+    -------
+    DataFrame with overridden consumption values.
+    """
+    if not override_foods:
+        return result
+
+    result = result.copy()
+
+    # Build food → [item_code, ...] lookup
+    map_df = food_item_map_df.copy()
+    map_df["item_code"] = pd.to_numeric(map_df["item_code"], errors="coerce")
+    map_df = map_df[map_df["item_code"].notna()]
+    map_df["item_code"] = map_df["item_code"].astype(int)
+    fbs_codes_by_food = map_df.groupby("food")["item_code"].apply(list).to_dict()
+
+    # Build FBS supply lookup: (country, item_code) → kg/capita/year
+    fbs_supply = fbs_items_df.set_index(["country", "item_code"])[
+        "supply_kg_per_capita_year"
+    ].to_dict()
+
+    # Build waste fraction lookup: (country, food_group) → waste_fraction
+    waste_lookup = flw_df.set_index(["country", "food_group"])[
+        "waste_fraction"
+    ].to_dict()
+
+    for food in override_foods:
+        codes = fbs_codes_by_food.get(food)
+        if codes is None:
+            logger.warning(
+                "FBS override: no FBS item codes for food '%s', skipping", food
+            )
+            continue
+
+        food_mask = result["food"] == food
+        if not food_mask.any():
+            logger.warning(
+                "FBS override: food '%s' not in baseline diet, skipping", food
+            )
+            continue
+
+        food_group = result.loc[food_mask, "food_group"].iloc[0]
+        before_total = result.loc[food_mask, "consumption_g_per_day"].sum()
+
+        for idx in result.index[food_mask]:
+            country = result.loc[idx, "country"]
+            # Sum supply across all FBS item codes for this food
+            supply_kg = sum(fbs_supply.get((country, int(code)), 0.0) for code in codes)
+            # Convert kg/capita/year → g/day
+            supply_g_day = supply_kg * 1000.0 / 365.0
+            # Apply waste correction
+            waste_frac = waste_lookup.get((country, food_group), 0.0)
+            intake_g_day = supply_g_day * (1.0 - waste_frac)
+            result.loc[idx, "consumption_g_per_day"] = intake_g_day
+
+        after_total = result.loc[food_mask, "consumption_g_per_day"].sum()
+        logger.info(
+            "FBS override: %s — before=%.0f g/day total, after=%.0f g/day total "
+            "(across %d countries)",
+            food,
+            before_total,
+            after_total,
+            food_mask.sum(),
+        )
+
+    return result
+
+
 def _apply_millet_split(shares_df: pd.DataFrame) -> None:
     """Apply fixed global split for foxtail-millet vs pearl-millet.
 
@@ -492,12 +847,14 @@ def main():
     food_item_map_path = snakemake.input.food_item_map
     qcl_resolution_path = snakemake.input.qcl_resolution
     food_groups_path = snakemake.input.food_groups
+    food_loss_waste_path = snakemake.input.food_loss_waste
     output_path = snakemake.output.baseline_diet
 
     reference_year = int(snakemake.params.reference_year)
     baseline_age = str(snakemake.params.baseline_age)
     food_groups_included = list(snakemake.params.food_groups_included)
     byproducts = list(snakemake.params.byproducts)
+    fbs_override_foods = list(snakemake.params.fbs_override_foods)
 
     logger.info("Estimating baseline diet for reference year %d", reference_year)
     logger.info("Baseline age group: %s", baseline_age)
@@ -510,6 +867,7 @@ def main():
     qcl_resolution_df = pd.read_csv(qcl_resolution_path, comment="#")
     crop_production_df = pd.read_csv(crop_production_path)
     animal_production_df = pd.read_csv(animal_production_path)
+    flw_df = pd.read_csv(food_loss_waste_path)
 
     # Step 1: Food group totals (GDD+GBD averaged where applicable)
     logger.info("Step 1: Computing food group totals...")
@@ -565,6 +923,13 @@ def main():
     result = result.sort_values(["country", "food_group", "food"]).reset_index(
         drop=True
     )
+
+    # Step 4: Override specific foods with waste-corrected FBS supply
+    if fbs_override_foods:
+        logger.info("Step 4: Applying FBS overrides for %s...", fbs_override_foods)
+        result = _apply_fbs_overrides(
+            result, fbs_items_df, food_item_map_df, flw_df, fbs_override_foods
+        )
 
     # Validation: group sums should match group totals
     _validate_group_sums(result, group_totals)

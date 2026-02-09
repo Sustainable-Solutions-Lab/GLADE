@@ -8,6 +8,10 @@ Prepare FAO animal production statistics for validation constraints.
 Reads country-level production of major animal products (dairy, beef, pork,
 poultry, eggs) from a FAOSTAT QCL bulk CSV to establish production targets
 for validation mode.
+
+For poultry, multiple FAOSTAT species are aggregated into the model's
+``meat-chicken`` product so demand for "other poultry" can be projected onto
+the modeled poultry commodity.
 """
 
 import logging
@@ -45,6 +49,20 @@ ADDITIONAL_DAIRY_SOURCES = {
     "Raw milk of goats": "dairy",
     "Raw milk of sheep": "dairy",
     "Raw milk of camel": "dairy",
+}
+
+# Additional poultry species to include in meat-chicken totals (not modeled
+# explicitly as separate commodities).
+ADDITIONAL_POULTRY_SOURCES = {
+    "Meat of ducks, fresh or chilled": "meat-chicken",
+    "Meat of turkeys, fresh or chilled": "meat-chicken",
+    "Meat of pigeons and other birds n.e.c., fresh, chilled or frozen": "meat-chicken",
+}
+
+# Additional red-meat species to include in meat-sheep totals (not modeled
+# explicitly as separate commodities).
+ADDITIONAL_RED_MEAT_SOURCES = {
+    "Meat of goat, fresh or chilled": "meat-sheep",
 }
 
 
@@ -106,6 +124,42 @@ def main() -> None:
             item_code,
         )
 
+    # Add additional poultry sources (duck/turkey/other birds -> meat-chicken)
+    for faostat_item, model_product in ADDITIONAL_POULTRY_SOURCES.items():
+        if faostat_item not in item_map:
+            logger.warning(
+                "FAOSTAT item '%s' not found; skipping additional poultry source",
+                faostat_item,
+            )
+            continue
+        item_code = item_map[faostat_item]
+        item_codes.append(str(item_code))
+        faostat_to_model[str(item_code)] = model_product
+        logger.info(
+            "Mapped additional poultry source '%s' -> '%s' (code %s)",
+            faostat_item,
+            model_product,
+            item_code,
+        )
+
+    # Add additional red-meat sources (goat -> meat-sheep)
+    for faostat_item, model_product in ADDITIONAL_RED_MEAT_SOURCES.items():
+        if faostat_item not in item_map:
+            logger.warning(
+                "FAOSTAT item '%s' not found; skipping additional red-meat source",
+                faostat_item,
+            )
+            continue
+        item_code = item_map[faostat_item]
+        item_codes.append(str(item_code))
+        faostat_to_model[str(item_code)] = model_product
+        logger.info(
+            "Mapped additional red-meat source '%s' -> '%s' (code %s)",
+            faostat_item,
+            model_product,
+            item_code,
+        )
+
     if not item_codes:
         raise RuntimeError("No FAOSTAT items could be mapped")
 
@@ -158,26 +212,57 @@ def main() -> None:
             "No FAOSTAT production records matched the configured animal products"
         )
 
+    # Egg unit handling:
+    # - Preferred/expected: tonnes ("t"), no conversion required.
+    # - Legacy possibility: thousand eggs ("1000 No"), convert to tonnes
+    #   assuming 60 g/egg.
+    egg_mask_raw = df["product"] == "eggs"
+    if egg_mask_raw.any():
+        if "Unit" not in df.columns:
+            raise RuntimeError("FAOSTAT production data has no 'Unit' column")
+
+        egg_units = (
+            df.loc[egg_mask_raw, "Unit"].astype(str).str.strip().str.lower().unique()
+        )
+        logger.info(
+            "Egg production units in source data: %s",
+            ", ".join(sorted(egg_units)),
+        )
+
+        egg_unit_series = df["Unit"].astype(str).str.strip().str.lower()
+        thousand_eggs_mask = (
+            egg_mask_raw
+            & egg_unit_series.str.contains("1000", na=False)
+            & egg_unit_series.str.contains("no", na=False)
+        )
+        tonnes_mask = egg_mask_raw & (egg_unit_series == "t")
+        unknown_mask = egg_mask_raw & ~(thousand_eggs_mask | tonnes_mask)
+
+        if unknown_mask.any():
+            unknown_units = sorted(egg_unit_series.loc[unknown_mask].unique())
+            raise RuntimeError(
+                "Unexpected FAOSTAT egg unit(s): "
+                + ", ".join(unknown_units)
+                + ". Expected 't' or '1000 No'."
+            )
+
+        if thousand_eggs_mask.any():
+            # egg_thousands * 1000 eggs/thousand * 60g/egg / 1000 g/kg / 1000 kg/tonne
+            # = egg_thousands * 0.06 tonnes
+            df.loc[thousand_eggs_mask, "Value"] = (
+                df.loc[thousand_eggs_mask, "Value"] * 0.06
+            )
+            logger.info(
+                "Converted %d egg records from '1000 No' to tonnes (60 g/egg)",
+                int(thousand_eggs_mask.sum()),
+            )
+
     result = (
         df.groupby(["country", "product", "year"], as_index=False)["Value"]
         .sum()
         .rename(columns={"Value": "production_tonnes"})
         .sort_values(["country", "product"])
     )
-
-    # Convert eggs from number to tonnes (approximate: 60g per egg)
-    # FAOSTAT reports eggs in "1000 no" units (thousands of eggs)
-    egg_mask = result["product"] == "eggs"
-    if egg_mask.any():
-        # egg_thousands * 1000 eggs/thousand * 60g/egg / 1000 g/kg / 1000 kg/tonne
-        # = egg_thousands * 0.06 tonnes
-        result.loc[egg_mask, "production_tonnes"] = (
-            result.loc[egg_mask, "production_tonnes"] * 0.06
-        )
-        logger.info(
-            "Converted %d egg records from thousands to tonnes (assuming 60g/egg)",
-            egg_mask.sum(),
-        )
 
     # Convert tonnes to Mt for consistency with model units
     result["production_mt"] = result["production_tonnes"] * 1e-6

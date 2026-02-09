@@ -159,6 +159,10 @@ soy,cal,kcal/100g,445.98
 soy,carb,g/100g,30.16
 soy,fat,g/100g,19.94
 soy,protein,g/100g,36.49
+soybean-oil,cal,kcal/100g,884.08
+soybean-oil,carb,g/100g,0.0
+soybean-oil,fat,g/100g,100.0
+soybean-oil,protein,g/100g,0.0
 sugar,cal,kcal/100g,386.71
 sugar,carb,g/100g,99.98
 sugar,fat,g/100g,0.0

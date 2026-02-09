@@ -143,7 +143,7 @@ Data Processing
 The dietary data processing pipeline involves three stages:
 
 1. **Prepare GDD Data** (``workflow/scripts/prepare_gdd_dietary_intake.py``): Processes GDD survey data for most food groups.
-2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_dietary_intake.py``): Fetches FAOSTAT supply data for dairy, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
+2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_gdd_supplements.py``): Fetches FAOSTAT supply data for dairy, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
 3. **Merge Sources** (``workflow/scripts/merge_dietary_sources.py``): Combines the datasets into a unified ``dietary_intake.csv``.
 
 The GDD processing step (Step 1) performs the following:
@@ -151,7 +151,7 @@ The GDD processing step (Step 1) performs the following:
 1. **Load GDD files**: Read country-level CSV files (``v*_cnty.csv``) for each dietary variable
 2. **Filter to reference year**: Extract data for ``config.health.reference_year`` (default: 2018)
 3. **Map age groups**: Convert GDD age midpoints to GBD-compatible age buckets (0-1, 1-2, 2-5, 6-10, 11-74, 75+ years)
-4. **Aggregate strata**: Compute national averages by age group across sex/education/urban-rural strata
+4. **Aggregate strata**: Use GDD's pre-computed population-weighted national aggregate rows (``female=999``, ``urban=999``, ``edu=999``) rather than a simple mean across all demographic strata, which would ignore stratum sizes. Falls back to simple mean only when aggregate rows are absent.
 5. **Map to food groups**: Apply the GDD-to-food-group mapping defined in the script
 6. **Aggregate variables**: Sum multiple GDD variables that map to the same food group (preserving age stratification)
 7. **Handle missing countries**: Apply proxies for territories without separate GDD data
@@ -179,6 +179,7 @@ Where:
 
   * ``g/day (fresh wt)``: Fresh/cooked "as consumed" weight for most foods
   * ``g/day (milk equiv)``: Total milk equivalents for dairy
+  * ``g/day (refined sugar eq)``: Refined sugar equivalent for the sugar food group
 
 * ``item``: Food group name
 * ``country``: ISO 3166-1 alpha-3 country code
@@ -269,7 +270,7 @@ FAOSTAT item-level supply data to produce **per-food, per-country** consumption
 estimates.
 
 This algorithm is implemented in ``workflow/scripts/estimate_baseline_diet.py``
-and proceeds in three steps.
+and proceeds in four steps.
 
 Step 1: Food Group Totals
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -414,6 +415,15 @@ distributed across all four using the same blended production share approach
    model food is called ``potato``, the projection applies a name mapping
    before computing production shares.
 
+Nuts/seeds residual projection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+FBS item 2551 ("Nuts and products") is a residual catch-all for tree nuts and
+seeds not individually itemized. The residual supply is distributed across
+``groundnut``, ``sesame-seed``, ``coconut``, and ``sunflower-seed`` using the
+same 70/30 blended production share approach. Other nuts/seeds foods with
+their own explicit FBS items are unaffected.
+
 Step 3: Per-Food Consumption
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -430,6 +440,36 @@ containing :math:`f`, and :math:`s_{i,f}` is the within-group share.
 
 As a validation check, within-group sums are verified to match group totals
 within a tolerance of 0.1 g/day. Any discrepancies are logged as warnings.
+
+Step 4: FBS Supply Overrides
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For specific foods where GDD survey-based group totals substantially
+underestimate actual consumption, the per-food estimate from Step 3 is replaced
+with **waste-corrected FAOSTAT Food Balance Sheet supply** data. The list of
+overridden foods is configured via ``config.diet.fbs_override_foods`` (default:
+``["yam"]``).
+
+For each overridden food and country, the replacement consumption is:
+
+.. math::
+
+   c_{i,f} = \frac{S_{i,f} \times 1000}{365} \times (1 - w_{i,g(f)})
+
+where :math:`S_{i,f}` is the FAOSTAT food supply (kg/capita/year) summed
+across the food's FBS item codes, and :math:`w_{i,g(f)}` is the country- and
+group-level consumer waste fraction from the food loss and waste dataset.
+
+.. admonition:: Why yam needs an override
+
+   GDD starchy vegetable intake for sub-Saharan Africa is 7–33× below FAOSTAT
+   food supply (e.g., Nigeria: GDD ≈ 72 g/day vs. FBS ≈ 700 g/day for
+   starchy vegetables). Because yam production is almost entirely concentrated
+   in West Africa, the GDD underestimate translates directly to a ~10×
+   underestimate of yam demand. The within-group shares are correct — the
+   problem is entirely in the GDD group total for starchy vegetables in these
+   countries. Overriding yam consumption with FBS supply ensures that the
+   model's demand matches observed food availability.
 
 Baseline Diet Output
 ---------------------
@@ -463,7 +503,7 @@ The baseline diet feeds into several parts of the model:
   is enabled, the solver adds per-food, per-country equality constraints on
   food consumption links, forcing the solution to replicate observed intake.
 
-* **Within-group ratio fixing**: When ``config.validation.fix_within_group_ratios``
+* **Within-group ratio fixing**: When ``config.food_groups.fix_within_group_ratios``
   is enabled, the solver constrains foods within each group to maintain their
   baseline proportions while allowing group totals to vary.
 
@@ -476,7 +516,7 @@ Workflow Integration
 
 **Snakemake rules**:
   * ``prepare_gdd_dietary_intake``
-  * ``prepare_faostat_dietary_intake``
+  * ``prepare_faostat_gdd_supplements``
   * ``merge_dietary_sources``
   * ``prepare_gbd_dietary_risk_exposure``
   * ``estimate_baseline_diet``
@@ -507,6 +547,7 @@ Workflow Integration
   * ``config.health.reference_year``: Year for GDD dietary intake data
   * ``config.diet.baseline_reference_year``: Year for GBD exposure data
   * ``config.diet.baseline_age``: Age group for baseline totals (default: ``"11-74 years"``)
+  * ``config.diet.fbs_override_foods``: Foods whose consumption is overridden with waste-corrected FBS supply (default: ``["yam"]``)
   * ``config.byproducts``: Foods to exclude from share calculation (e.g., wheat-bran)
 
 **Output**:
@@ -516,7 +557,7 @@ Workflow Integration
 
 **Scripts**:
   * ``workflow/scripts/prepare_gdd_dietary_intake.py``
-  * ``workflow/scripts/prepare_faostat_dietary_intake.py``
+  * ``workflow/scripts/prepare_faostat_gdd_supplements.py``
   * ``workflow/scripts/merge_dietary_sources.py``
   * ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py``
   * ``workflow/scripts/estimate_baseline_diet.py``

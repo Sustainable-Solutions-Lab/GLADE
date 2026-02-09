@@ -16,6 +16,7 @@ pigeon-pea,legumes
 sesame-seed,nuts_seeds
 palm-oil,oil
 olive-oil,oil
+soybean-oil,oil
 potato,starchy_vegetable
 apple,fruits
 citrus,fruits
@@ -24,6 +25,9 @@ tomato,vegetables
 barley-hulled,whole_grains
 oat,whole_grains
 sunflower-oil,oil
+groundnut-oil,oil
+sesame-oil,oil
+coconut-oil,oil
 sunflower-seed,nuts_seeds
 carrot,vegetables
 onion,vegetables

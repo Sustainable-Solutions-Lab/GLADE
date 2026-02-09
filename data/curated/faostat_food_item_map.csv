@@ -8,6 +8,10 @@
 # When multiple model foods map to the same FBS item, their supply is split
 # equally among them during ratio calculation.
 #
+# A single model food may also map to multiple FBS item codes (multiple rows with
+# the same ``food`` value). In that case, all mapped FBS supplies are aggregated
+# for that food before within-group normalization.
+#
 # Byproducts (wheat-bran, rice-bran, etc.) are excluded from ratio calculation
 # but included here for completeness.
 #
@@ -36,18 +40,29 @@ potato,Potatoes and products,2531
 sweet-potato,Sweet potatoes,2533
 cassava,Cassava and products,2532
 yam,Yams,2535
+# Residual starchy roots item used for projection onto modeled starchy foods
+potato,"Roots, Other",2534
 tomato,Tomatoes and products,2601
 carrot,Vegetables other,2605
 onion,Onions,2602
 cabbage,Vegetables other,2605
 banana,Bananas,2615
 apple,Apples and products,2617
+citrus,"Oranges, Mandarines",2611
+citrus,"Lemons, Limes and products",2612
+citrus,Grapefruit and products,2613
 citrus,Citrus Other,2614
 coconut,Coconuts - Incl Copra,2560
+# Residual nuts item used for projection onto modeled nuts and seeds
+groundnut,Nuts and products,2551
 groundnut,Groundnuts,2552
 sesame-seed,Sesame seed,2561
 sunflower-seed,Sunflower seed,2557
 sunflower-oil,Sunflowerseed Oil,2573
+soybean-oil,Soyabean Oil,2571
+groundnut-oil,Groundnut Oil,2572
+sesame-oil,Sesameseed Oil,2579
+coconut-oil,Coconut Oil,2578
 palm-oil,Palm Oil,2577
 olive-oil,Olive Oil,2580
 rapeseed-oil,Rape and Mustard Oil,2574

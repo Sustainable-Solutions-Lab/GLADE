@@ -172,12 +172,23 @@ def main():
                 else:
                     return "75+ years"
 
+            # Prefer GDD's pre-computed population-weighted national aggregate
+            # rows (female==999, urban==999, edu==999) over a simple mean across
+            # all 36 demographic strata, which would ignore stratum sizes.
+            strat_cols = [c for c in ["female", "urban", "edu"] if c in df_year.columns]
+            if strat_cols:
+                mask = pd.Series(True, index=df_year.index)
+                for col in strat_cols:
+                    mask &= df_year[col] == 999
+                df_agg = df_year[mask]
+                if not df_agg.empty:
+                    df_year = df_agg
+
             if "age" in df_year.columns:
                 # Add age bucket column
                 df_year["age_bucket"] = df_year["age"].apply(map_age_bucket)
 
-                # Aggregate across sex/urban/education but keep age buckets
-                # Take mean across other strata for each country-age bucket combination
+                # Aggregate to country-age level (mean across remaining rows)
                 natl = (
                     df_year.groupby(["iso3", "age_bucket"])["median"]
                     .mean()

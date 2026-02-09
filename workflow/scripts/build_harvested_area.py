@@ -4,6 +4,7 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+import logging
 from pathlib import Path
 
 from osgeo import gdal, osr
@@ -19,8 +20,13 @@ import pandas as pd  # noqa: E402
 import xarray as xr  # noqa: E402
 
 from workflow.scripts.raster_utils import raster_bounds, read_raster_float  # noqa: E402
+from workflow.scripts.vegetable_projection import (  # noqa: E402
+    OVG_COUNTRY_SHARE_BLEND,
+    build_blended_crop_shares,
+)
 
 RES06_HAR_SCALE_TO_HA = 1_000.0  # rasters store thousand hectares (kha)
+logger = logging.getLogger(__name__)
 
 
 def _load_mapping(mapping_path: Path) -> pd.DataFrame:
@@ -34,6 +40,7 @@ def _shares_for_crop(
     crop: str,
     mapping_df: pd.DataFrame,
     production_df: pd.DataFrame,
+    non_food_crops: set[str] | None = None,
 ) -> tuple[dict[str, float], float]:
     """Return country-specific shares and fallback share for the given crop."""
 
@@ -63,6 +70,39 @@ def _shares_for_crop(
     if production_df.empty:
         uniform_share = 1.0 / len(crops_in_module)
         return {}, uniform_share
+
+    non_food_set = set(non_food_crops or set())
+    available_crops = set(production_df["crop"].unique())
+    missing_crops = sorted(set(crops_in_module) - available_crops)
+    missing_relevant = [c for c in missing_crops if c not in non_food_set]
+    if missing_relevant:
+        # If module sibling crops are absent from the FAOSTAT production input
+        # (e.g., excluded from model configuration), avoid assigning 100% of the
+        # aggregated RES06 harvested area to the remaining crop.
+        uniform_share = 1.0 / len(crops_in_module)
+        logger.warning(
+            "Missing FAOSTAT production for RES06 module siblings of '%s': %s. "
+            "Using uniform harvested-area share %.3f across module crops %s.",
+            crop,
+            ", ".join(missing_relevant),
+            uniform_share,
+            ", ".join(crops_in_module),
+        )
+        return {}, uniform_share
+
+    if module_code == "OVG":
+        lookup, global_share = build_blended_crop_shares(
+            production_df,
+            crops_in_module,
+            blend_weight=OVG_COUNTRY_SHARE_BLEND,
+        )
+        shares_lookup = {
+            country: share
+            for (country, crop_name), share in lookup.items()
+            if crop_name == crop
+        }
+        fallback_share = float(global_share.get(crop, 1.0 / len(crops_in_module)))
+        return shares_lookup, fallback_share
 
     production_df["production_tonnes"] = pd.to_numeric(
         production_df["production_tonnes"], errors="coerce"
@@ -199,7 +239,13 @@ if __name__ == "__main__":
     mapping_df = _load_mapping(mapping_path)
     production_df = pd.read_csv(production_path)
 
-    shares_lookup, fallback_share = _shares_for_crop(crop, mapping_df, production_df)
+    non_food_crops = set(getattr(snakemake.params, "non_food_crops", []))  # type: ignore[attr-defined]
+    shares_lookup, fallback_share = _shares_for_crop(
+        crop,
+        mapping_df,
+        production_df,
+        non_food_crops=non_food_crops,
+    )
 
     extracted = _extract_harvested_area(
         harvested_raw,

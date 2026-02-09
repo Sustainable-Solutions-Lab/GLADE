@@ -162,6 +162,7 @@ rule build_model:
         health_reference_year=lambda w: get_effective_config(w.scenario)["health"][
             "reference_year"
         ],
+        validation=lambda w: get_effective_config(w.scenario)["validation"],
         production_stability=lambda w: get_effective_config(w.scenario)["validation"][
             "production_stability"
         ],

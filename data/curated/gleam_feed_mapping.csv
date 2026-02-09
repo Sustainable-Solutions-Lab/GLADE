@@ -31,16 +31,22 @@ BNSTEM,banana-stem,residue,monogastric,Banana stem residues
 LEAVES,,residue,both,Leaves from trees/forest (not modeled for now)
 FDDRBEET,sugarbeet,crop,ruminant,Fodder beet → sugar beet
 GRAINS,barley,crop,ruminant,Barley and other cereals (using barley as representative)
+GRAINS,oat,crop,ruminant,Oat grain represented by GLEAM mixed cereals nutritional profile
+GRAINS,rye,crop,ruminant,Rye grain represented by GLEAM mixed cereals nutritional profile
 CORN,maize,crop,both,Maize grain
 WHEAT,wheat,crop,monogastric,Wheat grain
 MAIZE,maize,crop,monogastric,Maize grain (same as CORN)
 BARLEY,barley,crop,monogastric,Barley grain
+BARLEY,oat,crop,monogastric,Oat grain proxied with barley nutritional profile
+BARLEY,rye,crop,monogastric,Rye grain proxied with barley nutritional profile
 MILLET,pearl-millet,crop,monogastric,Millet grain → pearl millet
 RICE,wetland-rice,crop,monogastric,Rice grain → wetland rice
 SORGHUM,sorghum,crop,monogastric,Sorghum grain
 SOY,soybean,crop,monogastric,Soybean grain
 PULSES,dry-pea,crop,monogastric,Legume grains → dry pea as representative
 CASSAVA,cassava,crop,monogastric,Cassava roots/pellets
+CASSAVA,white-potato,crop,monogastric,Potato tubers as pig feed (CASSAVA nutritional proxy)
+CASSAVA,sweet-potato,crop,monogastric,Sweet potato roots as pig feed (CASSAVA nutritional proxy)
 BNFRUIT,banana,crop,monogastric,Banana fruit
 MLSOY,sunflower-meal,food,both,Soybean meal → sunflower meal (model has this)
 MLRAPE,rapeseed-meal,food,both,Rapeseed/canola meal

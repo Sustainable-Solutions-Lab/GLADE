@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 
 import matplotlib
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import pypsa
@@ -162,6 +164,28 @@ def _aggregate_consumption_by_group(network: pypsa.Network) -> pd.Series:
     return consume_p0.groupby(consume_groups).sum().sort_index()
 
 
+def _aggregate_demand_by_group(network: pypsa.Network) -> pd.Series:
+    """Aggregate baseline food demand by group in Mt.
+
+    Uses food-level equality constraints when available; falls back to
+    realized consumption for legacy generator-based slack mode.
+    """
+    if not _has_food_level_constraints(network):
+        return _aggregate_consumption_by_group(network)
+
+    gc = network.global_constraints.static
+    if gc.empty:
+        return pd.Series(dtype=float)
+
+    food_gc = gc[gc.index.astype(str).str.startswith("food_equal_")]
+    if food_gc.empty or "food_group" not in food_gc.columns:
+        return pd.Series(dtype=float)
+
+    constants = pd.to_numeric(food_gc["constant"], errors="coerce").fillna(0.0)
+    groups = food_gc["food_group"].astype(str)
+    return constants.groupby(groups).sum().sort_index()
+
+
 def _build_food_slack_df(network: pypsa.Network) -> pd.DataFrame:
     """Build per-food slack DataFrame from food-level constraints or generators.
 
@@ -236,13 +260,22 @@ def _build_food_slack_from_generators(network: pypsa.Network) -> pd.DataFrame:
 
 def _plot_food_slack(
     slack_df: pd.DataFrame,
+    demand: pd.Series,
     consumption: pd.Series,
     output_pdf: Path,
 ) -> None:
     """Render stacked bar chart of per-food slack grouped by food group."""
-    if slack_df.empty:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.text(0.5, 0.5, "No food slack recorded", ha="center", va="center")
+    group_colors_param = getattr(snakemake.params, "group_colors", {}) or {}
+
+    all_groups = sorted(
+        set(demand.index.astype(str).tolist())
+        | set(consumption.index.astype(str).tolist())
+        | set(slack_df.get("food_group", pd.Series(dtype=str)).astype(str).tolist())
+        | set(group_colors_param)
+    )
+    if not all_groups:
+        _fig, ax = plt.subplots(figsize=(10, 6))
+        ax.text(0.5, 0.5, "No food groups found", ha="center", va="center")
         ax.axis("off")
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(output_pdf, bbox_inches="tight", dpi=300)
@@ -250,92 +283,191 @@ def _plot_food_slack(
         logger.info("No slack to plot; wrote placeholder to %s", output_pdf)
         return
 
-    # Only keep foods with non-negligible slack
-    slack_df = slack_df[
-        (slack_df["overconsumption"] > 0.01) | (slack_df["underconsumption"] > 0.01)
-    ].copy()
+    plot_df = slack_df.copy()
+    if not plot_df.empty:
+        plot_df = plot_df[
+            (plot_df["overconsumption"] > 0.01) | (plot_df["underconsumption"] > 0.01)
+        ].copy()
 
+    # Sort food groups by total slack but keep zero-slack groups in the plot.
     if slack_df.empty:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.text(0.5, 0.5, "Food slack < 0.01 Mt everywhere", ha="center", va="center")
-        ax.axis("off")
-        output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(output_pdf, bbox_inches="tight", dpi=300)
-        plt.close()
-        return
+        abs_slack_by_group = pd.Series(0.0, index=all_groups)
+    else:
+        abs_slack_by_group = (
+            slack_df.groupby("food_group")[["overconsumption", "underconsumption"]]
+            .sum()
+            .sum(axis=1)
+            .reindex(all_groups, fill_value=0.0)
+        )
 
-    # Sort food groups by total slack, then foods within each group
-    slack_df["total"] = slack_df["overconsumption"] + slack_df["underconsumption"]
+    if plot_df.empty:
+        group_totals = pd.Series(0.0, index=all_groups)
+    else:
+        plot_df["total"] = plot_df["overconsumption"] + plot_df["underconsumption"]
+        group_totals = (
+            plot_df.groupby("food_group")["total"]
+            .sum()
+            .reindex(all_groups, fill_value=0.0)
+        )
+
     group_order = (
-        slack_df.groupby("food_group")["total"]
-        .sum()
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
-    slack_df["group_rank"] = slack_df["food_group"].map(
+        group_totals.rename_axis("food_group")
+        .reset_index(name="total")
+        .sort_values(["total", "food_group"], ascending=[False, True])
+    )["food_group"].tolist()
+    plot_df["group_rank"] = plot_df["food_group"].map(
         {g: i for i, g in enumerate(group_order)}
     )
-    slack_df = slack_df.sort_values(["group_rank", "total"], ascending=[True, False])
+    plot_df = plot_df.sort_values(["group_rank", "total"], ascending=[True, False])
 
     # Assign colors per food group
-    group_colors_param = getattr(snakemake.params, "group_colors", {}) or {}
     colors = categorical_colors(group_order, overrides=group_colors_param)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _fig, ax = plt.subplots(figsize=(10, 6))
 
     # Build stacked bars: one bar per food group, stacked by food
     bar_width = 0.7
     positions = np.arange(len(group_order))
+
+    label_candidates: list[dict[str, float | str]] = []
 
     for direction, sign, alpha in [
         ("overconsumption", 1, 1.0),
         ("underconsumption", -1, 0.45),
     ]:
         for gi, group in enumerate(group_order):
-            group_foods = slack_df[slack_df["food_group"] == group]
+            group_foods = plot_df[plot_df["food_group"] == group]
             cumulative = 0.0
             for _, row in group_foods.iterrows():
                 val = row[direction]
                 if val < 0.01:
                     continue
+                if cumulative > 0.0:
+                    boundary = sign * cumulative
+                    ax.hlines(
+                        boundary,
+                        gi - bar_width / 2,
+                        gi + bar_width / 2,
+                        colors="white",
+                        linewidth=0.9,
+                        zorder=4,
+                    )
                 ax.bar(
                     gi,
                     sign * val,
                     width=bar_width,
                     bottom=sign * cumulative,
                     color=colors[group],
-                    edgecolor=colors[group],
-                    linewidth=0.5,
+                    edgecolor="white",
+                    linewidth=0.8,
                     alpha=alpha,
                 )
-                # Label foods with significant slack
-                if val > slack_df["total"].quantile(0.7):
-                    y_center = sign * (cumulative + val / 2)
-                    ax.text(
-                        gi,
-                        y_center,
-                        row["food"],
-                        ha="center",
-                        va="center",
-                        fontsize=6,
-                    )
+                y_center = sign * (cumulative + val / 2.0)
+                label_candidates.append(
+                    {
+                        "x_bar": float(gi),
+                        "y_center": float(y_center),
+                        "food": str(row["food"]),
+                    }
+                )
                 cumulative += val
+
+    # Place labels centered on each segment.
+    if label_candidates:
+        labels_df = pd.DataFrame(label_candidates)
+        for _, row in labels_df.iterrows():
+            ax.text(
+                float(row["x_bar"]),
+                float(row["y_center"]),
+                str(row["food"]),
+                ha="center",
+                va="center",
+                fontsize=6,
+                bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.2},
+                zorder=6,
+            )
 
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xticks(positions)
     ax.set_xticklabels(group_order, rotation=35, ha="right")
+    ax.set_xlim(-0.6, len(group_order) - 0.4)
     ax.set_ylabel("Mt")
     ax.set_title("Food slack by group (stacked by food)")
     ax.grid(axis="y", alpha=0.3)
+    if plot_df.empty:
+        ax.text(
+            0.5,
+            0.95,
+            "Food slack < 0.01 Mt across all food groups",
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=9,
+        )
+
+    # Secondary axis: absolute slack relative to baseline demand by group.
+    demand_by_group = pd.to_numeric(
+        demand.reindex(group_order, fill_value=0.0), errors="coerce"
+    ).fillna(0.0)
+    abs_slack = pd.to_numeric(
+        abs_slack_by_group.reindex(group_order, fill_value=0.0), errors="coerce"
+    ).fillna(0.0)
+    ratio_pct = pd.Series(np.nan, index=group_order, dtype=float)
+    positive_demand = demand_by_group > 0
+    ratio_pct.loc[positive_demand] = (
+        abs_slack.loc[positive_demand] / demand_by_group.loc[positive_demand] * 100.0
+    )
+
+    ax2 = ax.twinx()
+    x_vals = np.asarray(positions, dtype=float)
+    mask = np.isfinite(ratio_pct.values)
+    ax2.scatter(
+        x_vals[mask],
+        ratio_pct.values[mask],
+        color="black",
+        s=18,
+        marker="o",
+        zorder=7,
+    )
+    ax2.set_ylabel("Absolute slack / demand (%)")
+    finite_ratio = ratio_pct[np.isfinite(ratio_pct)].values
+    y2_max = 1.0
+    if finite_ratio.size > 0:
+        ymax = float(np.max(finite_ratio))
+        y2_max = max(1.0, ymax * 1.15)
+
+    # Align secondary-axis zero with primary-axis zero while keeping
+    # secondary tick labels non-negative.
+    y1_min, y1_max = ax.get_ylim()
+    if y1_max <= y1_min:
+        y2_min = 0.0
+    else:
+        zero_frac = (0.0 - y1_min) / (y1_max - y1_min)
+        zero_frac = float(np.clip(zero_frac, 0.0, 1.0))
+        if zero_frac <= 0.0:
+            y2_min = 0.0
+        elif zero_frac >= 1.0:
+            y2_min = -y2_max
+        else:
+            y2_min = -zero_frac / (1.0 - zero_frac) * y2_max
+    ax2.set_ylim(y2_min, y2_max)
+    ax2.set_yticks(np.linspace(0.0, y2_max, 6))
 
     # Legend
-    from matplotlib.patches import Patch
-
     handles = [
         Patch(facecolor="gray", alpha=1.0, label="Excess (above baseline)"),
         Patch(facecolor="gray", alpha=0.45, label="Shortage (below baseline)"),
+        Line2D(
+            [],
+            [],
+            color="black",
+            marker="o",
+            linestyle="None",
+            markersize=5,
+            label="|Slack| / demand",
+        ),
     ]
-    ax.legend(handles=handles, loc="upper right")
+    ax.legend(handles=handles, loc="lower right")
 
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
@@ -390,7 +522,8 @@ if __name__ == "__main__":
     network = pypsa.Network(snakemake.input.network)
 
     slack_df = _build_food_slack_df(network)
+    demand = _aggregate_demand_by_group(network)
     consumption = _aggregate_consumption_by_group(network)
 
-    _plot_food_slack(slack_df, consumption, Path(snakemake.output.pdf))
+    _plot_food_slack(slack_df, demand, consumption, Path(snakemake.output.pdf))
     _write_csv(slack_df, consumption, Path(snakemake.output.csv))

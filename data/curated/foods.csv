@@ -37,6 +37,8 @@ foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,No processing
 pearl_millet_grain,pearl-millet,pearl-millet,1.0,No processing
 maize_grain,maize,maize,1.0,No processing
 soybean_whole,soybean,soy,1.0,No processing
+soybean_oil,soybean,soybean-oil,0.18,Oil extraction from soybeans (FAO SUA 2024 sheet 03)
+soybean_oil,soybean,sunflower-meal,0.78,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03)
 dry_pea_whole,dry-pea,dry-pea,1.0,No processing
 chickpea_whole,chickpea,chickpea,1.0,No processing
 cowpea_whole,cowpea,cowpea,1.0,No processing
@@ -54,8 +56,14 @@ cabbage_fresh,cabbage,cabbage,1.0,No processing
 banana_peeled,banana,banana,1.0,No processing
 citrus_fresh,citrus,citrus,1.0,No processing
 coconut_meat,coconut,coconut,1.0,No processing
+groundnut_oil,groundnut,groundnut-oil,0.45,Oil extraction from groundnuts (assumed industrial expeller yield)
+groundnut_oil,groundnut,sunflower-meal,0.50,Oilcake byproduct from groundnut oil extraction (assumed)
 groundnut_shelled,groundnut,groundnut,1.0,No processing (shell accounted for by edible portion)
+sesame_oil,sesame,sesame-oil,0.47,Oil extraction from sesame seed (assumed press yield)
+sesame_oil,sesame,sunflower-meal,0.47,Oilcake byproduct from sesame oil extraction (assumed)
 sesame_whole,sesame,sesame-seed,1.0,No processing
+coconut_oil,coconut,coconut-oil,0.35,Oil extraction from coconut kernel (assumed fresh-kernel basis)
+coconut_oil,coconut,sunflower-meal,0.45,Press-cake byproduct from coconut oil extraction (assumed)
 sunflower_oil,sunflower,sunflower-oil,0.35,TODO
 sunflower_oil,sunflower,sunflower-meal,0.50,TODO
 sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for by edible portion)
