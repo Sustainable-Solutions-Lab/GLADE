@@ -64,7 +64,7 @@ def add_feed_slack_generators(
 
     # Only add positive slack for ruminant grassland (to avoid inflating N2O via protein feed)
     grassland_mask = feed_buses.str.contains("ruminant_grassland")
-    grassland_buses = feed_buses[grassland_mask].tolist()
+    grassland_buses = feed_buses[grassland_mask]
 
     # Add carriers for slack
     n.carriers.add(
@@ -73,13 +73,17 @@ def add_feed_slack_generators(
     )
 
     # Add positive slack generators only for grassland (provide feed when insufficient)
-    if grassland_buses:
-        gen_pos_names = [
-            f"slack:feed_positive:{bus.split(':')[-1]}" for bus in grassland_buses
-        ]
+    if not grassland_buses.empty:
+        gen_pos_names = pd.Index(
+            "slack:feed_positive:"
+            + pd.Series(grassland_buses, index=grassland_buses).str.split(":").str[-1],
+            dtype="object",
+        )
+        pos_df = pd.DataFrame(index=gen_pos_names)
+        pos_df["bus"] = grassland_buses.to_numpy()
         n.generators.add(
-            gen_pos_names,
-            bus=grassland_buses,
+            pos_df.index,
+            bus=pos_df["bus"],
             carrier="slack_positive_feed",
             p_nom_extendable=True,
             marginal_cost=marginal_cost,
@@ -91,22 +95,23 @@ def add_feed_slack_generators(
 
     # Add negative slack stores to absorb excess feed.
     if allow_negative_grassland_slack:
-        negative_slack_buses = feed_buses.tolist()
+        negative_slack_buses = feed_buses
     else:
-        negative_slack_buses = feed_buses[~grassland_mask].tolist()
+        negative_slack_buses = feed_buses[~grassland_mask]
 
-    if negative_slack_buses:
+    if not negative_slack_buses.empty:
         # Build unique names: extract category and country from index
         # Convention exception: using str.extract on bus names for category/country
-        _ng = pd.Index(negative_slack_buses).str.extract(
-            r"^feed:(?P<category>[^:]+):(?P<country>.+)$"
+        neg_df = pd.DataFrame(index=negative_slack_buses)
+        neg_df["bus"] = negative_slack_buses.to_numpy()
+        _ng = neg_df["bus"].str.extract(r"^feed:(?P<category>[^:]+):(?P<country>.+)$")
+        neg_df.index = pd.Index(
+            "slack:feed_negative_" + _ng["category"] + ":" + _ng["country"],
+            dtype="object",
         )
-        gen_neg_names = (
-            "slack:feed_negative_" + _ng["category"] + ":" + _ng["country"]
-        ).tolist()
         n.generators.add(
-            gen_neg_names,
-            bus=negative_slack_buses,
+            neg_df.index,
+            bus=neg_df["bus"],
             carrier="slack_negative_feed",
             p_nom_extendable=True,
             p_min_pu=-1.0,
@@ -116,7 +121,7 @@ def add_feed_slack_generators(
 
         logger.info(
             "Added %d negative feed slack stores for validation feasibility",
-            len(gen_neg_names),
+            len(neg_df),
         )
 
 
@@ -390,44 +395,44 @@ def add_feed_to_animal_product_links(
     df["adjusted_efficiency"] = df["efficiency"] * df["flw_multiplier"]
 
     # Build all link data with vectorized string ops
-    all_names = (
-        "animal:" + df["product"] + "_" + df["feed_category"] + ":" + df["country"]
-    ).tolist()
-    all_bus0 = df["feed_bus"].tolist()
-    all_bus1 = df["food_bus"].tolist()
-    all_bus3 = ("fertilizer:" + df["country"]).tolist()
+    names = pd.Index(
+        "animal:" + df["product"] + "_" + df["feed_category"] + ":" + df["country"],
+        dtype="object",
+    )
+    link_df = df.set_index(names, drop=False).copy()
+    link_df["bus3"] = "fertilizer:" + link_df["country"]
     # Convert per-tonne emissions to per-Mt flows (CH4, N2O in t; feed in Mt)
     # Manure N needs no conversion: t N / t feed = Mt N / Mt feed (ratio is scale-invariant)
-    all_ch4 = (df["ch4_per_t_feed"] * constants.MEGATONNE_TO_TONNE).tolist()
-    all_n_fert = df["n_fert_per_t_feed"].tolist()
-    all_n2o = (df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE).tolist()
+    link_df["efficiency2"] = link_df["ch4_per_t_feed"] * constants.MEGATONNE_TO_TONNE
+    link_df["efficiency3"] = link_df["n_fert_per_t_feed"]
+    link_df["efficiency4"] = link_df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE
 
     # All animal production links now have multiple outputs:
     # bus1: animal product, bus2: CH4, bus3: manure N fertilizer (country-specific), bus4: N2O
     n.links.add(
-        all_names,
-        bus0=all_bus0,
-        bus1=all_bus1,
+        link_df.index,
+        bus0=link_df["feed_bus"],
+        bus1=link_df["food_bus"],
         carrier="animal_production",
-        efficiency=df["adjusted_efficiency"].tolist(),
-        marginal_cost=df["marginal_cost"].tolist(),
+        efficiency=link_df["adjusted_efficiency"],
+        marginal_cost=link_df["marginal_cost"],
         p_nom_extendable=True,
         bus2="emission:ch4",
-        efficiency2=all_ch4,
-        bus3=all_bus3,
-        efficiency3=all_n_fert,
+        efficiency2=link_df["efficiency2"],
+        bus3=link_df["bus3"],
+        efficiency3=link_df["efficiency3"],
         bus4="emission:n2o",
-        efficiency4=all_n2o,
-        country=df["country"].tolist(),
-        product=df["product"].tolist(),
-        feed_category=df["feed_category"].tolist(),
-        manure_ch4_share=df["manure_ch4_share"].tolist(),
-        pasture_n2o_share=df["pasture_n2o_share"].tolist(),
+        efficiency4=link_df["efficiency4"],
+        country=link_df["country"],
+        product=link_df["product"],
+        feed_category=link_df["feed_category"],
+        manure_ch4_share=link_df["manure_ch4_share"],
+        pasture_n2o_share=link_df["pasture_n2o_share"],
     )
 
     logger.info(
         "Added %d feed→animal product links with outputs: product, CH4 (enteric+manure), manure N fertilizer, N2O",
-        len(all_names),
+        len(link_df),
     )
     if skipped_count > 0:
         logger.info("Skipped %d links due to missing buses", skipped_count)

@@ -46,13 +46,19 @@ def add_carriers_and_buses(
             [countries, crop_list], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        crop_buses = ("crop:" + df["item"] + ":" + df["country"]).tolist()
-        crop_carriers = ("crop_" + df["item"]).tolist()
-        crop_countries = df["country"].tolist()
-        crop_names = df["item"].tolist()
+        crop_buses = pd.Index(
+            "crop:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        crop_df = pd.DataFrame(index=crop_buses)
+        crop_df["carrier"] = ("crop_" + df["item"]).to_numpy()
+        crop_df["country"] = df["country"].to_numpy()
+        crop_df["crop"] = df["item"].to_numpy()
         n.carriers.add(sorted({f"crop_{crop}" for crop in crop_list}), unit="Mt")
         n.buses.add(
-            crop_buses, carrier=crop_carriers, country=crop_countries, crop=crop_names
+            crop_df.index,
+            carrier=crop_df["carrier"],
+            country=crop_df["country"],
+            crop=crop_df["crop"],
         )
 
     # Residues per country
@@ -62,16 +68,19 @@ def add_carriers_and_buses(
             [countries, residue_items_sorted], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        residue_buses = ("residue:" + df["item"] + ":" + df["country"]).tolist()
-        residue_carriers = ("residue_" + df["item"]).tolist()
-        residue_countries = df["country"].tolist()
-        residue_names = df["item"].tolist()
-        n.carriers.add(sorted(set(residue_carriers)), unit="Mt")
+        residue_buses = pd.Index(
+            "residue:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        residue_df = pd.DataFrame(index=residue_buses)
+        residue_df["carrier"] = ("residue_" + df["item"]).to_numpy()
+        residue_df["country"] = df["country"].to_numpy()
+        residue_df["residue"] = df["item"].to_numpy()
+        n.carriers.add(sorted(set(residue_df["carrier"])), unit="Mt")
         n.buses.add(
-            residue_buses,
-            carrier=residue_carriers,
-            country=residue_countries,
-            residue=residue_names,
+            residue_df.index,
+            carrier=residue_df["carrier"],
+            country=residue_df["country"],
+            residue=residue_df["residue"],
         )
 
     # Foods per country
@@ -80,13 +89,19 @@ def add_carriers_and_buses(
             [countries, food_list], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        food_buses = ("food:" + df["item"] + ":" + df["country"]).tolist()
-        food_carriers = ("food_" + df["item"]).tolist()
-        food_countries = df["country"].tolist()
-        food_names = df["item"].tolist()
+        food_buses = pd.Index(
+            "food:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        food_df = pd.DataFrame(index=food_buses)
+        food_df["carrier"] = ("food_" + df["item"]).to_numpy()
+        food_df["country"] = df["country"].to_numpy()
+        food_df["food"] = df["item"].to_numpy()
         n.carriers.add(sorted({f"food_{food}" for food in food_list}), unit="Mt")
         n.buses.add(
-            food_buses, carrier=food_carriers, country=food_countries, food=food_names
+            food_df.index,
+            carrier=food_df["carrier"],
+            country=food_df["country"],
+            food=food_df["food"],
         )
 
     # Food groups per country
@@ -95,14 +110,21 @@ def add_carriers_and_buses(
             [countries, food_group_list], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        group_buses = ("group:" + df["item"] + ":" + df["country"]).tolist()
-        group_carriers = ("group_" + df["item"]).tolist()
-        group_countries = df["country"].tolist()
+        group_buses = pd.Index(
+            "group:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        group_df = pd.DataFrame(index=group_buses)
+        group_df["carrier"] = ("group_" + df["item"]).to_numpy()
+        group_df["country"] = df["country"].to_numpy()
         n.carriers.add(
             sorted({f"group_{group}" for group in food_group_list}),
             unit="Mt",
         )
-        n.buses.add(group_buses, carrier=group_carriers, country=group_countries)
+        n.buses.add(
+            group_df.index,
+            carrier=group_df["carrier"],
+            country=group_df["country"],
+        )
 
     # Macronutrients per country
     nutrient_list_sorted = sorted(dict.fromkeys(nutrient_list))
@@ -120,11 +142,16 @@ def add_carriers_and_buses(
             [countries, nutrient_list_sorted], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        nutrient_buses = ("nutrient:" + df["item"] + ":" + df["country"]).tolist()
-        nutrient_carriers = df["item"].tolist()
-        nutrient_countries = df["country"].tolist()
+        nutrient_buses = pd.Index(
+            "nutrient:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        nutrient_df = pd.DataFrame(index=nutrient_buses)
+        nutrient_df["carrier"] = df["item"].to_numpy()
+        nutrient_df["country"] = df["country"].to_numpy()
         n.buses.add(
-            nutrient_buses, carrier=nutrient_carriers, country=nutrient_countries
+            nutrient_df.index,
+            carrier=nutrient_df["carrier"],
+            country=nutrient_df["country"],
         )
 
     # Feed carriers per country (9 pools: 5 ruminant + 4 monogastric quality classes)
@@ -134,11 +161,18 @@ def add_carriers_and_buses(
             [countries, feed_categories], names=["country", "item"]
         )
         df = idx.to_frame(index=False)
-        feed_buses = ("feed:" + df["item"] + ":" + df["country"]).tolist()
-        feed_carriers = ("feed_" + df["item"]).tolist()
-        feed_countries = df["country"].tolist()
-        n.carriers.add(sorted(set(feed_carriers)), unit="Mt")
-        n.buses.add(feed_buses, carrier=feed_carriers, country=feed_countries)
+        feed_buses = pd.Index(
+            "feed:" + df["item"] + ":" + df["country"], dtype="object"
+        )
+        feed_df = pd.DataFrame(index=feed_buses)
+        feed_df["carrier"] = ("feed_" + df["item"]).to_numpy()
+        feed_df["country"] = df["country"].to_numpy()
+        n.carriers.add(sorted(set(feed_df["carrier"])), unit="Mt")
+        n.buses.add(
+            feed_df.index,
+            carrier=feed_df["carrier"],
+            country=feed_df["country"],
+        )
 
     n.carriers.add("feed_conversion", unit="Mt")
 

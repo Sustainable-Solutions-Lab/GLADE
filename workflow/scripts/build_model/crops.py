@@ -980,6 +980,7 @@ def add_residue_soil_incorporation_links(
         return
 
     cross["link_name"] = "incorporate:residue_" + cross["item"] + ":" + cross["country"]
+    cross = cross.set_index("link_name", drop=False)
 
     # Add the carrier
     carrier = "residue_incorporation"
@@ -988,11 +989,11 @@ def add_residue_soil_incorporation_links(
 
     # Add the links
     n.links.add(
-        cross["link_name"].tolist(),
-        bus0=cross["bus_name"].tolist(),
+        cross.index,
+        bus0=cross["bus_name"],
         bus1="emission:n2o",
         carrier=carrier,
-        efficiency=cross["n2o_efficiency"].tolist(),
+        efficiency=cross["n2o_efficiency"],
         marginal_cost=0.0,  # No cost to incorporate residues
         p_nom_extendable=True,
     )

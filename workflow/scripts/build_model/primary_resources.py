@@ -159,16 +159,18 @@ def add_fertilizer_distribution_links(
 
     n.carriers.add("fertilizer_distribution", unit="Mt")
 
-    countries_idx = pd.Index(country_list)
-    fertilizer_buses = ("fertilizer:" + countries_idx).tolist()
-    names = ("distribute:fertilizer:" + countries_idx).tolist()
+    countries_idx = pd.Index(country_list, dtype="object")
+    names = pd.Index("distribute:fertilizer:" + countries_idx, dtype="object")
+    link_df = pd.DataFrame(index=names)
+    link_df["country"] = countries_idx.to_numpy()
+    link_df["bus1"] = ("fertilizer:" + countries_idx).to_numpy()
     params: dict[str, object] = {
         "bus0": "fertilizer:supply",
-        "bus1": fertilizer_buses,
+        "bus1": link_df["bus1"],
         "carrier": "fertilizer_distribution",
         "efficiency": 1.0,
         "p_nom_extendable": True,
-        "country": country_list,
+        "country": link_df["country"],
     }
 
     # Calculate total N2O emissions (direct + indirect)
@@ -190,14 +192,18 @@ def add_fertilizer_distribution_links(
         params["bus2"] = "emission:n2o"
         params["efficiency2"] = emission_t_per_mt
 
-    n.links.add(names, **params)
+    n.links.add(link_df.index, **params)
 
     # Add extendable stores to absorb excess fertilizer (primarily manure nitrogen
     # from animal production when crop demand is insufficient)
+    store_names = pd.Index("store:fertilizer:" + countries_idx, dtype="object")
+    store_df = pd.DataFrame(index=store_names)
+    store_df["bus"] = ("fertilizer:" + countries_idx).to_numpy()
+    store_df["country"] = countries_idx.to_numpy()
     n.stores.add(
-        ("store:fertilizer:" + countries_idx).tolist(),
-        bus=fertilizer_buses,
+        store_df.index,
+        bus=store_df["bus"],
         carrier="fertilizer",
         e_nom_extendable=True,
-        country=country_list,
+        country=store_df["country"],
     )

@@ -153,13 +153,14 @@ def _add_trade_hubs_and_links(
 
     pairs = pd.MultiIndex.from_product([tradable_items, hub_ids], names=["item", "hub"])
     pairs_df = pairs.to_frame(index=False)
-    hub_bus_names = (
-        hub_name_prefix + ":" + pairs_df["hub"].astype(str) + "_" + pairs_df["item"]
-    ).tolist()
-    hub_bus_carriers = (carrier_prefix + pairs_df["item"]).tolist()
-
-    if hub_bus_names:
-        n.buses.add(hub_bus_names, carrier=hub_bus_carriers)
+    hub_bus_names = pd.Index(
+        hub_name_prefix + ":" + pairs_df["hub"].astype(str) + "_" + pairs_df["item"],
+        dtype="object",
+    )
+    if not hub_bus_names.empty:
+        hub_buses_df = pd.DataFrame(index=hub_bus_names)
+        hub_buses_df["carrier"] = (carrier_prefix + pairs_df["item"]).to_numpy()
+        n.buses.add(hub_buses_df.index, carrier=hub_buses_df["carrier"])
 
     gdf_ee = regions_gdf.to_crs(6933)
     gdf_countries = gdf_ee[gdf_ee["country"].isin(countries)].dissolve(
@@ -242,14 +243,19 @@ def _add_trade_hubs_and_links(
         # Add trade carrier if not present
         if link_carrier not in n.carriers.static.index:
             n.carriers.add(link_carrier, unit="Mt")
+        links_df = pd.DataFrame(index=pd.Index(link_names, dtype="object"))
+        links_df["bus0"] = link_bus0
+        links_df["bus1"] = link_bus1
+        links_df["marginal_cost"] = link_costs
+        links_df[item_column] = link_items
         n.links.add(
-            link_names,
-            bus0=link_bus0,
-            bus1=link_bus1,
-            marginal_cost=link_costs,
+            links_df.index,
+            bus0=links_df["bus0"],
+            bus1=links_df["bus1"],
+            marginal_cost=links_df["marginal_cost"],
             p_nom_extendable=True,
             carrier=link_carrier,
-            **{item_column: link_items},
+            **{item_column: links_df[item_column]},
         )
 
     if n_hubs >= 2:
@@ -259,12 +265,6 @@ def _add_trade_hubs_and_links(
         )
         ii, jj = np.where(~np.eye(n_hubs, dtype=bool))
 
-        hub_link_names: list[str] = []
-        hub_link_bus0: list[str] = []
-        hub_link_bus1: list[str] = []
-        hub_link_costs: list[float] = []
-        hub_link_items: list[str] = []
-
         if len(ii) > 0:
             dists_km = hub_distances[ii, jj]
             hub_pairs_list = list(zip(ii, jj, dists_km))
@@ -272,8 +272,8 @@ def _add_trade_hubs_and_links(
                 list(itertools.product(tradable_items, hub_pairs_list)),
                 columns=["item", "hub_pair"],
             )
-            pairs[["i", "j", "dist"]] = pd.DataFrame(
-                pairs["hub_pair"].tolist(), index=pairs.index
+            pairs[["i", "j", "dist"]] = pd.DataFrame.from_records(
+                pairs["hub_pair"], index=pairs.index
             )
             pairs = pairs.drop(columns="hub_pair")
             pairs["item_cost"] = pairs["item"].map(item_costs)
@@ -281,7 +281,7 @@ def _add_trade_hubs_and_links(
             i_str = pairs["i"].astype(int).astype(str)
             j_str = pairs["j"].astype(int).astype(str)
 
-            hub_link_names = (
+            hub_link_names = pd.Index(
                 link_name_prefix
                 + ":"
                 + pairs["item"]
@@ -289,25 +289,30 @@ def _add_trade_hubs_and_links(
                 + i_str
                 + "_to_hub"
                 + j_str
-            ).tolist()
-            hub_link_bus0 = (
+            )
+            hub_links_df = pd.DataFrame(index=hub_link_names)
+            hub_links_df["bus0"] = (
                 hub_name_prefix + ":" + i_str + "_" + pairs["item"]
-            ).tolist()
-            hub_link_bus1 = (
+            ).to_numpy()
+            hub_links_df["bus1"] = (
                 hub_name_prefix + ":" + j_str + "_" + pairs["item"]
-            ).tolist()
-            hub_link_costs = (pairs["dist"] * pairs["item_cost"]).tolist()
-            hub_link_items = pairs["item"].tolist()
+            ).to_numpy()
+            hub_links_df["marginal_cost"] = (
+                pairs["dist"] * pairs["item_cost"]
+            ).to_numpy()
+            hub_links_df[item_column] = pairs["item"].to_numpy()
+        else:
+            hub_links_df = pd.DataFrame()
 
-        if hub_link_names:
+        if not hub_links_df.empty:
             n.links.add(
-                hub_link_names,
-                bus0=hub_link_bus0,
-                bus1=hub_link_bus1,
-                marginal_cost=hub_link_costs,
+                hub_links_df.index,
+                bus0=hub_links_df["bus0"],
+                bus1=hub_links_df["bus1"],
+                marginal_cost=hub_links_df["marginal_cost"],
                 p_nom_extendable=True,
                 carrier=link_carrier,
-                **{item_column: hub_link_items},
+                **{item_column: hub_links_df[item_column]},
             )
 
 

@@ -252,49 +252,52 @@ def add_feed_supply_links(
     # Cross-merge with countries
     countries_df = pd.DataFrame({"country": countries})
     expanded = all_feeds.merge(countries_df, how="cross")
+    if expanded.empty:
+        logger.info("No feed supply links to create; check crop/food lists")
+        return
 
     # Build all name/bus columns with vectorized string ops
     feed_cat = expanded["animal_type"] + "_" + expanded["category"]
-    all_names = (
+    names = pd.Index(
         expanded["link_prefix"]
         + ":"
         + expanded["feed_item"]
         + "_to_"
         + feed_cat
         + ":"
-        + expanded["country"]
-    ).tolist()
-    all_bus0 = (
+        + expanded["country"],
+        dtype="object",
+    )
+    expanded = expanded.set_index(names, drop=False)
+    expanded["bus0"] = (
         expanded["bus_prefix"] + ":" + expanded["feed_item"] + ":" + expanded["country"]
-    ).tolist()
-    all_bus1 = ("feed:" + feed_cat + ":" + expanded["country"]).tolist()
-    all_countries = expanded["country"].tolist()
-    all_feed_categories = feed_cat.tolist()
-    all_crops = expanded["crop_value"].tolist()
-
-    if not all_names:
-        logger.info("No feed supply links to create; check crop/food lists")
-        return
+    )
+    expanded["feed_category_value"] = (
+        expanded["animal_type"] + "_" + expanded["category"]
+    )
+    expanded["bus1"] = (
+        "feed:" + expanded["feed_category_value"] + ":" + expanded["country"]
+    )
 
     # Add feed_conversion carrier
     if "feed_conversion" not in n.carriers.static.index:
         n.carriers.add("feed_conversion", unit="Mt")
 
     n.links.add(
-        all_names,
-        bus0=all_bus0,
-        bus1=all_bus1,
+        expanded.index,
+        bus0=expanded["bus0"],
+        bus1=expanded["bus1"],
         carrier="feed_conversion",
         marginal_cost=_LOW_PROCESSING_COST,
         p_nom_extendable=True,
-        country=all_countries,
-        feed_category=all_feed_categories,
-        crop=all_crops,
+        country=expanded["country"],
+        feed_category=expanded["feed_category_value"],
+        crop=expanded["crop_value"],
     )
 
     logger.info(
         "Created %d feed supply links (%d ruminant, %d monogastric)",
-        len(all_names),
+        len(expanded),
         len(ruminant_feeds) * len(countries),
         len(monogastric_feeds) * len(countries),
     )
