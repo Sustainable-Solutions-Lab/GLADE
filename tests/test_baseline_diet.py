@@ -325,6 +325,223 @@ class TestApplyMilletSplit:
 class TestBuildWithinGroupShares:
     """Tests for the full within-group share computation."""
 
+    def test_vegetable_residual_is_projected_across_ovg_crops(self):
+        """FBS item 2605 is projected to onion/cabbage/carrot, not tomato."""
+        food_groups_df = pd.DataFrame(
+            {
+                "food": ["onion", "cabbage", "carrot", "tomato"],
+                "group": ["vegetables", "vegetables", "vegetables", "vegetables"],
+            }
+        )
+        food_item_map_df = pd.DataFrame(
+            {
+                "food": ["onion", "cabbage", "carrot", "tomato"],
+                "item_code": [2602, 2605, 2605, 2601],
+            }
+        )
+        fbs_items_df = pd.DataFrame(
+            {
+                "item_code": [2601, 2602, 2605],
+                "item_name": [
+                    "Tomatoes and products",
+                    "Onions",
+                    "Vegetables, other",
+                ],
+                "country": ["USA", "USA", "USA"],
+                "supply_kg_per_capita_year": [10.0, 20.0, 70.0],
+            }
+        )
+        crop_production_df = pd.DataFrame(
+            {
+                "country": ["USA", "USA", "USA"],
+                "crop": ["onion", "cabbage", "carrot"],
+                "year": [2018, 2018, 2018],
+                "production_tonnes": [30.0, 50.0, 20.0],
+            }
+        )
+
+        shares = build_within_group_shares(
+            food_groups_df,
+            food_item_map_df,
+            fbs_items_df,
+            qcl_resolution_df=pd.DataFrame(columns=["food", "qcl_item_code"]),
+            crop_production_df=crop_production_df,
+            animal_production_df=pd.DataFrame(),
+            food_groups_included=["vegetables"],
+            byproducts=[],
+        )
+
+        by_food = shares.set_index("food")["share"]
+        # Residual 70 splits as 21/35/14 from OVG production shares (30/50/20).
+        # Combined with explicit 20 (onion) and 10 (tomato) gives total 100.
+        assert by_food["onion"] == pytest.approx(0.41)
+        assert by_food["cabbage"] == pytest.approx(0.35)
+        assert by_food["carrot"] == pytest.approx(0.14)
+        assert by_food["tomato"] == pytest.approx(0.10)
+
+    def test_starchy_residual_is_projected_across_modeled_starchy_foods(self):
+        """FBS item 2534 is projected to potato/sweet-potato/yam/cassava."""
+        food_groups_df = pd.DataFrame(
+            {
+                "food": ["potato", "sweet-potato", "yam", "cassava"],
+                "group": ["starchy_vegetable"] * 4,
+            }
+        )
+        food_item_map_df = pd.DataFrame(
+            {
+                "food": ["potato", "potato", "sweet-potato", "yam", "cassava"],
+                "item_code": [2531, 2534, 2533, 2535, 2532],
+            }
+        )
+        fbs_items_df = pd.DataFrame(
+            {
+                "item_code": [2531, 2532, 2533, 2534, 2535],
+                "item_name": [
+                    "Potatoes and products",
+                    "Cassava and products",
+                    "Sweet potatoes",
+                    "Roots, Other",
+                    "Yams",
+                ],
+                "country": ["USA"] * 5,
+                "supply_kg_per_capita_year": [10.0, 10.0, 10.0, 40.0, 10.0],
+            }
+        )
+        crop_production_df = pd.DataFrame(
+            {
+                "country": ["USA", "USA", "USA", "USA"],
+                "crop": ["white-potato", "cassava", "sweet-potato", "yam"],
+                "year": [2018] * 4,
+                "production_tonnes": [60.0, 20.0, 10.0, 10.0],
+            }
+        )
+
+        shares = build_within_group_shares(
+            food_groups_df,
+            food_item_map_df,
+            fbs_items_df,
+            qcl_resolution_df=pd.DataFrame(columns=["food", "qcl_item_code"]),
+            crop_production_df=crop_production_df,
+            animal_production_df=pd.DataFrame(),
+            food_groups_included=["starchy_vegetable"],
+            byproducts=[],
+        )
+
+        by_food = shares.set_index("food")["share"]
+        # Residual 40 splits as 24/8/4/4 from production shares 60/20/10/10.
+        # Combined with explicit 10 each gives totals 34/18/14/14 out of 80.
+        assert by_food["potato"] == pytest.approx(34.0 / 80.0)
+        assert by_food["cassava"] == pytest.approx(18.0 / 80.0)
+        assert by_food["sweet-potato"] == pytest.approx(14.0 / 80.0)
+        assert by_food["yam"] == pytest.approx(14.0 / 80.0)
+
+    def test_nuts_residual_is_projected_across_modeled_nuts_foods(self):
+        """FBS item 2551 is projected to modeled nuts/seeds foods."""
+        food_groups_df = pd.DataFrame(
+            {
+                "food": ["groundnut", "sesame-seed", "coconut", "sunflower-seed"],
+                "group": ["nuts_seeds"] * 4,
+            }
+        )
+        food_item_map_df = pd.DataFrame(
+            {
+                "food": [
+                    "groundnut",
+                    "groundnut",
+                    "sesame-seed",
+                    "coconut",
+                    "sunflower-seed",
+                ],
+                "item_code": [2552, 2551, 2561, 2560, 2557],
+            }
+        )
+        fbs_items_df = pd.DataFrame(
+            {
+                "item_code": [2551, 2552, 2561, 2560, 2557],
+                "item_name": [
+                    "Nuts and products",
+                    "Groundnuts",
+                    "Sesame seed",
+                    "Coconuts - Incl Copra",
+                    "Sunflower seed",
+                ],
+                "country": ["USA"] * 5,
+                "supply_kg_per_capita_year": [40.0, 10.0, 10.0, 10.0, 10.0],
+            }
+        )
+        crop_production_df = pd.DataFrame(
+            {
+                "country": ["USA", "USA", "USA", "USA"],
+                "crop": ["groundnut", "sesame", "coconut", "sunflower"],
+                "year": [2018] * 4,
+                "production_tonnes": [70.0, 10.0, 10.0, 10.0],
+            }
+        )
+
+        shares = build_within_group_shares(
+            food_groups_df,
+            food_item_map_df,
+            fbs_items_df,
+            qcl_resolution_df=pd.DataFrame(columns=["food", "qcl_item_code"]),
+            crop_production_df=crop_production_df,
+            animal_production_df=pd.DataFrame(),
+            food_groups_included=["nuts_seeds"],
+            byproducts=[],
+        )
+
+        by_food = shares.set_index("food")["share"]
+        # Residual 40 splits by production shares 70/10/10/10 -> 28/4/4/4.
+        # Combined with explicit 10 each gives totals 38/14/14/14 out of 80.
+        assert by_food["groundnut"] == pytest.approx(38.0 / 80.0)
+        assert by_food["sesame-seed"] == pytest.approx(14.0 / 80.0)
+        assert by_food["coconut"] == pytest.approx(14.0 / 80.0)
+        assert by_food["sunflower-seed"] == pytest.approx(14.0 / 80.0)
+
+    def test_food_with_multiple_fbs_items_is_aggregated(self):
+        """A food mapped to multiple FBS items uses the summed supply."""
+        food_groups_df = pd.DataFrame(
+            {
+                "food": ["banana", "citrus"],
+                "group": ["fruits", "fruits"],
+            }
+        )
+        food_item_map_df = pd.DataFrame(
+            {
+                "food": ["banana", "citrus", "citrus", "citrus", "citrus"],
+                "item_code": [2615, 2611, 2612, 2613, 2614],
+            }
+        )
+        fbs_items_df = pd.DataFrame(
+            {
+                "item_code": [2615, 2611, 2612, 2613, 2614],
+                "item_name": [
+                    "Bananas",
+                    "Oranges, Mandarines",
+                    "Lemons, Limes and products",
+                    "Grapefruit and products",
+                    "Citrus, Other",
+                ],
+                "country": ["USA"] * 5,
+                "supply_kg_per_capita_year": [100.0, 30.0, 20.0, 10.0, 40.0],
+            }
+        )
+
+        shares = build_within_group_shares(
+            food_groups_df,
+            food_item_map_df,
+            fbs_items_df,
+            qcl_resolution_df=pd.DataFrame(columns=["food", "qcl_item_code"]),
+            crop_production_df=pd.DataFrame(),
+            animal_production_df=pd.DataFrame(),
+            food_groups_included=["fruits"],
+            byproducts=[],
+        )
+
+        banana = shares[(shares["country"] == "USA") & (shares["food"] == "banana")]
+        citrus = shares[(shares["country"] == "USA") & (shares["food"] == "citrus")]
+        assert banana["share"].iloc[0] == pytest.approx(0.5)
+        assert citrus["share"].iloc[0] == pytest.approx(0.5)
+
     def test_shares_reflect_fbs_supply_within_group(
         self,
         food_groups_df,
