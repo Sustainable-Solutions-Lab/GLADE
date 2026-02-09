@@ -138,7 +138,7 @@ def _plot_for_x(
     fig.text(
         0.01,
         0.01,
-        "Areas are mean conditional first-order Sobol shares, averaged over other slice parameters.",
+        "Areas are conditional first-order Sobol shares.",
         fontsize=8,
         alpha=0.8,
     )

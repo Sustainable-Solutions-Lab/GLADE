@@ -13,7 +13,6 @@ The implementation is parameter-agnostic: parameter names, distributions,
 and slice variable designations are all read from the generator spec.
 """
 
-import itertools
 import logging
 from pathlib import Path
 
@@ -263,7 +262,7 @@ def conditional_sobol(
         # Evaluate each basis polynomial at the conditioning value
         vals = {}
         for poly in uni_expansion:
-            deg = int(poly.exponents[0][0])
+            deg = int(poly.exponents[-1][0])
             vals[deg] = float(poly(s_val))
         slice_basis_values[s_idx] = vals
 
@@ -338,8 +337,8 @@ def load_scenario_outputs(
         # Load objective breakdown for total cost
         obj_path = scenario_dir / "objective_breakdown.csv"
         if obj_path.exists():
-            obj_df = pd.read_csv(obj_path, index_col=0)
-            row["total_cost"] = obj_df["total_bnusd"].sum()
+            obj_df = pd.read_csv(obj_path)
+            row["total_cost"] = obj_df.iloc[0].sum()
         else:
             row["total_cost"] = np.nan
 
@@ -497,33 +496,36 @@ def main() -> None:
         for i, pname in enumerate(param_names):
             logger.info("  %s: S1=%.3f, ST=%.3f", pname, s1[i], s_total[i])
 
-        # Conditional Sobol indices (if slice parameters defined)
+        # Conditional Sobol indices (if slice parameters defined).
+        # Condition on each slice parameter individually so that the
+        # other slice parameters remain free and contribute to
+        # explained variability.
         if slice_indices and slice_grid:
-            slice_value_lists = [slice_grid[sp] for sp in slice_param_names]
-            for combo in itertools.product(*slice_value_lists):
-                s1_c, st_c, cond_var = conditional_sobol(
-                    pce_result["coefficients"],
-                    pce_result["expansion"],
-                    pce_result["multi_indices"],
-                    joint_dist,
-                    n_params,
-                    slice_indices,
-                    list(combo),
-                )
+            for sp_idx, sp_name in zip(slice_indices, slice_param_names):
+                for sp_val in slice_grid[sp_name]:
+                    s1_c, st_c, cond_var = conditional_sobol(
+                        pce_result["coefficients"],
+                        pce_result["expansion"],
+                        pce_result["multi_indices"],
+                        joint_dist,
+                        n_params,
+                        [sp_idx],
+                        [sp_val],
+                    )
 
-                for i, pname in enumerate(param_names):
-                    if i in slice_indices:
-                        continue
-                    row = {
-                        "output": col,
-                        "parameter": pname,
-                        "S1_cond": s1_c[i],
-                        "ST_cond": st_c[i],
-                        "conditional_variance": cond_var,
-                    }
-                    for sp_name, sp_val in zip(slice_param_names, combo):
-                        row[sp_name] = sp_val
-                    conditional_rows.append(row)
+                    for i, pname in enumerate(param_names):
+                        if i == sp_idx:
+                            continue
+                        conditional_rows.append(
+                            {
+                                "output": col,
+                                "parameter": pname,
+                                "S1_cond": s1_c[i],
+                                "ST_cond": st_c[i],
+                                "conditional_variance": cond_var,
+                                sp_name: sp_val,
+                            }
+                        )
 
     # Write output CSVs
     global_df = pd.DataFrame(global_rows)

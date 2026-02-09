@@ -147,7 +147,7 @@ def _sensitivity_scenario_inputs(wildcards):
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
-    Returns a dict mapping each slice parameter name to a list of 7
+    Returns a dict mapping each slice parameter name to a list of 25
     linearly-spaced values between its min and max.
     """
     import numpy as _np
@@ -161,7 +161,7 @@ def _sensitivity_slice_grid(wildcards):
         spec = generator["parameters"][sp]
         dist = build_chaospy_distribution(spec)
         lo, hi = float(dist.lower[0]), float(dist.upper[0])
-        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 7)]
+        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 25)]
     return grid
 
 
