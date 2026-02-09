@@ -56,7 +56,6 @@ if __name__ == "__main__":
             )
 
     logging.getLogger("pypsa.network.transform").addFilter(_CarrierUnitWarningFilter())
-
     # Apply scenario config overrides based on wildcard
     apply_scenario_config(snakemake.config, snakemake.wildcards.scenario)
 
@@ -134,20 +133,33 @@ if __name__ == "__main__":
             water_supply=valid["water_supply"].astype(str),
             region=valid["region"].astype(str),
             resource_class=valid["resource_class"].astype(int),
+            residue_yield_t_per_ha=pd.to_numeric(
+                valid["residue_yield_t_per_ha"], errors="coerce"
+            ),
         )
-        residue_lookup = (
-            valid.groupby(["crop", "water_supply", "region", "resource_class"])
-            .apply(
-                lambda g: dict(
-                    zip(
-                        g["feed_item"].astype(str),
-                        g["residue_yield_t_per_ha"].astype(float),
-                    )
-                ),
-                include_groups=False,
-            )
-            .to_dict()
-        )
+        valid = valid.dropna(subset=["residue_yield_t_per_ha"])
+        residue_lookup: dict[tuple[str, str, str, int], dict[str, float]] = {}
+        for (
+            crop_name,
+            water_supply,
+            region,
+            resource_class,
+            feed_item,
+            residue_yield,
+        ) in valid[
+            [
+                "crop",
+                "water_supply",
+                "region",
+                "resource_class",
+                "feed_item",
+                "residue_yield_t_per_ha",
+            ]
+        ].itertuples(index=False, name=None):
+            key = (crop_name, water_supply, region, int(resource_class))
+            if key not in residue_lookup:
+                residue_lookup[key] = {}
+            residue_lookup[key][str(feed_item)] = float(residue_yield)
     else:
         residue_feed_items = []
         residue_lookup = {}
@@ -838,6 +850,12 @@ if __name__ == "__main__":
     logger.info("Buses: %d", len(n.buses.static))
     logger.info("Stores: %d", len(n.stores.static))
     logger.info("Links: %d", len(n.links.static))
+
+    # PyPSA may keep unused optional link bus slots as empty strings.
+    # Normalize these placeholders to missing values before export.
+    link_bus_cols = [c for c in n.links.static.columns if c.startswith("bus")]
+    for col in link_bus_cols:
+        n.links.static[col] = n.links.static[col].replace("", pd.NA)
 
     netcdf_config = snakemake.params.netcdf
     n.export_to_netcdf(

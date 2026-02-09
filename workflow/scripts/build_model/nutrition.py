@@ -238,38 +238,55 @@ def add_food_nutrition_links(
     for nutrient in nutrients:
         eff_matrix[nutrient] *= nutrient_factors[nutrient]
 
+    if not consumable_foods:
+        logger.info("No consumable foods configured; skipping food consumption links")
+        return
+
     countries_index = pd.Index(countries, dtype="object")
+    foods_index = pd.Index(consumable_foods, dtype="object")
+
+    links_df = (
+        pd.MultiIndex.from_product(
+            [foods_index, countries_index], names=["food", "country"]
+        )
+        .to_frame(index=False)
+        .astype({"food": "object", "country": "object"})
+    )
+    links_df["name"] = "consume:" + links_df["food"] + ":" + links_df["country"]
+    links_df["bus0"] = "food:" + links_df["food"] + ":" + links_df["country"]
+    links_df["food_group"] = links_df["food"].map(food_to_group)
 
     # Food bus flows are Mt/year, so efficiencies below represent nutrient fractions.
-    for food in consumable_foods:
-        group_val = food_to_group.get(food)
-        has_group = group_val is not None and pd.notna(group_val)
-
-        names = list("consume:" + food + ":" + countries_index)
-        bus0 = list("food:" + food + ":" + countries_index)
-
+    def _add_links(batch_df: pd.DataFrame, *, include_group: bool) -> None:
+        links = batch_df.set_index("name", drop=False)
         params = {
-            "bus0": bus0,
+            "bus0": links["bus0"],
             "carrier": "food_consumption",
             "marginal_cost": _LOW_DEFAULT_MARGINAL_COST,
+            "food": links["food"],
+            "country": links["country"],
         }
 
-        # macronutrient outputs
         for i, nutrient in enumerate(nutrients, start=1):
-            params[f"bus{i}"] = list("nutrient:" + nutrient + ":" + countries_index)
+            bus_key = f"bus{i}"
             eff_key = "efficiency" if i == 1 else f"efficiency{i}"
-            params[eff_key] = eff_matrix.at[food, nutrient]
+            params[bus_key] = "nutrient:" + nutrient + ":" + links["country"]
+            params[eff_key] = links["food"].map(eff_matrix[nutrient])
 
-        # optional food group output as last leg
-        if has_group:
+        if include_group:
             idx = len(nutrients) + 1
-            params[f"bus{idx}"] = list("group:" + group_val + ":" + countries_index)
+            params[f"bus{idx}"] = (
+                "group:" + links["food_group"].astype(str) + ":" + links["country"]
+            )
             params[f"efficiency{idx}"] = 1.0
+            params["food_group"] = links["food_group"]
 
-        # Add metadata attributes
-        params["food"] = food
-        params["country"] = countries
-        if has_group:
-            params["food_group"] = group_val
+        n.links.add(links.index, p_nom_extendable=True, **params)
 
-        n.links.add(names, p_nom_extendable=True, **params)
+    with_group_df = links_df[links_df["food_group"].notna()]
+    if not with_group_df.empty:
+        _add_links(with_group_df, include_group=True)
+
+    without_group_df = links_df[links_df["food_group"].isna()]
+    if not without_group_df.empty:
+        _add_links(without_group_df, include_group=False)

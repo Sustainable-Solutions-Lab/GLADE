@@ -52,26 +52,38 @@ def add_regional_crop_production_links(
     if "crop_production" not in n.carriers.static.index:
         n.carriers.add("crop_production", unit="Mt")
 
+    all_rows: list[pd.DataFrame] = []
+    bus_index = n.buses.static.index
+
     for crop in crop_list:
-        # Get fertilizer N application rate (kg N/ha/year) for this crop
-        # If crop not in fertilizer data, default to 0 (no fertilizer requirement)
         fert_n_rate_kg_per_ha = float(fertilizer_n_rates.get(crop, 0.0))
+
+        cost_year = float(crop_costs_per_year.get(crop, float("nan")))
+        cost_planting = float(crop_costs_per_planting.get(crop, float("nan")))
+        if not np.isfinite(cost_year):
+            cost_year = 0.0
+        if not np.isfinite(cost_planting):
+            cost_planting = 0.0
+        if cost_year == 0.0 and cost_planting == 0.0:
+            logger.info(
+                "No USDA cost for crop '%s'; defaulting marginal_cost to 0", crop
+            )
+        base_cost = (cost_year + cost_planting) * 1e6 * constants.USD_TO_BNUSD
+        fert_efficiency = (
+            -fert_n_rate_kg_per_ha * 1e6 * constants.KG_TO_MEGATONNE
+        )  # kg N/ha -> Mt N/Mha
 
         available_supplies = [
             ws for ws in ("r", "i") if f"{crop}_yield_{ws}" in yields_data
         ]
 
-        # Process available water supplies (rainfed always first for stability)
         for ws in available_supplies:
-            water_code = ws  # "i" or "r"
             water_label = "irrigated" if ws == "i" else "rainfed"
-
             key = f"{crop}_yield_{ws}"
             crop_yields = yields_data[key].copy()
 
             if use_actual_production:
                 harvest_table = harvested_area_data[f"{crop}_harvested_{ws}"]
-                # Only join harvested_area if the table has data (not empty)
                 if (
                     not harvest_table.empty
                     and "harvested_area" in harvest_table.columns
@@ -81,10 +93,7 @@ def add_regional_crop_production_links(
                         how="left",
                     )
 
-            # Make index levels columns
             df = crop_yields.reset_index()
-
-            # Add a unique name per link including water supply and class
             df["name"] = (
                 "produce:"
                 + crop
@@ -95,32 +104,21 @@ def add_regional_crop_production_links(
                 + "_c"
                 + df["resource_class"].astype(int).astype(str)
             )
-
-            # Set index to "name"
             df.set_index("name", inplace=True)
             df.index.name = None
 
-            # Filter out rows with zero suitable area or zero yield
             df = df[(df["suitable_area"] > 0) & (df["yield"] > 0)]
-
-            # Filter low yields for numerical stability
             if min_yield_t_per_ha > 0:
-                low_yield_mask = df["yield"] < min_yield_t_per_ha
-                df = df[~low_yield_mask]
+                df = df[df["yield"] >= min_yield_t_per_ha]
 
             if use_actual_production:
-                df["harvested_area"] = pd.to_numeric(
-                    df.get("harvested_area"), errors="coerce"
-                )
                 df["fixed_area_ha"] = pd.to_numeric(
                     df.get("harvested_area"), errors="coerce"
                 )
                 df = df[df["fixed_area_ha"] > 0]
 
-            # Map regions to countries and filter to allowed countries
             df["country"] = df["region"].map(region_to_country)
             df = df[df["country"].isin(allowed_countries)]
-
             if df.empty:
                 continue
 
@@ -130,9 +128,9 @@ def add_regional_crop_production_links(
                 + "_c"
                 + df["resource_class"].astype(int).astype(str)
                 + "_"
-                + water_code
+                + ws
             )
-            missing_bus_mask = ~bus0_series.isin(n.buses.static.index)
+            missing_bus_mask = ~bus0_series.isin(bus_index)
             if missing_bus_mask.any():
                 missing_buses = bus0_series[missing_bus_mask].unique()
                 preview = ", ".join(missing_buses[:5])
@@ -144,148 +142,138 @@ def add_regional_crop_production_links(
                 )
                 df = df.loc[~missing_bus_mask].copy()
                 bus0_series = bus0_series.loc[df.index]
-
             if df.empty:
                 continue
 
-            # Cost for this crop: per-year + per-planting costs (USD/ha); if missing, use 0
-            cost_year = float(crop_costs_per_year.get(crop, float("nan")))
-            cost_planting = float(crop_costs_per_planting.get(crop, float("nan")))
-
-            if not np.isfinite(cost_year):
-                cost_year = 0.0
-            if not np.isfinite(cost_planting):
-                cost_planting = 0.0
-
-            if cost_year == 0.0 and cost_planting == 0.0:
-                logger.info(
-                    "No USDA cost for crop '%s'; defaulting marginal_cost to 0",
-                    crop,
-                )
-
-            # For single crops, total cost = per-year + per-planting
-            cost_per_ha = cost_year + cost_planting
-
-            # Add links
-            # Connect to class-level land bus per region/resource class and water supply
-            # Land is now tracked in Mha, so scale yields and areas accordingly
-            resource_classes = df["resource_class"].astype(int).to_numpy()
-            regions = df["region"].astype(str).to_numpy()
-            # Cost is per hectare; convert to per Mha in bnUSD/Mha
-            base_cost = cost_per_ha * 1e6 * constants.USD_TO_BNUSD
-
-            # Land bus flows are in Mha; yields (t/ha) numerically equal Mt/Mha so
-            # the efficiency terms remain the raw yield values.
-            link_params = {
-                "name": df.index,
-                "carrier": "crop_production",
-                "bus0": bus0_series,
-                "bus1": "crop:" + crop + ":" + df["country"],
-                # Output: Mt crop per Mha land (already Mt-aware)
-                "efficiency": df["yield"],
-                "bus3": "fertilizer:" + df["country"],
-                "efficiency3": -fert_n_rate_kg_per_ha
-                * 1e6
-                * constants.KG_TO_MEGATONNE,  # kg N/ha → Mt N/Mha
-                # Link marginal_cost is per unit of bus0 flow (now Mha).
-                "marginal_cost": base_cost,
-                "p_nom_max": df["suitable_area"] / 1e6,  # ha → Mha
-                "p_nom_extendable": not use_actual_production,
-                # Metadata columns
-                "crop": crop,
-                "country": df["country"],
-                "region": df["region"],
-                "resource_class": df["resource_class"].astype(int),
-                "water_supply": water_label,
-            }
-
-            if use_actual_production:
-                fixed_area_mha = df["fixed_area_ha"] / 1e6
-                link_params["p_nom"] = fixed_area_mha
-                link_params["p_nom_max"] = fixed_area_mha
-                link_params["p_nom_min"] = fixed_area_mha
-                link_params["p_min_pu"] = 1.0
-
+            water_bus = np.full(len(df), "emission:co2", dtype=object)
+            water_eff = np.zeros(len(df), dtype=float)
             if ws == "i":
-                water_requirement = pd.to_numeric(
+                water_bus = ("water:" + df["region"].astype(str)).to_numpy(dtype=object)
+                water_eff = -pd.to_numeric(
                     df["water_requirement_m3_per_ha"], errors="coerce"
-                )
-
-                link_params["bus2"] = "water:" + df["region"]
-                # Convert m³/ha to Mm³/Mha for compatibility with scaled water units
-                link_params["efficiency2"] = -water_requirement
-
-            next_bus_idx = 4
-            if residue_lookup:
-                residue_feed_items = sorted(
-                    {
-                        feed_item
-                        for region, resource_class in zip(regions, resource_classes)
-                        for feed_item in residue_lookup.get(
-                            (crop, water_code, region, int(resource_class)), {}
-                        )
-                    }
-                )
-                if residue_feed_items:
-                    # Build a lookup dict keyed by (region, resource_class)
-                    # for vectorized efficiency assignment
-                    for feed_item in residue_feed_items:
-                        lookup_map = {
-                            (r, int(rc)): residue_lookup.get(
-                                (crop, water_code, r, int(rc)), {}
-                            ).get(feed_item, 0.0)
-                            for r, rc in zip(regions, resource_classes)
-                        }
-                        efficiencies = np.array(
-                            [
-                                lookup_map.get((r, int(rc)), 0.0)
-                                for r, rc in zip(regions, resource_classes)
-                            ],
-                            dtype=float,
-                        )
-                        if np.allclose(efficiencies, 0.0):
-                            continue
-                        bus_key = f"bus{next_bus_idx}"
-                        eff_key = f"efficiency{next_bus_idx}"
-                        link_params[bus_key] = (
-                            "residue:" + feed_item + ":" + df["country"]
-                        )
-                        link_params[eff_key] = efficiencies
-                        next_bus_idx += 1
-
-            emission_outputs: dict[str, np.ndarray] = {}
+                ).to_numpy(dtype=float)
 
             if crop == "wetland-rice" and rice_methane_factor > 0:
-                # Methane emissions from rice cultivation
-                # Factor is kg CH4/ha from IPCC.
-                # Link input (bus0) is in Mha; CH4 bus is in tonnes (tCH4).
-                # Conversion: kg CH4/ha → t CH4/Mha
-                #   = kg/ha * 1e-3 (kg to t) * 1e6 (ha to Mha) = kg/ha * 1e3
-
-                # IPCC 2019 Refinement, Vol 4, Chapter 5, Table 5.12
-                # Scaling factor for water regime during cultivation (SFw)
-                # Continuously flooded (irrigated baseline): 1.0
-                # Regular rainfed: uses config parameter
                 scaling_factor = (
                     1.0 if ws == "i" else rainfed_wetland_rice_ch4_scaling_factor
                 )
-
-                ch4_emissions = np.full(
+                ch4_eff = np.full(
                     len(df),
-                    rice_methane_factor * scaling_factor * 1e3,  # kg CH4/ha → t CH4/Mha
+                    rice_methane_factor
+                    * scaling_factor
+                    * 1e3,  # kg CH4/ha -> t CH4/Mha
                     dtype=float,
                 )
-                emission_outputs["ch4"] = ch4_emissions
+            else:
+                ch4_eff = np.zeros(len(df), dtype=float)
 
-            for emission_type in sorted(emission_outputs.keys()):
-                values = emission_outputs[emission_type]
-                key_bus = f"bus{next_bus_idx}"
-                key_eff = f"efficiency{next_bus_idx}"
-                link_params[key_bus] = f"emission:{emission_type}"
-                link_params[key_eff] = values
-                next_bus_idx += 1
+            row_df = pd.DataFrame(index=df.index)
+            row_df["crop"] = crop
+            row_df["water_code"] = ws
+            row_df["country"] = df["country"].astype(str).to_numpy()
+            row_df["region"] = df["region"].astype(str).to_numpy()
+            row_df["resource_class"] = df["resource_class"].astype(int).to_numpy()
+            row_df["water_supply"] = water_label
+            row_df["bus0"] = bus0_series.astype(str).to_numpy()
+            row_df["bus1"] = (
+                "crop:" + crop + ":" + df["country"].astype(str)
+            ).to_numpy()
+            row_df["efficiency"] = pd.to_numeric(df["yield"], errors="coerce").to_numpy(
+                dtype=float
+            )
+            row_df["bus2"] = water_bus
+            row_df["efficiency2"] = water_eff
+            row_df["bus3"] = ("fertilizer:" + df["country"].astype(str)).to_numpy()
+            row_df["efficiency3"] = fert_efficiency
+            row_df["bus4"] = "emission:ch4"
+            row_df["efficiency4"] = ch4_eff
+            row_df["marginal_cost"] = base_cost
+            row_df["p_nom_max"] = (
+                pd.to_numeric(df["suitable_area"], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                / 1e6
+            )
 
-            n.links.add(**link_params)
+            if use_actual_production:
+                fixed_area_mha = (
+                    pd.to_numeric(df["fixed_area_ha"], errors="coerce").to_numpy(
+                        dtype=float
+                    )
+                    / 1e6
+                )
+                row_df["p_nom"] = fixed_area_mha
+                row_df["p_nom_max"] = fixed_area_mha
+                row_df["p_nom_min"] = fixed_area_mha
+                row_df["p_min_pu"] = 1.0
+
+            all_rows.append(row_df)
+
+    if not all_rows:
+        return
+
+    all_df = pd.concat(all_rows, axis=0)
+    all_df.index = all_df.index.astype(str)
+
+    keys = list(
+        zip(
+            all_df["crop"].astype(str),
+            all_df["water_code"].astype(str),
+            all_df["region"].astype(str),
+            all_df["resource_class"].astype(int),
+        )
+    )
+    countries = all_df["country"].astype(str).to_numpy()
+    residue_bus5 = np.empty(len(keys), dtype=object)
+    residue_eff5 = np.zeros(len(keys), dtype=float)
+
+    for i, (key, country) in enumerate(zip(keys, countries, strict=False)):
+        feed_map = residue_lookup.get(key, {})
+        if not feed_map:
+            residue_bus5[i] = ""
+            continue
+        if len(feed_map) > 1:
+            feed_items = ", ".join(sorted(feed_map))
+            raise ValueError(
+                "Expected at most one residue output per crop production link, "
+                f"got {len(feed_map)} for key {key}: {feed_items}"
+            )
+        feed_item, residue_yield = next(iter(feed_map.items()))
+        residue_bus5[i] = f"residue:{feed_item}:{country}"
+        residue_eff5[i] = float(residue_yield)
+
+    all_df["bus5"] = residue_bus5
+    all_df["efficiency5"] = residue_eff5
+
+    add_kwargs: dict[str, object] = {
+        "carrier": "crop_production",
+        "bus0": all_df["bus0"],
+        "bus1": all_df["bus1"],
+        "efficiency": all_df["efficiency"],
+        "bus2": all_df["bus2"],
+        "efficiency2": all_df["efficiency2"],
+        "bus3": all_df["bus3"],
+        "efficiency3": all_df["efficiency3"],
+        "bus4": all_df["bus4"],
+        "efficiency4": all_df["efficiency4"],
+        "bus5": all_df["bus5"],
+        "efficiency5": all_df["efficiency5"],
+        "marginal_cost": all_df["marginal_cost"],
+        "p_nom_max": all_df["p_nom_max"],
+        "p_nom_extendable": not use_actual_production,
+        "crop": all_df["crop"],
+        "country": all_df["country"],
+        "region": all_df["region"],
+        "resource_class": all_df["resource_class"],
+        "water_supply": all_df["water_supply"],
+    }
+
+    if use_actual_production:
+        add_kwargs["p_nom"] = all_df["p_nom"]
+        add_kwargs["p_nom_min"] = all_df["p_nom_min"]
+        add_kwargs["p_min_pu"] = all_df["p_min_pu"]
+
+    n.links.add(all_df.index, **add_kwargs)
 
 
 def add_multi_cropping_links(
@@ -722,10 +710,9 @@ def add_multi_cropping_links(
     for col in eff_cols:
         link_df[col] = link_df[col].fillna(0.0)
 
-    link_names = link_df.index.tolist()
     all_cols = component_cols + metadata_cols + ["crop"] + bus_cols + eff_cols
-    kwargs = {col: link_df[col].tolist() for col in all_cols}
-    n.links.add(link_names, **kwargs)
+    kwargs = {col: link_df[col] for col in all_cols}
+    n.links.add(link_df.index, **kwargs)
 
 
 def add_spared_land_links(

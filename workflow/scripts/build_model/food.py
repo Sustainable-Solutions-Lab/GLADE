@@ -40,8 +40,8 @@ def add_food_conversion_links(
     Foods flagged as byproducts are ignored when checking for food-group mappings.
     """
 
-    # Filter foods DataFrame to only include configured crops
-    foods = foods[foods["crop"].isin(crop_list)].copy()
+    # Filter foods DataFrame to only include configured crops and foods.
+    foods = foods[foods["crop"].isin(crop_list) & foods["food"].isin(food_list)].copy()
 
     # Add food_processing carrier
     if "food_processing" not in n.carriers.static.index:
@@ -66,7 +66,24 @@ def add_food_conversion_links(
         ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
         | (_lw["multiplier"] <= 0.01)
     ]
-    _extreme_pairs = set(zip(_extreme["country"], _extreme["food_group"]))
+    extreme_countries_by_group = (
+        _extreme.groupby("food_group")["country"].agg(set).to_dict()
+    )
+
+    countries_index = pd.Index(normalized_countries, dtype="object")
+    country_set = set(normalized_countries)
+    groups = sorted({group for group in food_to_group.values() if pd.notna(group)})
+    multiplier_by_group = {}
+    for group in groups:
+        keys = pd.MultiIndex.from_arrays(
+            [normalized_countries, [group] * len(normalized_countries)]
+        )
+        multiplier_by_group[group] = pd.Series(
+            multiplier_lookup.reindex(keys).to_numpy(),
+            index=countries_index,
+        )
+
+    batched_frames = {}
 
     # Group foods by pathway and crop
     pathway_groups = foods.groupby(["pathway", "crop"])
@@ -75,71 +92,72 @@ def add_food_conversion_links(
         pathway = str(pathway).strip()
         crop = str(crop).strip()
 
-        # Filter to foods that are in the food_list
-        pathway_df = pathway_df[pathway_df["food"].isin(food_list)].copy()
-        if pathway_df.empty:
+        output_rows = pathway_df[["food", "factor"]].copy()
+        output_rows["food"] = output_rows["food"].astype(str)
+        output_rows["factor"] = output_rows["factor"].astype(float)
+        n_outputs = len(output_rows.index)
+        if n_outputs == 0:
             continue
 
-        # Get output foods and factors
-        output_foods = pathway_df["food"].astype(str).tolist()
-        output_factors = pathway_df["factor"].astype(float).tolist()
-
         # Verify mass balance (sum of factors should be ≤ 1.0)
-        total_factor = sum(output_factors)
+        total_factor = output_rows["factor"].sum()
         if total_factor > 1.01:  # Allow small rounding tolerance
             invalid_pathways.append(f"{pathway} ({crop}): sum={total_factor:.3f}")
 
         # Get conversion factor (dry matter → fresh edible)
         conversion_factor = crop_to_fresh_factor[crop]
 
-        # Create multi-output link names (one per country)
-        names = [f"pathway:{pathway}:{c}" for c in normalized_countries]
-        bus0 = [f"crop:{crop}:{c}" for c in normalized_countries]
+        names = pd.Index("pathway:" + pathway + ":" + countries_index, dtype="object")
+        link_df = pd.DataFrame(index=names)
+        link_df["bus0"] = "crop:" + crop + ":" + countries_index
+        link_df["country"] = countries_index
+        link_df["crop"] = crop
+        link_df["pathway"] = pathway
 
-        # All crop/food buses are in Mt, so the efficiency coefficients are
-        # simple mass fractions after accounting for losses.
-        link_params = {
-            "bus0": bus0,
-            "carrier": "food_processing",
-            "marginal_cost": _LOW_PROCESSING_COST,
-            "p_nom_extendable": True,
-            "country": normalized_countries,
-            "crop": crop,
-            "pathway": pathway,
-        }
-
-        # Add each output food as a separate bus with its efficiency
-        for output_idx, (food, factor) in enumerate(
-            zip(output_foods, output_factors), start=1
-        ):
+        # Add each output food as a separate bus with its efficiency.
+        for output_idx, row in enumerate(output_rows.itertuples(index=False), start=1):
+            food = row.food
+            factor = row.factor
             bus_key = f"bus{output_idx}"
             eff_key = "efficiency" if output_idx == 1 else f"efficiency{output_idx}"
 
-            link_params[bus_key] = [f"food:{food}:{c}" for c in normalized_countries]
+            link_df[bus_key] = "food:" + food + ":" + countries_index
 
             # Calculate efficiencies per country (including loss/waste adjustments)
             group = food_to_group.get(food)
-            if group is None:
+            if group is None or pd.isna(group):
                 # Food has no group mapping - no loss/waste adjustment
                 if food not in byproduct_foods:
                     missing_group_foods.add(food)
-                efficiencies = [factor * conversion_factor] * len(normalized_countries)
+                link_df[eff_key] = factor * conversion_factor
             else:
-                # Vectorized lookup of multipliers for all countries at once
-                keys = pd.MultiIndex.from_arrays(
-                    [normalized_countries, [group] * len(normalized_countries)]
-                )
-                multipliers = multiplier_lookup.reindex(keys).values
+                multipliers = multiplier_by_group[group]
+                extreme_countries = extreme_countries_by_group.get(group, set())
                 excessive_losses.update(
-                    (c, group)
-                    for c in normalized_countries
-                    if (c, group) in _extreme_pairs
+                    (c, group) for c in extreme_countries & country_set
                 )
-                efficiencies = (factor * conversion_factor * multipliers).tolist()
+                link_df[eff_key] = factor * conversion_factor * multipliers.to_numpy()
 
-            link_params[eff_key] = efficiencies
+        batched_frames.setdefault(n_outputs, []).append(link_df)
 
-        n.links.add(names, **link_params)
+    for n_outputs, frames in batched_frames.items():
+        all_df = pd.concat(frames, axis=0)
+        link_params = {
+            "bus0": all_df["bus0"],
+            "carrier": "food_processing",
+            "marginal_cost": _LOW_PROCESSING_COST,
+            "p_nom_extendable": True,
+            "country": all_df["country"],
+            "crop": all_df["crop"],
+            "pathway": all_df["pathway"],
+        }
+        for output_idx in range(1, n_outputs + 1):
+            bus_key = f"bus{output_idx}"
+            eff_key = "efficiency" if output_idx == 1 else f"efficiency{output_idx}"
+            link_params[bus_key] = all_df[bus_key]
+            link_params[eff_key] = all_df[eff_key]
+
+        n.links.add(all_df.index, **link_params)
 
     # Warnings
     if invalid_pathways:

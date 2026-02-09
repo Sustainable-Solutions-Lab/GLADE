@@ -11,6 +11,7 @@ outputs for fertilizer.
 
 import logging
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -208,6 +209,74 @@ def add_feed_to_animal_product_links(
         .astype(float)
         .to_dict()
     )
+    ruminant_n_lookup = (
+        ruminant_feed_categories.assign(
+            category=ruminant_feed_categories["category"].astype(str),
+            N_g_per_kg_DM=pd.to_numeric(
+                ruminant_feed_categories["N_g_per_kg_DM"], errors="coerce"
+            ),
+        )
+        .dropna(subset=["N_g_per_kg_DM"])
+        .set_index("category")["N_g_per_kg_DM"]
+        .to_dict()
+    )
+    monogastric_n_lookup = (
+        monogastric_feed_categories.assign(
+            category=monogastric_feed_categories["category"].astype(str),
+            N_g_per_kg_DM=pd.to_numeric(
+                monogastric_feed_categories["N_g_per_kg_DM"], errors="coerce"
+            ),
+        )
+        .dropna(subset=["N_g_per_kg_DM"])
+        .set_index("category")["N_g_per_kg_DM"]
+        .to_dict()
+    )
+    protein_rows = nutrition.reset_index()
+    protein_rows = protein_rows[protein_rows["nutrient"] == "protein"]
+    protein_rows["value"] = pd.to_numeric(protein_rows["value"], errors="coerce")
+    protein_rows = protein_rows.dropna(subset=["value"])
+    product_protein_lookup = (
+        protein_rows.assign(food=protein_rows["food"].astype(str))
+        .set_index("food")["value"]
+        .to_dict()
+    )
+
+    manure_cols = [
+        "country",
+        "product",
+        "feed_category",
+        "manure_ch4_kg_per_kg_DMI",
+        "pasture_fraction",
+        "pasture_n2o_ef",
+        "managed_n2o_ef",
+    ]
+    manure_rows = manure_emissions.loc[:, manure_cols].copy()
+    for col in (
+        "manure_ch4_kg_per_kg_DMI",
+        "pasture_fraction",
+        "pasture_n2o_ef",
+        "managed_n2o_ef",
+    ):
+        manure_rows[col] = pd.to_numeric(manure_rows[col], errors="coerce")
+
+    manure_ch4_lookup: dict[tuple[str, str, str], float] = {}
+    manure_n2o_lookup: dict[tuple[str, str], tuple[float, float, float]] = {}
+    manure_n2o_by_product_lookup: dict[str, tuple[float, float, float]] = {}
+    for row in manure_rows.itertuples(index=False):
+        country = str(row.country)
+        product = str(row.product)
+        feed_category = str(row.feed_category)
+        manure_ch4 = row.manure_ch4_kg_per_kg_DMI
+        if pd.notna(manure_ch4):
+            manure_ch4_lookup.setdefault(
+                (country, product, feed_category), float(manure_ch4)
+            )
+
+        n2o_values = (row.pasture_fraction, row.pasture_n2o_ef, row.managed_n2o_ef)
+        if all(pd.notna(v) for v in n2o_values):
+            factors = (float(n2o_values[0]), float(n2o_values[1]), float(n2o_values[2]))
+            manure_n2o_lookup.setdefault((product, feed_category), factors)
+            manure_n2o_by_product_lookup.setdefault(product, factors)
 
     df = feed_requirements.copy()
     df = df[df["product"].isin(animal_products)]
@@ -240,53 +309,64 @@ def add_feed_to_animal_product_links(
             logger.info("Skipped %d links due to missing buses", skipped_count)
         return
 
-    # Compute CH4 and N2O/manure-N per row (helpers are complex; keep per-row calls
-    # but benefit from pre-indexed DataFrames for the inner lookups)
-    ch4_results = []
-    n2o_results = []
-    for _, row in df.iterrows():
+    warned_missing_protein: set[str] = set()
+    ch4_per_t_feed_values: list[float] = []
+    manure_ch4_per_t_feed_values: list[float] = []
+    n_fert_per_t_feed_values: list[float] = []
+    n2o_per_t_feed_values: list[float] = []
+    pasture_n2o_share_values: list[float] = []
+    for product, feed_category, country, efficiency in df[
+        ["product", "feed_category", "country", "efficiency"]
+    ].itertuples(index=False, name=None):
         # Calculate total CH4 (enteric + manure) per tonne feed intake
         # This is relative to bus0 (feed), so it can be used directly as efficiency2
         ch4_per_t_feed, manure_ch4_per_t_feed = _calculate_ch4_per_feed_intake(
-            product=row["product"],
-            feed_category=row["feed_category"],
-            country=row["country"],
+            product=product,
+            feed_category=feed_category,
+            country=country,
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
-        ch4_results.append((ch4_per_t_feed, manure_ch4_per_t_feed))
+        ch4_per_t_feed_values.append(ch4_per_t_feed)
+        manure_ch4_per_t_feed_values.append(manure_ch4_per_t_feed)
 
         # Calculate manure N fertilizer and N2O outputs per tonne feed intake
         n_fert_per_t_feed, n2o_per_t_feed, pasture_n2o_share = (
             _calculate_manure_n_outputs(
-                product=row["product"],
-                feed_category=row["feed_category"],
-                efficiency=row["efficiency"],
-                ruminant_categories=ruminant_feed_categories,
-                monogastric_categories=monogastric_feed_categories,
-                nutrition=nutrition,
-                manure_emissions=manure_emissions,
+                product=product,
+                feed_category=feed_category,
+                efficiency=efficiency,
+                ruminant_n_lookup=ruminant_n_lookup,
+                monogastric_n_lookup=monogastric_n_lookup,
+                product_protein_lookup=product_protein_lookup,
+                manure_n2o_lookup=manure_n2o_lookup,
+                manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
                 manure_n_to_fertilizer=manure_n_to_fert,
                 indirect_ef4=indirect_ef4,
                 indirect_ef5=indirect_ef5,
                 frac_gasm=frac_gasm,
                 frac_leach=frac_leach,
+                warned_missing_protein=warned_missing_protein,
             )
         )
-        n2o_results.append((n_fert_per_t_feed, n2o_per_t_feed, pasture_n2o_share))
+        n_fert_per_t_feed_values.append(n_fert_per_t_feed)
+        n2o_per_t_feed_values.append(n2o_per_t_feed)
+        pasture_n2o_share_values.append(pasture_n2o_share)
 
     # Unpack results into columns
-    df["ch4_per_t_feed"] = [r[0] for r in ch4_results]
-    df["manure_ch4_per_t_feed"] = [r[1] for r in ch4_results]
-    df["manure_ch4_share"] = df.apply(
-        lambda r: r["manure_ch4_per_t_feed"] / r["ch4_per_t_feed"]
-        if r["ch4_per_t_feed"] > 0
-        else 0.0,
-        axis=1,
+    df["ch4_per_t_feed"] = ch4_per_t_feed_values
+    df["manure_ch4_per_t_feed"] = manure_ch4_per_t_feed_values
+    ch4_values = df["ch4_per_t_feed"].to_numpy(dtype=float)
+    manure_ch4_values = df["manure_ch4_per_t_feed"].to_numpy(dtype=float)
+    df["manure_ch4_share"] = np.divide(
+        manure_ch4_values,
+        ch4_values,
+        out=np.zeros_like(ch4_values),
+        where=ch4_values > 0,
     )
-    df["n_fert_per_t_feed"] = [r[0] for r in n2o_results]
-    df["n2o_per_t_feed"] = [r[1] for r in n2o_results]
-    df["pasture_n2o_share"] = [r[2] for r in n2o_results]
+    df["n_fert_per_t_feed"] = n_fert_per_t_feed_values
+    df["n2o_per_t_feed"] = n2o_per_t_feed_values
+    df["pasture_n2o_share"] = pasture_n2o_share_values
 
     # Calculate marginal cost (cost per Mt feed input)
     # animal_costs is in USD per Mt product, efficiency is Mt product per Mt feed

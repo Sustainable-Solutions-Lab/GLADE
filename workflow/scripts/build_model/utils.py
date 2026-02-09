@@ -246,15 +246,17 @@ def _calculate_manure_n_outputs(
     product: str,
     feed_category: str,
     efficiency: float,
-    ruminant_categories: pd.DataFrame,
-    monogastric_categories: pd.DataFrame,
-    nutrition: pd.DataFrame,
-    manure_emissions: pd.DataFrame,
+    ruminant_n_lookup: dict[str, float],
+    monogastric_n_lookup: dict[str, float],
+    product_protein_lookup: dict[str, float],
+    manure_n2o_lookup: dict[tuple[str, str], tuple[float, float, float]],
+    manure_n2o_by_product_lookup: dict[str, tuple[float, float, float]],
     manure_n_to_fertilizer: float,
     indirect_ef4: float,
     indirect_ef5: float,
     frac_gasm: float,
     frac_leach: float,
+    warned_missing_protein: set[str] | None = None,
 ) -> tuple[float, float, float]:
     """Calculate manure N fertilizer and N₂O outputs per tonne feed intake.
 
@@ -272,18 +274,17 @@ def _calculate_manure_n_outputs(
         Feed category (e.g., "ruminant_forage", "monogastric_grain")
     efficiency : float
         Feed conversion efficiency (t product / t feed DM)
-    ruminant_categories : pd.DataFrame
-        Ruminant feed categories with N_g_per_kg_DM
-    monogastric_categories : pd.DataFrame
-        Monogastric feed categories with N_g_per_kg_DM
-    nutrition : pd.DataFrame
-        Nutrition data indexed by (food, nutrient)
-    manure_emissions : pd.DataFrame
-        MMS-weighted emission factors with columns:
-        - product, feed_category: identifiers
-        - pasture_fraction: fraction of manure deposited on pasture
-        - pasture_n2o_ef: EF3PRP (kg N2O-N per kg N) for pasture deposition
-        - managed_n2o_ef: combined storage + application EF for managed manure
+    ruminant_n_lookup : dict[str, float]
+        Ruminant feed N content lookup (g N/kg DM) keyed by category.
+    monogastric_n_lookup : dict[str, float]
+        Monogastric feed N content lookup (g N/kg DM) keyed by category.
+    product_protein_lookup : dict[str, float]
+        Product protein lookup (g protein/100g product) keyed by product.
+    manure_n2o_lookup : dict[tuple[str, str], tuple[float, float, float]]
+        MMS N2O factors keyed by (product, feed_category) as
+        (pasture_fraction, pasture_n2o_ef, managed_n2o_ef).
+    manure_n2o_by_product_lookup : dict[str, tuple[float, float, float]]
+        Fallback MMS N2O factors keyed by product only.
     manure_n_to_fertilizer : float
         Fraction of managed N available as fertilizer after losses
     indirect_ef4 : float
@@ -303,24 +304,21 @@ def _calculate_manure_n_outputs(
         (vs managed systems), useful for plotting breakdowns.
     """
     # Get feed N content (g N/kg DM)
-    category_name = feed_category.split("_", 1)[
-        1
-    ]  # Extract category from "ruminant_forage" etc.
-
+    category_name = feed_category.split("_", 1)[1]
     if feed_category.startswith("ruminant_"):
-        feed_n_g_per_kg = ruminant_categories.loc[
-            ruminant_categories["category"] == category_name, "N_g_per_kg_DM"
-        ].values[0]
+        feed_n_g_per_kg = ruminant_n_lookup.get(category_name)
     else:
-        feed_n_g_per_kg = monogastric_categories.loc[
-            monogastric_categories["category"] == category_name, "N_g_per_kg_DM"
-        ].values[0]
+        feed_n_g_per_kg = monogastric_n_lookup.get(category_name)
+    if feed_n_g_per_kg is None:
+        raise ValueError(f"Missing feed N content for category '{feed_category}'")
 
     # Get product protein content (g protein/100g product)
-    try:
-        protein_g_per_100g = nutrition.loc[(product, "protein"), "value"]
-    except KeyError:
-        logger.warning("No protein data for %s, assuming 0 N in product", product)
+    protein_g_per_100g = product_protein_lookup.get(product)
+    if protein_g_per_100g is None:
+        if warned_missing_protein is None or product not in warned_missing_protein:
+            logger.warning("No protein data for %s, assuming 0 N in product", product)
+            if warned_missing_protein is not None:
+                warned_missing_protein.add(product)
         protein_g_per_100g = 0.0
 
     # Convert protein to N using factor 6.25 (protein = N * 6.25)
@@ -336,31 +334,20 @@ def _calculate_manure_n_outputs(
     n_excreted_t_per_t_feed = feed_n_t_per_t_feed - product_n_t_per_t_feed
 
     # Look up MMS-based N2O factors for this product and feed category
-    mask = (manure_emissions["product"] == product) & (
-        manure_emissions["feed_category"] == feed_category
-    )
-    if mask.sum() == 0:
-        # Fallback: try without feed_category (for products with single category)
-        mask = manure_emissions["product"] == product
-        if mask.sum() == 0:
-            logger.warning(
-                "No manure emission data for %s/%s, using defaults",
-                product,
-                feed_category,
-            )
-            pasture_fraction = 1.0 if feed_category.endswith("_grassland") else 0.0
-            pasture_n2o_ef = 0.02 if "cattle" in product or "dairy" in product else 0.01
-            managed_n2o_ef = 0.0095  # storage (0.005) + application (0.75 * 0.006)
-        else:
-            row = manure_emissions[mask].iloc[0]
-            pasture_fraction = row["pasture_fraction"]
-            pasture_n2o_ef = row["pasture_n2o_ef"]
-            managed_n2o_ef = row["managed_n2o_ef"]
+    mms_factors = manure_n2o_lookup.get((product, feed_category))
+    if mms_factors is None:
+        mms_factors = manure_n2o_by_product_lookup.get(product)
+    if mms_factors is None:
+        logger.warning(
+            "No manure emission data for %s/%s, using defaults",
+            product,
+            feed_category,
+        )
+        pasture_fraction = 1.0 if feed_category.endswith("_grassland") else 0.0
+        pasture_n2o_ef = 0.02 if "cattle" in product or "dairy" in product else 0.01
+        managed_n2o_ef = 0.0095  # storage (0.005) + application (0.75 * 0.006)
     else:
-        row = manure_emissions[mask].iloc[0]
-        pasture_fraction = row["pasture_fraction"]
-        pasture_n2o_ef = row["pasture_n2o_ef"]
-        managed_n2o_ef = row["managed_n2o_ef"]
+        pasture_fraction, pasture_n2o_ef, managed_n2o_ef = mms_factors
 
     # Split N between pasture and managed fractions
     n_pasture = n_excreted_t_per_t_feed * pasture_fraction
@@ -412,7 +399,7 @@ def _calculate_ch4_per_feed_intake(
     feed_category: str,
     country: str,
     enteric_my_lookup: dict[str, float],
-    manure_emissions: pd.DataFrame,
+    manure_ch4_lookup: dict[tuple[str, str, str], float],
 ) -> tuple[float, float]:
     """Calculate CH4 emissions (tCH4/t feed DM) split into total and manure.
 
@@ -428,9 +415,9 @@ def _calculate_ch4_per_feed_intake(
         Country code (ISO3)
     enteric_my_lookup : dict[str, float]
         Enteric methane yields by ruminant feed category (g CH4 / kg DMI)
-    manure_emissions : pd.DataFrame
-        Manure CH4 emission factors with columns: country, product, feed_category,
-        manure_ch4_kg_per_kg_DMI
+    manure_ch4_lookup : dict[tuple[str, str, str], float]
+        Manure CH4 emission factors keyed by
+        (country, product, feed_category) in kg CH4/kg DMI.
 
     Returns
     -------
@@ -454,15 +441,9 @@ def _calculate_ch4_per_feed_intake(
     # decomposition results in negligible CH4 (IPCC MCF ~0.5% for PRP).
     # We therefore skip manure CH4 for grassland feed categories.
     if not feed_category.endswith("_grassland"):
-        manure_row = manure_emissions[
-            (manure_emissions["country"] == country)
-            & (manure_emissions["product"] == product)
-            & (manure_emissions["feed_category"] == feed_category)
-        ]
-
-        if not manure_row.empty:
-            # manure_ch4_kg_per_kg_DMI is in kg CH4/kg DM = t CH4/t DM (ratio is invariant)
-            manure_t_per_t = manure_row["manure_ch4_kg_per_kg_DMI"].values[0]
+        manure_t_per_t = manure_ch4_lookup.get((country, product, feed_category))
+        if manure_t_per_t is not None:
+            # kg CH4/kg DM = t CH4/t DM (ratio is scale-invariant)
             total_ch4_per_t_feed += manure_t_per_t
             manure_ch4_per_t_feed += manure_t_per_t
 
