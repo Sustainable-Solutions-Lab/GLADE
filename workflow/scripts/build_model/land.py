@@ -257,20 +257,23 @@ def add_land_components(
     cropland_bus_names = list(cropland_df.index)
 
     # Add pasture pool buses (per region/class, water-agnostic)
-    # Only create unique pasture buses (deduplicate across water supplies)
-    pasture_df = (
-        land_index_df.groupby(["region", "resource_class", "pasture_bus"])
-        .first()
-        .reset_index()
-    )
-    pasture_df = pasture_df.set_index("pasture_bus")
-    n.buses.add(
-        pasture_df.index,
-        carrier="land_pasture",
-        region=pasture_df["region"],
-        resource_class=pasture_df["resource_class"],
-    )
-    pasture_bus_names = list(pasture_df.index)
+    # Only create from rainfed entries, since only rainfed land feeds pasture.
+    rainfed_for_pasture = land_index_df[land_index_df["water_supply"] == "r"]
+    pasture_bus_names = []
+    if not rainfed_for_pasture.empty:
+        pasture_df = (
+            rainfed_for_pasture.groupby(["region", "resource_class", "pasture_bus"])
+            .first()
+            .reset_index()
+        )
+        pasture_df = pasture_df.set_index("pasture_bus")
+        n.buses.add(
+            pasture_df.index,
+            carrier="land_pasture",
+            region=pasture_df["region"],
+            resource_class=pasture_df["resource_class"],
+        )
+        pasture_bus_names = list(pasture_df.index)
 
     # --- Existing cropland supply ---
     baseline_rows = land_index_df[land_index_df["existing_available_ha"] > 0].copy()
