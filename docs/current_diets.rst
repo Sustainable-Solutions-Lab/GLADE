@@ -14,6 +14,20 @@ The model uses a hybrid approach to represent current consumption patterns, comb
 * **Baseline reference**: Comparing optimized diets against current consumption
 * **Model constraints**: Optionally constrain the optimization to remain near current diets
 
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/baseline_diet_by_region.png
+   :alt: Baseline diet composition by world region
+   :width: 100%
+   :align: center
+
+   Population-weighted mean food group consumption (g/person/day) by UN M49 macro-region, showing how dietary patterns vary across world regions.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/baseline_diet_by_food.png
+   :alt: Baseline diet breakdown by individual foods
+   :width: 100%
+   :align: center
+
+   Global population-weighted mean consumption (g/person/day) broken down by individual foods within each food group.
+
 Data Sources
 ------------
 
@@ -193,6 +207,270 @@ The GDD dataset covers 185 countries. For a small number of territories without 
 
 These proxies are defined in the ``COUNTRY_PROXIES`` dictionary in ``prepare_gdd_dietary_intake.py``.
 
+GBD Dietary Risk Exposure Data
+------------------------------
+
+In addition to the GDD survey data and FAOSTAT supplements described above,
+the model also incorporates dietary exposure estimates from the **Global Burden
+of Disease (GBD) Study 2019** [Brauer2024]_. These estimates cover adults aged
+25 and older and are derived from the GBD's dietary risk factor framework (see
+the "GBD Dietary Risk Factors" section in :doc:`health` for the full risk
+factor definitions).
+
+The GBD data provides country-level intake estimates (g/day) for the following
+food groups:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - GBD Risk Factor
+     - Model Food Group
+     - Notes
+   * - ``FRUIT``
+     - ``fruits``
+     - Whole fruits, excluding juices
+   * - ``VEG``
+     - ``vegetables``
+     - Non-starchy vegetables
+   * - ``WHOLEGRAINS``
+     - ``whole_grains``
+     - Whole grains
+   * - ``LEGUMES``
+     - ``legumes``
+     - Beans and pulses
+   * - ``NUTS``
+     - ``nuts_seeds``
+     - Nuts, seeds, and peanuts
+   * - ``REDMEAT``
+     - ``red_meat``
+     - Unprocessed red meats
+   * - ``MILK``
+     - *(cross-validation only)*
+     - Logged for comparison against FAOSTAT dairy
+
+These six food groups (excluding milk) overlap with GDD estimates, enabling
+both cross-validation and averaging to produce more robust group totals. The
+GBD data is processed by ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py``,
+which filters the raw IHME CSV files for the configured reference year, maps
+GBD location names to ISO3 country codes, and outputs
+``processing/{name}/gbd_dietary_risk_exposure.csv``.
+
+.. _baseline-diet-estimation:
+
+Baseline Diet Estimation
+------------------------
+
+The dietary intake pipeline described above produces **food-group-level**
+totals (e.g., "fruits: 145 g/day in the USA"). The model, however, operates
+at the level of individual foods (e.g., apple, banana, citrus). The baseline
+diet estimation algorithm bridges this gap by combining food-group totals with
+FAOSTAT item-level supply data to produce **per-food, per-country** consumption
+estimates.
+
+This algorithm is implemented in ``workflow/scripts/estimate_baseline_diet.py``
+and proceeds in three steps.
+
+Step 1: Food Group Totals
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For food groups where both GDD and GBD estimates are available, the two
+sources are **averaged** to produce a more robust estimate:
+
+.. math::
+
+   T_g = \frac{T_g^{\mathrm{GDD}} + T_g^{\mathrm{GBD}}}{2}
+
+This averaging applies to six food groups: ``fruits``, ``vegetables``,
+``whole_grains``, ``legumes``, ``nuts_seeds``, and ``red_meat``. If GBD data
+is missing for a particular country, the GDD value is used alone.
+
+For all other food groups (``dairy``, ``poultry``, ``oil``, ``grain``,
+``starchy_vegetable``, ``prc_meat``, ``fish``, ``eggs``, ``sugar``), the
+GDD or FAOSTAT value from ``dietary_intake.csv`` is used as-is.
+
+The script also logs **cross-validation metrics** between GDD and GBD for the
+overlapping groups, reporting the median and range of the GDD/GBD ratio across
+countries. GBD milk intake is logged separately for comparison against the
+FAOSTAT-derived dairy estimate.
+
+The age group used for baseline totals is configured via
+``config.diet.baseline_age`` (default: ``"11-74 years"``).
+
+Step 2: Within-Group Food Shares
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Once food-group totals are established, the algorithm determines how to
+distribute each group's total across its constituent foods. This uses
+**FAOSTAT FBS item-level supply** data to compute relative proportions.
+
+Food-to-FBS-item mapping
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The mapping between model foods and FBS items is defined in
+``data/curated/faostat_food_item_map.csv``. Key characteristics:
+
+* A food can map to **multiple FBS items** (supplies are summed). For example,
+  ``citrus`` maps to four FBS items: Oranges/Mandarines (2611),
+  Lemons/Limes (2612), Grapefruit (2613), and Citrus Other (2614).
+
+* Multiple foods can share a **single FBS item** (requiring disambiguation).
+  For example, ``cowpea``, ``chickpea``, ``gram``, ``phaseolus-bean``, and
+  ``pigeon-pea`` all map to FBS item "Beans" (2546).
+
+Three resolution scenarios arise when computing within-group shares from FBS supply:
+
+1. **Unique mapping**: The food is the sole claimant of its FBS item and
+   receives 100% of that item's supply.
+
+2. **Shared FBS item with QCL resolution**: Multiple foods share an FBS item.
+   Country-level production data from FAOSTAT QCL (production) statistics is
+   used to split the shared supply proportionally (see below).
+
+3. **No QCL mapping**: If no production data is available, the shared supply
+   is split equally among the unresolved foods.
+
+QCL-based disambiguation
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When multiple model foods map to the same FBS item, their relative consumption
+shares are estimated from **country-level production** data. The file
+``data/curated/faostat_food_qcl_resolution.csv`` maps each such food to a
+specific QCL (production statistics) item code.
+
+.. admonition:: Example
+
+   ``cowpea``, ``chickpea``, ``gram``, ``phaseolus-bean``, and ``pigeon-pea``
+   all map to FBS item "Beans" (2546). The QCL resolution file maps each to a
+   distinct production item:
+
+   - ``cowpea`` → QCL 195 (Cow peas, dry)
+   - ``phaseolus-bean`` → QCL 176 (Beans, dry)
+   - ``pigeon-pea`` → QCL 197 (Pigeon peas, dry)
+   - ``chickpea`` → QCL 191 (Chick peas, dry)
+   - ``gram`` → QCL 191 (Chick peas, dry)
+
+   In a country where cow pea production is 2 Mt and chickpea production is
+   1 Mt (with no other pulses), cowpea would receive 2/3 of the "Beans" supply
+   while chickpea and gram together receive 1/3 (split equally between them,
+   since they share QCL code 191).
+
+The same approach is used for dairy: ``dairy`` (cattle milk) and
+``dairy-buffalo`` (buffalo milk) share FBS item 2848 and are resolved via
+QCL items 882 and 951 respectively.
+
+Millet species split
+^^^^^^^^^^^^^^^^^^^^^
+
+Pearl millet (``pearl-millet``) and foxtail millet (``foxtail-millet``) both
+map to FBS item 2517 ("Millet and products") and to the same QCL aggregate
+"Millet", which does not distinguish species. Since FAO lacks species-level
+millet production data, a **fixed 80/20 split** is applied globally: 80% pearl
+millet, 20% foxtail millet, based on literature estimates of global production
+shares.
+
+Vegetable residual projection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+FAOSTAT FBS item 2605 ("Vegetables, other") is a **residual catch-all**
+covering all vegetables not individually itemized. Tomato has its own explicit
+FBS item (2601) and is unaffected by the residual.
+
+The residual supply is distributed across the model's "other vegetable group"
+(OVG) crops — ``onion``, ``cabbage``, and ``carrot`` — using **blended
+production shares**:
+
+.. math::
+
+   s_{c,f} = 0.7 \times s_{c,f}^{\mathrm{country}} + 0.3 \times s_f^{\mathrm{global}}
+
+where :math:`s_{c,f}^{\mathrm{country}}` is the country-specific production
+share of crop :math:`f` among the three OVG crops, and
+:math:`s_f^{\mathrm{global}}` is the global production share. The 70/30
+blending avoids over-reliance on country-level data, which can be noisy for
+small producers.
+
+.. admonition:: Note
+
+   ``onion`` also has an explicit FBS item (2602, "Onions"), so its total
+   supply is the sum of its explicit item supply and its projected share of
+   the residual. ``cabbage`` and ``carrot`` rely entirely on the residual
+   projection.
+
+Starchy vegetable residual projection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+An analogous residual exists for starchy vegetables: FBS item 2534 ("Roots,
+Other") covers root and tuber crops not individually itemized. The four
+modeled starchy foods — ``potato``, ``sweet-potato``, ``yam``, and
+``cassava`` — each have their own explicit FBS items (2531, 2533, 2535, and
+2532 respectively), but the residual supply from item 2534 is additionally
+distributed across all four using the same blended production share approach
+(70% country-specific, 30% global).
+
+.. admonition:: Note
+
+   Because the crop production data uses the name ``white-potato`` while the
+   model food is called ``potato``, the projection applies a name mapping
+   before computing production shares.
+
+Step 3: Per-Food Consumption
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The final per-food consumption estimate is the product of the food-group total
+and the within-group share:
+
+.. math::
+
+   c_{i,f} = T_{i,g(f)} \times s_{i,f}
+
+where :math:`c_{i,f}` is the estimated consumption (g/day) of food :math:`f`
+in country :math:`i`, :math:`T_{i,g(f)}` is the group total for the food group
+containing :math:`f`, and :math:`s_{i,f}` is the within-group share.
+
+As a validation check, within-group sums are verified to match group totals
+within a tolerance of 0.1 g/day. Any discrepancies are logged as warnings.
+
+Baseline Diet Output
+---------------------
+
+The output file ``processing/{name}/baseline_diet.csv`` contains one row per
+(country, food) combination with the following columns:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Column
+     - Description
+   * - ``country``
+     - ISO 3166-1 alpha-3 country code
+   * - ``food``
+     - Model food name (e.g., ``apple``, ``rice-white``, ``cowpea``)
+   * - ``food_group``
+     - Food group to which the food belongs
+   * - ``consumption_g_per_day``
+     - Estimated daily consumption in grams per person
+
+Rows are sorted by (country, food_group, food).
+
+Downstream Uses
+~~~~~~~~~~~~~~~~
+
+The baseline diet feeds into several parts of the model:
+
+* **Baseline diet enforcement**: When ``config.validation.enforce_baseline_diet``
+  is enabled, the solver adds per-food, per-country equality constraints on
+  food consumption links, forcing the solution to replicate observed intake.
+
+* **Within-group ratio fixing**: When ``config.validation.fix_within_group_ratios``
+  is enabled, the solver constrains foods within each group to maintain their
+  baseline proportions while allowing group totals to vary.
+
+* **Health impact assessment**: Baseline consumption is used when computing
+  the population-attributable fraction of diet-related disease burden (see
+  :doc:`health`).
+
 Workflow Integration
 --------------------
 
@@ -200,29 +478,48 @@ Workflow Integration
   * ``prepare_gdd_dietary_intake``
   * ``prepare_faostat_dietary_intake``
   * ``merge_dietary_sources``
+  * ``prepare_gbd_dietary_risk_exposure``
+  * ``estimate_baseline_diet``
 
-**Input**:
+**Input data**:
   * ``data/manually_downloaded/GDD-dietary-intake/Country-level estimates/*.csv`` (GDD)
-  * FAOSTAT API (live fetch)
+  * ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/*.csv`` (GBD)
+  * FAOSTAT API (live fetch for FBS, QCL, and animal production data)
+
+**Curated data files**:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - File
+     - Purpose
+   * - ``data/curated/faostat_food_item_map.csv``
+     - Maps model foods to FAOSTAT FBS item codes for within-group share calculation
+   * - ``data/curated/faostat_food_qcl_resolution.csv``
+     - Maps foods sharing an FBS item to individual QCL production codes for disambiguation
+   * - ``data/curated/food_groups.csv``
+     - Defines the food-to-food-group mapping
 
 **Configuration parameters**:
   * ``config.countries``: List of countries to process
-  * ``config.food_groups.included``: Food groups to filter and aggregate in GDD data
-  * ``config.health.reference_year``: Year for dietary intake data
+  * ``config.food_groups.included``: Food groups to filter and aggregate
+  * ``config.health.reference_year``: Year for GDD dietary intake data
+  * ``config.diet.baseline_reference_year``: Year for GBD exposure data
+  * ``config.diet.baseline_age``: Age group for baseline totals (default: ``"11-74 years"``)
+  * ``config.byproducts``: Foods to exclude from share calculation (e.g., wheat-bran)
 
 **Output**:
-  * ``processing/{name}/dietary_intake.csv`` (Final merged file)
+  * ``processing/{name}/dietary_intake.csv`` — Merged food-group-level intake
+  * ``processing/{name}/gbd_dietary_risk_exposure.csv`` — GBD risk exposure estimates
+  * ``processing/{name}/baseline_diet.csv`` — Per-food, per-country consumption
 
 **Scripts**:
   * ``workflow/scripts/prepare_gdd_dietary_intake.py``
   * ``workflow/scripts/prepare_faostat_dietary_intake.py``
   * ``workflow/scripts/merge_dietary_sources.py``
-
-Baseline diet enforcement in the optimization can be toggled via
-``config.validation.enforce_baseline_diet``. When enabled, the solver reads
-``processing/{name}/baseline_diet.csv`` and adds per-food, per-country equality
-constraints on food consumption links, forcing the solution to replicate
-observed intake at the individual food level.
+  * ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py``
+  * ``workflow/scripts/estimate_baseline_diet.py``
 
 References
 ----------
@@ -230,3 +527,5 @@ References
 .. [GDD2024] Global Dietary Database. Dietary intake data by country, 2018. Tufts University Friedman School of Nutrition Science and Policy. https://www.globaldietarydatabase.org/ (accessed 2025)
 
 .. [Miller2021] Miller V, Singh GM, Onopa J, et al. Global Dietary Database 2017: Data Availability and Gaps on 54 Major Foods, Beverages and Nutrients among 5.6 Million Children and Adults from 1220 Surveys Worldwide. *BMJ Global Health*, 2021;6(2):e003585. https://doi.org/10.1136/bmjgh-2020-003585
+
+.. Reference [Brauer2024] is defined in health.rst (Sphinx citations are global).

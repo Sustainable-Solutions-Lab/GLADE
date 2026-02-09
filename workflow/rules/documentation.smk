@@ -55,6 +55,9 @@ DOC_FIGURES = [
     # Health figures
     "health_clusters",
     "health_burden",
+    # Current diets figures
+    "baseline_diet_by_region",
+    "baseline_diet_by_food",
 ]
 
 
@@ -391,6 +394,37 @@ rule doc_fig_health_burden:
         "logs/shared/doc_fig_health_burden.log",
     script:
         "../scripts/doc_figures/health_burden_map.py"
+
+
+rule doc_fig_baseline_diet_by_region:
+    """Generate baseline diet by-region stacked bar chart."""
+    input:
+        baseline_diet=f"processing/{DOC_FIG_NAME}/baseline_diet.csv",
+        population=f"processing/{DOC_FIG_NAME}/population.csv",
+        m49_codes="data/curated/M49-codes.csv",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/baseline_diet_by_region.svg",
+        png="docs/_static/figures/baseline_diet_by_region.png",
+    log:
+        "logs/shared/doc_fig_baseline_diet_by_region.log",
+    script:
+        "../scripts/doc_figures/baseline_diet_by_region.py"
+
+
+rule doc_fig_baseline_diet_by_food:
+    """Generate baseline diet by-food stacked bar chart."""
+    input:
+        baseline_diet=f"processing/{DOC_FIG_NAME}/baseline_diet.csv",
+        population=f"processing/{DOC_FIG_NAME}/population.csv",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/baseline_diet_by_food.svg",
+        png="docs/_static/figures/baseline_diet_by_food.png",
+    log:
+        "logs/shared/doc_fig_baseline_diet_by_food.log",
+    script:
+        "../scripts/doc_figures/baseline_diet_by_food.py"
 
 
 # --- Trade friction production pattern GIF ---
