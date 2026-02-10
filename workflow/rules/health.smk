@@ -22,8 +22,13 @@ rule retrieve_gdp_per_capita:
         year=config["health"]["clustering"]["gdp_reference_year"],
     output:
         gdp="data/downloads/gdp_per_capita.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/retrieve_gdp_per_capita.log",
+    benchmark:
+        "benchmarks/retrieve_gdp_per_capita.tsv"
     script:
         "../scripts/retrieve_gdp_per_capita.py"
 
@@ -37,8 +42,13 @@ rule prepare_gbd_mortality:
         reference_year=config["health"]["reference_year"],
     output:
         mortality="processing/{name}/health/gbd_mortality_rates.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/prepare_gbd_mortality.log",
+    benchmark:
+        "benchmarks/{name}/prepare_gbd_mortality.tsv"
     script:
         "../scripts/prepare_gbd_mortality.py"
 
@@ -53,8 +63,13 @@ rule prepare_relative_risks:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
         relative_risks="processing/{name}/health/relative_risks.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/prepare_relative_risks.log",
+    benchmark:
+        "benchmarks/{name}/prepare_relative_risks.tsv"
     script:
         "../scripts/prepare_relative_risks.py"
 
@@ -66,8 +81,13 @@ rule prepare_life_table:
         reference_year=config["health"]["reference_year"],
     output:
         life_table="processing/{name}/health/life_table.csv",
+    resources:
+        runtime=1,
+        mem_mb=3800,
     log:
         "logs/{name}/prepare_life_table.log",
+    benchmark:
+        "benchmarks/{name}/prepare_life_table.tsv"
     script:
         "../scripts/prepare_life_table.py"
 
@@ -99,7 +119,12 @@ rule prepare_health_costs:
         clusters="processing/{name}/health/scen-{scenario}/country_clusters.csv",
         cluster_risk_baseline="processing/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
         derived_tmrel="processing/{name}/health/scen-{scenario}/derived_tmrel.csv",
+    resources:
+        runtime=1,
+        mem_mb=400,
     log:
         "logs/{name}/prepare_health_costs_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/prepare_health_costs_scen-{scenario}.tsv"
     script:
         "../scripts/prepare_health_costs.py"

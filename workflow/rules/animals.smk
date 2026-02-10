@@ -21,8 +21,13 @@ rule prepare_faostat_animal_production:
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "processing/{name}/faostat_animal_production.csv",
+    resources:
+        runtime=1,
+        mem_mb=2800,
     log:
         "logs/{name}/prepare_faostat_animal_production.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_animal_production.tsv"
     script:
         "../scripts/prepare_faostat_animal_production.py"
 
@@ -36,8 +41,13 @@ rule prepare_faostat_yields:
         averaging_period=config["animal_costs"]["averaging_period"],
     output:
         "processing/{name}/faostat_animal_yields.csv",
+    resources:
+        runtime=1,
+        mem_mb=2800,
     log:
         "logs/{name}/prepare_faostat_yields.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_yields.tsv"
     script:
         "../scripts/prepare_faostat_yields.py"
 
@@ -49,8 +59,13 @@ rule prepare_gleam_feed_properties:
     output:
         ruminant="processing/{name}/ruminant_feed_properties.csv",
         monogastric="processing/{name}/monogastric_feed_properties.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/prepare_gleam_feed_properties.log",
+    benchmark:
+        "benchmarks/{name}/prepare_gleam_feed_properties.tsv"
     script:
         "../scripts/prepare_gleam_feed_properties.py"
 
@@ -66,8 +81,13 @@ rule categorize_feeds:
         monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
         ruminant_mapping="processing/{name}/ruminant_feed_mapping.csv",
         monogastric_mapping="processing/{name}/monogastric_feed_mapping.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/categorize_feeds.log",
+    benchmark:
+        "benchmarks/{name}/categorize_feeds.tsv"
     script:
         "../scripts/categorize_feeds.py"
 
@@ -88,8 +108,13 @@ rule build_feed_to_animal_products:
         ],
         carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
         feed_proxy_map=config["animal_products"]["feed_proxy_map"],
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/build_feed_to_animal_products.log",
+    benchmark:
+        "benchmarks/{name}/build_feed_to_animal_products.tsv"
     script:
         "../scripts/build_feed_to_animal_products.py"
 
@@ -104,7 +129,12 @@ rule calculate_manure_emissions:
         n2o_efs="data/curated/ipcc_manure_n2o_emission_factors.csv",
     output:
         "processing/{name}/manure_emission_factors.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/calculate_manure_emissions.log",
+    benchmark:
+        "benchmarks/{name}/calculate_manure_emissions.tsv"
     script:
         "../scripts/calculate_manure_emissions.py"

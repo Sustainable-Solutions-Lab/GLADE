@@ -57,6 +57,13 @@ precedence = "override"
 SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC0-1.0"
 
+# Auto-generated benchmark outputs (gitignored)
+[[annotations]]
+path = "benchmarks/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
 # Jupyter notebooks: JSON format makes inline SPDX headers difficult to parse
 [[annotations]]
 path = "notebooks/*.ipynb"

@@ -974,6 +974,8 @@ solving:
   options_highs:
     solver: "choose"
     mip_rel_gap: 0.001  # align relative gap with gurobi setting
+  runtime: 5  # Maximum solver runtime in minutes (used by SLURM)
+  mem_mb: 4200  # Maximum solver memory in MB (used by SLURM)
 
 # --- section: plotting ---
 plotting:

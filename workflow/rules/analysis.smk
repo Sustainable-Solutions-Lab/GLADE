@@ -10,8 +10,13 @@ rule prepare_faostat_emissions:
         "processing/{name}/faostat_emissions.csv",
     params:
         year=config["validation"]["production_year"],
+    resources:
+        runtime=1,
+        mem_mb=1400,
     log:
         "logs/{name}/prepare_faostat_emissions.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_emissions.tsv"
     script:
         "../scripts/prepare_faostat_emissions.py"
 
@@ -29,8 +34,13 @@ rule extract_ghg_intensity:
     output:
         csv="results/{name}/analysis/scen-{scenario}/ghg_intensity.csv",
         totals="results/{name}/analysis/scen-{scenario}/ghg_totals.csv",
+    resources:
+        runtime=1,
+        mem_mb=950,
     log:
         "logs/{name}/extract_ghg_intensity_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/extract_ghg_intensity_scen-{scenario}.tsv"
     script:
         "../scripts/analysis/extract_ghg_intensity.py"
 
@@ -53,8 +63,13 @@ rule extract_health_impacts:
     output:
         marginals="results/{name}/analysis/scen-{scenario}/health_marginals.csv",
         totals="results/{name}/analysis/scen-{scenario}/health_totals.csv",
+    resources:
+        runtime=1,
+        mem_mb=1000,
     log:
         "logs/{name}/extract_health_impacts_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/extract_health_impacts_scen-{scenario}.tsv"
     script:
         "../scripts/analysis/extract_health_impacts.py"
 
@@ -69,8 +84,13 @@ rule extract_statistics:
         animal_production="results/{name}/analysis/scen-{scenario}/animal_production.csv",
         food_consumption="results/{name}/analysis/scen-{scenario}/food_consumption.csv",
         food_group_consumption="results/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
+    resources:
+        runtime=1,
+        mem_mb=950,
     log:
         "logs/{name}/extract_statistics_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/extract_statistics_scen-{scenario}.tsv"
     script:
         "../scripts/analysis/extract_statistics.py"
 
@@ -81,8 +101,13 @@ rule extract_objective_breakdown:
         network="results/{name}/solved/model_scen-{scenario}.nc",
     output:
         objective_breakdown="results/{name}/analysis/scen-{scenario}/objective_breakdown.csv",
+    resources:
+        runtime=1,
+        mem_mb=1000,
     log:
         "logs/{name}/extract_objective_breakdown_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/extract_objective_breakdown_scen-{scenario}.tsv"
     script:
         "../scripts/analysis/extract_objective_breakdown.py"
 
@@ -189,7 +214,12 @@ rule compute_pce_sensitivity:
         global_indices="results/{name}/analysis/pce_global_indices_{prefix}.csv",
         conditional_indices="results/{name}/analysis/pce_conditional_indices_{prefix}.csv",
         validation="results/{name}/analysis/pce_validation_{prefix}.csv",
+    resources:
+        runtime=5,
+        mem_mb=2000,
     log:
         "logs/{name}/compute_pce_sensitivity_{prefix}.log",
+    benchmark:
+        "benchmarks/{name}/compute_pce_sensitivity_{prefix}.tsv"
     script:
         "../scripts/analysis/compute_pce_sensitivity.py"

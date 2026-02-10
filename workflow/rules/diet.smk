@@ -20,8 +20,13 @@ rule prepare_gdd_dietary_intake:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
         diet="processing/{name}/gdd_dietary_intake.csv",
+    resources:
+        runtime=1,
+        mem_mb=1000,
     log:
         "logs/{name}/prepare_gdd_dietary_intake.log",
+    benchmark:
+        "benchmarks/{name}/prepare_gdd_dietary_intake.tsv"
     script:
         "../scripts/prepare_gdd_dietary_intake.py"
 
@@ -42,8 +47,13 @@ rule prepare_faostat_fbs_items:
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
+    resources:
+        runtime=1,
+        mem_mb=3200,
     log:
         "logs/{name}/prepare_faostat_fbs_items.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_fbs_items.tsv"
     script:
         "../scripts/prepare_faostat_fbs_items.py"
 
@@ -66,8 +76,13 @@ rule prepare_faostat_gdd_supplements:
         ],
     output:
         supply="processing/{name}/faostat_gdd_supplements.csv",
+    resources:
+        runtime=1,
+        mem_mb=3300,
     log:
         "logs/{name}/prepare_faostat_gdd_supplements.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_gdd_supplements.tsv"
     script:
         "../scripts/prepare_faostat_gdd_supplements.py"
 
@@ -79,8 +94,13 @@ rule merge_dietary_sources:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
     output:
         diet="processing/{name}/dietary_intake.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/merge_dietary_sources.log",
+    benchmark:
+        "benchmarks/{name}/merge_dietary_sources.tsv"
     script:
         "../scripts/merge_dietary_sources.py"
 
@@ -100,8 +120,13 @@ rule prepare_food_loss_waste:
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
+    resources:
+        runtime=1,
+        mem_mb=3300,
     log:
         "logs/{name}/prepare_food_loss_waste.log",
+    benchmark:
+        "benchmarks/{name}/prepare_food_loss_waste.tsv"
     script:
         "../scripts/prepare_food_loss_waste.py"
 
@@ -118,8 +143,13 @@ rule prepare_gbd_dietary_risk_exposure:
         reference_year=config["diet"]["baseline_reference_year"],
     output:
         exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
+    resources:
+        runtime=1,
+        mem_mb=500,
     log:
         "logs/{name}/prepare_gbd_dietary_risk_exposure.log",
+    benchmark:
+        "benchmarks/{name}/prepare_gbd_dietary_risk_exposure.tsv"
     script:
         "../scripts/prepare_gbd_dietary_risk_exposure.py"
 
@@ -148,7 +178,12 @@ rule estimate_baseline_diet:
         fbs_override_foods=config["diet"]["fbs_override_foods"],
     output:
         baseline_diet="processing/{name}/baseline_diet.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/estimate_baseline_diet.log",
+    benchmark:
+        "benchmarks/{name}/estimate_baseline_diet.tsv"
     script:
         "../scripts/estimate_baseline_diet.py"

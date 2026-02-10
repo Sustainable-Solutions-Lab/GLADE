@@ -1327,7 +1327,7 @@ properties:
 
   solving:
     type: object
-    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs]
+    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs, runtime, mem_mb]
     additionalProperties: false
     properties:
       solver:
@@ -1361,6 +1361,14 @@ properties:
               - type: number
               - type: string
         description: "HiGHS solver options"
+      runtime:
+        type: integer
+        minimum: 1
+        description: "Maximum solver runtime in minutes (SLURM resource)"
+      mem_mb:
+        type: integer
+        minimum: 100
+        description: "Maximum solver memory in MB (SLURM resource)"
 
   plotting:
     type: object

@@ -69,8 +69,13 @@ rule doc_fig_intro_global_coverage:
     output:
         svg="docs/_static/figures/intro_global_coverage.svg",
         png="docs/_static/figures/intro_global_coverage.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_intro_global_coverage.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_intro_global_coverage.tsv"
     script:
         "../scripts/doc_figures/intro_global_coverage.py"
 
@@ -82,8 +87,13 @@ rule doc_fig_model_topology:
     output:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_model_topology.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_model_topology.tsv"
     script:
         "../scripts/visualize_model_topology.py"
 
@@ -95,8 +105,13 @@ rule doc_fig_land_flows:
     output:
         svg="docs/_static/figures/land_flows.svg",
         png="docs/_static/figures/land_flows.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_land_flows.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_land_flows.tsv"
     script:
         "../scripts/doc_figures/land_flows.py"
 
@@ -110,8 +125,13 @@ rule doc_fig_land_resource_classes:
     output:
         svg="docs/_static/figures/land_resource_classes.svg",
         png="docs/_static/figures/land_resource_classes.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_land_resource_classes.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_land_resource_classes.tsv"
     script:
         "../scripts/doc_figures/land_resource_classes.py"
 
@@ -128,8 +148,13 @@ rule doc_fig_environment_luc_inputs:
     output:
         svg="docs/_static/figures/environment_luc_inputs.svg",
         png="docs/_static/figures/environment_luc_inputs.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_environment_luc_inputs.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_environment_luc_inputs.tsv"
     script:
         "../scripts/doc_figures/luc_inputs_map.py"
 
@@ -143,8 +168,13 @@ rule doc_fig_environment_luc_lef:
     output:
         svg="docs/_static/figures/environment_luc_lef.svg",
         png="docs/_static/figures/environment_luc_lef.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_environment_luc_lef.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_environment_luc_lef.tsv"
     script:
         "../scripts/doc_figures/luc_lef_map.py"
 
@@ -159,8 +189,13 @@ rule doc_fig_crop_yield:
     output:
         svg="docs/_static/figures/crop_yield_{crop}.svg",
         png="docs/_static/figures/crop_yield_{crop}.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_crop_yield_{crop}.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_crop_yield_{crop}.tsv"
     script:
         "../scripts/doc_figures/crop_yield_map.py"
 
@@ -177,8 +212,13 @@ rule doc_fig_crop_yield_resource_class:
     params:
         resource_class_1=1,
         resource_class_2=2,
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_crop_yield_resource_class_{crop}.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_crop_yield_resource_class_{crop}.tsv"
     script:
         "../scripts/doc_figures/crop_yield_resource_class.py"
 
@@ -194,8 +234,13 @@ rule doc_fig_multi_cropping_potential_rainfed:
         png="docs/_static/figures/multi_cropping_potential_rainfed.png",
     params:
         water_supply="rainfed",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_multi_cropping_potential_rainfed.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_multi_cropping_potential_rainfed.tsv"
     script:
         "../scripts/doc_figures/multi_cropping_potential.py"
 
@@ -211,8 +256,13 @@ rule doc_fig_multi_cropping_potential_irrigated:
         png="docs/_static/figures/multi_cropping_potential_irrigated.png",
     params:
         water_supply="irrigated",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_multi_cropping_potential_irrigated.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_multi_cropping_potential_irrigated.tsv"
     script:
         "../scripts/doc_figures/multi_cropping_potential.py"
 
@@ -226,8 +276,13 @@ rule doc_fig_water_basin_availability:
     output:
         svg="docs/_static/figures/water_basin_availability.svg",
         png="docs/_static/figures/water_basin_availability.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_water_basin_availability.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_water_basin_availability.tsv"
     script:
         "../scripts/doc_figures/water_basin_availability.py"
 
@@ -241,8 +296,13 @@ rule doc_fig_water_region_availability:
     output:
         svg="docs/_static/figures/water_region_availability.svg",
         png="docs/_static/figures/water_region_availability.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_water_region_availability.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_water_region_availability.tsv"
     script:
         "../scripts/doc_figures/water_region_availability.py"
 
@@ -256,8 +316,13 @@ rule doc_fig_irrigated_land_fraction:
     output:
         svg="docs/_static/figures/irrigated_land_fraction.svg",
         png="docs/_static/figures/irrigated_land_fraction.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_irrigated_land_fraction.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_irrigated_land_fraction.tsv"
     script:
         "../scripts/doc_figures/irrigated_land_fraction.py"
 
@@ -271,8 +336,13 @@ rule doc_fig_grassland_yield:
     output:
         svg="docs/_static/figures/grassland_yield.svg",
         png="docs/_static/figures/grassland_yield.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_grassland_yield.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_grassland_yield.tsv"
     script:
         "../scripts/doc_figures/grassland_yield_map.py"
 
@@ -288,8 +358,13 @@ rule doc_fig_grazing_only_land_fraction:
     output:
         svg="docs/_static/figures/grazing_only_land_fraction.svg",
         png="docs/_static/figures/grazing_only_land_fraction.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_grazing_only_land_fraction.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_grazing_only_land_fraction.tsv"
     script:
         "../scripts/doc_figures/grazing_only_land_fraction.py"
 
@@ -304,8 +379,13 @@ rule doc_fig_trade_network:
         png="docs/_static/figures/trade_network.png",
     params:
         n_hubs=config["trade"]["hubs"],
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_trade_network.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_trade_network.tsv"
     script:
         "../scripts/doc_figures/trade_network_map.py"
 
@@ -314,8 +394,13 @@ rule doc_fig_workflow_rulegraph_dot:
     """Generate workflow dependency graph in DOT format from Snakemake."""
     output:
         dot="docs/_static/figures/workflow_rulegraph_raw.dot",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph_dot.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_workflow_rulegraph_dot.tsv"
     shell:
         """
         snakemake --rulegraph --config name=test > {output.dot} 2> {log}
@@ -328,8 +413,13 @@ rule doc_fig_workflow_rulegraph_styled:
         dot="docs/_static/figures/workflow_rulegraph_raw.dot",
     output:
         dot="docs/_static/figures/workflow_rulegraph.dot",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph_styled.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_workflow_rulegraph_styled.tsv"
     script:
         "../scripts/doc_figures/style_workflow_graph.py"
 
@@ -341,8 +431,13 @@ rule doc_fig_workflow_rulegraph:
     output:
         svg="docs/_static/figures/workflow_rulegraph.svg",
         png="docs/_static/figures/workflow_rulegraph.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_workflow_rulegraph.tsv"
     script:
         "../scripts/doc_figures/render_graph.py"
 
@@ -358,8 +453,13 @@ rule doc_fig_analysis_ghg_health:
         ghg_png="docs/_static/figures/analysis_marginal_ghg.png",
         yll_svg="docs/_static/figures/analysis_marginal_yll.svg",
         yll_png="docs/_static/figures/analysis_marginal_yll.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_analysis_ghg_health.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_analysis_ghg_health.tsv"
     script:
         "../scripts/doc_figures/analysis_ghg_health.py"
 
@@ -373,8 +473,13 @@ rule doc_fig_health_clusters:
     output:
         svg="docs/_static/figures/health_clusters.svg",
         png="docs/_static/figures/health_clusters.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_health_clusters.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_health_clusters.tsv"
     script:
         "../scripts/doc_figures/health_clusters_map.py"
 
@@ -390,8 +495,13 @@ rule doc_fig_health_burden:
     output:
         svg="docs/_static/figures/health_burden.svg",
         png="docs/_static/figures/health_burden.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_health_burden.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_health_burden.tsv"
     script:
         "../scripts/doc_figures/health_burden_map.py"
 
@@ -406,8 +516,13 @@ rule doc_fig_baseline_diet_by_region:
     output:
         svg="docs/_static/figures/baseline_diet_by_region.svg",
         png="docs/_static/figures/baseline_diet_by_region.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_baseline_diet_by_region.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_baseline_diet_by_region.tsv"
     script:
         "../scripts/doc_figures/baseline_diet_by_region.py"
 
@@ -421,8 +536,13 @@ rule doc_fig_baseline_diet_by_food:
     output:
         svg="docs/_static/figures/baseline_diet_by_food.svg",
         png="docs/_static/figures/baseline_diet_by_food.png",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_baseline_diet_by_food.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_baseline_diet_by_food.tsv"
     script:
         "../scripts/doc_figures/baseline_diet_by_food.py"
 
@@ -456,8 +576,13 @@ rule doc_fig_production_pattern_frame:
     params:
         frame_label=lambda w: TRADE_SCENARIO_LABELS[w.trade_scenario],
         bar_xmax_mha=PRODUCTION_PATTERN_BAR_XMAX,
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_production_pattern_{trade_scenario}.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_production_pattern_{trade_scenario}.tsv"
     script:
         "../scripts/doc_figures/production_pattern.py"
 
@@ -471,8 +596,13 @@ rule doc_fig_production_pattern_gif:
         ),
     output:
         gif="docs/_static/figures/production_pattern.gif",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/doc_fig_production_pattern_gif.log",
+    benchmark:
+        "benchmarks/shared/doc_fig_production_pattern_gif.tsv"
     script:
         "../scripts/doc_figures/collate_production_gif.py"
 
@@ -494,8 +624,13 @@ rule build_docs:
         glob("docs/**/*.rst", recursive=True),
     output:
         "docs/_build/html/index.html",
+    resources:
+        runtime=10,
+        mem_mb=2000,
     log:
         "logs/shared/build_docs.log",
+    benchmark:
+        "benchmarks/shared/build_docs.tsv"
     shell:
         """
         cd docs && make html > ../{log} 2>&1

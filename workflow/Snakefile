@@ -44,6 +44,12 @@ include: "rules/luc.smk"
 include: "rules/documentation.smk"
 
 
+localrules:
+    all,
+    solve_all_scenarios,
+    analyze_all_scenarios,
+
+
 wildcard_constraints:
     climate_model=r"[a-zA-Z0-9\-]+",
     period=r"[A-Z0-9]+",

@@ -76,8 +76,13 @@ rule build_luc_grid:
         yield_raster=_grid_yield_raster,
     output:
         grid=f"{shared_luc_dir}/grid.nc",
+    resources:
+        runtime=1,
+        mem_mb=250,
     log:
         "logs/shared/build_luc_grid.log",
+    benchmark:
+        "benchmarks/shared/build_luc_grid.tsv"
     script:
         "../scripts/build_luc_grid.py"
 
@@ -93,8 +98,13 @@ rule resample_luicube_grassland:
         notrees_nppeco="data/downloads/luicube/GL-notrees_NPPeco.tif",
     output:
         f"{shared_luc_dir}/luicube_grassland.nc",
+    resources:
+        runtime=1,
+        mem_mb=4200,
     log:
         "logs/shared/resample_luicube_grassland.log",
+    benchmark:
+        "benchmarks/shared/resample_luicube_grassland.tsv"
     script:
         "../scripts/resample_luicube_grassland.py"
 
@@ -105,8 +115,13 @@ rule resample_land_cover:
         land_cover="data/downloads/land_cover_lccs_class.nc",
     output:
         fractions=f"{shared_luc_dir}/land_cover_resampled.nc",
+    resources:
+        runtime=5,
+        mem_mb=700,
     log:
         "logs/shared/resample_land_cover.log",
+    benchmark:
+        "benchmarks/shared/resample_land_cover.tsv"
     script:
         "../scripts/resample_land_cover.py"
 
@@ -117,8 +132,13 @@ rule resample_regrowth:
         regrowth_raw="data/downloads/forest_carbon_accumulation_griscom_1km.tif",
     output:
         regrowth=f"{shared_luc_dir}/regrowth_resampled.nc",
+    resources:
+        runtime=1,
+        mem_mb=1300,
     log:
         "logs/shared/resample_regrowth.log",
+    benchmark:
+        "benchmarks/shared/resample_regrowth.tsv"
     script:
         "../scripts/resample_forest_carbon_accumulation.py"
 
@@ -137,8 +157,13 @@ rule prepare_luc_inputs:
         agb="processing/{name}/luc/agb.nc",
         soc="processing/{name}/luc/soc.nc",
         regrowth="processing/{name}/luc/regrowth.nc",
+    resources:
+        runtime=1,
+        mem_mb=1200,
     log:
         "logs/{name}/prepare_luc_inputs.log",
+    benchmark:
+        "benchmarks/{name}/prepare_luc_inputs.tsv"
     script:
         "../scripts/prepare_luc_inputs.py"
 
@@ -150,8 +175,13 @@ rule build_current_grassland_area:
         regions="processing/{name}/regions.geojson",
     output:
         current_area="processing/{name}/luc/current_grassland_area_by_class.csv",
+    resources:
+        runtime=1,
+        mem_mb=800,
     log:
         "logs/{name}/build_current_grassland_area.log",
+    benchmark:
+        "benchmarks/{name}/build_current_grassland_area.tsv"
     script:
         "../scripts/build_current_grassland_area.py"
 
@@ -173,8 +203,13 @@ if config["luc"]["cropland_source"] == "gaez":
             irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        resources:
+            runtime=1,
+            mem_mb=850,
         log:
             "logs/{name}/build_current_cropland_area.log",
+        benchmark:
+            "benchmarks/{name}/build_current_cropland_area.tsv"
         script:
             "../scripts/build_cropland_baseline_from_gaez.py"
 
@@ -189,8 +224,13 @@ else:
             regions="processing/{name}/regions.geojson",
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        resources:
+            runtime=1,
+            mem_mb=850,
         log:
             "logs/{name}/build_current_cropland_area.log",
+        benchmark:
+            "benchmarks/{name}/build_current_cropland_area.tsv"
         script:
             "../scripts/build_current_cropland_area.py"
 
@@ -204,8 +244,13 @@ rule build_grazing_only_land:
         suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
     output:
         grazing_area="processing/{name}/land_grazing_only_by_class.csv",
+    resources:
+        runtime=1,
+        mem_mb=1800,
     log:
         "logs/{name}/build_grazing_only_land.log",
+    benchmark:
+        "benchmarks/{name}/build_grazing_only_land.tsv"
     script:
         "../scripts/build_grazing_only_land.py"
 
@@ -226,7 +271,12 @@ rule build_luc_carbon_coefficients:
         pulses="processing/{name}/luc/pulses.nc",
         annualized="processing/{name}/luc/annualized.nc",
         coefficients="processing/{name}/luc/luc_carbon_coefficients.csv",
+    resources:
+        runtime=1,
+        mem_mb=2400,
     log:
         "logs/{name}/build_luc_carbon_coefficients.log",
+    benchmark:
+        "benchmarks/{name}/build_luc_carbon_coefficients.tsv"
     script:
         "../scripts/build_luc_carbon_coefficients.py"

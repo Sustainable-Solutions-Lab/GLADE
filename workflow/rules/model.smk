@@ -172,8 +172,13 @@ rule build_model:
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="results/{name}/build/model_scen-{scenario}.nc",
+    resources:
+        runtime=1,
+        mem_mb=900,
     log:
         "logs/{name}/build_model_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/build_model_scen-{scenario}.tsv"
     script:
         "../scripts/build_model.py"
 
@@ -313,7 +318,12 @@ rule solve_model:
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="results/{name}/solved/model_scen-{scenario}.nc",
+    resources:
+        runtime=lambda w: get_effective_config(w.scenario)["solving"]["runtime"],
+        mem_mb=lambda w: get_effective_config(w.scenario)["solving"]["mem_mb"],
     log:
         "logs/{name}/solve_model_scen-{scenario}.log",
+    benchmark:
+        "benchmarks/{name}/solve_model_scen-{scenario}.tsv"
     script:
         "../scripts/solve_model.py"

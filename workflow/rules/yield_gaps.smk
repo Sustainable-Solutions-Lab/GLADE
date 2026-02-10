@@ -23,8 +23,13 @@ rule yield_gap_by_country:
         countries=config["countries"],
     output:
         csv="processing/{name}/yield_gap_by_country_{crop}_{water_supply}.csv",
+    resources:
+        runtime=5,
+        mem_mb=2000,
     log:
         "logs/{name}/yield_gap_by_country_{crop}_{water_supply}.log",
+    benchmark:
+        "benchmarks/{name}/yield_gap_by_country_{crop}_{water_supply}.tsv"
     script:
         "scripts/compute_yield_gap_by_country.py"
 
@@ -44,7 +49,12 @@ rule average_yield_gap_by_country:
         yield_gap_country_csvs,
     output:
         csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
+    resources:
+        runtime=5,
+        mem_mb=2000,
     log:
         "logs/{name}/average_yield_gap_by_country_{water_supply}.log",
+    benchmark:
+        "benchmarks/{name}/average_yield_gap_by_country_{water_supply}.tsv"
     script:
         "scripts/aggregate_yield_gap_all_crops.py"

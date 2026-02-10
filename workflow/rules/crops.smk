@@ -21,8 +21,13 @@ rule prepare_faostat_crop_production:
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "processing/{name}/faostat_crop_production.csv",
+    resources:
+        runtime=1,
+        mem_mb=2900,
     log:
         "logs/{name}/prepare_faostat_crop_production.log",
+    benchmark:
+        "benchmarks/{name}/prepare_faostat_crop_production.tsv"
     script:
         "../scripts/prepare_faostat_crop_production.py"
 
@@ -35,8 +40,13 @@ rule prepare_fao_edible_portion:
         crops=config["crops"],
     output:
         edible_portion="processing/{name}/fao_edible_portion.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/prepare_fao_edible_portion.log",
+    benchmark:
+        "benchmarks/{name}/prepare_fao_edible_portion.tsv"
     script:
         "../scripts/prepare_fao_edible_portion.py"
 
@@ -75,8 +85,13 @@ rule build_crop_yields:
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
         "processing/{name}/crop_yields/{crop}_{water_supply}.csv",
+    resources:
+        runtime=1,
+        mem_mb=1300,
     log:
         "logs/{name}/build_crop_yields_{crop}_{water_supply}.log",
+    benchmark:
+        "benchmarks/{name}/build_crop_yields_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_crop_yields.py"
 
@@ -94,8 +109,13 @@ rule build_harvested_area_gaez:
         non_food_crops=config["non_food_crops"],
     output:
         "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
+    resources:
+        runtime=1,
+        mem_mb=700,
     log:
         "logs/{name}/build_harvested_area_gaez_{crop}_{water_supply}.log",
+    benchmark:
+        "benchmarks/{name}/build_harvested_area_gaez_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_harvested_area.py"
 
@@ -151,8 +171,13 @@ rule build_multi_cropping:
     output:
         eligible="processing/{name}/multi_cropping/eligible_area.csv",
         yields="processing/{name}/multi_cropping/cycle_yields.csv",
+    resources:
+        runtime=2,
+        mem_mb=5500,
     log:
         "logs/{name}/build_multi_cropping.log",
+    benchmark:
+        "benchmarks/{name}/build_multi_cropping.tsv"
     script:
         "../scripts/build_multi_cropping.py"
 
@@ -164,8 +189,13 @@ rule build_grassland_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/isimip_grassland_yields.csv",
+    resources:
+        runtime=1,
+        mem_mb=1500,
     log:
         "logs/{name}/build_grassland_yields.log",
+    benchmark:
+        "benchmarks/{name}/build_grassland_yields.tsv"
     script:
         "../scripts/build_grassland_yields.py"
 
@@ -177,8 +207,13 @@ rule build_luicube_grassland_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/luicube_grassland_yields.csv",
+    resources:
+        runtime=1,
+        mem_mb=2600,
     log:
         "logs/{name}/build_luicube_grassland_yields.log",
+    benchmark:
+        "benchmarks/{name}/build_luicube_grassland_yields.tsv"
     script:
         "../scripts/build_luicube_grassland_yields.py"
 
@@ -191,8 +226,13 @@ rule merge_grassland_yields:
         isimip_utilization_rate=config["grazing"]["isimip_utilization_rate"],
     output:
         "processing/{name}/grassland_yields.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/merge_grassland_yields.log",
+    benchmark:
+        "benchmarks/{name}/merge_grassland_yields.tsv"
     script:
         "../scripts/merge_grassland_yields.py"
 
@@ -212,8 +252,13 @@ rule build_crop_residue_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/crop_residue_yields/{crop}.csv",
+    resources:
+        runtime=1,
+        mem_mb=250,
     log:
         "logs/{name}/build_crop_residue_yields_{crop}.log",
+    benchmark:
+        "benchmarks/{name}/build_crop_residue_yields_{crop}.tsv"
     script:
         "../scripts/build_crop_residue_yields.py"
 

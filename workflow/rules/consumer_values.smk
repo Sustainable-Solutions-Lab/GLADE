@@ -24,8 +24,13 @@ rule extract_consumer_values:
         network="results/{name}/solved/model_scen-baseline.nc",
     output:
         consumer_values="results/{name}/consumer_values/values.csv",
+    resources:
+        runtime=5,
+        mem_mb=2000,
     log:
         "logs/{name}/extract_consumer_values.log",
+    benchmark:
+        "benchmarks/{name}/extract_consumer_values.tsv"
     script:
         "../scripts/extract_consumer_values.py"
 
@@ -83,7 +88,12 @@ rule plot_consumer_values_comparison:
     params:
         scenarios=CV_SCENARIOS,
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
+    resources:
+        runtime=5,
+        mem_mb=2000,
     log:
         "logs/{name}/plot_consumer_values_comparison.log",
+    benchmark:
+        "benchmarks/{name}/plot_consumer_values_comparison.tsv"
     script:
         "../scripts/plotting/plot_consumer_values_comparison.py"

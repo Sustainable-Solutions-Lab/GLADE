@@ -8,8 +8,13 @@ rule download_gadm_zip:
         temp("data/downloads/gadm_410-levels.zip"),
     params:
         url="https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-levels.zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gadm_zip.log",
+    benchmark:
+        "benchmarks/shared/download_gadm_zip.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -22,8 +27,13 @@ rule extract_adm1:
         zip="data/downloads/gadm_410-levels.zip",
     output:
         "data/downloads/gadm.gpkg",
+    resources:
+        runtime=15,
+        mem_mb=1100,
     log:
         "logs/shared/extract_adm1.log",
+    benchmark:
+        "benchmarks/shared/extract_adm1.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -37,8 +47,13 @@ rule retrieve_cpi_data:
         end_year=config["currency_base_year"],
     output:
         cpi="processing/shared/cpi_annual.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/shared/retrieve_cpi_data.log",
+    benchmark:
+        "benchmarks/shared/retrieve_cpi_data.tsv"
     script:
         "../scripts/retrieve_cpi_data.py"
 
@@ -49,8 +64,13 @@ rule retrieve_hicp_data:
         end_year=config["currency_base_year"],
     output:
         hicp="processing/shared/hicp_annual.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/shared/retrieve_hicp_data.log",
+    benchmark:
+        "benchmarks/shared/retrieve_hicp_data.tsv"
     script:
         "../scripts/retrieve_hicp_data.py"
 
@@ -61,8 +81,13 @@ rule retrieve_ppp_rates:
         end_year=2023,  # Latest available PPP data (2024 not yet published)
     output:
         ppp="processing/shared/ppp_eur_intl_dollar.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/shared/retrieve_ppp_rates.log",
+    benchmark:
+        "benchmarks/shared/retrieve_ppp_rates.tsv"
     script:
         "../scripts/retrieve_ppp_rates.py"
 
@@ -71,8 +96,13 @@ rule download_fadn_data:
     output:
         data="data/downloads/fadn_nuts0_so.csv",
         variables="data/downloads/fadn_variables.xlsx",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_fadn_data.log",
+    benchmark:
+        "benchmarks/shared/download_fadn_data.tsv"
     shell:
         """
         wget -q -O {output.data} \
@@ -94,8 +124,13 @@ rule retrieve_usda_costs:
         averaging_period=config["crop_costs"]["averaging_period"],
     output:
         costs="processing/{name}/usda_costs.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/{name}/retrieve_usda_costs.log",
+    benchmark:
+        "benchmarks/{name}/retrieve_usda_costs.tsv"
     script:
         "../scripts/retrieve_usda_costs.py"
 
@@ -113,8 +148,13 @@ rule retrieve_fadn_costs:
         averaging_period=config["crop_costs"]["averaging_period"],
     output:
         costs="processing/{name}/fadn_costs.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/{name}/retrieve_fadn_costs.log",
+    benchmark:
+        "benchmarks/{name}/retrieve_fadn_costs.tsv"
     script:
         "../scripts/retrieve_fadn_costs.py"
 
@@ -131,8 +171,13 @@ rule merge_crop_costs:
         base_year=config["currency_base_year"],
     output:
         costs="processing/{name}/crop_costs.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/{name}/merge_crop_costs.log",
+    benchmark:
+        "benchmarks/{name}/merge_crop_costs.tsv"
     script:
         "../scripts/merge_crop_costs.py"
 
@@ -147,8 +192,13 @@ rule retrieve_usda_animal_costs:
         averaging_period=config["animal_costs"]["averaging_period"],
     output:
         costs="processing/{name}/usda_animal_costs.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/{name}/retrieve_usda_animal_costs.log",
+    benchmark:
+        "benchmarks/{name}/retrieve_usda_animal_costs.tsv"
     script:
         "../scripts/retrieve_usda_animal_costs.py"
 
@@ -167,8 +217,13 @@ rule retrieve_fadn_animal_costs:
         averaging_period=config["animal_costs"]["averaging_period"],
     output:
         costs="processing/{name}/fadn_animal_costs.csv",
+    resources:
+        runtime=15,
+        mem_mb=200,
     log:
         "logs/{name}/retrieve_fadn_animal_costs.log",
+    benchmark:
+        "benchmarks/{name}/retrieve_fadn_animal_costs.tsv"
     script:
         "../scripts/retrieve_fadn_animal_costs.py"
 
@@ -184,8 +239,13 @@ rule merge_animal_costs:
         base_year=config["currency_base_year"],
     output:
         costs="processing/{name}/animal_costs.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/{name}/merge_animal_costs.log",
+    benchmark:
+        "benchmarks/{name}/merge_animal_costs.tsv"
     script:
         "../scripts/merge_animal_costs.py"
 
@@ -195,8 +255,13 @@ rule download_faostat_qcl:
         temp("data/downloads/faostat/QCL.zip"),
     params:
         url="https://bulks-faostat.fao.org/production/Production_Crops_Livestock_E_All_Data_(Normalized).zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_faostat_qcl.log",
+    benchmark:
+        "benchmarks/shared/download_faostat_qcl.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -209,8 +274,13 @@ rule extract_faostat_qcl:
         "data/downloads/faostat/QCL.zip",
     output:
         "data/downloads/faostat/QCL.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/shared/extract_faostat_qcl.log",
+    benchmark:
+        "benchmarks/shared/extract_faostat_qcl.tsv"
     shell:
         r"""
         unzip -p "{input}" "*.csv" > "{output}" 2> {log}
@@ -222,8 +292,13 @@ rule download_faostat_fbs:
         temp("data/downloads/faostat/FBS.zip"),
     params:
         url="https://bulks-faostat.fao.org/production/FoodBalanceSheets_E_All_Data_(Normalized).zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_faostat_fbs.log",
+    benchmark:
+        "benchmarks/shared/download_faostat_fbs.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -236,8 +311,13 @@ rule extract_faostat_fbs:
         "data/downloads/faostat/FBS.zip",
     output:
         "data/downloads/faostat/FBS.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/shared/extract_faostat_fbs.log",
+    benchmark:
+        "benchmarks/shared/extract_faostat_fbs.tsv"
     shell:
         r"""
         unzip -p "{input}" "*.csv" > "{output}" 2> {log}
@@ -249,8 +329,13 @@ rule download_faostat_gt:
         temp("data/downloads/faostat/GT.zip"),
     params:
         url="https://bulks-faostat.fao.org/production/Emissions_Totals_E_All_Data_(Normalized).zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_faostat_gt.log",
+    benchmark:
+        "benchmarks/shared/download_faostat_gt.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -263,8 +348,13 @@ rule extract_faostat_gt:
         "data/downloads/faostat/GT.zip",
     output:
         "data/downloads/faostat/GT.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/shared/extract_faostat_gt.log",
+    benchmark:
+        "benchmarks/shared/extract_faostat_gt.tsv"
     shell:
         r"""
         unzip -p "{input}" "*.csv" > "{output}" 2> {log}
@@ -276,8 +366,13 @@ rule download_unsd_sdg:
         temp("data/downloads/unsd/SDG.zip"),
     params:
         url="https://unstats.un.org/sdgs/indicators/database/archive/2025_Q4.1_AllData_After_20251212_CSV.zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_unsd_sdg.log",
+    benchmark:
+        "benchmarks/shared/download_unsd_sdg.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -290,8 +385,13 @@ rule extract_unsd_sdg:
         "data/downloads/unsd/SDG.zip",
     output:
         "data/downloads/unsd/SDG_12_3_1.csv",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/shared/extract_unsd_sdg.log",
+    benchmark:
+        "benchmarks/shared/extract_unsd_sdg.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -311,8 +411,13 @@ rule download_gaez_yield_data:
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_yield_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_yield_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -327,8 +432,13 @@ rule download_gaez_water_requirement_data:
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_water_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_water_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -343,8 +453,13 @@ rule download_gaez_suitability_data:
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_suitability_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_suitability_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -360,8 +475,13 @@ rule download_gaez_multiple_cropping_zone:
             else f"gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAPSET/RES01-MCI/"
             f"GAEZ-V5.RES01-MCI.{w.period}.{w.climate_model}.{w.climate_scenario}.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_multiple_cropping_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_multiple_cropping_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -377,8 +497,13 @@ rule download_gaez_growing_season_start:
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
             f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_growing_season_start_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_growing_season_start_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -394,8 +519,13 @@ rule download_gaez_growing_season_length:
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
             f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_growing_season_length_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_growing_season_length_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -412,8 +542,13 @@ rule download_gaez_actual_yield:
             f"GAEZ-V5.RES06-YLD.{get_gaez_code(w.crop, 'res06')}."
             f"WS{w.water_supply.upper()}.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_actual_yield_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_actual_yield_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -429,8 +564,13 @@ rule download_gaez_harvested_area:
             f"GAEZ-V5.RES06-HAR.{get_gaez_code(w.crop, 'res06')}."
             f"WS{w.water_supply.upper()}.tif"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_harvested_area_{water_supply}_{crop}.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_harvested_area_{water_supply}_{crop}.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -441,8 +581,13 @@ rule download_gaez_irrigated_landshare_map:
     params:
         # LR-IRR: Share of land area equipped for irrigation
         gcs_url="gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAP/GAEZ-V5.LR-IRR.tif",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gaez_irrigated_landshare_map.log",
+    benchmark:
+        "benchmarks/shared/download_gaez_irrigated_landshare_map.tsv"
     shell:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
@@ -460,8 +605,13 @@ rule download_grassland_yield_data:
         "data/downloads/grassland_yield_historical.nc4",
     params:
         url="https://files.isimip.org/ISIMIP2a/OutputData/agriculture/LPJmL/watch/historical/lpjml_watch_nobc_hist_co2_yield-mgr-noirr-default_global_annual_1971_2001.nc4",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_grassland_yield_data.log",
+    benchmark:
+        "benchmarks/shared/download_grassland_yield_data.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -480,8 +630,13 @@ rule download_wpp_population:
         life_table_url=(
             "https://population.un.org/wpp/assets/Excel%20Files/1_Indicator%20(Standard)/CSV_FILES/WPP2024_Life_Table_Abridged_Medium_2024-2100.csv.gz"
         ),
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_wpp_population.log",
+    benchmark:
+        "benchmarks/shared/download_wpp_population.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output.population})"
@@ -495,8 +650,13 @@ rule download_waterfootprint_appendix:
         "data/downloads/Report53_Appendix.zip",
     params:
         url="https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_waterfootprint_appendix.log",
+    benchmark:
+        "benchmarks/shared/download_waterfootprint_appendix.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -509,8 +669,13 @@ rule download_huang_irrigation_water:
         temp("data/downloads/huang_irrigation_water_v2.7z"),
     params:
         url="https://zenodo.org/records/1209296/files/irrigation%20water%20use%20v2.7z?download=1",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_huang_irrigation_water.log",
+    benchmark:
+        "benchmarks/shared/download_huang_irrigation_water.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -525,8 +690,13 @@ rule extract_huang_irrigation_water:
         "data/downloads/huang_irrigation_water.nc",
     params:
         filename="withd_irr_watergap.nc",
+    resources:
+        runtime=5,
+        mem_mb=200,
     log:
         "logs/shared/extract_huang_irrigation_water.log",
+    benchmark:
+        "benchmarks/shared/extract_huang_irrigation_water.tsv"
     shell:
         r"""
         # Extract the NetCDF file from the 7z archive
@@ -542,8 +712,13 @@ rule download_fao_nutrient_conversion_table:
         "data/downloads/fao_nutrient_conversion_table_for_sua_2024.xlsx",
     params:
         url="https://www.fao.org/3/CC9678EN/Nutrient_conversion_table_for_SUA_2024.xlsx",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_fao_nutrient_conversion_table.log",
+    benchmark:
+        "benchmarks/shared/download_fao_nutrient_conversion_table.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -556,8 +731,13 @@ rule download_gleam_supplement:
         "data/downloads/gleam_3.0_supplement_s1.xlsx",
     params:
         url="https://www.fao.org/fileadmin/user_upload/gleam/docs/GLEAM_3.0_Supplement_S1.xlsx",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_gleam_supplement.log",
+    benchmark:
+        "benchmarks/shared/download_gleam_supplement.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -572,8 +752,13 @@ rule download_luicube_grassland:
         year=config["data"]["luicube"]["year"],
     output:
         "data/downloads/luicube/{lu_class}_{variable}.tif",
+    resources:
+        runtime=30,
+        mem_mb=1000,
     log:
         "logs/shared/download_luicube_{lu_class}_{variable}.log",
+    benchmark:
+        "benchmarks/shared/download_luicube_{lu_class}_{variable}.tsv"
     script:
         "../scripts/download_luicube_raster.py"
 
@@ -588,8 +773,13 @@ rule download_land_cover:
             "year": [config["data"]["land_cover"]["year"]],
             "version": [config["data"]["land_cover"]["version"]],
         },
+    resources:
+        runtime=60,
+        mem_mb=500,
     log:
         "logs/shared/download_land_cover.log",
+    benchmark:
+        "benchmarks/shared/download_land_cover.tsv"
     script:
         "../scripts/download_land_cover.py"
 
@@ -599,8 +789,13 @@ rule extract_land_cover_class:
         "data/downloads/land_cover.zip",
     output:
         "data/downloads/land_cover_lccs_class.nc",
+    resources:
+        runtime=15,
+        mem_mb=13000,
     log:
         "logs/shared/extract_land_cover_class.log",
+    benchmark:
+        "benchmarks/shared/extract_land_cover_class.tsv"
     script:
         "../scripts/extract_land_cover_class.py"
 
@@ -610,8 +805,13 @@ rule download_biomass_cci:
         "data/downloads/esa_biomass_cci_v6_0.nc",
     params:
         url="https://dap.ceda.ac.uk/neodc/esacci/biomass/data/agb/maps/v6.0/netcdf/ESACCI-BIOMASS-L4-AGB-MERGED-10000m-fv6.0.nc?download=1",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_biomass_cci.log",
+    benchmark:
+        "benchmarks/shared/download_biomass_cci.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -625,8 +825,13 @@ rule download_soilgrids_ocs:
     params:
         coverage_id="ocs_0-30cm_mean",
         target_resolution_m=config["data"]["soilgrids"]["target_resolution_m"],
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_soilgrids_ocs.log",
+    benchmark:
+        "benchmarks/shared/download_soilgrids_ocs.tsv"
     script:
         "../scripts/download_soilgrids_ocs.py"
 
@@ -636,8 +841,13 @@ rule download_forest_carbon_accumulation_1km:
         "data/downloads/forest_carbon_accumulation_griscom_1km.tif",
     params:
         url="https://www.arcgis.com/sharing/rest/content/items/f950ea7878e143258a495daddea90cc0/data",
+    resources:
+        runtime=30,
+        mem_mb=500,
     log:
         "logs/shared/download_forest_carbon_accumulation_1km.log",
+    benchmark:
+        "benchmarks/shared/download_forest_carbon_accumulation_1km.tsv"
     shell:
         r"""
         mkdir -p "$(dirname {output})"
@@ -654,7 +864,12 @@ if config["data"]["usda"]["retrieve_nutrition"]:
             food_groups="data/curated/food_groups.csv",
         output:
             "data/curated/nutrition.csv",
+        resources:
+            runtime=30,
+            mem_mb=200,
         log:
             "logs/shared/retrieve_usda_nutrition.log",
+        benchmark:
+            "benchmarks/shared/retrieve_usda_nutrition.tsv"
         script:
             "../scripts/retrieve_usda_nutrition.py"

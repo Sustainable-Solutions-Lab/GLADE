@@ -20,8 +20,13 @@ rule prepare_population:
     output:
         population="processing/{name}/population.csv",
         population_age="processing/{name}/population_age.csv",
+    resources:
+        runtime=1,
+        mem_mb=1800,
     log:
         "logs/{name}/prepare_population.log",
+    benchmark:
+        "benchmarks/{name}/prepare_population.tsv"
     script:
         "../scripts/prepare_population.py"
 
@@ -34,8 +39,13 @@ rule simplify_gadm:
         simplify_tolerance_km=config["aggregation"]["simplify_tolerance_km"],
     output:
         "processing/shared/gadm-simplified.gpkg",
+    resources:
+        runtime=3,
+        mem_mb=8500,
     log:
         "logs/shared/simplify_gadm.log",
+    benchmark:
+        "benchmarks/shared/simplify_gadm.tsv"
     script:
         "../scripts/simplify_gadm.py"
 
@@ -50,8 +60,13 @@ rule build_regions:
         countries=config["countries"],
     output:
         "processing/{name}/regions.geojson",
+    resources:
+        runtime=1,
+        mem_mb=400,
     log:
         "logs/{name}/build_regions.log",
+    benchmark:
+        "benchmarks/{name}/build_regions.tsv"
     script:
         "../scripts/build_regions.py"
 
@@ -67,8 +82,13 @@ rule compute_resource_classes:
         resource_class_quantiles=config["aggregation"]["resource_class_quantiles"],
     output:
         classes="processing/{name}/resource_classes.nc",
+    resources:
+        runtime=1,
+        mem_mb=1900,
     log:
         "logs/{name}/compute_resource_classes.log",
+    benchmark:
+        "benchmarks/{name}/compute_resource_classes.tsv"
     script:
         "../scripts/compute_resource_classes.py"
 
@@ -84,7 +104,12 @@ rule aggregate_class_areas:
         irrigated_area_source=config["aggregation"]["irrigated_area_source"],
     output:
         "processing/{name}/land_area_by_class.csv",
+    resources:
+        runtime=1,
+        mem_mb=3000,
     log:
         "logs/{name}/aggregate_class_areas.log",
+    benchmark:
+        "benchmarks/{name}/aggregate_class_areas.tsv"
     script:
         "../scripts/aggregate_class_areas.py"

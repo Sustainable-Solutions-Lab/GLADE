@@ -20,8 +20,13 @@ rule prepare_fertilizer_application_rates:
         mapping="data/curated/ifa_fubc_crop_mapping.csv",
     output:
         "processing/{name}/fertilizer_application_rates.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/prepare_fertilizer_application_rates.log",
+    benchmark:
+        "benchmarks/{name}/prepare_fertilizer_application_rates.tsv"
     script:
         "../scripts/prepare_fertilizer_application_rates.py"
 
@@ -34,8 +39,13 @@ rule derive_global_fertilizer_rates:
         crops=config["crops"],
     output:
         "processing/{name}/global_fertilizer_n_rates.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/derive_global_fertilizer_rates.log",
+    benchmark:
+        "benchmarks/{name}/derive_global_fertilizer_rates.tsv"
     script:
         "../scripts/derive_global_fertilizer_rates.py"
 
@@ -46,8 +56,13 @@ rule extract_waterfootprint_appendix:
     output:
         shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
         excel="data/downloads/Report53_Appendix/Report53-Appendices-VI-IX.xls",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/shared/extract_waterfootprint_appendix.log",
+    benchmark:
+        "benchmarks/shared/extract_waterfootprint_appendix.tsv"
     shell:
         r"""
         unzip -o {input.zip_path} -d data/downloads > {log} 2>&1
@@ -60,8 +75,13 @@ rule process_blue_water_availability:
         excel=rules.extract_waterfootprint_appendix.output.excel,
     output:
         "processing/{name}/water/blue_water_availability.csv",
+    resources:
+        runtime=1,
+        mem_mb=200,
     log:
         "logs/{name}/process_blue_water_availability.log",
+    benchmark:
+        "benchmarks/{name}/process_blue_water_availability.tsv"
     script:
         "../scripts/process_blue_water_availability.py"
 
@@ -80,8 +100,13 @@ rule build_region_water_sustainable:
     output:
         monthly_region="processing/{name}/water/sustainable/monthly_region_water.csv",
         region_growing="processing/{name}/water/sustainable/region_growing_season_water.csv",
+    resources:
+        runtime=1,
+        mem_mb=300,
     log:
         "logs/{name}/build_region_water_sustainable.log",
+    benchmark:
+        "benchmarks/{name}/build_region_water_sustainable.tsv"
     script:
         "../scripts/build_region_water_availability.py"
 
@@ -97,8 +122,13 @@ rule build_region_water_current_use:
     output:
         monthly_region="processing/{name}/water/current_use/monthly_region_water.csv",
         region_growing="processing/{name}/water/current_use/region_growing_season_water.csv",
+    resources:
+        runtime=1,
+        mem_mb=400,
     log:
         "logs/{name}/build_region_water_current_use.log",
+    benchmark:
+        "benchmarks/{name}/build_region_water_current_use.tsv"
     script:
         "../scripts/process_huang_irrigation_water.py"
 
@@ -124,8 +154,13 @@ rule select_water_scenario:
     output:
         monthly_region="processing/{name}/water/monthly_region_water.csv",
         region_growing="processing/{name}/water/region_growing_season_water.csv",
+    resources:
+        runtime=1,
+        mem_mb=400,
     log:
         "logs/{name}/select_water_scenario.log",
+    benchmark:
+        "benchmarks/{name}/select_water_scenario.tsv"
     run:
         import shutil
         from pathlib import Path
