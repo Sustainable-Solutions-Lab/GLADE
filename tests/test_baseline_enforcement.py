@@ -21,6 +21,7 @@ _spec.loader.exec_module(_solve_module)
 
 _build_ratios_from_baseline = _solve_module._build_ratios_from_baseline
 add_food_incentives_to_objective = _solve_module.add_food_incentives_to_objective
+add_food_consumption_constraints = _solve_module.add_food_consumption_constraints
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +311,42 @@ class TestAddFoodIncentivesToObjective:
         assert food_network.links.static.at[
             "consume:wheat:USA", "marginal_cost"
         ] == pytest.approx(original + 0.5)
+
+
+# ---------------------------------------------------------------------------
+# Test add_food_consumption_constraints
+# ---------------------------------------------------------------------------
+
+
+class TestAddFoodConsumptionConstraints:
+    def test_dual_mapping_names_match_link_dimension(self, food_network):
+        food_network.set_snapshots(["now"])
+        food_network.optimize.create_model(include_objective_constant=False)
+
+        baseline_df = pd.DataFrame(
+            {
+                "food": ["wheat", "rice", "wheat"],
+                "country": ["USA", "USA", "IND"],
+                "food_group": ["grain", "grain", "grain"],
+                "consumption_g_per_day": [100.0, 50.0, 25.0],
+            }
+        )
+        population = {"USA": 1_000_000.0, "IND": 1_000_000.0}
+
+        add_food_consumption_constraints(
+            food_network, baseline_df, population, slack_cost=50.0
+        )
+
+        expected = {
+            "food_equal_consume:wheat:USA",
+            "food_equal_consume:rice:USA",
+            "food_equal_consume:wheat:IND",
+        }
+        assert expected.issubset(set(food_network.global_constraints.index))
+
+        gc = food_network.global_constraints.loc[sorted(expected)]
+        assert (gc["type"] == "food_consumption").all()
+        assert (gc["sense"] == "==").all()
 
 
 # ---------------------------------------------------------------------------
