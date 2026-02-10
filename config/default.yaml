@@ -326,21 +326,24 @@ food_groups:
   constraints: {}
   equal_by_country_source: null
   # Per-capita consumption caps (g/person/day) applied as e_nom_max on stores.
-  # Values are 2x the observed maximum consumption in GDD dietary intake data.
+  # Values are set to:
+  #   ceil(2 * max(TMREL, max country-level group consumption))
+  # using custom baseline diet estimates from processing/{name}/baseline_diet.csv
+  # and TMREL values from derived health RR curves (where available).
   max_per_capita:
-    whole_grains: 390
-    grain: 1383
-    fruits: 999
-    vegetables: 961
-    legumes: 471
-    nuts_seeds: 144
-    starchy_vegetable: 1225
-    oil: 51
-    red_meat: 505
-    poultry: 381
-    dairy: 2864
-    eggs: 214
-    sugar: 145
+    whole_grains: 300
+    grain: 1403
+    fruits: 658
+    vegetables: 785
+    legumes: 300
+    nuts_seeds: 79
+    starchy_vegetable: 1221
+    oil: 155
+    red_meat: 285
+    poultry: 241
+    dairy: 2865
+    eggs: 213
+    sugar: 133
   # Fix relative food contributions within each food group based on baseline
   # consumption data. When enabled, the model maintains baseline ratios between
   # foods in each group (e.g., if wheat is 60% and rice 40% of grains, that
