@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import contextlib
+import ctypes
+import gc
 import logging
 
 from linopy.constraints import print_single_constraint
@@ -311,7 +314,11 @@ def add_food_consumption_constraints(
 
     # Register global constraints for dual extraction
     foods = matched["food"].values
-    gc_names = [f"food_equal_{f}_{c}" for f, c in zip(foods, countries)]
+    # Constraint dual assignment in PyPSA maps vectorized GlobalConstraint duals
+    # by appending the linopy dimension value (here: link name) to the
+    # "GlobalConstraint-food_equal" prefix. Use matching GlobalConstraint names
+    # so duals are written back correctly (e.g. food_equal_consume:wheat:USA).
+    gc_names = [f"food_equal_{link}" for link in link_names]
     food_groups = matched["food_group"].values
     n.global_constraints.add(
         gc_names,
@@ -1107,11 +1114,13 @@ def _run_solve() -> None:
     )
     result = (status, condition)
 
-    # Temporary debug export of the raw solved linopy model
-    # linopy_debug_path = Path(snakemake.output.network).with_name("linopy_model.nc")
-    # linopy_debug_path.parent.mkdir(parents=True, exist_ok=True)
-    # n.model.to_netcdf(linopy_debug_path)
-    # logger.info("Wrote linopy model snapshot to %s", linopy_debug_path)
+    # Free solver-internal model (Gurobi/HiGHS); solution is already stored
+    # in linopy variables so assign_solution/assign_duals still work.
+    if hasattr(n.model, "solver_model") and n.model.solver_model is not None:
+        with contextlib.suppress(AttributeError):
+            n.model.solver_model.dispose()
+        n.model.solver_model = None
+        gc.collect()
 
     if status == "ok":
         aux_names = HEALTH_AUX_MAP.pop(id(n.model), set())
@@ -1171,6 +1180,12 @@ def _run_solve() -> None:
                     food_slack_total,
                     n.meta["food_slack_cost"],
                 )
+
+        # Free the linopy model before export; all values have been assigned.
+        n._model = None
+        gc.collect()
+        with contextlib.suppress(OSError):
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
 
         n.export_to_netcdf(
             snakemake.output.network,
