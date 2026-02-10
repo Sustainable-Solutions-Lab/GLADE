@@ -145,18 +145,20 @@ def add_regional_crop_production_links(
             if df.empty:
                 continue
 
-            water_bus = np.full(len(df), "emission:co2", dtype=object)
-            water_eff = np.zeros(len(df), dtype=float)
             if ws == "i":
                 water_bus = ("water:" + df["region"].astype(str)).to_numpy(dtype=object)
                 water_eff = -pd.to_numeric(
                     df["water_requirement_m3_per_ha"], errors="coerce"
                 ).to_numpy(dtype=float)
+            else:
+                water_bus = np.full(len(df), "", dtype=object)
+                water_eff = np.zeros(len(df), dtype=float)
 
             if crop == "wetland-rice" and rice_methane_factor > 0:
                 scaling_factor = (
                     1.0 if ws == "i" else rainfed_wetland_rice_ch4_scaling_factor
                 )
+                ch4_bus = np.full(len(df), "emission:ch4", dtype=object)
                 ch4_eff = np.full(
                     len(df),
                     rice_methane_factor
@@ -165,6 +167,7 @@ def add_regional_crop_production_links(
                     dtype=float,
                 )
             else:
+                ch4_bus = np.full(len(df), "", dtype=object)
                 ch4_eff = np.zeros(len(df), dtype=float)
 
             row_df = pd.DataFrame(index=df.index)
@@ -185,7 +188,7 @@ def add_regional_crop_production_links(
             row_df["efficiency2"] = water_eff
             row_df["bus3"] = ("fertilizer:" + df["country"].astype(str)).to_numpy()
             row_df["efficiency3"] = fert_efficiency
-            row_df["bus4"] = "emission:ch4"
+            row_df["bus4"] = ch4_bus
             row_df["efficiency4"] = ch4_eff
             row_df["marginal_cost"] = base_cost
             row_df["p_nom_max"] = (
