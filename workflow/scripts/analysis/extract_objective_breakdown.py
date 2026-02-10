@@ -232,6 +232,11 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     if food_slack_cost:
         total["Slack penalties"] = total.get("Slack penalties", 0.0) + food_slack_cost
 
+    # Piecewise food utility is also a linopy-level objective term.
+    food_utility_cost = n.meta.get("food_utility_cost", 0.0)
+    if food_utility_cost:
+        total["Consumer values"] = total.get("Consumer values", 0.0) + food_utility_cost
+
     extracted_sum = total.sum()
     model_objective = n.objective
 

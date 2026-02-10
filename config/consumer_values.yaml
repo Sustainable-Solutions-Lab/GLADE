@@ -35,11 +35,17 @@ animal_products:
 biomass:
   marginal_cost: 0
 
-# Food-group incentives derived from consumer values
+# Legacy linear incentives (disabled for piecewise-utility testing)
 food_incentives:
   enabled: false
-  sources:
-  - "results/{name}/consumer_values/values.csv"
+  sources: []
+
+# Piecewise diminishing utility derived from consumer values
+food_utility_piecewise:
+  enabled: false
+  n_blocks: 4
+  decline_factor: 0.7
+  total_width_multiplier: 2.0
 
 # Compare all consumer values scenarios in plots
 plotting:

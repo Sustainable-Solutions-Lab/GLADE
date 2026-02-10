@@ -54,6 +54,13 @@ food_incentives:
   enabled: false  # When true, food-level incentives are applied to the objective
   sources: []
 
+# --- section: food_utility_piecewise ---
+food_utility_piecewise:
+  enabled: false  # When true, use piecewise diminishing marginal utility for food consumption
+  n_blocks: 4
+  decline_factor: 0.7  # Multiplicative utility decay by block (0 < factor <= 1)
+  total_width_multiplier: 2.0  # Total incentivized quantity as multiple of baseline consumption
+
 # --- section: optimal_taxes ---
 optimal_taxes:
   enabled: false  # When true, enables the optimal taxes/subsidies workflow

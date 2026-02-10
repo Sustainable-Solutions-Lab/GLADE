@@ -15,6 +15,7 @@ required:
   - netcdf
   - validation
   - food_incentives
+  - food_utility_piecewise
   - optimal_taxes
   - land
   - water
@@ -229,6 +230,28 @@ properties:
         items:
           type: string
         description: "Paths to food incentives CSVs (may include {name} placeholder)"
+
+  food_utility_piecewise:
+    type: object
+    required: [enabled, n_blocks, decline_factor, total_width_multiplier]
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        description: "When true, apply piecewise diminishing marginal utility for food consumption"
+      n_blocks:
+        type: integer
+        minimum: 1
+        description: "Number of utility blocks per (food, country)"
+      decline_factor:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 1
+        description: "Multiplicative marginal-utility decay by block index"
+      total_width_multiplier:
+        type: number
+        exclusiveMinimum: 0
+        description: "Total incentivized quantity as multiple of baseline consumption"
 
   optimal_taxes:
     type: object
@@ -1480,4 +1503,15 @@ allOf:
         validation:
           properties:
             enforce_baseline_diet:
+              const: true
+  - not:
+      required: [food_incentives, food_utility_piecewise]
+      properties:
+        food_incentives:
+          properties:
+            enabled:
+              const: true
+        food_utility_piecewise:
+          properties:
+            enabled:
               const: true

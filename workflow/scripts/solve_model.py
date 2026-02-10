@@ -18,6 +18,10 @@ from workflow.scripts.build_model.utils import _per_capita_mass_to_mt_per_year
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_country_population
 from workflow.scripts.snakemake_utils import apply_scenario_config
+from workflow.scripts.solve_model.food_utility import (
+    add_piecewise_food_utility,
+    pop_piecewise_food_utility_value,
+)
 from workflow.scripts.solve_model.health import (
     HEALTH_AUX_MAP,
     add_health_objective,
@@ -248,16 +252,10 @@ def add_food_consumption_constraints(
     links_df = n.links.static
     consume_links = links_df[links_df["carrier"] == "food_consumption"]
 
-    # Build target dict from baseline_diet.csv
-    df = baseline_df.copy()
-    df["country"] = df["country"].str.upper()
-
-    # Filter to foods/countries that exist in the model
-    model_keys = set(zip(consume_links["food"], consume_links["country"]))
-    df = df[df.apply(lambda r: (r["food"], r["country"]) in model_keys, axis=1)].copy()
-
-    # Floor at 0.1 g/day to avoid numerical issues with very small values
-    df["consumption_g_per_day"] = df["consumption_g_per_day"].clip(lower=0.1)
+    df = _prepare_baseline_diet_for_food_constraints(
+        baseline_df,
+        consume_links,
+    )
 
     # Build link name → target mapping
     consume_links_keyed = consume_links.copy()
@@ -337,10 +335,36 @@ def add_food_consumption_constraints(
     )
 
 
+def _prepare_baseline_diet_for_food_constraints(
+    baseline_df: pd.DataFrame,
+    consume_links: pd.DataFrame,
+    *,
+    min_consumption_g_per_day: float = 0.1,
+) -> pd.DataFrame:
+    """Prepare baseline diet data for food constraints and ratio derivation.
+
+    Uses the same filtering and clipping logic as per-food equality constraints
+    so ratio-based runs are consistent with baseline-equality runs.
+    """
+    df = baseline_df.copy()
+    df["country"] = df["country"].astype(str).str.upper()
+    df["food"] = df["food"].astype(str)
+    df["consumption_g_per_day"] = pd.to_numeric(
+        df["consumption_g_per_day"], errors="coerce"
+    ).fillna(0.0)
+
+    model_keys = set(zip(consume_links["food"], consume_links["country"]))
+    df = df[df.apply(lambda r: (r["food"], r["country"]) in model_keys, axis=1)].copy()
+
+    df["consumption_g_per_day"] = df["consumption_g_per_day"].clip(
+        lower=min_consumption_g_per_day
+    )
+    return df
+
+
 def _build_ratios_from_baseline(baseline_df: pd.DataFrame) -> pd.DataFrame:
     """Derive within-group food ratios from baseline diet data."""
     df = baseline_df.copy()
-    df["country"] = df["country"].str.upper()
     totals = df.groupby(["country", "food_group"])["consumption_g_per_day"].transform(
         "sum"
     )
@@ -926,8 +950,17 @@ def _run_solve() -> None:
         ghg_price = float(snakemake.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
 
-    # Add food-level incentives to the objective if enabled
-    if snakemake.config["food_incentives"]["enabled"]:
+    incentives_enabled = bool(snakemake.config["food_incentives"]["enabled"])
+    piecewise_utility_cfg = snakemake.params.food_utility_piecewise
+    piecewise_utility_enabled = bool(piecewise_utility_cfg["enabled"])
+
+    if incentives_enabled and piecewise_utility_enabled:
+        raise ValueError(
+            "food_incentives and food_utility_piecewise cannot both be enabled"
+        )
+
+    # Add food-level linear incentives to marginal costs if enabled
+    if incentives_enabled:
         incentives_paths = list(snakemake.input.food_incentives)
         add_food_incentives_to_objective(n, incentives_paths)
 
@@ -935,6 +968,14 @@ def _run_solve() -> None:
     logger.info("Creating linopy model...")
     n.optimize.create_model(include_objective_constant=False)
     logger.info("Linopy model created.")
+
+    if piecewise_utility_enabled:
+        if bool(snakemake.params.enforce_baseline):
+            raise ValueError(
+                "food_utility_piecewise cannot be combined with "
+                "validation.enforce_baseline_diet=true"
+            )
+        add_piecewise_food_utility(n, snakemake.input.food_utility_piecewise)
 
     solver_name = snakemake.params.solver
     solver_threads = snakemake.params.solver_threads
@@ -958,6 +999,11 @@ def _run_solve() -> None:
 
     # Load baseline diet data (used for food-level enforcement and/or ratio constraints)
     baseline_df = pd.read_csv(snakemake.input.baseline_diet)
+    consume_links = n.links.static[n.links.static["carrier"] == "food_consumption"]
+    prepared_baseline_df = _prepare_baseline_diet_for_food_constraints(
+        baseline_df,
+        consume_links,
+    )
 
     # Food-level baseline enforcement (per-food equality constraints)
     per_country_equal: dict[str, dict[str, float]] | None = None
@@ -969,7 +1015,9 @@ def _run_solve() -> None:
         )
     if enforce_baseline:
         slack_cost = float(snakemake.config["validation"]["slack_marginal_cost"])
-        add_food_consumption_constraints(n, baseline_df, population_map, slack_cost)
+        add_food_consumption_constraints(
+            n, prepared_baseline_df, population_map, slack_cost
+        )
     elif equal_source:
         equal_df = pd.read_csv(snakemake.input.food_group_equal)
         required = {"group", "country", "consumption_g_per_day"}
@@ -1077,7 +1125,7 @@ def _run_solve() -> None:
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = snakemake.params.fix_within_group_ratios
     if ratio_cfg["enabled"] and not enforce_baseline:
-        ratios_df = _build_ratios_from_baseline(baseline_df)
+        ratios_df = _build_ratios_from_baseline(prepared_baseline_df)
         add_within_group_ratio_constraints(n, ratios_df)
     elif ratio_cfg["enabled"] and enforce_baseline:
         logger.info(
@@ -1137,6 +1185,10 @@ def _run_solve() -> None:
         finally:
             if removed:
                 variables_container.data.update(removed)
+
+        piecewise_utility_value = pop_piecewise_food_utility_value(n)
+        if abs(piecewise_utility_value) > 1e-12:
+            n.meta["food_utility_cost"] = -piecewise_utility_value
 
         # Extract production stability slack values if present
         production_slack = {}

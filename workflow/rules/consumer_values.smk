@@ -7,7 +7,9 @@
 This workflow:
 1. Extracts "consumer values" (dual variables) from a baseline model with fixed
    consumption (enforce_baseline_diet=True)
-2. Uses these values in subsequent solves to explore how health/environmental
+2. Calibrates piecewise utility blocks from extracted values and baseline food
+   consumption levels
+3. Uses these values in subsequent solves to explore how health/environmental
    pricing affects consumption while accounting for revealed consumer preferences
 """
 
@@ -26,6 +28,25 @@ rule extract_consumer_values:
         "logs/{name}/extract_consumer_values.log",
     script:
         "../scripts/extract_consumer_values.py"
+
+
+rule calibrate_food_utility_blocks:
+    """Calibrate piecewise food utility blocks from baseline dual values."""
+    input:
+        network="results/{name}/solved/model_scen-baseline.nc",
+        consumer_values="results/{name}/consumer_values/values.csv",
+    output:
+        utility_blocks="results/{name}/consumer_values/utility_blocks.csv",
+    params:
+        n_blocks=config["food_utility_piecewise"]["n_blocks"],
+        decline_factor=config["food_utility_piecewise"]["decline_factor"],
+        total_width_multiplier=config["food_utility_piecewise"][
+            "total_width_multiplier"
+        ],
+    log:
+        "logs/{name}/calibrate_food_utility_blocks.log",
+    script:
+        "../scripts/calibrate_food_utility_blocks.py"
 
 
 # Consumer values comparison scenarios (from scenario definitions)

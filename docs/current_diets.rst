@@ -507,6 +507,16 @@ The baseline diet feeds into several parts of the model:
   is enabled, the solver constrains foods within each group to maintain their
   baseline proportions while allowing group totals to vary.
 
+* **Piecewise consumer utility calibration**: In the consumer-values workflow,
+  baseline per-food consumption and baseline food-equality duals are combined to
+  calibrate ``results/{name}/consumer_values/utility_blocks.csv``. These blocks
+  are then used in the solve objective when
+  ``config.food_utility_piecewise.enabled`` is true.
+
+  The current calibration anchors utility at baseline quantity: the block
+  containing baseline consumption uses the extracted dual value, while blocks
+  below baseline are more valuable and blocks above baseline are less valuable.
+
 * **Health impact assessment**: Baseline consumption is used when computing
   the population-attributable fraction of diet-related disease burden (see
   :doc:`health`).

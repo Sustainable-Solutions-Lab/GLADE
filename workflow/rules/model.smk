@@ -206,6 +206,11 @@ def solve_model_inputs(w):
         inputs["food_incentives"] = [
             source.format(name=w.name, scenario=w.scenario) for source in sources
         ]
+    utility_cfg = eff_cfg["food_utility_piecewise"]
+    if utility_cfg["enabled"]:
+        inputs["food_utility_piecewise"] = (
+            f"results/{w.name}/consumer_values/utility_blocks.csv"
+        )
     equal_source = eff_cfg["food_groups"]["equal_by_country_source"]
     if equal_source:
         inputs["food_group_equal"] = equal_source.format(
@@ -296,6 +301,9 @@ rule solve_model:
         ],
         production_stability=lambda w: get_effective_config(w.scenario)["validation"][
             "production_stability"
+        ],
+        food_utility_piecewise=lambda w: get_effective_config(w.scenario)[
+            "food_utility_piecewise"
         ],
         fix_within_group_ratios=lambda w: get_effective_config(w.scenario)[
             "food_groups"
