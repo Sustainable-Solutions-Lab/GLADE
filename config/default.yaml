@@ -68,6 +68,7 @@ optimal_taxes:
 # --- section: land ---
 land:
   regional_limit: 0.7 # fraction of each region's potential cropland that is made available.
+  land_use_cost_usd_per_ha: 0.0 # Small optional per-hectare land-use cost to regularize land allocation (set >0 to activate)
   filtering:
     min_crop_yield_t_per_ha: 0.01      # Minimum yield for crop links (t/ha); filters ~1% of entries
     min_grassland_yield_t_per_ha: 0.05 # Minimum yield for grassland links (t/ha); filters ~6% of entries

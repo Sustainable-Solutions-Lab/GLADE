@@ -264,7 +264,7 @@ properties:
 
   land:
     type: object
-    required: [regional_limit, filtering]
+    required: [regional_limit, land_use_cost_usd_per_ha, filtering]
     additionalProperties: false
     properties:
       regional_limit:
@@ -272,6 +272,10 @@ properties:
         minimum: 0
         maximum: 1
         description: "Fraction of each region's potential cropland that is made available"
+      land_use_cost_usd_per_ha:
+        type: number
+        minimum: 0
+        description: "Optional marginal land-use cost applied to land supply dispatch (USD per ha)"
       filtering:
         type: object
         required: [min_crop_yield_t_per_ha, min_grassland_yield_t_per_ha, min_area_ha]

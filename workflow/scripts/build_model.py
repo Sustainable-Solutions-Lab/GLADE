@@ -31,7 +31,7 @@ from workflow.scripts.build_model import (
     trade,
     utils,
 )
-from workflow.scripts.constants import FEED_CATEGORIES
+from workflow.scripts.constants import FEED_CATEGORIES, HA_PER_MHA, USD_TO_BNUSD
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.snakemake_utils import apply_scenario_config
 
@@ -559,6 +559,8 @@ if __name__ == "__main__":
         disable_spared_grassland = True
 
     reg_limit = float(land_cfg["regional_limit"])
+    land_use_cost_usd_per_ha = float(land_cfg["land_use_cost_usd_per_ha"])
+    land_use_cost_bnusd_per_mha = land_use_cost_usd_per_ha * HA_PER_MHA * USD_TO_BNUSD
     filtering_cfg = land_cfg["filtering"]
     min_crop_yield = float(filtering_cfg["min_crop_yield_t_per_ha"])
     min_grassland_yield = float(filtering_cfg["min_grassland_yield_t_per_ha"])
@@ -572,6 +574,7 @@ if __name__ == "__main__":
         land_slack_cost=validation_slack_cost,  # Use unified validation slack cost
         enable_land_slack=enable_land_slack,
         min_area_ha=min_area_ha,
+        land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
         disable_new_cropland=disable_new_cropland,
         disable_new_pasture=disable_new_pasture,
         disable_spared_grassland=disable_spared_grassland,

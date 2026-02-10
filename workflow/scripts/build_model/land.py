@@ -88,6 +88,7 @@ def add_land_components(
     land_slack_cost: float,
     enable_land_slack: bool,
     min_area_ha: float,
+    land_use_cost_bnusd_per_mha: float,
     disable_new_cropland: bool = False,
     disable_new_pasture: bool = False,
     disable_spared_grassland: bool = False,
@@ -122,6 +123,8 @@ def add_land_components(
         Whether to add slack generators for land constraints.
     min_area_ha : float
         Minimum area threshold (ha). Entries below this are filtered out.
+    land_use_cost_bnusd_per_mha : float
+        Marginal land-use cost applied to land supply dispatch (bnUSD/Mha).
     disable_new_cropland : bool
         If True, no new land can supply the cropland pool.
     disable_new_pasture : bool
@@ -317,7 +320,7 @@ def add_land_components(
             carrier="land_existing_cropland",
             p_nom=existing_gen_df["existing_available_mha"],
             p_nom_extendable=False,
-            marginal_cost=0.0,
+            marginal_cost=land_use_cost_bnusd_per_mha,
             region=existing_gen_df["region"],
             resource_class=existing_gen_df["resource_class"],
             water_supply=existing_gen_df["water_supply"],
@@ -406,7 +409,7 @@ def add_land_components(
             carrier="land_new",
             p_nom_extendable=True,
             p_nom_max=new_gen_df["new_available_mha"],
-            marginal_cost=0.0,
+            marginal_cost=land_use_cost_bnusd_per_mha,
             region=new_gen_df["region"],
             resource_class=new_gen_df["resource_class"],
             water_supply=new_gen_df["water_supply"],
@@ -575,6 +578,7 @@ def add_land_components(
             carrier=gen_df["source_carrier"],
             p_nom_extendable=True,
             p_nom_max=gen_df["area_mha"],
+            marginal_cost=land_use_cost_bnusd_per_mha,
             region=gen_df["region"],
             resource_class=gen_df["resource_class"],
             water_supply="rainfed",
