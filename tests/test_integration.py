@@ -5,7 +5,7 @@
 """Integration tests for the Snakemake workflow.
 
 These tests exercise the full pipeline using the lightweight test
-configuration (config/test.yaml) with reduced spatial resolution and
+configuration (tests/config/test.yaml) with reduced spatial resolution and
 a small crop subset.
 """
 

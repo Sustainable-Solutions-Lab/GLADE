@@ -165,8 +165,8 @@ Test Configuration
 
 Two dedicated config files drive the test suite:
 
-* **``config/test.yaml``**: Minimal overrides on top of ``default.yaml`` — 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Outputs to ``results/test/``.
-* **``config/test_scenarios.yaml``**: Two scenarios (``default`` and ``G``) to exercise the scenario mechanism and GHG pricing code path.
+* **``tests/config/test.yaml``**: Minimal overrides on top of ``default.yaml`` — 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Outputs to ``results/test/``.
+* **``tests/config/test_scenarios.yaml``**: Two scenarios (``default`` and ``G``) to exercise the scenario mechanism and GHG pricing code path.
 
 Running Tests
 ~~~~~~~~~~~~~
@@ -195,7 +195,7 @@ Test Markers
 How It Works
 ~~~~~~~~~~~~
 
-Tests call a shared helper ``run_snakemake_target()`` in ``tests/conftest.py`` that invokes the Snakemake Python API directly (no subprocess). The helper layers ``config/test.yaml`` on top of ``config/default.yaml`` and targets specific output files.
+Tests call a shared helper ``run_snakemake_target()`` in ``tests/conftest.py`` that invokes the Snakemake Python API directly (no subprocess). The helper layers ``tests/config/test.yaml`` on top of ``config/default.yaml`` and targets specific output files.
 
 * **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing anything. Does not require credentials or downloaded data. Catches missing inputs, broken rules, and invalid wildcard patterns.
 * **Execution test** (``test_build_solve_analyze``): Runs the actual pipeline through analysis for the default scenario. Requires USDA/ECMWF credentials for data downloads on first run.

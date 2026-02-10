@@ -6,7 +6,7 @@
 # Uses test config base (reduced resolution) with minimal PCE samples
 
 name: "test_sensitivity"
-scenario_defs: "config/test_sensitivity_scenarios.yaml"
+scenario_defs: "tests/config/test_sensitivity_scenarios.yaml"
 
 # Inherit from test config for fast execution
 aggregation:

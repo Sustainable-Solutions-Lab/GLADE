@@ -236,12 +236,12 @@ Notes:
 
 ## Testing
 
-Integration tests live in `tests/` and use pytest with the Snakemake Python API. They exercise the full workflow pipeline using a lightweight configuration (`config/test.yaml`) with reduced spatial resolution and a small crop subset, outputting to `results/test/`.
+Integration tests live in `tests/` and use pytest with the Snakemake Python API. They exercise the full workflow pipeline using a lightweight configuration (`tests/config/test.yaml`) with reduced spatial resolution and a small crop subset, outputting to `results/test/`.
 
 ### Test Configuration
 
-- **`config/test.yaml`**: 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Overrides `default.yaml`.
-- **`config/test_scenarios.yaml`**: Two scenarios (`default` and `G`) — enough to exercise the scenario mechanism and GHG pricing.
+- **`tests/config/test.yaml`**: 200 regions, 2 resource classes, 9 crops, 14 trade hubs. Overrides `default.yaml`.
+- **`tests/config/test_scenarios.yaml`**: Two scenarios (`default` and `G`) — enough to exercise the scenario mechanism and GHG pricing.
 
 ### Running Tests
 

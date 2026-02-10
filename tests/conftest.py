@@ -18,7 +18,7 @@ from snakemake.settings.types import (
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SNAKEFILE = PROJECT_ROOT / "workflow" / "Snakefile"
 CONFIG_DEFAULT = PROJECT_ROOT / "config" / "default.yaml"
-CONFIG_TEST = PROJECT_ROOT / "config" / "test.yaml"
+CONFIG_TEST = PROJECT_ROOT / "tests" / "config" / "test.yaml"
 RESULTS_DIR = PROJECT_ROOT / "results" / "test"
 
 

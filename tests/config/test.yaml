@@ -7,7 +7,7 @@
 
 name: "test"
 
-scenario_defs: "config/test_scenarios.yaml"
+scenario_defs: "tests/config/test_scenarios.yaml"
 
 aggregation:
   regions:
