@@ -70,7 +70,7 @@ rule doc_fig_intro_global_coverage:
         svg="docs/_static/figures/intro_global_coverage.svg",
         png="docs/_static/figures/intro_global_coverage.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_intro_global_coverage.log",
@@ -88,7 +88,7 @@ rule doc_fig_model_topology:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_model_topology.log",
@@ -106,7 +106,7 @@ rule doc_fig_land_flows:
         svg="docs/_static/figures/land_flows.svg",
         png="docs/_static/figures/land_flows.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_land_flows.log",
@@ -126,7 +126,7 @@ rule doc_fig_land_resource_classes:
         svg="docs/_static/figures/land_resource_classes.svg",
         png="docs/_static/figures/land_resource_classes.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_land_resource_classes.log",
@@ -149,7 +149,7 @@ rule doc_fig_environment_luc_inputs:
         svg="docs/_static/figures/environment_luc_inputs.svg",
         png="docs/_static/figures/environment_luc_inputs.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_environment_luc_inputs.log",
@@ -169,7 +169,7 @@ rule doc_fig_environment_luc_lef:
         svg="docs/_static/figures/environment_luc_lef.svg",
         png="docs/_static/figures/environment_luc_lef.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_environment_luc_lef.log",
@@ -190,7 +190,7 @@ rule doc_fig_crop_yield:
         svg="docs/_static/figures/crop_yield_{crop}.svg",
         png="docs/_static/figures/crop_yield_{crop}.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_crop_yield_{crop}.log",
@@ -213,7 +213,7 @@ rule doc_fig_crop_yield_resource_class:
         resource_class_1=1,
         resource_class_2=2,
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_crop_yield_resource_class_{crop}.log",
@@ -235,7 +235,7 @@ rule doc_fig_multi_cropping_potential_rainfed:
     params:
         water_supply="rainfed",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_multi_cropping_potential_rainfed.log",
@@ -257,7 +257,7 @@ rule doc_fig_multi_cropping_potential_irrigated:
     params:
         water_supply="irrigated",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_multi_cropping_potential_irrigated.log",
@@ -277,7 +277,7 @@ rule doc_fig_water_basin_availability:
         svg="docs/_static/figures/water_basin_availability.svg",
         png="docs/_static/figures/water_basin_availability.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_water_basin_availability.log",
@@ -297,7 +297,7 @@ rule doc_fig_water_region_availability:
         svg="docs/_static/figures/water_region_availability.svg",
         png="docs/_static/figures/water_region_availability.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_water_region_availability.log",
@@ -317,7 +317,7 @@ rule doc_fig_irrigated_land_fraction:
         svg="docs/_static/figures/irrigated_land_fraction.svg",
         png="docs/_static/figures/irrigated_land_fraction.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_irrigated_land_fraction.log",
@@ -337,7 +337,7 @@ rule doc_fig_grassland_yield:
         svg="docs/_static/figures/grassland_yield.svg",
         png="docs/_static/figures/grassland_yield.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_grassland_yield.log",
@@ -359,7 +359,7 @@ rule doc_fig_grazing_only_land_fraction:
         svg="docs/_static/figures/grazing_only_land_fraction.svg",
         png="docs/_static/figures/grazing_only_land_fraction.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_grazing_only_land_fraction.log",
@@ -380,7 +380,7 @@ rule doc_fig_trade_network:
     params:
         n_hubs=config["trade"]["hubs"],
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_trade_network.log",
@@ -395,7 +395,7 @@ rule doc_fig_workflow_rulegraph_dot:
     output:
         dot="docs/_static/figures/workflow_rulegraph_raw.dot",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph_dot.log",
@@ -414,7 +414,7 @@ rule doc_fig_workflow_rulegraph_styled:
     output:
         dot="docs/_static/figures/workflow_rulegraph.dot",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph_styled.log",
@@ -432,7 +432,7 @@ rule doc_fig_workflow_rulegraph:
         svg="docs/_static/figures/workflow_rulegraph.svg",
         png="docs/_static/figures/workflow_rulegraph.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_workflow_rulegraph.log",
@@ -454,7 +454,7 @@ rule doc_fig_analysis_ghg_health:
         yll_svg="docs/_static/figures/analysis_marginal_yll.svg",
         yll_png="docs/_static/figures/analysis_marginal_yll.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_analysis_ghg_health.log",
@@ -474,7 +474,7 @@ rule doc_fig_health_clusters:
         svg="docs/_static/figures/health_clusters.svg",
         png="docs/_static/figures/health_clusters.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_health_clusters.log",
@@ -496,7 +496,7 @@ rule doc_fig_health_burden:
         svg="docs/_static/figures/health_burden.svg",
         png="docs/_static/figures/health_burden.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_health_burden.log",
@@ -517,7 +517,7 @@ rule doc_fig_baseline_diet_by_region:
         svg="docs/_static/figures/baseline_diet_by_region.svg",
         png="docs/_static/figures/baseline_diet_by_region.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_baseline_diet_by_region.log",
@@ -537,7 +537,7 @@ rule doc_fig_baseline_diet_by_food:
         svg="docs/_static/figures/baseline_diet_by_food.svg",
         png="docs/_static/figures/baseline_diet_by_food.png",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_baseline_diet_by_food.log",
@@ -577,7 +577,7 @@ rule doc_fig_production_pattern_frame:
         frame_label=lambda w: TRADE_SCENARIO_LABELS[w.trade_scenario],
         bar_xmax_mha=PRODUCTION_PATTERN_BAR_XMAX,
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_production_pattern_{trade_scenario}.log",
@@ -597,7 +597,7 @@ rule doc_fig_production_pattern_gif:
     output:
         gif="docs/_static/figures/production_pattern.gif",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/doc_fig_production_pattern_gif.log",
@@ -625,7 +625,7 @@ rule build_docs:
     output:
         "docs/_build/html/index.html",
     resources:
-        runtime=10,
+        runtime="10m",
         mem_mb=2000,
     log:
         "logs/shared/build_docs.log",

@@ -22,7 +22,7 @@ rule prepare_faostat_crop_production:
     output:
         "processing/{name}/faostat_crop_production.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=2900,
     log:
         "logs/{name}/prepare_faostat_crop_production.log",
@@ -41,7 +41,7 @@ rule prepare_fao_edible_portion:
     output:
         edible_portion="processing/{name}/fao_edible_portion.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/prepare_fao_edible_portion.log",
@@ -86,7 +86,7 @@ rule build_crop_yields:
     output:
         "processing/{name}/crop_yields/{crop}_{water_supply}.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1300,
     log:
         "logs/{name}/build_crop_yields_{crop}_{water_supply}.log",
@@ -110,7 +110,7 @@ rule build_harvested_area_gaez:
     output:
         "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=700,
     log:
         "logs/{name}/build_harvested_area_gaez_{crop}_{water_supply}.log",
@@ -172,7 +172,7 @@ rule build_multi_cropping:
         eligible="processing/{name}/multi_cropping/eligible_area.csv",
         yields="processing/{name}/multi_cropping/cycle_yields.csv",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=5500,
     log:
         "logs/{name}/build_multi_cropping.log",
@@ -190,7 +190,7 @@ rule build_grassland_yields:
     output:
         "processing/{name}/isimip_grassland_yields.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1500,
     log:
         "logs/{name}/build_grassland_yields.log",
@@ -208,7 +208,7 @@ rule build_luicube_grassland_yields:
     output:
         "processing/{name}/luicube_grassland_yields.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=2600,
     log:
         "logs/{name}/build_luicube_grassland_yields.log",
@@ -227,7 +227,7 @@ rule merge_grassland_yields:
     output:
         "processing/{name}/grassland_yields.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/merge_grassland_yields.log",
@@ -253,7 +253,7 @@ rule build_crop_residue_yields:
     output:
         "processing/{name}/crop_residue_yields/{crop}.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=250,
     log:
         "logs/{name}/build_crop_residue_yields_{crop}.log",

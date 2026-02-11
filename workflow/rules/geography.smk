@@ -21,7 +21,7 @@ rule prepare_population:
         population="processing/{name}/population.csv",
         population_age="processing/{name}/population_age.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1800,
     log:
         "logs/{name}/prepare_population.log",
@@ -40,7 +40,7 @@ rule simplify_gadm:
     output:
         "processing/shared/gadm-simplified.gpkg",
     resources:
-        runtime=3,
+        runtime="3m",
         mem_mb=8500,
     log:
         "logs/shared/simplify_gadm.log",
@@ -61,7 +61,7 @@ rule build_regions:
     output:
         "processing/{name}/regions.geojson",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=400,
     log:
         "logs/{name}/build_regions.log",
@@ -83,7 +83,7 @@ rule compute_resource_classes:
     output:
         classes="processing/{name}/resource_classes.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1900,
     log:
         "logs/{name}/compute_resource_classes.log",
@@ -105,7 +105,7 @@ rule aggregate_class_areas:
     output:
         "processing/{name}/land_area_by_class.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=3000,
     log:
         "logs/{name}/aggregate_class_areas.log",

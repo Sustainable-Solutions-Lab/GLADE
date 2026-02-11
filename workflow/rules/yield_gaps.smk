@@ -24,7 +24,7 @@ rule yield_gap_by_country:
     output:
         csv="processing/{name}/yield_gap_by_country_{crop}_{water_supply}.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/yield_gap_by_country_{crop}_{water_supply}.log",
@@ -50,7 +50,7 @@ rule average_yield_gap_by_country:
     output:
         csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/average_yield_gap_by_country_{water_supply}.log",

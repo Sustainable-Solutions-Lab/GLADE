@@ -173,7 +173,7 @@ rule build_model:
     output:
         network="results/{name}/build/model_scen-{scenario}.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=900,
     log:
         "logs/{name}/build_model_scen-{scenario}.log",

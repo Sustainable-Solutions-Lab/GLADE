@@ -21,7 +21,7 @@ rule prepare_gdd_dietary_intake:
     output:
         diet="processing/{name}/gdd_dietary_intake.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1000,
     log:
         "logs/{name}/prepare_gdd_dietary_intake.log",
@@ -48,7 +48,7 @@ rule prepare_faostat_fbs_items:
     output:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=3200,
     log:
         "logs/{name}/prepare_faostat_fbs_items.log",
@@ -77,7 +77,7 @@ rule prepare_faostat_gdd_supplements:
     output:
         supply="processing/{name}/faostat_gdd_supplements.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=3300,
     log:
         "logs/{name}/prepare_faostat_gdd_supplements.log",
@@ -95,7 +95,7 @@ rule merge_dietary_sources:
     output:
         diet="processing/{name}/dietary_intake.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/merge_dietary_sources.log",
@@ -121,7 +121,7 @@ rule prepare_food_loss_waste:
     output:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=3300,
     log:
         "logs/{name}/prepare_food_loss_waste.log",
@@ -144,7 +144,7 @@ rule prepare_gbd_dietary_risk_exposure:
     output:
         exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=500,
     log:
         "logs/{name}/prepare_gbd_dietary_risk_exposure.log",
@@ -179,7 +179,7 @@ rule estimate_baseline_diet:
     output:
         baseline_diet="processing/{name}/baseline_diet.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/estimate_baseline_diet.log",

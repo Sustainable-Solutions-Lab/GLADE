@@ -23,7 +23,7 @@ rule retrieve_gdp_per_capita:
     output:
         gdp="data/downloads/gdp_per_capita.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/retrieve_gdp_per_capita.log",
@@ -43,7 +43,7 @@ rule prepare_gbd_mortality:
     output:
         mortality="processing/{name}/health/gbd_mortality_rates.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/prepare_gbd_mortality.log",
@@ -64,7 +64,7 @@ rule prepare_relative_risks:
     output:
         relative_risks="processing/{name}/health/relative_risks.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/prepare_relative_risks.log",
@@ -82,7 +82,7 @@ rule prepare_life_table:
     output:
         life_table="processing/{name}/health/life_table.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=3800,
     log:
         "logs/{name}/prepare_life_table.log",
@@ -120,7 +120,7 @@ rule prepare_health_costs:
         cluster_risk_baseline="processing/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
         derived_tmrel="processing/{name}/health/scen-{scenario}/derived_tmrel.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=400,
     log:
         "logs/{name}/prepare_health_costs_scen-{scenario}.log",

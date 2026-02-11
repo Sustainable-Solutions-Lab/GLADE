@@ -43,7 +43,7 @@ rule plot_yield_gap:
     output:
         pdf="results/{name}/plots/yield_gap_{crop}_{water_supply}.pdf",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_yield_gap_{crop}_{water_supply}.log",
@@ -59,7 +59,7 @@ rule plot_regions_map:
     output:
         pdf="results/{name}/plots/regions_map.pdf",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=250,
     log:
         "logs/{name}/plot_regions_map.log",
@@ -76,7 +76,7 @@ rule plot_resource_classes_map:
     output:
         pdf="results/{name}/plots/resource_classes_map.pdf",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1400,
     log:
         "logs/{name}/plot_resource_classes_map.log",
@@ -94,7 +94,7 @@ rule plot_objective_breakdown:
         breakdown_pdf="results/{name}/plots/scen-{scenario}/objective_breakdown.pdf",
         breakdown_csv="results/{name}/plots/scen-{scenario}/objective_breakdown.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_objective_breakdown_scen-{scenario}.log",
@@ -112,7 +112,7 @@ rule plot_yll_global_by_cause:
         pdf="results/{name}/plots/scen-{scenario}/yll_global_by_cause.pdf",
         csv="results/{name}/plots/scen-{scenario}/yll_global_by_cause.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_yll_global_by_cause_scen-{scenario}.log",
@@ -148,7 +148,7 @@ rule plot_health_impacts:
         health_baseline_map_pdf="results/{name}/plots/scen-{scenario}/health_baseline_map.pdf",
         health_baseline_map_csv="results/{name}/plots/scen-{scenario}/health_baseline_by_region.csv",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_health_impacts_scen-{scenario}.log",
@@ -164,7 +164,7 @@ rule plot_relative_risk_curves:
     output:
         pdf="results/{name}/plots/relative_risk_curves.pdf",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_relative_risk_curves.log",
@@ -184,7 +184,7 @@ rule plot_crop_production_map:
     output:
         pdf="results/{name}/plots/scen-{scenario}/crop_production_map.pdf",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1400,
     log:
         "logs/{name}/plot_crop_production_map_scen-{scenario}.log",
@@ -205,7 +205,7 @@ rule plot_crop_trade_map:
     output:
         pdf="results/{name}/plots/scen-{scenario}/crop_trade_map.pdf",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_crop_trade_map_scen-{scenario}.log",
@@ -224,7 +224,7 @@ rule plot_crop_use_breakdown:
     params:
         animal_products=config["animal_products"]["include"],
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_crop_use_breakdown_scen-{scenario}.log",
@@ -241,7 +241,7 @@ rule plot_feed_breakdown:
         pdf="results/{name}/plots/scen-{scenario}/feed_breakdown.pdf",
         csv="results/{name}/plots/scen-{scenario}/feed_breakdown.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1100,
     log:
         "logs/{name}/plot_feed_breakdown_scen-{scenario}.log",
@@ -260,7 +260,7 @@ rule plot_food_group_slack:
     params:
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=950,
     log:
         "logs/{name}/plot_food_group_slack_scen-{scenario}.log",
@@ -277,7 +277,7 @@ rule plot_slack_overview:
         pdf="results/{name}/plots/scen-{scenario}/slack_overview.pdf",
         csv="results/{name}/plots/scen-{scenario}/slack_overview.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_slack_overview_scen-{scenario}.log",
@@ -294,7 +294,7 @@ rule plot_water_balance:
         pdf="results/{name}/plots/scen-{scenario}/water_balance.pdf",
         csv="results/{name}/plots/scen-{scenario}/water_balance.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_water_balance_scen-{scenario}.log",
@@ -312,7 +312,7 @@ rule plot_water_use_map:
         pdf="results/{name}/plots/scen-{scenario}/water_use_map.pdf",
         csv="results/{name}/plots/scen-{scenario}/water_use_by_region.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_water_use_map_scen-{scenario}.log",
@@ -331,7 +331,7 @@ rule plot_food_consumption:
     params:
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=250,
     log:
         "logs/{name}/plot_food_consumption_scen-{scenario}.log",
@@ -358,7 +358,7 @@ rule plot_food_consumption_comparison:
         wildcards=comparison_scenarios,
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_food_consumption_comparison.log",
@@ -384,7 +384,7 @@ rule plot_system_cost_comparison:
     params:
         wildcards=comparison_scenarios,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_system_cost_comparison.log",
@@ -406,7 +406,7 @@ rule plot_food_consumption_map:
     params:
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=250,
     log:
         "logs/{name}/plot_food_consumption_map_scen-{scenario}.log",
@@ -432,7 +432,7 @@ rule plot_food_consumption_baseline_map:
         ),
         group_colors=food_group_colors,
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_food_consumption_baseline_map-{scenario}.log",
@@ -464,7 +464,7 @@ rule plot_yield_map:
         unit="t/ha",
         cmap="YlGn",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_yield_map_{item}_{water_supply}.log",
@@ -481,7 +481,7 @@ rule plot_average_yield_gap_by_country:
     output:
         pdf="results/{name}/plots/yield_gap_by_country_average_{water_supply}.pdf",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_average_yield_gap_by_country_{water_supply}.log",
@@ -498,7 +498,7 @@ rule plot_water_value_map:
     output:
         pdf="results/{name}/plots/scen-{scenario}/water_value_map.pdf",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_water_value_map_scen-{scenario}.log",
@@ -526,7 +526,7 @@ rule plot_emissions_breakdown:
             "n2o_to_co2_factor"
         ],
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1200,
     log:
         "logs/{name}/plot_emissions_breakdown_scen-{scenario}.log",
@@ -547,7 +547,7 @@ rule plot_consumption_balance:
     params:
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_consumption_balance_scen-{scenario}.log",
@@ -568,7 +568,7 @@ rule plot_ghg_health_global:
     params:
         group_colors=food_group_colors,
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/plot_ghg_health_global_scen-{scenario}.log",
@@ -589,7 +589,7 @@ rule plot_luc_emissions:
         map_pdf="results/{name}/plots/scen-{scenario}/luc_emissions_map.pdf",
         csv="results/{name}/plots/scen-{scenario}/luc_emissions.csv",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_luc_emissions_scen-{scenario}.log",
@@ -609,7 +609,7 @@ rule plot_pce_conditional_sensitivity:
     params:
         metric="S1_cond",
     resources:
-        runtime=2,
+        runtime="2m",
         mem_mb=1000,
     log:
         "logs/{name}/plot_pce_conditional_sensitivity_{prefix}.log",

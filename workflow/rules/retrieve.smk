@@ -9,7 +9,7 @@ rule download_gadm_zip:
     params:
         url="https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-levels.zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gadm_zip.log",
@@ -28,7 +28,7 @@ rule extract_adm1:
     output:
         "data/downloads/gadm.gpkg",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=1100,
     log:
         "logs/shared/extract_adm1.log",
@@ -48,7 +48,7 @@ rule retrieve_cpi_data:
     output:
         cpi="processing/shared/cpi_annual.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/shared/retrieve_cpi_data.log",
@@ -65,7 +65,7 @@ rule retrieve_hicp_data:
     output:
         hicp="processing/shared/hicp_annual.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/shared/retrieve_hicp_data.log",
@@ -82,7 +82,7 @@ rule retrieve_ppp_rates:
     output:
         ppp="processing/shared/ppp_eur_intl_dollar.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/shared/retrieve_ppp_rates.log",
@@ -97,7 +97,7 @@ rule download_fadn_data:
         data="data/downloads/fadn_nuts0_so.csv",
         variables="data/downloads/fadn_variables.xlsx",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_fadn_data.log",
@@ -125,7 +125,7 @@ rule retrieve_usda_costs:
     output:
         costs="processing/{name}/usda_costs.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/{name}/retrieve_usda_costs.log",
@@ -149,7 +149,7 @@ rule retrieve_fadn_costs:
     output:
         costs="processing/{name}/fadn_costs.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/{name}/retrieve_fadn_costs.log",
@@ -172,7 +172,7 @@ rule merge_crop_costs:
     output:
         costs="processing/{name}/crop_costs.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/{name}/merge_crop_costs.log",
@@ -193,7 +193,7 @@ rule retrieve_usda_animal_costs:
     output:
         costs="processing/{name}/usda_animal_costs.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/{name}/retrieve_usda_animal_costs.log",
@@ -218,7 +218,7 @@ rule retrieve_fadn_animal_costs:
     output:
         costs="processing/{name}/fadn_animal_costs.csv",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=200,
     log:
         "logs/{name}/retrieve_fadn_animal_costs.log",
@@ -240,7 +240,7 @@ rule merge_animal_costs:
     output:
         costs="processing/{name}/animal_costs.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/{name}/merge_animal_costs.log",
@@ -256,7 +256,7 @@ rule download_faostat_qcl:
     params:
         url="https://bulks-faostat.fao.org/production/Production_Crops_Livestock_E_All_Data_(Normalized).zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_faostat_qcl.log",
@@ -275,7 +275,7 @@ rule extract_faostat_qcl:
     output:
         "data/downloads/faostat/QCL.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/shared/extract_faostat_qcl.log",
@@ -293,7 +293,7 @@ rule download_faostat_fbs:
     params:
         url="https://bulks-faostat.fao.org/production/FoodBalanceSheets_E_All_Data_(Normalized).zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_faostat_fbs.log",
@@ -312,7 +312,7 @@ rule extract_faostat_fbs:
     output:
         "data/downloads/faostat/FBS.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/shared/extract_faostat_fbs.log",
@@ -330,7 +330,7 @@ rule download_faostat_gt:
     params:
         url="https://bulks-faostat.fao.org/production/Emissions_Totals_E_All_Data_(Normalized).zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_faostat_gt.log",
@@ -349,7 +349,7 @@ rule extract_faostat_gt:
     output:
         "data/downloads/faostat/GT.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/shared/extract_faostat_gt.log",
@@ -367,7 +367,7 @@ rule download_unsd_sdg:
     params:
         url="https://unstats.un.org/sdgs/indicators/database/archive/2025_Q4.1_AllData_After_20251212_CSV.zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_unsd_sdg.log",
@@ -386,7 +386,7 @@ rule extract_unsd_sdg:
     output:
         "data/downloads/unsd/SDG_12_3_1.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/shared/extract_unsd_sdg.log",
@@ -412,7 +412,7 @@ rule download_gaez_yield_data:
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_yield_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
@@ -433,7 +433,7 @@ rule download_gaez_water_requirement_data:
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_water_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
@@ -454,7 +454,7 @@ rule download_gaez_suitability_data:
             f"{get_gaez_code(w.crop, 'res05')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_suitability_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
@@ -476,7 +476,7 @@ rule download_gaez_multiple_cropping_zone:
             f"GAEZ-V5.RES01-MCI.{w.period}.{w.climate_model}.{w.climate_scenario}.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_multiple_cropping_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}.log",
@@ -498,7 +498,7 @@ rule download_gaez_growing_season_start:
             f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_growing_season_start_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
@@ -520,7 +520,7 @@ rule download_gaez_growing_season_length:
             f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_growing_season_length_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.log",
@@ -543,7 +543,7 @@ rule download_gaez_actual_yield:
             f"WS{w.water_supply.upper()}.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_actual_yield_{water_supply}_{crop}.log",
@@ -565,7 +565,7 @@ rule download_gaez_harvested_area:
             f"WS{w.water_supply.upper()}.tif"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_harvested_area_{water_supply}_{crop}.log",
@@ -582,7 +582,7 @@ rule download_gaez_irrigated_landshare_map:
         # LR-IRR: Share of land area equipped for irrigation
         gcs_url="gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAP/GAEZ-V5.LR-IRR.tif",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gaez_irrigated_landshare_map.log",
@@ -606,7 +606,7 @@ rule download_grassland_yield_data:
     params:
         url="https://files.isimip.org/ISIMIP2a/OutputData/agriculture/LPJmL/watch/historical/lpjml_watch_nobc_hist_co2_yield-mgr-noirr-default_global_annual_1971_2001.nc4",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_grassland_yield_data.log",
@@ -631,7 +631,7 @@ rule download_wpp_population:
             "https://population.un.org/wpp/assets/Excel%20Files/1_Indicator%20(Standard)/CSV_FILES/WPP2024_Life_Table_Abridged_Medium_2024-2100.csv.gz"
         ),
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_wpp_population.log",
@@ -651,7 +651,7 @@ rule download_waterfootprint_appendix:
     params:
         url="https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_waterfootprint_appendix.log",
@@ -670,7 +670,7 @@ rule download_huang_irrigation_water:
     params:
         url="https://zenodo.org/records/1209296/files/irrigation%20water%20use%20v2.7z?download=1",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_huang_irrigation_water.log",
@@ -691,7 +691,7 @@ rule extract_huang_irrigation_water:
     params:
         filename="withd_irr_watergap.nc",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=200,
     log:
         "logs/shared/extract_huang_irrigation_water.log",
@@ -713,7 +713,7 @@ rule download_fao_nutrient_conversion_table:
     params:
         url="https://www.fao.org/3/CC9678EN/Nutrient_conversion_table_for_SUA_2024.xlsx",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_fao_nutrient_conversion_table.log",
@@ -732,7 +732,7 @@ rule download_gleam_supplement:
     params:
         url="https://www.fao.org/fileadmin/user_upload/gleam/docs/GLEAM_3.0_Supplement_S1.xlsx",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_gleam_supplement.log",
@@ -753,7 +753,7 @@ rule download_luicube_grassland:
     output:
         "data/downloads/luicube/{lu_class}_{variable}.tif",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=1000,
     log:
         "logs/shared/download_luicube_{lu_class}_{variable}.log",
@@ -774,7 +774,7 @@ rule download_land_cover:
             "version": [config["data"]["land_cover"]["version"]],
         },
     resources:
-        runtime=60,
+        runtime="60m",
         mem_mb=500,
     log:
         "logs/shared/download_land_cover.log",
@@ -790,7 +790,7 @@ rule extract_land_cover_class:
     output:
         "data/downloads/land_cover_lccs_class.nc",
     resources:
-        runtime=15,
+        runtime="15m",
         mem_mb=13000,
     log:
         "logs/shared/extract_land_cover_class.log",
@@ -806,7 +806,7 @@ rule download_biomass_cci:
     params:
         url="https://dap.ceda.ac.uk/neodc/esacci/biomass/data/agb/maps/v6.0/netcdf/ESACCI-BIOMASS-L4-AGB-MERGED-10000m-fv6.0.nc?download=1",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_biomass_cci.log",
@@ -826,7 +826,7 @@ rule download_soilgrids_ocs:
         coverage_id="ocs_0-30cm_mean",
         target_resolution_m=config["data"]["soilgrids"]["target_resolution_m"],
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_soilgrids_ocs.log",
@@ -842,7 +842,7 @@ rule download_forest_carbon_accumulation_1km:
     params:
         url="https://www.arcgis.com/sharing/rest/content/items/f950ea7878e143258a495daddea90cc0/data",
     resources:
-        runtime=30,
+        runtime="30m",
         mem_mb=500,
     log:
         "logs/shared/download_forest_carbon_accumulation_1km.log",
@@ -865,7 +865,7 @@ if config["data"]["usda"]["retrieve_nutrition"]:
         output:
             "data/curated/nutrition.csv",
         resources:
-            runtime=30,
+            runtime="30m",
             mem_mb=200,
         log:
             "logs/shared/retrieve_usda_nutrition.log",

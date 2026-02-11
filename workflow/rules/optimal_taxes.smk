@@ -28,7 +28,7 @@ rule extract_optimal_consumption:
     output:
         consumption="results/{name}/optimal_taxes/optimal_consumption.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/extract_optimal_consumption.log",
@@ -50,7 +50,7 @@ rule extract_optimal_taxes:
     output:
         taxes="results/{name}/optimal_taxes/taxes.csv",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/extract_optimal_taxes.log",
@@ -70,7 +70,7 @@ rule plot_optimal_taxes:
     params:
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/plot_optimal_taxes.log",
@@ -100,7 +100,7 @@ rule plot_optimal_taxes_diet_comparison:
         ],
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=2000,
     log:
         "logs/{name}/plot_optimal_taxes_diet_comparison.log",

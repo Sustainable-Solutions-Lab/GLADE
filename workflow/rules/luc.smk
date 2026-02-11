@@ -77,7 +77,7 @@ rule build_luc_grid:
     output:
         grid=f"{shared_luc_dir}/grid.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=250,
     log:
         "logs/shared/build_luc_grid.log",
@@ -99,7 +99,7 @@ rule resample_luicube_grassland:
     output:
         f"{shared_luc_dir}/luicube_grassland.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=4200,
     log:
         "logs/shared/resample_luicube_grassland.log",
@@ -116,7 +116,7 @@ rule resample_land_cover:
     output:
         fractions=f"{shared_luc_dir}/land_cover_resampled.nc",
     resources:
-        runtime=5,
+        runtime="5m",
         mem_mb=700,
     log:
         "logs/shared/resample_land_cover.log",
@@ -133,7 +133,7 @@ rule resample_regrowth:
     output:
         regrowth=f"{shared_luc_dir}/regrowth_resampled.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1300,
     log:
         "logs/shared/resample_regrowth.log",
@@ -158,7 +158,7 @@ rule prepare_luc_inputs:
         soc="processing/{name}/luc/soc.nc",
         regrowth="processing/{name}/luc/regrowth.nc",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1200,
     log:
         "logs/{name}/prepare_luc_inputs.log",
@@ -176,7 +176,7 @@ rule build_current_grassland_area:
     output:
         current_area="processing/{name}/luc/current_grassland_area_by_class.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=800,
     log:
         "logs/{name}/build_current_grassland_area.log",
@@ -204,7 +204,7 @@ if config["luc"]["cropland_source"] == "gaez":
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
         resources:
-            runtime=1,
+            runtime="1m",
             mem_mb=850,
         log:
             "logs/{name}/build_current_cropland_area.log",
@@ -225,7 +225,7 @@ else:
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
         resources:
-            runtime=1,
+            runtime="1m",
             mem_mb=850,
         log:
             "logs/{name}/build_current_cropland_area.log",
@@ -245,7 +245,7 @@ rule build_grazing_only_land:
     output:
         grazing_area="processing/{name}/land_grazing_only_by_class.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=1800,
     log:
         "logs/{name}/build_grazing_only_land.log",
@@ -272,7 +272,7 @@ rule build_luc_carbon_coefficients:
         annualized="processing/{name}/luc/annualized.nc",
         coefficients="processing/{name}/luc/luc_carbon_coefficients.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=2400,
     log:
         "logs/{name}/build_luc_carbon_coefficients.log",

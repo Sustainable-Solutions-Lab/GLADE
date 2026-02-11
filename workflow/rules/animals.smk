@@ -22,7 +22,7 @@ rule prepare_faostat_animal_production:
     output:
         "processing/{name}/faostat_animal_production.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=2800,
     log:
         "logs/{name}/prepare_faostat_animal_production.log",
@@ -42,7 +42,7 @@ rule prepare_faostat_yields:
     output:
         "processing/{name}/faostat_animal_yields.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=2800,
     log:
         "logs/{name}/prepare_faostat_yields.log",
@@ -60,7 +60,7 @@ rule prepare_gleam_feed_properties:
         ruminant="processing/{name}/ruminant_feed_properties.csv",
         monogastric="processing/{name}/monogastric_feed_properties.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/prepare_gleam_feed_properties.log",
@@ -82,7 +82,7 @@ rule categorize_feeds:
         ruminant_mapping="processing/{name}/ruminant_feed_mapping.csv",
         monogastric_mapping="processing/{name}/monogastric_feed_mapping.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/categorize_feeds.log",
@@ -109,7 +109,7 @@ rule build_feed_to_animal_products:
         carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
         feed_proxy_map=config["animal_products"]["feed_proxy_map"],
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/build_feed_to_animal_products.log",
@@ -130,7 +130,7 @@ rule calculate_manure_emissions:
     output:
         "processing/{name}/manure_emission_factors.csv",
     resources:
-        runtime=1,
+        runtime="1m",
         mem_mb=200,
     log:
         "logs/{name}/calculate_manure_emissions.log",
