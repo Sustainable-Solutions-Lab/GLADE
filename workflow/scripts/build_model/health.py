@@ -81,8 +81,14 @@ def add_health_stores(
     value_per_yll_usd = float(health_cfg["value_per_yll"])
 
     # bnUSD per million YLL = USD/YLL * USD_TO_BNUSD / YLL_TO_MILLION_YLL
+    # Use a small epsilon cost when value_per_yll is zero to prevent LP
+    # degeneracy: the piecewise-linear health model allows health stores to
+    # accumulate more than the true burden, and without any cost the solver
+    # has no incentive to tighten them to the correct level.
+    epsilon_usd_per_yll = 0.1
+    effective_value = max(value_per_yll_usd, epsilon_usd_per_yll)
     cost_per_myll = (
-        value_per_yll_usd * constants.USD_TO_BNUSD / constants.YLL_TO_MILLION_YLL
+        effective_value * constants.USD_TO_BNUSD / constants.YLL_TO_MILLION_YLL
     )
 
     n.carriers.add("health", unit="million YLL")
