@@ -20,4 +20,4 @@ _generators:
         ghg_pricing_enabled: true
         ghg_price: "{ghg}"
       biomass:
-        marginal_cost: "{biomass}"
+        marginal_values_usd_per_tonne: "{biomass}"

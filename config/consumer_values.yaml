@@ -32,9 +32,6 @@ validation:
 animal_products:
   feed_efficiency_regions: null
 
-biomass:
-  marginal_cost: 0
-
 # Legacy linear incentives (disabled for piecewise-utility testing)
 food_incentives:
   enabled: false

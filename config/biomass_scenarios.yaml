@@ -4,7 +4,7 @@
 
 # Biomass Price Sensitivity Analysis Scenarios
 # ---------------------------------------------
-# Uses _generators DSL to vary biomass marginal cost (USD_2024/tonne dry matter).
+# Uses _generators DSL to vary biomass values (USD_2024/tonne dry matter).
 
 _generators:
   - name: biomass_{cost}
@@ -13,4 +13,4 @@ _generators:
         values: [0, 25, 50, 75, 100, 150, 200]
     template:
       biomass:
-        marginal_cost: "{cost}"
+        marginal_values_usd_per_tonne: "{cost}"

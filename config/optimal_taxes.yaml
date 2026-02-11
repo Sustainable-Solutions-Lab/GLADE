@@ -34,9 +34,6 @@ health:
 emissions:
   ghg_price: 200
 
-biomass:
-  marginal_cost: 0
-
 # Plotting configuration
 plotting:
   comparison_scenarios: "all"

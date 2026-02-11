@@ -58,7 +58,7 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
 
   **Food groups**: Standard groups include grains, whole_grains, legumes, nuts_seeds, oil, starchy_vegetable, fruits, vegetables, sugar, byproduct, red_meat, poultry, dairy, and eggs. Additional groups can be defined by extending ``config.food_groups.included``.
 
-  **Byproduct handling**: Foods assigned to the ``byproduct`` group (such as wheat-bran, rice-bran, oat-bran, wheat-germ, sunflower-meal, rapeseed-meal, and buckwheat-hulls) are **excluded from direct human consumption**. Instead, these byproducts can be utilized as animal feed (see :ref:`byproduct-feed-conversion`), making them available for livestock production systems. Byproducts also have links to per-country ``biomass`` buses, providing a disposal route for byproducts that lack feed mappings; surplus can be exported to the energy sector at the configured ``biomass.marginal_cost`` (set to 0 for free disposal).
+  **Byproduct handling**: Foods assigned to the ``byproduct`` group (such as wheat-bran, rice-bran, oat-bran, wheat-germ, sunflower-meal, rapeseed-meal, and buckwheat-hulls) are **excluded from direct human consumption**. Instead, these byproducts can be utilized as animal feed (see :ref:`byproduct-feed-conversion`), making them available for livestock production systems. Byproducts also have links to per-country ``biomass`` buses, providing a disposal route for byproducts that lack feed mappings; surplus can be exported to the energy sector at the configured ``biomass.marginal_values_usd_per_tonne`` (set to 0 for free disposal).
 
 Food Loss & Waste Adjustments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

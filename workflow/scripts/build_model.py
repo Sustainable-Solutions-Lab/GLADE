@@ -492,7 +492,8 @@ if __name__ == "__main__":
     # Creates country-level biomass buses and sinks (negative generators) that
     # allow crops and byproducts to be exported to the energy sector. This also
     # provides a disposal route for byproducts that lack feed mappings (e.g.
-    # wheat-germ, rice-bran). Set marginal_cost to 0 to make biomass export free.
+    # wheat-germ, rice-bran). Set biomass.marginal_values_usd_per_tonne to 0 to
+    # make biomass export free.
     biomass.add_biomass_infrastructure(n, cfg_countries, biomass_cfg)
     biomass.add_biomass_byproduct_links(n, cfg_countries, snakemake.params.byproducts)
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)

@@ -377,7 +377,7 @@ biomass:
   - oil-palm
   - sugarcane
   - biomass-sorghum
-  marginal_cost: 50  # USD_2024 per tonne dry matter exported to the energy sector
+  marginal_values_usd_per_tonne: 0  # USD_2024 per tonne dry matter exported to the energy sector
 
 # --- section: trade ---
 trade:

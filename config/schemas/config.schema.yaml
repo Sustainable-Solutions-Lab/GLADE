@@ -718,7 +718,7 @@ properties:
 
   biomass:
     type: object
-    required: [crops, marginal_cost]
+    required: [crops, marginal_values_usd_per_tonne]
     additionalProperties: false
     properties:
       crops:
@@ -728,7 +728,7 @@ properties:
           type: string
           pattern: "^[a-z0-9-]+$"
         description: "Crops available for biomass export"
-      marginal_cost:
+      marginal_values_usd_per_tonne:
         type: number
         minimum: 0
         description: "Revenue in USD per tonne dry matter exported to energy sector"

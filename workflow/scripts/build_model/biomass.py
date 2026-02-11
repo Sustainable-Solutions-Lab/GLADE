@@ -7,7 +7,8 @@
 This module handles biomass exports to the energy sector, including
 infrastructure setup and routing from crops and byproducts. Biomass
 infrastructure is always present to provide a disposal route for
-byproducts that lack feed mappings; set marginal_cost to 0 for free disposal.
+byproducts that lack feed mappings; set marginal_values_usd_per_tonne
+to 0 for free disposal.
 """
 
 from collections.abc import Iterable, Mapping
@@ -32,7 +33,7 @@ def add_biomass_infrastructure(
     and add_biomass_byproduct_links.
     """
 
-    marginal_cost = float(biomass_cfg["marginal_cost"])
+    marginal_cost = float(biomass_cfg["marginal_values_usd_per_tonne"])
     marginal_cost *= constants.USD_TO_BNUSD / constants.TONNE_TO_MEGATONNE
     # Biomass quantities are in Mt DM throughout this module.
     biomass_carrier = "biomass"

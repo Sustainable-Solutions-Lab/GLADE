@@ -29,9 +29,9 @@ emissions:
   ghg_pricing_enabled: true
   ghg_price: 200  # USD_2024/tCO2-eq
 
-# Biomass production settings (scenarios will override marginal_cost)
+# Biomass production settings (scenarios will override marginal_values_usd_per_tonne)
 biomass:
-  marginal_cost: 50  # Default price, will be overridden by scenarios
+  marginal_values_usd_per_tonne: 50  # Default price, will be overridden by scenarios
 
 # Compare all biomass scenarios in plots
 plotting:

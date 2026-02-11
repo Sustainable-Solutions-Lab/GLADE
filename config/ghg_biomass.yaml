@@ -25,7 +25,7 @@ emissions:
 
 # Biomass production settings; individual scenarios set prices
 biomass:
-  marginal_cost: 100  # Overridden by scenario grid
+  marginal_values_usd_per_tonne: 100  # Overridden by scenario grid
 
 # Compare all combined scenarios in plots
 plotting:

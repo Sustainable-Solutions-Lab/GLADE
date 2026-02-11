@@ -204,7 +204,7 @@ This generator explores all combinations of GHG and biomass prices:
          emissions:
            ghg_price: "{ghg}"
          biomass:
-           marginal_cost: "{biomass}"
+           marginal_values_usd_per_tonne: "{biomass}"
 
 Result: 35 scenarios (7 × 5 combinations).
 
@@ -527,9 +527,9 @@ Biomass
 Per-country ``biomass`` buses track dry-matter exports to the energy sector. All foods
 listed under ``byproducts`` gain links to this bus, providing a disposal route for
 byproducts that lack feed mappings. Crops listed in ``biomass.crops`` can be diverted
-directly as feedstocks. The ``marginal_cost`` parameter (USD\ :sub:`2024` per tonne dry
-matter) sets the price received when biomass leaves the food system; set to 0 for free
-disposal.
+directly as feedstocks. The ``marginal_values_usd_per_tonne`` parameter
+(USD\ :sub:`2024` per tonne dry matter) sets the price received when biomass leaves the
+food system; set to 0 for free disposal.
 
 Animal Products
 ~~~~~~~~~~~~~~~
