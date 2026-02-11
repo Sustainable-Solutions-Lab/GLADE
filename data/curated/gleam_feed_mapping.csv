@@ -44,6 +44,8 @@ RICE,wetland-rice,crop,monogastric,Rice grain → wetland rice
 SORGHUM,sorghum,crop,monogastric,Sorghum grain
 SOY,soybean,crop,monogastric,Soybean grain
 PULSES,dry-pea,crop,monogastric,Legume grains → dry pea as representative
+PULSES,cowpea,crop,monogastric,Legume grains → cowpea
+PULSES,pigeonpea,crop,monogastric,Legume grains → pigeonpea
 CASSAVA,cassava,crop,monogastric,Cassava roots/pellets
 CASSAVA,white-potato,crop,monogastric,Potato tubers as pig feed (CASSAVA nutritional proxy)
 CASSAVA,sweet-potato,crop,monogastric,Sweet potato roots as pig feed (CASSAVA nutritional proxy)

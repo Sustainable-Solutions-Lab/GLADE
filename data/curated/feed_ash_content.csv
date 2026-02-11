@@ -20,6 +20,8 @@ barley,2.5,Barley,Barley grain
 barley-straw,6.6,Wheat straw,No barley straw in table - wheat straw as proxy for cereal straw
 cassava,4.0,Cassava pulp dried,Cassava roots
 dry-pea,3.5,Pea,Pea/legume grain
+cowpea,3.5,Pea,Legume grain (cowpea proxied with pea)
+pigeonpea,3.5,Pea,Legume grain (pigeonpea proxied with pea)
 grassland,8.6,"Grass, dehydrated",Grass hay/fresh grass
 maize,1.4,Maize,Maize grain
 maize-stover,6.6,Wheat straw,No maize stover - using wheat straw as cereal residue proxy
