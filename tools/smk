@@ -11,6 +11,44 @@ set -euo pipefail
 
 MEM_MAX=${SMK_MEM_MAX:-10G}
 
+parse_mem_limit_to_mb() {
+  local raw="$1"
+  local value unit unit_upper multiplier bytes
+
+  if [[ "$raw" =~ ^([0-9]+)([a-zA-Z]+)?$ ]]; then
+    value="${BASH_REMATCH[1]}"
+    unit="${BASH_REMATCH[2]:-}"
+  else
+    echo "[tools/smk] Invalid SMK_MEM_MAX value '${raw}'. Expected e.g. 12G or 12000M." >&2
+    exit 1
+  fi
+
+  unit_upper="${unit^^}"
+  case "$unit_upper" in
+    "") multiplier=1 ;;
+    K|KB) multiplier=1000 ;;
+    M|MB) multiplier=1000000 ;;
+    G|GB) multiplier=1000000000 ;;
+    T|TB) multiplier=1000000000000 ;;
+    KI|KIB) multiplier=1024 ;;
+    MI|MIB) multiplier=1048576 ;;
+    GI|GIB) multiplier=1073741824 ;;
+    TI|TIB) multiplier=1099511627776 ;;
+    *)
+      echo "[tools/smk] Unsupported SMK_MEM_MAX unit in '${raw}'." >&2
+      exit 1
+      ;;
+  esac
+
+  bytes=$((value * multiplier))
+  echo $(((bytes + 999999) / 1000000))
+}
+
+SMK_MEM_MB_LIMIT=""
+if [[ -n "${SMK_MEM_MAX:-}" ]]; then
+  SMK_MEM_MB_LIMIT="$(parse_mem_limit_to_mb "${SMK_MEM_MAX}")"
+fi
+
 # Run with local cache and tmp directories so coding agents don't have to write outside the project dir.
 mkdir -p "$PWD/.cache" "$PWD/.tmp"
 export XDG_CACHE_HOME=$PWD/.cache
@@ -19,6 +57,7 @@ export TMPDIR=$PWD/.tmp
 # Parse environment and jobs arguments
 PIXI_ENV=""
 has_jobs_arg=false
+has_mem_mb_resource_arg=false
 new_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -29,6 +68,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -j*)
       has_jobs_arg=true
+      new_args+=("$1")
+      shift
+      ;;
+    mem_mb=*)
+      has_mem_mb_resource_arg=true
       new_args+=("$1")
       shift
       ;;
@@ -45,6 +89,11 @@ set -- "${new_args[@]}"
 # Add -j1 if not specified
 if [ "$has_jobs_arg" = false ]; then
   set -- -j1 "$@"
+fi
+
+# Forward explicit SMK_MEM_MAX to Snakemake scheduler when no mem_mb resource is set.
+if [[ -n "$SMK_MEM_MB_LIMIT" && "$has_mem_mb_resource_arg" = false ]]; then
+  set -- --resources "mem_mb=${SMK_MEM_MB_LIMIT}" "$@"
 fi
 
 if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet true >/dev/null 2>&1; then

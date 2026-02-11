@@ -230,7 +230,7 @@ Notes:
 - **Scenario wildcard**: All model and plot targets include a `{scenario}` wildcard (e.g., `model_scen-default.nc`). Scenarios are defined in `config/scenarios.yaml` and apply configuration overrides. Available scenarios: default, H, G, HG.
 - Snakemake tracks code changes and will rerun affected rules; manual cleanup of workflow artefacts is unnecessary. You almost never have to use the `--forcerun` argument.
 - Prefer small, testable edits and validate by running the narrowest target that exercises your change.
-- `tools/smk` runs Snakemake in a systemd cgroup with a hard 10G cap and swap disabled by default; override with `SMK_MEM_MAX=12G tools/smk ...`. It also implements the `-e <environment>` flag to select the pixi environment.
+- `tools/smk` runs Snakemake in a systemd cgroup with a hard 10G cap and swap disabled by default; override with `SMK_MEM_MAX=12G tools/smk ...`. When `SMK_MEM_MAX` is set, it is also forwarded to Snakemake as a global `mem_mb` resource limit for scheduling. It also implements the `-e <environment>` flag to select the pixi environment.
 - Retrieval / downloading rules and scripts make network calls; when running such rules you will need to ask for permission to run outside the sandbox in order to get network access.
 - Never rerun retrieval rules without explicitly being instructed to do so. This includes implicit calls like an indiscriminate use of the `--forceall` Snakemake argument.
 

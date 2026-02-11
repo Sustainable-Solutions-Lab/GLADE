@@ -233,6 +233,7 @@ It is possible to run the workflow directly with the ``snakemake`` command. Food
 1. Runs Snakemake in a systemd cgroup with hard memory limit (default 10 GB), killing the process group if memory limit is exceeded
 2. Disables swap to prevent system instability
 3. Sets the ``-j1`` argument (running only one job at a time) by default unless the user sets the ``-j<n>`` option explicitly.
+4. When ``SMK_MEM_MAX`` is set, forwards it as ``--resources mem_mb=<...>`` so Snakemake scheduling respects the same memory ceiling.
 
 **Default memory limit**: 10 GB (configurable via ``SMK_MEM_MAX`` environment variable)
 
