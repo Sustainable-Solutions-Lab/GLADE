@@ -1,0 +1,198 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Combined Sensitivity Analysis Configuration
+# -------------------------------------------
+# Combines GHG price sensitivity, YLL value sensitivity, and joint GHG+YLL
+# sensitivity into a single configuration with multiple scenario groups.
+#
+# Scenario groups:
+#   - ghg_*: GHG price sensitivity (health value = 0)
+#   - yll_*: Health value sensitivity (GHG price = 0)
+#   - ghg_yll_*: Combined sensitivity (both vary together)
+
+name: "sensitivity"
+scenarios:
+  # Combined Sensitivity Analysis Scenarios
+  # ---------------------------------------
+  # Includes three sensitivity analyses:
+  #   1. GHG price sensitivity (ghg_*): vary GHG price with health value = 0
+  #   2. YLL value sensitivity (yll_*): vary health value with GHG price = 0
+  #   3. Combined sensitivity (ghg_yll_*): vary both parameters together
+
+  # Baseline scenario for calibrating piecewise food utility blocks (dual variables)
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        enabled: false
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # =============================================================================
+  # GHG Price Sensitivity (health value = 0)
+  # =============================================================================
+
+  ghg_0:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    food_utility_piecewise:
+      enabled: true
+    food_groups:
+      fix_within_group_ratios:
+        enabled: true
+    macronutrients:
+      cal:
+        equal: 2400
+
+  # =============================================================================
+  # YLL Value Sensitivity (GHG price = 0)
+  # =============================================================================
+
+  yll_0:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    food_utility_piecewise:
+      enabled: true
+    food_groups:
+      fix_within_group_ratios:
+        enabled: true
+    macronutrients:
+      cal:
+        equal: 2400
+
+  # =============================================================================
+  # Combined GHG+YLL Sensitivity (both vary together)
+  # =============================================================================
+
+  ghg_yll_0:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    food_utility_piecewise:
+      enabled: true
+    food_groups:
+      fix_within_group_ratios:
+        enabled: true
+    macronutrients:
+      cal:
+        equal: 2400
+
+  # =============================================================================
+  # Generated Scenarios
+  # =============================================================================
+
+  _generators:
+    # GHG price sensitivity: 1 to 500 USD/tCO2-eq (log-spaced, 10 points)
+    - name: ghg_{ghg}
+      parameters:
+        ghg:
+          space: log
+          start: 2
+          stop: 500
+          num: 8
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: 0
+        food_utility_piecewise:
+          enabled: true
+        food_groups:
+          fix_within_group_ratios:
+            enabled: true
+        macronutrients:
+          cal:
+            equal: 2400
+
+    # YLL value sensitivity: 5 to 100000 USD/YLL (log-spaced, 10 points)
+    - name: yll_{yll}
+      parameters:
+        yll:
+          space: log
+          start: 50
+          stop: 100000
+          num: 8
+          round: true
+      template:
+        emissions:
+          ghg_price: 0
+        health:
+          value_per_yll: "{yll}"
+        food_utility_piecewise:
+          enabled: true
+        food_groups:
+          fix_within_group_ratios:
+            enabled: true
+        macronutrients:
+          cal:
+            equal: 2400
+
+    # Combined sensitivity: both parameters vary together (log-spaced, 10 points each)
+    - name: ghg_yll_{ghg}
+      mode: zip
+      parameters:
+        ghg:
+          space: log
+          start: 2
+          stop: 500
+          num: 8
+          round: true
+        yll:
+          space: log
+          start: 50
+          stop: 100000
+          num: 8
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: "{yll}"
+        food_utility_piecewise:
+          enabled: true
+        food_groups:
+          fix_within_group_ratios:
+            enabled: true
+        macronutrients:
+          cal:
+            equal: 2400
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+
+animal_products:
+  # Use regionalized feed efficiency values
+  feed_efficiency_regions: null
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  options_gurobi:
+    Method: 2
+    MIPGap: 0.001
+    MIPFocus: 2
+    VarBranch: 0

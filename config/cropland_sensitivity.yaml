@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Cropland Utilization Sensitivity Analysis Configuration
+# --------------------------------------------------------
+# Evaluates how varying the maximum allowable cropland utilization
+# fraction (land.regional_limit) affects model results.
+# Tests 5 values: 0.1, 0.3, 0.5, 0.7, 1.0
+
+name: "cropland_sensitivity"
+scenarios:
+  # Cropland Utilization Fraction Sensitivity Scenarios
+  # ----------------------------------------------------
+  # Uses _generators DSL to vary land.regional_limit from 0.1 to 1.0.
+  # Based on the "test" scenario from opt config.
+
+  baseline:
+    # Fixed consumption to extract consumer values (dual variables)
+    validation:
+      enforce_baseline_diet: true
+    food_incentives:
+      enabled: false
+    health:
+      value_per_yll: 0
+    emissions:
+      ghg_price: 0
+    # Note: no constraint on caloric intake
+
+  _generators:
+    - name: land_limit_{limit}
+      parameters:
+        limit:
+          values: [0.1, 0.3, 0.5, 0.7, 1.0]
+          name_format: "lambda x: int(x * 100)"
+      template:
+        land:
+          regional_limit: "{limit}"
+        food_incentives:
+          enabled: true
+        health:
+          enabled: true
+          value_per_yll: 5000
+        emissions:
+          ghg_price: 200
+        macronutrients:
+          cal:
+            equal: 2400
+
+# Consumer values derived from baseline consumption patterns
+food_incentives:
+  sources:
+    - "results/{name}/consumer_values/values.csv"
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2

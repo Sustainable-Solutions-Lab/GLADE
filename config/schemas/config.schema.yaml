@@ -53,9 +53,10 @@ properties:
     pattern: "^[a-zA-Z0-9_-]+$"
     description: "Optional config name identifier (overrides default)"
 
-  scenario_defs:
-    type: string
-    description: "Path to scenario definitions YAML file"
+  scenarios:
+    type: object
+    additionalProperties: true
+    description: "Inline scenario definitions (overrides applied per scenario)"
 
   planning_horizon:
     type: integer
@@ -1408,7 +1409,7 @@ properties:
             items:
               type: string
               pattern: "^scen-.*"
-        description: "Scenario wildcards (suffixes after 'model_') available for comparison plots. Use 'all' to compare all scenarios defined in scenario_defs."
+        description: "Scenario wildcards (suffixes after 'model_') available for comparison plots. Use 'all' to compare all scenarios defined under the `scenarios` key."
       colors:
         type: object
         required: [crops, food_groups]

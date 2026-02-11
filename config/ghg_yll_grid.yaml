@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# GHG/YLL Grid Sensitivity Analysis
+# -----------------------------------
+# Explores all combinations of GHG price and YLL value over a 2D grid.
+
+name: "ghg_yll_grid"
+scenarios:
+  # GHG/YLL Grid Sensitivity Scenarios
+  # ------------------------------------
+  # Cartesian product of GHG prices and YLL values, producing a full 2D grid
+  # of scenarios exploring all combinations.
+
+  # Baseline scenario for calibrating piecewise food utility blocks (dual variables)
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        enabled: false
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # =============================================================================
+  # Generated Scenarios (full grid)
+  # =============================================================================
+
+  _generators:
+    - name: ghg{ghg}_yll{yll}
+      mode: grid
+      parameters:
+        ghg:
+          space: log
+          start: 2
+          stop: 500
+          num: 8
+          round: true
+        yll:
+          space: log
+          start: 50
+          stop: 100000
+          num: 8
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: "{yll}"
+        food_utility_piecewise:
+          enabled: true
+        food_groups:
+          fix_within_group_ratios:
+            enabled: true
+        macronutrients:
+          cal:
+            equal: 2400
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+
+animal_products:
+  # Use regionalized feed efficiency values
+  feed_efficiency_regions: null
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  options_gurobi:
+    Method: 2
+    MIPGap: 0.001
+    MIPFocus: 2
+    VarBranch: 0

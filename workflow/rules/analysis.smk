@@ -123,17 +123,8 @@ rule extract_objective_breakdown:
 
 
 def _sensitivity_generator(wildcards):
-    """Extract the single sensitivity generator from scenario_defs."""
-    import yaml
-
-    scenario_defs_path = config.get("scenario_defs")
-    if not scenario_defs_path:
-        raise ValueError(
-            "scenario_defs not configured; cannot compute sensitivity indices"
-        )
-
-    with open(scenario_defs_path, "r", encoding="utf-8") as f:
-        raw_defs = yaml.safe_load(f) or {}
+    """Extract the single sensitivity generator from config scenarios."""
+    raw_defs = config.get("scenarios") or {}
 
     generators = [
         gen
@@ -141,10 +132,10 @@ def _sensitivity_generator(wildcards):
         if gen.get("mode") == "sensitivity"
     ]
     if not generators:
-        raise ValueError("No sensitivity generator found in scenario_defs")
+        raise ValueError("No sensitivity generator found in scenarios")
     if len(generators) > 1:
         raise ValueError(
-            "Multiple sensitivity generators found in scenario_defs. "
+            "Multiple sensitivity generators found in scenarios. "
             "Only one sensitivity generator per config is currently supported."
         )
     return generators[0]

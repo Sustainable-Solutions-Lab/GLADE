@@ -61,7 +61,7 @@ rule calibrate_food_utility_blocks:
 # Consumer values comparison scenarios (from scenario definitions)
 CV_SCENARIOS = list_scenarios()
 if not CV_SCENARIOS:
-    raise ValueError("Missing scenario_defs in config for consumer values workflow")
+    raise ValueError("Missing scenarios in config for consumer values workflow")
 
 
 def consumer_values_comparison_inputs(wildcards):

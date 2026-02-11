@@ -8,12 +8,12 @@ plotting_cfg = config.get("plotting", {})
 food_group_colors = plotting_cfg.get("colors", {}).get("food_groups", {})
 comparison_scenarios = plotting_cfg["comparison_scenarios"]
 
-# Expand "all" to all scenario names from scenario_defs
+# Expand "all" to all scenario names from config
 if comparison_scenarios == "all":
     scenario_names = list_scenarios()
     if not scenario_names:
         raise ValueError(
-            "Cannot use comparison_scenarios='all' without scenario_defs defined in config"
+            "Cannot use comparison_scenarios='all' without scenarios defined in config"
         )
     comparison_scenarios = [f"scen-{name}" for name in scenario_names]
 

@@ -7,7 +7,19 @@
 # Scenarios defined in biomass_scenarios.yaml vary biomass prices from 0 to 200 USD/tonne
 
 name: "biomass"
-scenario_defs: "config/biomass_scenarios.yaml"
+scenarios:
+  # Biomass Price Sensitivity Analysis Scenarios
+  # ---------------------------------------------
+  # Uses _generators DSL to vary biomass values (USD_2024/tonne dry matter).
+
+  _generators:
+    - name: biomass_{cost}
+      parameters:
+        cost:
+          values: [0, 25, 50, 75, 100, 150, 200]
+      template:
+        biomass:
+          marginal_values_usd_per_tonne: "{cost}"
 
 # Use coarser spatial aggregation for faster processing
 aggregation:

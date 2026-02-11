@@ -3,26 +3,92 @@
 # SPDX-License-Identifier: CC-BY-4.0
 
 name: "current_yields"
-scenario_defs: "config/current_yields_scenarios.yaml"
+scenarios:
+  baseline:
+    # Fixed consumption to extract consumer values (dual variables)
+    validation:
+      enforce_baseline_diet: true
+    food_incentives:
+      enabled: false
+    health:
+      value_per_yll: 0
+    emissions:
+      ghg_price: 0
+    # Note: no constraint on caloric intake
 
-# Consumer values derived from baseline consumption patterns
-food_incentives:
-  sources:
-    - "results/{name}/consumer_values/values.csv"
+  default:
+    food_utility_piecewise:
+      enabled: true
+    health:
+      enabled: true
+      value_per_yll: 5000
+    emissions:
+      ghg_price: 200
+    macronutrients:
+      cal:
+        equal: 2400  # kcal/person/day
+
+  # =============================================================================
+  # Food utility sensitivity: vary decline_factor and n_blocks (grid)
+  # =============================================================================
+
+  _generators:
+    # Priced scenarios (yll=5000, ghg=200)
+    - name: util_d{decay}_b{blocks}
+      mode: grid
+      parameters:
+        decay:
+          values: [0.5, 0.7, 0.9]
+          name_format: "lambda x: str(x).replace('.', '')"
+        blocks:
+          values: [2, 4, 8]
+      template:
+        food_utility_piecewise:
+          enabled: true
+          decline_factor: "{decay}"
+          n_blocks: "{blocks}"
+        health:
+          enabled: true
+          value_per_yll: 5000
+        emissions:
+          ghg_price: 200
+        macronutrients:
+          cal:
+            equal: 2400
+
+    # Base scenarios (yll=0, ghg=0)
+    - name: util_d{decay}_b{blocks}_base
+      mode: grid
+      parameters:
+        decay:
+          values: [0.5, 0.7, 0.9]
+          name_format: "lambda x: str(x).replace('.', '')"
+        blocks:
+          values: [2, 4, 8]
+      template:
+        food_utility_piecewise:
+          enabled: true
+          decline_factor: "{decay}"
+          n_blocks: "{blocks}"
+        health:
+          value_per_yll: 0
+        emissions:
+          ghg_price: 0
+        macronutrients:
+          cal:
+            equal: 2400
 
 validation:
   use_actual_yields: true
-
-food_groups:
-  fix_within_group_ratios:
-    enabled: true
-    reference_year: 2018
 
 animal_products:
   # Use regionalized feed efficiency values
   feed_efficiency_regions: null
 
+plotting:
+  comparison_scenarios: "all"
+
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 1
+  threads: 2

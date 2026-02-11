@@ -134,15 +134,11 @@ def load_scenario_defs(project_root: Path, config_name: str) -> dict:
 
     from scenario_generators import expand_scenario_defs
 
-    # Load main config to get scenario_defs path
     config_path = project_root / "config" / f"{config_name}.yaml"
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
-    scenario_defs_path = project_root / config["scenario_defs"]
-    with open(scenario_defs_path) as f:
-        raw_defs = yaml.safe_load(f)
-
+    raw_defs = config.get("scenarios") or {}
     return expand_scenario_defs(raw_defs)
 
 

@@ -7,7 +7,21 @@
 
 name: "test"
 
-scenario_defs: "tests/config/test_scenarios.yaml"
+scenarios:
+  # Toy scenarios for pytest integration tests.
+  # Subset of production scenarios to exercise key code paths.
+
+  default:
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: false
+
+  G:
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: true
 
 aggregation:
   regions:

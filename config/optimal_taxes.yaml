@@ -10,7 +10,69 @@
 # 3. Extracts dual variables as optimal Pigouvian taxes/subsidies
 
 name: "optimal_taxes"
-scenario_defs: "config/optimal_taxes_scenarios.yaml"
+scenarios:
+  # Optimal Taxes/Subsidies Workflow Scenarios
+  # ------------------------------------------
+  # Workflow:
+  # 0. "baseline": Fixed consumption, no health/GHG - used to extract consumer values
+  # 1. "optimize": Free consumption with health/GHG objectives - derives optimal consumption
+  # 2. "extract_taxes": Fixed consumption (from optimize), production costs only - extracts duals as taxes
+  # 3. "apply_taxes": Production costs only with taxes/subsidies applied in objective
+
+  baseline:
+    # Fixed consumption to extract consumer values (dual variables)
+    validation:
+      enforce_baseline_diet: true
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: false
+
+  optimize:
+    # Stage 1: Free consumption optimization with health/GHG enabled
+    # Resulting consumption patterns represent the health/GHG-optimal diet
+    food_incentives:
+      enabled: true
+      sources:
+      - "results/{name}/consumer_values/values.csv"
+    health:
+      enabled: true
+    emissions:
+      ghg_pricing_enabled: true
+    macronutrients:
+      cal:
+        equal: 2400    # kcal/person/day
+
+  extract_taxes:
+    # Stage 2: Production costs only with fixed consumption from Stage 1
+    # Dual variables of consumption constraints = optimal Pigouvian taxes/subsidies
+    # Note: consumption is fixed via food_groups.equal_by_country_source
+    food_incentives:
+      enabled: true
+      sources:
+      - "results/{name}/consumer_values/values.csv"
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: false
+    food_groups:
+      equal_by_country_source: "results/{name}/optimal_taxes/optimal_consumption.csv"
+
+  apply_taxes:
+    # Stage 3: Production costs only with taxes/subsidies applied in objective
+    # Uses the same calorie constraint as Stage 1 to make diets comparable.
+    food_incentives:
+      enabled: true
+      sources:
+      - "results/{name}/consumer_values/values.csv"
+      - "results/{name}/optimal_taxes/taxes.csv"
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: false
+    macronutrients:
+      cal:
+        equal: 2400    # kcal/person/day
 
 # Enable the optimal taxes workflow; this just triggers a special config validation
 optimal_taxes:

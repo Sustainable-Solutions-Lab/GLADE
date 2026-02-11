@@ -4,10 +4,6 @@
 
 """Validation checks for consumer values configuration."""
 
-from pathlib import Path
-
-import yaml
-
 
 def _consumer_values_enabled(config: dict, scenario_defs: dict) -> bool:
     def has_consumer_values_sources(cfg: dict) -> bool:
@@ -31,30 +27,14 @@ def _consumer_values_enabled(config: dict, scenario_defs: dict) -> bool:
     return False
 
 
-def validate_consumer_values(config: dict, project_root: Path) -> None:
+def validate_consumer_values(config: dict, _project_root=None) -> None:
     """Ensure consumer values runs have a baseline scenario defined."""
-    scenario_defs_path = config.get("scenario_defs")
-    if not scenario_defs_path:
-        if _consumer_values_enabled(config, {}):
-            raise ValueError(
-                "consumer values incentives enabled but scenario_defs is not configured; "
-                "a baseline scenario is required"
-            )
-        return
-
-    scenario_defs_file = project_root / scenario_defs_path
-    if not scenario_defs_file.exists():
-        raise FileNotFoundError(
-            f"scenario_defs not found at '{scenario_defs_file.as_posix()}'"
-        )
-
-    with open(scenario_defs_file, encoding="utf-8") as f:
-        scenario_defs = yaml.safe_load(f) or {}
+    scenario_defs = config.get("scenarios") or {}
 
     if not _consumer_values_enabled(config, scenario_defs):
         return
 
     if "baseline" not in scenario_defs:
         raise ValueError(
-            "consumer values incentives enabled but scenario_defs does not define a 'baseline' scenario"
+            "consumer values incentives enabled but scenarios does not define a 'baseline' scenario"
         )

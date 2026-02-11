@@ -11,7 +11,6 @@ import copy
 import csv
 import hashlib
 import json
-import yaml
 
 from scenario_generators import expand_scenario_defs
 
@@ -28,21 +27,16 @@ def _recursive_update(target, source):
 
 
 def load_scenario_defs():
-    """Load scenario definitions from the configured scenario_defs path."""
+    """Load scenario definitions from the config's `scenarios` key."""
     global _SCENARIO_CACHE
     if _SCENARIO_CACHE is None:
-        path = config.get("scenario_defs")
-        if path:
-            with open(path, "r", encoding="utf-8") as f:
-                raw_defs = yaml.safe_load(f) or {}
-            _SCENARIO_CACHE = expand_scenario_defs(raw_defs)
-        else:
-            _SCENARIO_CACHE = {}
+        raw_defs = config.get("scenarios") or {}
+        _SCENARIO_CACHE = expand_scenario_defs(raw_defs)
     return _SCENARIO_CACHE
 
 
 def list_scenarios():
-    """Return the scenario names from scenario_defs."""
+    """Return the scenario names from the `scenarios` config key."""
     return list(load_scenario_defs().keys())
 
 
@@ -68,7 +62,7 @@ def get_effective_config(scenario_name):
 
 def scenario_override_hash(scenario_name):
     """Return a stable hash of scenario overrides."""
-    # Snakemake does not track scenario_defs changes; this hash exists only to force
+    # Snakemake does not track scenario changes; this hash exists only to force
     # correct reruns when scenario definitions are edited.
     if not scenario_name:
         overrides = {}

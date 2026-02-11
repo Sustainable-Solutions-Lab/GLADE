@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: CC-BY-4.0
 
 name: "validation"
-scenario_defs: "config/validation_scenarios.yaml"
+scenarios:
+  default: {}
 
 planning_horizon: 2020
 
@@ -15,7 +16,7 @@ validation:
   disable_spared_grassland: true
   slack_marginal_cost: 10
   grassland_yield_multiplier: 1.2
-  feed_efficiency_multiplier: 1.2
+  feed_efficiency_multiplier: 1.15
 
 water:
   supply_scenario: current_use

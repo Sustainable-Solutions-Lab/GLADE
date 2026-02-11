@@ -169,7 +169,7 @@ rule build_model:
         ],
         netcdf=lambda w: get_effective_config(w.scenario)["netcdf"],
         sensitivity=lambda w: get_effective_config(w.scenario)["sensitivity"],
-        # Only used to force correct reruns when scenario_defs changes.
+        # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="<results>/{name}/build/model_scen-{scenario}.nc",
@@ -331,7 +331,7 @@ rule solve_model:
             "food_groups"
         ]["fix_within_group_ratios"],
         sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
-        # Only used to force correct reruns when scenario_defs changes.
+        # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",

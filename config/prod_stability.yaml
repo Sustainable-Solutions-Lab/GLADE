@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+name: "prod_stability"
+scenarios:
+  # Production stability (L1 penalty) sensitivity analysis
+  # Two sets: with and without health/emissions pricing
+
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_incentives:
+      enabled: false
+    health:
+      value_per_yll: 0
+    emissions:
+      ghg_price: 0
+
+  _generators:
+    # L1 cost sweep with health + emissions pricing (yll=5000, ghg=200)
+    - name: l1_{cost}_priced
+      parameters:
+        cost:
+          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
+          name_format: "lambda x: str(x).replace('.', 'p')"
+      template:
+        food_utility_piecewise:
+          enabled: true
+        validation:
+          production_stability:
+            enabled: true
+            penalty_mode: "l1"
+            l1_cost: "{cost}"
+        health:
+          enabled: true
+          value_per_yll: 5000
+        emissions:
+          ghg_price: 200
+        macronutrients:
+          cal:
+            equal: 2400
+
+    # L1 cost sweep without health/emissions pricing (yll=0, ghg=0)
+    - name: l1_{cost}_base
+      parameters:
+        cost:
+          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
+          name_format: "lambda x: str(x).replace('.', 'p')"
+      template:
+        food_utility_piecewise:
+          enabled: true
+        validation:
+          production_stability:
+            enabled: true
+            penalty_mode: "l1"
+            l1_cost: "{cost}"
+        health:
+          value_per_yll: 0
+        emissions:
+          ghg_price: 0
+        macronutrients:
+          cal:
+            equal: 2400
+
+validation:
+  use_actual_yields: true
+
+animal_products:
+  # Use regionalized feed efficiency values
+  feed_efficiency_regions: null
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2

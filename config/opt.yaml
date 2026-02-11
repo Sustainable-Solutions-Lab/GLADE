@@ -4,13 +4,30 @@
 
 name: "opt"
 
-macronutrients:
-  cal:
-    min: 2400    # kcal/person/day
+scenarios:
+  baseline:
+    # Fixed consumption to extract consumer values (dual variables)
+    validation:
+      enforce_baseline_diet: true
+    food_incentives:
+      enabled: false
+    health:
+      value_per_yll: 0
+    emissions:
+      ghg_price: 0
+    # Note: no constraint on caloric intake
 
-health:
-  enabled: true
-  value_per_yll: 50000  # USD_2024 per year of life lost; overridden by scenarios
+  default:
+    food_utility_piecewise:
+      enabled: true
+    health:
+      enabled: true
+      value_per_yll: 5000
+    emissions:
+      ghg_price: 200
+    macronutrients:
+      cal:
+        equal: 2400  # kcal/person/day
 
 solving:
   solver: "gurobi"

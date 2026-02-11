@@ -7,8 +7,6 @@
 from pathlib import Path
 import sys
 
-import yaml
-
 # Add workflow directory to path for imports
 _workflow_dir = Path(__file__).parent.parent
 if str(_workflow_dir) not in sys.path:
@@ -28,26 +26,8 @@ def _recursive_update(target: dict, source: dict) -> dict:
 
 
 def load_scenarios(config: dict) -> dict:
-    """Load scenario definitions from the file specified in the config."""
-    scenario_path = config.get("scenario_defs")
-    if not scenario_path:
-        raise ValueError("Config key 'scenario_defs' must be set to use scenarios.")
-
-    # Resolve path relative to project root (assuming script runs in working dir or subfolder)
-    # We try to find the file.
-    path = Path(scenario_path)
-    if not path.exists():
-        # Fallback if running from a subdirectory
-        path = Path("../") / scenario_path
-
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Scenario definitions file not found at {scenario_path}"
-        )
-
-    with open(path, encoding="utf-8") as f:
-        raw_defs = yaml.safe_load(f)
-
+    """Load scenario definitions from the config's `scenarios` key."""
+    raw_defs = config.get("scenarios") or {}
     return expand_scenario_defs(raw_defs)
 
 

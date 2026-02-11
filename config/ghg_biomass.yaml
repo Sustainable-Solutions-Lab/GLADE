@@ -7,7 +7,26 @@
 # and biomass prices (0–200 USD/tonne dry matter).
 
 name: "ghg_biomass"
-scenario_defs: "config/ghg_biomass_scenarios.yaml"
+scenarios:
+  # Joint GHG Price and Biomass Price Sensitivity Scenarios
+  # --------------------------------------------------------
+  # Uses _generators DSL to create a grid of GHG prices (0-300 USD_2024/tCO2-eq)
+  # and biomass prices (0-200 USD_2024/tonne dry matter).
+
+  _generators:
+    - name: ghg{ghg}_biomass{biomass}
+      mode: grid
+      parameters:
+        ghg:
+          values: [0, 50, 100, 150, 200, 250, 300]
+        biomass:
+          values: [0, 50, 100, 150, 200]
+      template:
+        emissions:
+          ghg_pricing_enabled: true
+          ghg_price: "{ghg}"
+        biomass:
+          marginal_values_usd_per_tonne: "{biomass}"
 
 # Use coarser spatial aggregation for faster processing
 aggregation:

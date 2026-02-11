@@ -4,7 +4,37 @@
 
 # Default configuration - override in project-specific configs
 # --- section: scenario_metadata ---
-scenario_defs: "config/scenarios.yaml"
+scenarios:
+  # Scenario Presets
+  # ----------------
+  # Each key represents a named scenario that can be activated via the
+  # {scenario} wildcard in Snakemake (e.g., model_scen-HighGHG.nc).
+  # The values are configuration overrides applied recursively on top
+  # of the default configuration.
+
+  default:
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: false
+
+  H:
+    health:
+      enabled: true
+    emissions:
+      ghg_pricing_enabled: false
+
+  G:
+    health:
+      enabled: false
+    emissions:
+      ghg_pricing_enabled: true
+
+  HG:
+    health:
+      enabled: true
+    emissions:
+      ghg_pricing_enabled: true
 planning_horizon: 2030
 currency_base_year: 2024  # Base year for inflation-adjusted USD values
 
@@ -985,7 +1015,7 @@ solving:
     solver: "choose"
     mip_rel_gap: 0.001  # align relative gap with gurobi setting
   runtime: 5  # Maximum solver runtime in minutes (used by SLURM)
-  mem_mb: 4200  # Maximum solver memory in MB (used by SLURM)
+  mem_mb: 6000  # Maximum solve_model memory in MB (used by SLURM)
 
 # --- section: plotting ---
 plotting:
