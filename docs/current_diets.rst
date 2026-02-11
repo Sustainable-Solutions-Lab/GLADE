@@ -49,7 +49,7 @@ Weight Conventions
 
 GDD reports all dietary intake values in **grams per day using "as consumed" weights** [Miller2021]_. This means:
 
-* **Fresh vegetables and fruits**: Reported in fresh weight (e.g., a raw apple, fresh tomato)
+* **Fresh vegetables and fruits**: Reported in fresh weight (e.g., a fresh banana, fresh tomato)
 * **Grains**: Reported in cooked weight (e.g., cooked rice, prepared bread)
 * **Dairy**: Reported as **total milk equivalents**, which includes milk, yogurt, cheese and other dairy products converted to their milk equivalent weight
 * **Meats**: Reported in cooked/prepared weight
@@ -264,7 +264,7 @@ Baseline Diet Estimation
 
 The dietary intake pipeline described above produces **food-group-level**
 totals (e.g., "fruits: 145 g/day in the USA"). The model, however, operates
-at the level of individual foods (e.g., apple, banana, citrus). The baseline
+at the level of individual foods (e.g., banana, citrus). The baseline
 diet estimation algorithm bridges this gap by combining food-group totals with
 FAOSTAT item-level supply data to produce **per-food, per-country** consumption
 estimates.
@@ -486,7 +486,7 @@ The output file ``processing/{name}/baseline_diet.csv`` contains one row per
    * - ``country``
      - ISO 3166-1 alpha-3 country code
    * - ``food``
-     - Model food name (e.g., ``apple``, ``rice-white``, ``cowpea``)
+     - Model food name (e.g., ``banana``, ``rice-white``, ``cowpea``)
    * - ``food_group``
      - Food group to which the food belongs
    * - ``consumption_g_per_day``

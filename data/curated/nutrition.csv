@@ -1,8 +1,4 @@
 food,nutrient,unit,value
-apple,cal,kcal/100g,52.1
-apple,carb,g/100g,13.81
-apple,fat,g/100g,0.17
-apple,protein,g/100g,0.26
 banana,cal,kcal/100g,88.67
 banana,carb,g/100g,22.84
 banana,fat,g/100g,0.33
@@ -39,6 +35,10 @@ coconut,cal,kcal/100g,353.97
 coconut,carb,g/100g,15.23
 coconut,fat,g/100g,33.49
 coconut,protein,g/100g,3.33
+coconut-oil,cal,kcal/100g,891.49
+coconut-oil,carb,g/100g,0.0
+coconut-oil,fat,g/100g,99.06
+coconut-oil,protein,g/100g,0.0
 cowpea,cal,kcal/100g,336.04
 cowpea,carb,g/100g,60.03
 cowpea,fat,g/100g,1.26
@@ -79,6 +79,10 @@ groundnut,cal,kcal/100g,567.4
 groundnut,carb,g/100g,16.13
 groundnut,fat,g/100g,49.24
 groundnut,protein,g/100g,25.8
+groundnut-oil,cal,kcal/100g,884.08
+groundnut-oil,carb,g/100g,0.0
+groundnut-oil,fat,g/100g,100.0
+groundnut-oil,protein,g/100g,0.0
 maize,cal,kcal/100g,364.96
 maize,carb,g/100g,74.26
 maize,fat,g/100g,4.74
@@ -147,6 +151,10 @@ rye,cal,kcal/100g,337.95
 rye,carb,g/100g,75.86
 rye,fat,g/100g,1.63
 rye,protein,g/100g,10.34
+sesame-oil,cal,kcal/100g,884.08
+sesame-oil,carb,g/100g,0.0
+sesame-oil,fat,g/100g,100.0
+sesame-oil,protein,g/100g,0.0
 sesame-seed,cal,kcal/100g,572.9
 sesame-seed,carb,g/100g,23.45
 sesame-seed,fat,g/100g,49.67
