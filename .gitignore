@@ -10,6 +10,7 @@ notebooks/*
 !notebooks/sensitivity_utils.py
 !notebooks/*_sensitivity.ipynb
 logs
+benchmarks
 data/downloads/*
 **/__pycache__
 *.egg-info/
