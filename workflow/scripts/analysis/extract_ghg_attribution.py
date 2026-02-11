@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Extract GHG intensity and totals by food and country.
+"""Extract consumption-attributed GHG intensity and totals by food and country.
 
 This script computes consumption-attributed GHG emissions by tracing emissions
 through trade and processing networks back to production using flow-based
@@ -12,8 +12,8 @@ Uses food_consumption.csv from extract_statistics for consumption amounts,
 avoiding duplicate extraction of consumption data from the network.
 
 Outputs:
-- ghg_intensity.csv: Intensity at the food level (kgCO2e/kg, USD/t)
-- ghg_totals.csv: Total emissions by country and food_group (MtCO2eq)
+- ghg_attribution.csv: Intensity at the food level (kgCO2e/kg, USD/t)
+- ghg_attribution_totals.csv: Total emissions by country and food_group (MtCO2eq)
 """
 
 import logging

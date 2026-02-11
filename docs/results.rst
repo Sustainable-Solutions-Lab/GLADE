@@ -28,8 +28,9 @@ The various output files are structured as follows::
     │       ├── animal_production.csv   # Livestock production
     │       ├── food_consumption.csv    # Consumption by food
     │       ├── food_group_consumption.csv  # Consumption by food group
-    │       ├── ghg_intensity.csv       # GHG intensity by food
-    │       ├── ghg_totals.csv          # Total GHG by country/food group
+    │       ├── ghg_attribution.csv      # Consumption-attributed GHG intensity by food
+    │       ├── ghg_attribution_totals.csv  # Total attributed GHG by country/food group
+    │       ├── net_emissions.csv       # Net GHG emissions by gas
     │       ├── health_marginals.csv    # Marginal health impacts by food group
     │       ├── health_totals.csv       # Total YLL by health cluster
     │       └── objective_breakdown.csv # Cost categories breakdown

@@ -161,14 +161,14 @@ Running the GHG Extraction
 
 .. code-block:: bash
 
-   # Extract GHG intensity for a scenario
+   # Extract consumption-attributed GHG intensity for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/ghg_intensity.csv
+       results/{name}/analysis/scen-default/ghg_attribution.csv
 
 Output files:
 
-``results/{name}/analysis/scen-{scenario}/ghg_intensity.csv``
-   Per-country, per-food GHG intensity including:
+``results/{name}/analysis/scen-{scenario}/ghg_attribution.csv``
+   Per-country, per-food consumption-attributed GHG intensity including:
 
    .. csv-table::
       :header: Column, Type, Unit, Description
@@ -180,8 +180,8 @@ Output files:
       ``ghg_kgco2e_per_kg``, float, kgCO2e/kg, "GHG intensity"
       ``ghg_usd_per_t``, float, USD/t, "Monetized GHG damage"
 
-``results/{name}/analysis/scen-{scenario}/ghg_totals.csv``
-   Total GHG emissions by country and food group:
+``results/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv``
+   Total consumption-attributed GHG emissions by country and food group:
 
    .. csv-table::
       :header: Column, Type, Unit, Description
@@ -189,6 +189,28 @@ Output files:
       ``country``, string, —, "ISO 3166-1 alpha-3 country code"
       ``food_group``, string, —, "Food group"
       ``ghg_mtco2eq``, float, MtCO2eq, "Total emissions attributed to consumption"
+
+Net Emissions
+-------------
+
+The net emissions extraction reads the solved network's emission aggregation
+links directly, providing the absolute net GHG balance including negative
+emissions from spared land sequestration.
+
+.. code-block:: bash
+
+   # Extract net emissions for a scenario
+   tools/smk -j4 --configfile config/<name>.yaml -- \
+       results/{name}/analysis/scen-default/net_emissions.csv
+
+``results/{name}/analysis/scen-{scenario}/net_emissions.csv``
+   Net GHG emissions per gas and total:
+
+   .. csv-table::
+      :header: Column, Type, Unit, Description
+
+      ``gas``, string, —, "Gas type (co2, ch4, n2o, total)"
+      ``net_mtco2eq``, float, MtCO2eq, "Net emissions in CO2 equivalents"
 
 Health Impacts
 --------------

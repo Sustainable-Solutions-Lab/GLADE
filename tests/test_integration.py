@@ -34,15 +34,19 @@ def test_build_solve_analyze(results_dir):
     """
     run_snakemake_target(
         "results/test/analysis/scen-default/crop_production.csv",
-        "results/test/analysis/scen-default/ghg_intensity.csv",
-        "results/test/analysis/scen-default/ghg_totals.csv",
+        "results/test/analysis/scen-default/ghg_attribution.csv",
+        "results/test/analysis/scen-default/ghg_attribution_totals.csv",
+        "results/test/analysis/scen-default/net_emissions.csv",
         "results/test/analysis/scen-default/objective_breakdown.csv",
     )
 
     assert (results_dir / "solved" / "model_scen-default.nc").exists()
     assert (results_dir / "analysis" / "scen-default" / "crop_production.csv").exists()
-    assert (results_dir / "analysis" / "scen-default" / "ghg_intensity.csv").exists()
-    assert (results_dir / "analysis" / "scen-default" / "ghg_totals.csv").exists()
+    assert (results_dir / "analysis" / "scen-default" / "ghg_attribution.csv").exists()
+    assert (
+        results_dir / "analysis" / "scen-default" / "ghg_attribution_totals.csv"
+    ).exists()
+    assert (results_dir / "analysis" / "scen-default" / "net_emissions.csv").exists()
     assert (
         results_dir / "analysis" / "scen-default" / "objective_breakdown.csv"
     ).exists()

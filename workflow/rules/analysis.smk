@@ -23,8 +23,8 @@ rule prepare_faostat_emissions:
         "../scripts/prepare_faostat_emissions.py"
 
 
-rule extract_ghg_intensity:
-    """Extract GHG intensity and totals by food and country."""
+rule extract_ghg_attribution:
+    """Extract consumption-attributed GHG intensity and totals by food and country."""
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",
         food_groups="data/curated/food_groups.csv",
@@ -34,19 +34,38 @@ rule extract_ghg_intensity:
         ch4_gwp=config["emissions"]["ch4_to_co2_factor"],
         n2o_gwp=config["emissions"]["n2o_to_co2_factor"],
     output:
-        csv="<results>/{name}/analysis/scen-{scenario}/ghg_intensity.csv",
-        totals="<results>/{name}/analysis/scen-{scenario}/ghg_totals.csv",
+        csv="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.csv",
+        totals="<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv",
     group:
         "model_core"
     resources:
         runtime="1m",
         mem_mb=950,
     log:
-        "<logs>/{name}/extract_ghg_intensity_scen-{scenario}.log",
+        "<logs>/{name}/extract_ghg_attribution_scen-{scenario}.log",
     benchmark:
-        "<benchmarks>/{name}/extract_ghg_intensity_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/extract_ghg_attribution_scen-{scenario}.tsv"
     script:
-        "../scripts/analysis/extract_ghg_intensity.py"
+        "../scripts/analysis/extract_ghg_attribution.py"
+
+
+rule extract_net_emissions:
+    """Extract net GHG emissions from emission aggregation links."""
+    input:
+        network="<results>/{name}/solved/model_scen-{scenario}.nc",
+    output:
+        csv="<results>/{name}/analysis/scen-{scenario}/net_emissions.csv",
+    group:
+        "model_core"
+    resources:
+        runtime="1m",
+        mem_mb=950,
+    log:
+        "<logs>/{name}/extract_net_emissions_scen-{scenario}.log",
+    benchmark:
+        "<benchmarks>/{name}/extract_net_emissions_scen-{scenario}.tsv"
+    script:
+        "../scripts/analysis/extract_net_emissions.py"
 
 
 rule extract_health_impacts:
@@ -162,7 +181,7 @@ def _sensitivity_scenario_inputs(wildcards):
         inputs.extend(
             [
                 f"<results>/{wildcards.name}/analysis/scen-{scenario}/objective_breakdown.csv",
-                f"<results>/{wildcards.name}/analysis/scen-{scenario}/ghg_totals.csv",
+                f"<results>/{wildcards.name}/analysis/scen-{scenario}/net_emissions.csv",
                 f"<results>/{wildcards.name}/analysis/scen-{scenario}/land_use.csv",
                 f"<results>/{wildcards.name}/analysis/scen-{scenario}/health_totals.csv",
             ]

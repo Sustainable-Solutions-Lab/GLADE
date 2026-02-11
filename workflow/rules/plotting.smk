@@ -610,7 +610,7 @@ rule plot_consumption_balance:
 rule plot_ghg_health_global:
     """Plot consumption-weighted global average GHG and YLL by food group."""
     input:
-        ghg_intensity="<results>/{name}/analysis/scen-{scenario}/ghg_intensity.csv",
+        ghg_intensity="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.csv",
         health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.csv",
     output:
         ghg_pdf="<results>/{name}/plots/scen-{scenario}/marginal_ghg_global.pdf",

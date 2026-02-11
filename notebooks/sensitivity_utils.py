@@ -13,6 +13,7 @@ import re
 import sys
 
 import matplotlib.pyplot as plt
+from matplotlib.transforms import blended_transform_factory
 import numpy as np
 import pandas as pd
 import pypsa
@@ -693,11 +694,11 @@ def load_ghg_from_statistics(
     config_name: str,
     param_name: str = "param_value",
 ) -> pd.DataFrame:
-    """Load GHG emissions data from extract_ghg_intensity rule outputs.
+    """Load GHG emissions data from extract_ghg_attribution rule outputs.
 
-    Reads pre-computed ghg_intensity.csv files from the workflow analysis outputs.
+    Reads pre-computed ghg_attribution.csv files from the workflow analysis outputs.
 
-    Requires running the Snakemake extract_ghg_intensity rule first.
+    Requires running the Snakemake extract_ghg_attribution rule first.
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
@@ -713,12 +714,12 @@ def load_ghg_from_statistics(
     data = {}
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "ghg_intensity.csv"
+            results_dir / "analysis" / f"scen-{scenario_name}" / "ghg_attribution.csv"
         )
         if not csv_path.exists():
             raise FileNotFoundError(
-                f"GHG intensity file not found: {csv_path}. "
-                f"Run the extract_ghg_intensity rule first."
+                f"GHG attribution file not found: {csv_path}. "
+                f"Run the extract_ghg_attribution rule first."
             )
 
         df = pd.read_csv(csv_path)
@@ -737,6 +738,49 @@ def load_ghg_from_statistics(
     return result.sort_index()
 
 
+def load_net_emissions(
+    scenarios: list[tuple[float, str, Path]],
+    project_root: Path,
+    config_name: str,
+    param_name: str = "param_value",
+) -> pd.Series:
+    """Load total net GHG emissions from extract_net_emissions rule outputs.
+
+    Reads pre-computed net_emissions.csv files and returns the total net
+    emissions (including negative emissions from spared land sequestration).
+
+    Args:
+        scenarios: List of (param_value, scenario_name, network_path) tuples
+        project_root: Path to project root directory
+        config_name: Name of the config
+        param_name: Name for the parameter (used as index name)
+
+    Returns:
+        Series with param_value as index and net emissions in GtCO2eq as values.
+    """
+    results_dir = project_root / "results" / config_name
+
+    data = {}
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+        )
+        if not csv_path.exists():
+            raise FileNotFoundError(
+                f"Net emissions file not found: {csv_path}. "
+                f"Run the extract_net_emissions rule first."
+            )
+
+        df = pd.read_csv(csv_path)
+        total_row = df[df["gas"] == "total"]
+        # Convert MtCO2eq to GtCO2eq
+        data[param_value] = total_row["net_mtco2eq"].iloc[0] / 1000
+
+    result = pd.Series(data, name="net_ghg_gtco2eq")
+    result.index.name = param_name
+    return result.sort_index()
+
+
 def load_objective_from_statistics(
     scenarios: list[tuple[float, str, Path]],
     project_root: Path,
@@ -747,12 +791,12 @@ def load_objective_from_statistics(
 ) -> pd.DataFrame:
     """Load objective breakdown from extract_objective_breakdown rule outputs.
 
-    Reads pre-computed objective_breakdown.csv, ghg_totals.csv, and
+    Reads pre-computed objective_breakdown.csv, ghg_attribution_totals.csv, and
     health_totals.csv files. Recomputes health/GHG costs at constant prices
     for comparability across scenarios with different price assumptions.
 
     Requires running the Snakemake analysis rules first (extract_objective_breakdown,
-    extract_ghg_intensity, extract_health_impacts).
+    extract_ghg_attribution, extract_health_impacts).
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
@@ -788,8 +832,8 @@ def load_objective_from_statistics(
             if col not in skip_cols:
                 row[col] = obj_df[col].iloc[0]
 
-        # Load GHG totals and compute cost at constant price
-        ghg_totals_path = analysis_dir / "ghg_totals.csv"
+        # Load GHG attribution totals and compute cost at constant price
+        ghg_totals_path = analysis_dir / "ghg_attribution_totals.csv"
         if ghg_totals_path.exists():
             ghg_totals_df = pd.read_csv(ghg_totals_path)
             ghg_mtco2eq = ghg_totals_df["ghg_mtco2eq"].sum()
@@ -1340,6 +1384,7 @@ def plot_stacked_sensitivity(
     min_height_for_label: float = 30,
     y_max: float | None = None,
     pretty_names: dict | None = None,
+    labels_right: bool = False,
 ):
     """Create a stacked area plot with logarithmic x-axis.
 
@@ -1357,6 +1402,7 @@ def plot_stacked_sensitivity(
         min_height_for_label: Minimum height to show a label
         y_max: Maximum y-axis value (optional)
         pretty_names: Custom pretty names dict (falls back to PRETTY_NAMES)
+        labels_right: Place labels at the right edge of the plot (default False)
     """
     if label_x_positions is None:
         label_x_positions = {}
@@ -1409,47 +1455,111 @@ def plot_stacked_sensitivity(
         "edgecolor": "none",
     }
 
-    log_x_min, log_x_max = np.log10(x_min), np.log10(x_max)
-    margin_frac = 0.15
-    log_margin = (log_x_max - log_x_min) * margin_frac
+    if labels_right:
+        # Place labels at the right edge with vertical spreading
+        right_idx = -1
+        entries = []
+        for i, group in enumerate(groups):
+            if group in label_skip:
+                continue
+            if y_smooth[group].max() < min_height_for_label:
+                continue
+            y_bot = y_stacks[i][right_idx]
+            y_top = y_stacks[i + 1][right_idx]
+            y_mid = (y_bot + y_top) / 2
+            label_text = pretty_names.get(group, PRETTY_NAMES.get(group, group))
+            entries.append((y_mid, label_text, group))
 
-    for i, group in enumerate(groups):
-        if group in label_skip:
-            continue
+        entries.sort(key=lambda e: e[0])
 
-        heights = y_smooth[group]
-        max_height = heights.max()
+        # Spread overlapping labels apart
+        total_height = y_stacks[-1].max()
+        min_spacing = total_height * 0.05
+        y_positions = [e[0] for e in entries]
+        for _ in range(100):
+            moved = False
+            for j in range(1, len(y_positions)):
+                gap = y_positions[j] - y_positions[j - 1]
+                if gap < min_spacing:
+                    push = (min_spacing - gap) / 2
+                    y_positions[j - 1] -= push
+                    y_positions[j] += push
+                    moved = True
+            # Clamp to stay within visible range
+            for j in range(len(y_positions)):
+                y_positions[j] = max(min_spacing / 2, y_positions[j])
+                y_positions[j] = min(total_height - min_spacing / 2, y_positions[j])
+            if not moved:
+                break
 
-        if max_height < min_height_for_label:
-            continue
+        trans = blended_transform_factory(ax.transAxes, ax.transData)
+        dot_x = 1.04
+        text_x = 1.07
+        for (_, label_text, group), y_pos in zip(entries, y_positions):
+            ax.plot(
+                dot_x,
+                y_pos,
+                "o",
+                color=colors[group],
+                markersize=3,
+                transform=trans,
+                clip_on=False,
+            )
+            ax.text(
+                text_x,
+                y_pos,
+                label_text,
+                transform=trans,
+                ha="left",
+                va="center",
+                fontsize=label_fontsize,
+                fontweight="bold",
+                clip_on=False,
+            )
+    else:
+        log_x_min, log_x_max = np.log10(x_min), np.log10(x_max)
+        margin_frac = 0.15
+        log_margin = (log_x_max - log_x_min) * margin_frac
 
-        max_idx = np.argmax(heights)
-        x_pos = x_smooth[max_idx]
+        for i, group in enumerate(groups):
+            if group in label_skip:
+                continue
 
-        if group in label_x_positions:
-            x_pos = label_x_positions[group]
+            heights = y_smooth[group]
+            max_height = heights.max()
 
-        log_x_pos = np.log10(x_pos)
-        log_x_pos = np.clip(log_x_pos, log_x_min + log_margin, log_x_max - log_margin)
-        x_pos = 10**log_x_pos
+            if max_height < min_height_for_label:
+                continue
 
-        idx = np.argmin(np.abs(x_smooth - x_pos))
-        y_bottom = y_stacks[i]
-        y_top = y_stacks[i + 1]
-        y_pos = (y_bottom[idx] + y_top[idx]) / 2
+            max_idx = np.argmax(heights)
+            x_pos = x_smooth[max_idx]
 
-        label_text = pretty_names.get(group, PRETTY_NAMES.get(group, group))
-        ax.text(
-            x_pos,
-            y_pos,
-            label_text,
-            ha="center",
-            va="center",
-            fontsize=label_fontsize,
-            fontweight="bold",
-            color="black",
-            bbox=bbox_style,
-        )
+            if group in label_x_positions:
+                x_pos = label_x_positions[group]
+
+            log_x_pos = np.log10(x_pos)
+            log_x_pos = np.clip(
+                log_x_pos, log_x_min + log_margin, log_x_max - log_margin
+            )
+            x_pos = 10**log_x_pos
+
+            idx = np.argmin(np.abs(x_smooth - x_pos))
+            y_bottom = y_stacks[i]
+            y_top = y_stacks[i + 1]
+            y_pos = (y_bottom[idx] + y_top[idx]) / 2
+
+            label_text = pretty_names.get(group, PRETTY_NAMES.get(group, group))
+            ax.text(
+                x_pos,
+                y_pos,
+                label_text,
+                ha="center",
+                va="center",
+                fontsize=label_fontsize,
+                fontweight="bold",
+                color="black",
+                bbox=bbox_style,
+            )
 
     ax.set_xscale("log")
     ax.set_xlabel(xlabel, fontsize=FONTSIZE_AXIS_LABEL)
@@ -1786,15 +1896,17 @@ def load_grid_data_from_statistics(
         analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
 
         obj_df = pd.read_csv(analysis_dir / "objective_breakdown.csv")
-        ghg_df = pd.read_csv(analysis_dir / "ghg_totals.csv")
+        net_df = pd.read_csv(analysis_dir / "net_emissions.csv")
         health_df = pd.read_csv(analysis_dir / "health_totals.csv")
+
+        ghg_mtco2eq = net_df.loc[net_df["gas"] == "total", "net_mtco2eq"].iloc[0]
 
         grid_data[(ghg_price, yll_value)] = {
             "crop_production": obj_df["crop_production"].iloc[0],
             "trade": obj_df["trade"].iloc[0],
             "consumer_values": obj_df.get("consumer_values", pd.Series([0.0])).iloc[0],
             "fertilizer": obj_df["fertilizer"].iloc[0],
-            "ghg_mtco2eq": ghg_df["ghg_mtco2eq"].sum(),
+            "ghg_mtco2eq": ghg_mtco2eq,
             "health_myll": health_df["yll_myll"].sum(),
             "total_objective": obj_df.iloc[0].sum(),
         }

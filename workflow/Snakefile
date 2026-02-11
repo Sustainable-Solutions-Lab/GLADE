@@ -149,8 +149,9 @@ ANALYZE_ALL_SCENARIOS_TARGETS = [
     for scenario in list_scenarios()
     for output in [
         "crop_production.csv",
-        "ghg_intensity.csv",
-        "ghg_totals.csv",
+        "ghg_attribution.csv",
+        "ghg_attribution_totals.csv",
+        "net_emissions.csv",
         "health_marginals.csv",
         "health_totals.csv",
         "objective_breakdown.csv",

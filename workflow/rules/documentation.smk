@@ -483,7 +483,7 @@ rule doc_fig_workflow_rulegraph:
 rule doc_fig_analysis_ghg_health:
     """Generate GHG and health impact bar charts for documentation."""
     input:
-        ghg_intensity=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/ghg_intensity.csv",
+        ghg_intensity=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/ghg_attribution.csv",
         health_marginals=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.csv",
         style=DOC_FIG_STYLE,
     output:
