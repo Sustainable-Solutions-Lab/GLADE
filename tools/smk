@@ -8,6 +8,7 @@ set -euo pipefail
 # Minimal wrapper: run Snakemake under a 10G cgroup cap, no swap.
 # Customize with SMK_MEM_MAX env (e.g., SMK_MEM_MAX=8G).
 # Use -e ENV or --env ENV to select pixi environment.
+# Use --slurm to submit jobs via SLURM (uses ~/.config/snakemake/slurm profile).
 
 MEM_MAX=${SMK_MEM_MAX:-10G}
 
@@ -57,8 +58,9 @@ mkdir -p "$CACHE_ROOT" "$TMP_ROOT"
 export XDG_CACHE_HOME="$CACHE_ROOT"
 export TMPDIR="$TMP_ROOT"
 
-# Parse environment and jobs arguments
+# Parse environment, jobs, and slurm arguments
 PIXI_ENV=""
+USE_SLURM=false
 has_jobs_arg=false
 has_mem_mb_resource_arg=false
 new_args=()
@@ -68,6 +70,10 @@ while [[ $# -gt 0 ]]; do
     -e|--env)
       PIXI_ENV="$2"
       shift 2
+      ;;
+    --slurm)
+      USE_SLURM=true
+      shift
       ;;
     -j*)
       has_jobs_arg=true
@@ -86,7 +92,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Restore args without consumed -e/--env
+# Restore args without consumed flags
 set -- "${new_args[@]}"
 
 # Add -j1 if not specified
@@ -96,6 +102,21 @@ fi
 
 # Use compact logger by default
 set -- --logger compact --show-failed-logs "$@"
+
+# When using SLURM, pass the profile and skip the local memory cap.
+if [ "$USE_SLURM" = true ]; then
+  SLURM_PROFILE="${SMK_SLURM_PROFILE:-$HOME/.config/snakemake/slurm}"
+  if [ ! -f "$SLURM_PROFILE/config.yaml" ]; then
+    echo "[tools/smk] SLURM profile not found at $SLURM_PROFILE/config.yaml" >&2
+    exit 1
+  fi
+  set -- --profile "$SLURM_PROFILE" "$@"
+  if [ -n "$PIXI_ENV" ]; then
+    exec pixi run -e "$PIXI_ENV" snakemake "$@"
+  else
+    exec pixi run snakemake "$@"
+  fi
+fi
 
 # Forward explicit SMK_MEM_MAX to Snakemake scheduler when no mem_mb resource is set.
 if [[ -n "$SMK_MEM_MB_LIMIT" && "$has_mem_mb_resource_arg" = false ]]; then
