@@ -173,6 +173,8 @@ rule build_model:
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="results/{name}/build/model_scen-{scenario}.nc",
+    group:
+        "model_core"
     resources:
         runtime="1m",
         mem_mb=900,
@@ -334,6 +336,8 @@ rule solve_model:
     output:
         network="results/{name}/solved/model_scen-{scenario}.nc",
     retries: 2
+    group:
+        "model_core"
     resources:
         runtime=solve_model_runtime,
         mem_mb=solve_model_mem_mb,

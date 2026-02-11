@@ -24,6 +24,8 @@ rule extract_consumer_values:
         network="results/{name}/solved/model_scen-baseline.nc",
     output:
         consumer_values="results/{name}/consumer_values/values.csv",
+    group:
+        "prep"
     resources:
         runtime="5m",
         mem_mb=2000,
@@ -48,6 +50,8 @@ rule calibrate_food_utility_blocks:
         total_width_multiplier=config["food_utility_piecewise"][
             "total_width_multiplier"
         ],
+    group:
+        "prep"
     log:
         "logs/{name}/calibrate_food_utility_blocks.log",
     script:
@@ -88,6 +92,8 @@ rule plot_consumer_values_comparison:
     params:
         scenarios=CV_SCENARIOS,
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,

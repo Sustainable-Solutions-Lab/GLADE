@@ -20,6 +20,8 @@ rule prepare_fertilizer_application_rates:
         mapping="data/curated/ifa_fubc_crop_mapping.csv",
     output:
         "processing/{name}/fertilizer_application_rates.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -39,6 +41,8 @@ rule derive_global_fertilizer_rates:
         crops=config["crops"],
     output:
         "processing/{name}/global_fertilizer_n_rates.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -56,6 +60,8 @@ rule extract_waterfootprint_appendix:
     output:
         shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
         excel="data/downloads/Report53_Appendix/Report53-Appendices-VI-IX.xls",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -75,6 +81,8 @@ rule process_blue_water_availability:
         excel=rules.extract_waterfootprint_appendix.output.excel,
     output:
         "processing/{name}/water/blue_water_availability.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -100,6 +108,8 @@ rule build_region_water_sustainable:
     output:
         monthly_region="processing/{name}/water/sustainable/monthly_region_water.csv",
         region_growing="processing/{name}/water/sustainable/region_growing_season_water.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=300,
@@ -122,6 +132,8 @@ rule build_region_water_current_use:
     output:
         monthly_region="processing/{name}/water/current_use/monthly_region_water.csv",
         region_growing="processing/{name}/water/current_use/region_growing_season_water.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=400,
@@ -154,6 +166,8 @@ rule select_water_scenario:
     output:
         monthly_region="processing/{name}/water/monthly_region_water.csv",
         region_growing="processing/{name}/water/region_growing_season_water.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=400,

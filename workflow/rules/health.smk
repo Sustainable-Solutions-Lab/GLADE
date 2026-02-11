@@ -42,6 +42,8 @@ rule prepare_gbd_mortality:
         reference_year=config["health"]["reference_year"],
     output:
         mortality="processing/{name}/health/gbd_mortality_rates.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -63,6 +65,8 @@ rule prepare_relative_risks:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
         relative_risks="processing/{name}/health/relative_risks.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -81,6 +85,8 @@ rule prepare_life_table:
         reference_year=config["health"]["reference_year"],
     output:
         life_table="processing/{name}/health/life_table.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=3800,
@@ -119,6 +125,8 @@ rule prepare_health_costs:
         clusters="processing/{name}/health/scen-{scenario}/country_clusters.csv",
         cluster_risk_baseline="processing/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
         derived_tmrel="processing/{name}/health/scen-{scenario}/derived_tmrel.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=400,

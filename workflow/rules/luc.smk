@@ -76,6 +76,8 @@ rule build_luc_grid:
         yield_raster=_grid_yield_raster,
     output:
         grid=f"{shared_luc_dir}/grid.nc",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=250,
@@ -98,6 +100,8 @@ rule resample_luicube_grassland:
         notrees_nppeco="data/downloads/luicube/GL-notrees_NPPeco.tif",
     output:
         f"{shared_luc_dir}/luicube_grassland.nc",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=4200,
@@ -115,6 +119,8 @@ rule resample_land_cover:
         land_cover="data/downloads/land_cover_lccs_class.nc",
     output:
         fractions=f"{shared_luc_dir}/land_cover_resampled.nc",
+    group:
+        "prep"
     resources:
         runtime="5m",
         mem_mb=700,
@@ -132,6 +138,8 @@ rule resample_regrowth:
         regrowth_raw="data/downloads/forest_carbon_accumulation_griscom_1km.tif",
     output:
         regrowth=f"{shared_luc_dir}/regrowth_resampled.nc",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1300,
@@ -157,6 +165,8 @@ rule prepare_luc_inputs:
         agb="processing/{name}/luc/agb.nc",
         soc="processing/{name}/luc/soc.nc",
         regrowth="processing/{name}/luc/regrowth.nc",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1200,
@@ -175,6 +185,8 @@ rule build_current_grassland_area:
         regions="processing/{name}/regions.geojson",
     output:
         current_area="processing/{name}/luc/current_grassland_area_by_class.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=800,
@@ -203,6 +215,8 @@ if config["luc"]["cropland_source"] == "gaez":
             irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        group:
+            "prep"
         resources:
             runtime="1m",
             mem_mb=850,
@@ -224,6 +238,8 @@ else:
             regions="processing/{name}/regions.geojson",
         output:
             cropland_area="processing/{name}/cropland_baseline_by_class.csv",
+        group:
+            "prep"
         resources:
             runtime="1m",
             mem_mb=850,
@@ -244,6 +260,8 @@ rule build_grazing_only_land:
         suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
     output:
         grazing_area="processing/{name}/land_grazing_only_by_class.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1800,
@@ -271,6 +289,8 @@ rule build_luc_carbon_coefficients:
         pulses="processing/{name}/luc/pulses.nc",
         annualized="processing/{name}/luc/annualized.nc",
         coefficients="processing/{name}/luc/luc_carbon_coefficients.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=2400,

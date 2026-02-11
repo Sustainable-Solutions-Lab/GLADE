@@ -20,6 +20,8 @@ rule prepare_population:
     output:
         population="processing/{name}/population.csv",
         population_age="processing/{name}/population_age.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1800,
@@ -39,6 +41,8 @@ rule simplify_gadm:
         simplify_tolerance_km=config["aggregation"]["simplify_tolerance_km"],
     output:
         "processing/shared/gadm-simplified.gpkg",
+    group:
+        "prep"
     resources:
         runtime="3m",
         mem_mb=8500,
@@ -60,6 +64,8 @@ rule build_regions:
         countries=config["countries"],
     output:
         "processing/{name}/regions.geojson",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=400,
@@ -82,6 +88,8 @@ rule compute_resource_classes:
         resource_class_quantiles=config["aggregation"]["resource_class_quantiles"],
     output:
         classes="processing/{name}/resource_classes.nc",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1900,
@@ -104,6 +112,8 @@ rule aggregate_class_areas:
         irrigated_area_source=config["aggregation"]["irrigated_area_source"],
     output:
         "processing/{name}/land_area_by_class.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=3000,

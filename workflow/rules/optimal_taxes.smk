@@ -27,6 +27,8 @@ rule extract_optimal_consumption:
         food_groups="data/curated/food_groups.csv",
     output:
         consumption="results/{name}/optimal_taxes/optimal_consumption.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
@@ -49,6 +51,8 @@ rule extract_optimal_taxes:
         network="results/{name}/solved/model_scen-extract_taxes.nc",
     output:
         taxes="results/{name}/optimal_taxes/taxes.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
@@ -69,6 +73,8 @@ rule plot_optimal_taxes:
         taxes_csv="results/{name}/plots/optimal_taxes/taxes_by_food_group.csv",
     params:
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
@@ -99,6 +105,8 @@ rule plot_optimal_taxes_diet_comparison:
             "Taxes in objective",
         ],
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,

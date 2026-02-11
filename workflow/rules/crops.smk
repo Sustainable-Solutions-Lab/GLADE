@@ -21,6 +21,8 @@ rule prepare_faostat_crop_production:
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "processing/{name}/faostat_crop_production.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=2900,
@@ -40,6 +42,8 @@ rule prepare_fao_edible_portion:
         crops=config["crops"],
     output:
         edible_portion="processing/{name}/fao_edible_portion.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -85,6 +89,8 @@ rule build_crop_yields:
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
         "processing/{name}/crop_yields/{crop}_{water_supply}.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1300,
@@ -109,6 +115,8 @@ rule build_harvested_area_gaez:
         non_food_crops=config["non_food_crops"],
     output:
         "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=700,
@@ -171,6 +179,8 @@ rule build_multi_cropping:
     output:
         eligible="processing/{name}/multi_cropping/eligible_area.csv",
         yields="processing/{name}/multi_cropping/cycle_yields.csv",
+    group:
+        "prep"
     resources:
         runtime="2m",
         mem_mb=5500,
@@ -189,6 +199,8 @@ rule build_grassland_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/isimip_grassland_yields.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1500,
@@ -207,6 +219,8 @@ rule build_luicube_grassland_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/luicube_grassland_yields.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=2600,
@@ -226,6 +240,8 @@ rule merge_grassland_yields:
         isimip_utilization_rate=config["grazing"]["isimip_utilization_rate"],
     output:
         "processing/{name}/grassland_yields.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -252,6 +268,8 @@ rule build_crop_residue_yields:
         regions="processing/{name}/regions.geojson",
     output:
         "processing/{name}/crop_residue_yields/{crop}.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=250,

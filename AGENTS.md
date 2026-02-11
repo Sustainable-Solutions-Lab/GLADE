@@ -277,6 +277,8 @@ pixi run -e dev pytest -v         # verbose output
 ### Git guidelines
 
 - AI Agents (Claude, Codex, etc) should not add themselves as co-authors to commits unless explicitly asked for.
+- Use commit messages in `<type>: <imperative summary>` format (e.g., `fix: handle empty scenario list`).
+- Prefer one of these types: `feat`, `fix`, `refactor`, `docs`, `tests`, `chore`, `perf`.
 
 ## Configuration Validation
 

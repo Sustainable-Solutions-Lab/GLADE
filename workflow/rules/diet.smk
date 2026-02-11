@@ -20,6 +20,8 @@ rule prepare_gdd_dietary_intake:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
         diet="processing/{name}/gdd_dietary_intake.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -47,6 +49,8 @@ rule prepare_faostat_fbs_items:
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="processing/{name}/faostat_fbs_items.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=3200,
@@ -76,6 +80,8 @@ rule prepare_faostat_gdd_supplements:
         ],
     output:
         supply="processing/{name}/faostat_gdd_supplements.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=3300,
@@ -94,6 +100,8 @@ rule merge_dietary_sources:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
     output:
         diet="processing/{name}/dietary_intake.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -120,6 +128,8 @@ rule prepare_food_loss_waste:
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         food_loss_waste="processing/{name}/food_loss_waste.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=3300,
@@ -143,6 +153,8 @@ rule prepare_gbd_dietary_risk_exposure:
         reference_year=config["diet"]["baseline_reference_year"],
     output:
         exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=500,
@@ -178,6 +190,8 @@ rule estimate_baseline_diet:
         fbs_override_foods=config["diet"]["fbs_override_foods"],
     output:
         baseline_diet="processing/{name}/baseline_diet.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,

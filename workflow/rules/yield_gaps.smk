@@ -23,6 +23,8 @@ rule yield_gap_by_country:
         countries=config["countries"],
     output:
         csv="processing/{name}/yield_gap_by_country_{crop}_{water_supply}.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
@@ -49,6 +51,8 @@ rule average_yield_gap_by_country:
         yield_gap_country_csvs,
     output:
         csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,

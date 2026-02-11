@@ -10,6 +10,8 @@ rule prepare_faostat_emissions:
         "processing/{name}/faostat_emissions.csv",
     params:
         year=config["validation"]["production_year"],
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=1400,
@@ -34,6 +36,8 @@ rule extract_ghg_intensity:
     output:
         csv="results/{name}/analysis/scen-{scenario}/ghg_intensity.csv",
         totals="results/{name}/analysis/scen-{scenario}/ghg_totals.csv",
+    group:
+        "model_core"
     resources:
         runtime="1m",
         mem_mb=950,
@@ -63,6 +67,8 @@ rule extract_health_impacts:
     output:
         marginals="results/{name}/analysis/scen-{scenario}/health_marginals.csv",
         totals="results/{name}/analysis/scen-{scenario}/health_totals.csv",
+    group:
+        "model_core"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -84,6 +90,8 @@ rule extract_statistics:
         animal_production="results/{name}/analysis/scen-{scenario}/animal_production.csv",
         food_consumption="results/{name}/analysis/scen-{scenario}/food_consumption.csv",
         food_group_consumption="results/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
+    group:
+        "model_core"
     resources:
         runtime="1m",
         mem_mb=950,
@@ -101,6 +109,8 @@ rule extract_objective_breakdown:
         network="results/{name}/solved/model_scen-{scenario}.nc",
     output:
         objective_breakdown="results/{name}/analysis/scen-{scenario}/objective_breakdown.csv",
+    group:
+        "model_core"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -214,6 +224,8 @@ rule compute_pce_sensitivity:
         global_indices="results/{name}/analysis/pce_global_indices_{prefix}.csv",
         conditional_indices="results/{name}/analysis/pce_conditional_indices_{prefix}.csv",
         validation="results/{name}/analysis/pce_validation_{prefix}.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,

@@ -69,6 +69,8 @@ rule doc_fig_intro_global_coverage:
     output:
         svg="docs/_static/figures/intro_global_coverage.svg",
         png="docs/_static/figures/intro_global_coverage.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -87,6 +89,8 @@ rule doc_fig_model_topology:
     output:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -105,6 +109,8 @@ rule doc_fig_land_flows:
     output:
         svg="docs/_static/figures/land_flows.svg",
         png="docs/_static/figures/land_flows.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -125,6 +131,8 @@ rule doc_fig_land_resource_classes:
     output:
         svg="docs/_static/figures/land_resource_classes.svg",
         png="docs/_static/figures/land_resource_classes.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -148,6 +156,8 @@ rule doc_fig_environment_luc_inputs:
     output:
         svg="docs/_static/figures/environment_luc_inputs.svg",
         png="docs/_static/figures/environment_luc_inputs.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -168,6 +178,8 @@ rule doc_fig_environment_luc_lef:
     output:
         svg="docs/_static/figures/environment_luc_lef.svg",
         png="docs/_static/figures/environment_luc_lef.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -189,6 +201,8 @@ rule doc_fig_crop_yield:
     output:
         svg="docs/_static/figures/crop_yield_{crop}.svg",
         png="docs/_static/figures/crop_yield_{crop}.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -212,6 +226,8 @@ rule doc_fig_crop_yield_resource_class:
     params:
         resource_class_1=1,
         resource_class_2=2,
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -234,6 +250,8 @@ rule doc_fig_multi_cropping_potential_rainfed:
         png="docs/_static/figures/multi_cropping_potential_rainfed.png",
     params:
         water_supply="rainfed",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -256,6 +274,8 @@ rule doc_fig_multi_cropping_potential_irrigated:
         png="docs/_static/figures/multi_cropping_potential_irrigated.png",
     params:
         water_supply="irrigated",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -276,6 +296,8 @@ rule doc_fig_water_basin_availability:
     output:
         svg="docs/_static/figures/water_basin_availability.svg",
         png="docs/_static/figures/water_basin_availability.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -296,6 +318,8 @@ rule doc_fig_water_region_availability:
     output:
         svg="docs/_static/figures/water_region_availability.svg",
         png="docs/_static/figures/water_region_availability.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -316,6 +340,8 @@ rule doc_fig_irrigated_land_fraction:
     output:
         svg="docs/_static/figures/irrigated_land_fraction.svg",
         png="docs/_static/figures/irrigated_land_fraction.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -336,6 +362,8 @@ rule doc_fig_grassland_yield:
     output:
         svg="docs/_static/figures/grassland_yield.svg",
         png="docs/_static/figures/grassland_yield.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -358,6 +386,8 @@ rule doc_fig_grazing_only_land_fraction:
     output:
         svg="docs/_static/figures/grazing_only_land_fraction.svg",
         png="docs/_static/figures/grazing_only_land_fraction.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -379,6 +409,8 @@ rule doc_fig_trade_network:
         png="docs/_static/figures/trade_network.png",
     params:
         n_hubs=config["trade"]["hubs"],
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -394,6 +426,8 @@ rule doc_fig_workflow_rulegraph_dot:
     """Generate workflow dependency graph in DOT format from Snakemake."""
     output:
         dot="docs/_static/figures/workflow_rulegraph_raw.dot",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -413,6 +447,8 @@ rule doc_fig_workflow_rulegraph_styled:
         dot="docs/_static/figures/workflow_rulegraph_raw.dot",
     output:
         dot="docs/_static/figures/workflow_rulegraph.dot",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -431,6 +467,8 @@ rule doc_fig_workflow_rulegraph:
     output:
         svg="docs/_static/figures/workflow_rulegraph.svg",
         png="docs/_static/figures/workflow_rulegraph.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -453,6 +491,8 @@ rule doc_fig_analysis_ghg_health:
         ghg_png="docs/_static/figures/analysis_marginal_ghg.png",
         yll_svg="docs/_static/figures/analysis_marginal_yll.svg",
         yll_png="docs/_static/figures/analysis_marginal_yll.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -473,6 +513,8 @@ rule doc_fig_health_clusters:
     output:
         svg="docs/_static/figures/health_clusters.svg",
         png="docs/_static/figures/health_clusters.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -495,6 +537,8 @@ rule doc_fig_health_burden:
     output:
         svg="docs/_static/figures/health_burden.svg",
         png="docs/_static/figures/health_burden.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -516,6 +560,8 @@ rule doc_fig_baseline_diet_by_region:
     output:
         svg="docs/_static/figures/baseline_diet_by_region.svg",
         png="docs/_static/figures/baseline_diet_by_region.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -536,6 +582,8 @@ rule doc_fig_baseline_diet_by_food:
     output:
         svg="docs/_static/figures/baseline_diet_by_food.svg",
         png="docs/_static/figures/baseline_diet_by_food.png",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -576,6 +624,8 @@ rule doc_fig_production_pattern_frame:
     params:
         frame_label=lambda w: TRADE_SCENARIO_LABELS[w.trade_scenario],
         bar_xmax_mha=PRODUCTION_PATTERN_BAR_XMAX,
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -596,6 +646,8 @@ rule doc_fig_production_pattern_gif:
         ),
     output:
         gif="docs/_static/figures/production_pattern.gif",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,
@@ -624,6 +676,8 @@ rule build_docs:
         glob("docs/**/*.rst", recursive=True),
     output:
         "docs/_build/html/index.html",
+    group:
+        "analysis_plot"
     resources:
         runtime="10m",
         mem_mb=2000,

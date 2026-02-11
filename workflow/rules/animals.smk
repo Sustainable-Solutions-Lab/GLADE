@@ -21,6 +21,8 @@ rule prepare_faostat_animal_production:
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "processing/{name}/faostat_animal_production.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=2800,
@@ -41,6 +43,8 @@ rule prepare_faostat_yields:
         averaging_period=config["animal_costs"]["averaging_period"],
     output:
         "processing/{name}/faostat_animal_yields.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=2800,
@@ -59,6 +63,8 @@ rule prepare_gleam_feed_properties:
     output:
         ruminant="processing/{name}/ruminant_feed_properties.csv",
         monogastric="processing/{name}/monogastric_feed_properties.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -81,6 +87,8 @@ rule categorize_feeds:
         monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
         ruminant_mapping="processing/{name}/ruminant_feed_mapping.csv",
         monogastric_mapping="processing/{name}/monogastric_feed_mapping.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -108,6 +116,8 @@ rule build_feed_to_animal_products:
         ],
         carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
         feed_proxy_map=config["animal_products"]["feed_proxy_map"],
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -129,6 +139,8 @@ rule calculate_manure_emissions:
         n2o_efs="data/curated/ipcc_manure_n2o_emission_factors.csv",
     output:
         "processing/{name}/manure_emission_factors.csv",
+    group:
+        "prep"
     resources:
         runtime="1m",
         mem_mb=200,

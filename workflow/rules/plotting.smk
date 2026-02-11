@@ -42,6 +42,8 @@ rule plot_yield_gap:
         unpack(yield_gap_raster_inputs),
     output:
         pdf="results/{name}/plots/yield_gap_{crop}_{water_supply}.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -58,6 +60,8 @@ rule plot_regions_map:
         regions="processing/{name}/regions.geojson",
     output:
         pdf="results/{name}/plots/regions_map.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=250,
@@ -75,6 +79,8 @@ rule plot_resource_classes_map:
         regions="processing/{name}/regions.geojson",
     output:
         pdf="results/{name}/plots/resource_classes_map.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1400,
@@ -93,6 +99,8 @@ rule plot_objective_breakdown:
     output:
         breakdown_pdf="results/{name}/plots/scen-{scenario}/objective_breakdown.pdf",
         breakdown_csv="results/{name}/plots/scen-{scenario}/objective_breakdown.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -111,6 +119,8 @@ rule plot_yll_global_by_cause:
     output:
         pdf="results/{name}/plots/scen-{scenario}/yll_global_by_cause.pdf",
         csv="results/{name}/plots/scen-{scenario}/yll_global_by_cause.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -147,6 +157,8 @@ rule plot_health_impacts:
         health_map_csv="results/{name}/plots/scen-{scenario}/health_risk_by_region.csv",
         health_baseline_map_pdf="results/{name}/plots/scen-{scenario}/health_baseline_map.pdf",
         health_baseline_map_csv="results/{name}/plots/scen-{scenario}/health_baseline_by_region.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -163,6 +175,8 @@ rule plot_relative_risk_curves:
         relative_risks="processing/{name}/health/relative_risks.csv",
     output:
         pdf="results/{name}/plots/relative_risk_curves.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -183,6 +197,8 @@ rule plot_crop_production_map:
         land_grazing_only="processing/{name}/land_grazing_only_by_class.csv",
     output:
         pdf="results/{name}/plots/scen-{scenario}/crop_production_map.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1400,
@@ -204,6 +220,8 @@ rule plot_crop_trade_map:
         network="results/{name}/solved/model_scen-{scenario}.nc",
     output:
         pdf="results/{name}/plots/scen-{scenario}/crop_trade_map.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -223,6 +241,8 @@ rule plot_crop_use_breakdown:
         csv="results/{name}/plots/scen-{scenario}/crop_use_breakdown.csv",
     params:
         animal_products=config["animal_products"]["include"],
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -240,6 +260,8 @@ rule plot_feed_breakdown:
     output:
         pdf="results/{name}/plots/scen-{scenario}/feed_breakdown.pdf",
         csv="results/{name}/plots/scen-{scenario}/feed_breakdown.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1100,
@@ -259,6 +281,8 @@ rule plot_food_group_slack:
         csv="results/{name}/plots/scen-{scenario}/food_group_slack.csv",
     params:
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=950,
@@ -276,6 +300,8 @@ rule plot_slack_overview:
     output:
         pdf="results/{name}/plots/scen-{scenario}/slack_overview.pdf",
         csv="results/{name}/plots/scen-{scenario}/slack_overview.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -293,6 +319,8 @@ rule plot_water_balance:
     output:
         pdf="results/{name}/plots/scen-{scenario}/water_balance.pdf",
         csv="results/{name}/plots/scen-{scenario}/water_balance.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -311,6 +339,8 @@ rule plot_water_use_map:
     output:
         pdf="results/{name}/plots/scen-{scenario}/water_use_map.pdf",
         csv="results/{name}/plots/scen-{scenario}/water_use_by_region.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1000,
@@ -330,6 +360,8 @@ rule plot_food_consumption:
         pdf="results/{name}/plots/scen-{scenario}/food_consumption.pdf",
     params:
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=250,
@@ -357,6 +389,8 @@ rule plot_food_consumption_comparison:
     params:
         wildcards=comparison_scenarios,
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -383,6 +417,8 @@ rule plot_system_cost_comparison:
         csv="results/{name}/plots/system_cost_comparison.csv",
     params:
         wildcards=comparison_scenarios,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -405,6 +441,8 @@ rule plot_food_consumption_map:
         csv="results/{name}/plots/scen-{scenario}/food_consumption_map.csv",
     params:
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=250,
@@ -431,6 +469,8 @@ rule plot_food_consumption_baseline_map:
             "baseline_reference_year", config["health"]["reference_year"]
         ),
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -463,6 +503,8 @@ rule plot_yield_map:
         supply=lambda wc: wc.water_supply,
         unit="t/ha",
         cmap="YlGn",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -480,6 +522,8 @@ rule plot_average_yield_gap_by_country:
         csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
     output:
         pdf="results/{name}/plots/yield_gap_by_country_average_{water_supply}.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -497,6 +541,8 @@ rule plot_water_value_map:
         regions="processing/{name}/regions.geojson",
     output:
         pdf="results/{name}/plots/scen-{scenario}/water_value_map.pdf",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -525,6 +571,8 @@ rule plot_emissions_breakdown:
         n2o_gwp=lambda w: get_effective_config(w.scenario)["emissions"][
             "n2o_to_co2_factor"
         ],
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=1200,
@@ -546,6 +594,8 @@ rule plot_consumption_balance:
         pdf="results/{name}/plots/scen-{scenario}/consumption_balance.pdf",
     params:
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -567,6 +617,8 @@ rule plot_ghg_health_global:
         yll_pdf="results/{name}/plots/scen-{scenario}/marginal_yll_global.pdf",
     params:
         group_colors=food_group_colors,
+    group:
+        "analysis_plot"
     resources:
         runtime="1m",
         mem_mb=200,
@@ -588,6 +640,8 @@ rule plot_luc_emissions:
         bar_pdf="results/{name}/plots/scen-{scenario}/luc_emissions_bar.pdf",
         map_pdf="results/{name}/plots/scen-{scenario}/luc_emissions_map.pdf",
         csv="results/{name}/plots/scen-{scenario}/luc_emissions.csv",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
@@ -608,6 +662,8 @@ rule plot_pce_conditional_sensitivity:
         ghg_price_pdf="results/{name}/plots/pce_conditional_s1_vs_ghg_price_{prefix}.pdf",
     params:
         metric="S1_cond",
+    group:
+        "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1000,
