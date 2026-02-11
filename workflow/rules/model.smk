@@ -10,6 +10,7 @@ along with helper functions for gathering input files.
 """
 
 import itertools
+import math
 
 
 def yield_inputs(wildcards):
@@ -271,6 +272,20 @@ def solver_options_with_threads(cfg: dict) -> dict:
     return options
 
 
+def solve_model_runtime(wildcards, attempt: int) -> int:
+    """Scale solve runtime in minutes aggressively on retries (x5 per retry)."""
+
+    base_runtime = get_effective_config(wildcards.scenario)["solving"]["runtime"]
+    return base_runtime * (5 ** (attempt - 1))
+
+
+def solve_model_mem_mb(wildcards, attempt: int) -> int:
+    """Scale solve memory moderately on retries (~30% per retry)."""
+
+    base_mem_mb = get_effective_config(wildcards.scenario)["solving"]["mem_mb"]
+    return math.ceil(base_mem_mb * (1.3 ** (attempt - 1)))
+
+
 rule solve_model:
     input:
         unpack(solve_model_inputs),
@@ -318,9 +333,10 @@ rule solve_model:
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
         network="results/{name}/solved/model_scen-{scenario}.nc",
+    retries: 2
     resources:
-        runtime=lambda w: get_effective_config(w.scenario)["solving"]["runtime"],
-        mem_mb=lambda w: get_effective_config(w.scenario)["solving"]["mem_mb"],
+        runtime=solve_model_runtime,
+        mem_mb=solve_model_mem_mb,
     log:
         "logs/{name}/solve_model_scen-{scenario}.log",
     benchmark:

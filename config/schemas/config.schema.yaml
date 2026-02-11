@@ -1362,9 +1362,9 @@ properties:
               - type: string
         description: "HiGHS solver options"
       runtime:
-        type: string
-        pattern: "^\\d+m$"
-        description: "Maximum solver runtime, e.g. '5m' (SLURM resource)"
+        type: integer
+        minimum: 1
+        description: "Maximum solver runtime in minutes (SLURM resource)"
       mem_mb:
         type: integer
         minimum: 100
