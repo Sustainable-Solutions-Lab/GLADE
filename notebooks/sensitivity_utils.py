@@ -310,11 +310,13 @@ def get_log_ticks(
     """Generate tick positions and labels for a log scale with round numbers.
 
     Creates tick marks at powers of 10 (1, 10, 100, 1000, etc.) that fall
-    within the range of the provided values.
+    within the range of the provided values. When the data includes 0, it
+    is placed at a position computed by ``log_scale_zero_position`` so that
+    it does not collide with real data points (e.g. when 1 is an actual value).
 
     Args:
         values: List of parameter values (e.g., [0, 5, 14, 38, 100, 500])
-        include_zero: Whether to include 0 at position 1 (for log scale)
+        include_zero: Whether to include 0 on the log scale
 
     Returns:
         Tuple of (tick_positions, tick_labels)
@@ -334,15 +336,20 @@ def get_log_ticks(
     ticks = []
     labels = []
 
-    # Include 0 at position 1 if requested and 0 is in the values
-    if include_zero and 0 in values:
-        ticks.append(1)
+    # Compute the zero position from the data spacing
+    has_zero = include_zero and 0 in values
+    zero_pos = None
+    if has_zero:
+        zero_pos = log_scale_zero_position(np.array(values, dtype=float))
+        ticks.append(zero_pos)
         labels.append("0")
 
-    # Add powers of 10
+    # Add powers of 10, skipping any that collide with the zero position
     for power in range(min_power, max_power + 1):
         tick_val = 10**power
         if tick_val >= min_val and tick_val <= max_val * 1.1:
+            if zero_pos is not None and tick_val == zero_pos:
+                continue
             ticks.append(tick_val)
             # Format label
             if tick_val >= 1000:
@@ -350,8 +357,19 @@ def get_log_ticks(
             else:
                 labels.append(str(int(tick_val)))
 
+    # Add the max value as an endpoint tick if it's significantly beyond the
+    # last power-of-10 tick (otherwise the rightmost data region is unlabeled)
+    real_ticks = [t for t in ticks if t != zero_pos]
+    if real_ticks and max_val > max(real_ticks) * 1.5:
+        ticks.append(max_val)
+        if max_val >= 1000:
+            labels.append(f"{int(max_val) // 1000}k")
+        else:
+            labels.append(str(int(max_val)))
+
     # Make sure we have at least the endpoints if no powers of 10 fall in range
-    if len(ticks) == 0 or (include_zero and len(ticks) == 1 and ticks[0] == 1):
+    n_real_ticks = len(ticks) - (1 if has_zero else 0)
+    if n_real_ticks == 0:
         # Add min and max values as ticks
         for val in [min_val, max_val]:
             if val not in ticks:
@@ -1358,7 +1376,8 @@ def plot_stacked_sensitivity(
     zero_pos = log_scale_zero_position(x_values)
     x_plot = np.where(x_values == 0, zero_pos, x_values)
 
-    x_min, x_max = zero_pos, x_plot.max() * 1.1
+    tick_max = max(x_ticks) if x_ticks else 0
+    x_min, x_max = zero_pos, max(x_plot.max(), tick_max) * 1.1
     x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
 
     y_smooth = {}
@@ -1498,7 +1517,8 @@ def plot_objective_sensitivity(
 
     zero_pos = log_scale_zero_position(x_values)
     x_plot = np.where(x_values == 0, zero_pos, x_values)
-    x_min, x_max = zero_pos, x_plot.max() * 1.1
+    tick_max = max(x_ticks) if x_ticks else 0
+    x_min, x_max = zero_pos, max(x_plot.max(), tick_max) * 1.1
     x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
 
     y_smooth = {}
