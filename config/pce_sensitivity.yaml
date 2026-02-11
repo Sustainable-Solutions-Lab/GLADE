@@ -12,9 +12,16 @@
 name: "pce_sensitivity"
 scenario_defs: "config/pce_sensitivity_scenarios.yaml"
 
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
 # Use validation mode for more realistic production patterns
 validation:
   use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
 
 # Enable health modeling for RR sensitivity
 health:
@@ -36,5 +43,6 @@ plotting:
 
 # Solver configuration
 solving:
-  solver: "highs"
-  threads: 4
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
