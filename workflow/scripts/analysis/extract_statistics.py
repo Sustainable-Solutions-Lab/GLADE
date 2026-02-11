@@ -166,9 +166,10 @@ def extract_crop_production(n: pypsa.Network) -> pd.DataFrame:
         groupby=["crop", "region", "country"],
         nice_names=False,
     )
-    df = production.to_frame("production_mt").reset_index()
-    df = df.dropna(subset=["crop", "region", "country"])
-    results.append(df)
+    if not production.empty:
+        df = production.to_frame("production_mt").reset_index()
+        df = df.dropna(subset=["crop", "region", "country"])
+        results.append(df)
 
     # Grassland production: output to feed bus (feed_ruminant_grassland)
     feed_bus_carriers = [
@@ -181,10 +182,11 @@ def extract_crop_production(n: pypsa.Network) -> pd.DataFrame:
         groupby=["region", "country"],
         nice_names=False,
     )
-    df = grassland.to_frame("production_mt").reset_index()
-    df = df.dropna(subset=["region", "country"])
-    df["crop"] = "grassland"
-    results.append(df[["crop", "region", "country", "production_mt"]])
+    if not grassland.empty:
+        df = grassland.to_frame("production_mt").reset_index()
+        df = df.dropna(subset=["region", "country"])
+        df["crop"] = "grassland"
+        results.append(df[["crop", "region", "country", "production_mt"]])
 
     # Multicropping: needs custom logic to lookup crop from output bus
     multi_production = _extract_multi_crop_production(n)
@@ -408,6 +410,9 @@ def extract_animal_production(n: pypsa.Network) -> pd.DataFrame:
         nice_names=False,
     )
 
+    if production.empty:
+        return pd.DataFrame(columns=["product", "country", "production_mt"])
+
     df = production.to_frame("production_mt").reset_index()
     df = df.dropna(subset=["product", "country"])
     # Also filter out 'nan' string values that might come from groupby
@@ -532,6 +537,22 @@ def _extract_consumption(
         groupby=groupby,
         nice_names=False,
     ).abs()
+
+    if consumption.empty:
+        columns = [
+            *groupby,
+            "consumption_mt",
+            "protein_mt",
+            "carb_mt",
+            "fat_mt",
+            "cal_pj",
+            "consumption_g_per_person_day",
+            "protein_g_per_person_day",
+            "carb_g_per_person_day",
+            "fat_g_per_person_day",
+            "cal_kcal_per_person_day",
+        ]
+        return pd.DataFrame(columns=columns)
 
     df = consumption.to_frame("consumption_mt").reset_index()
     df = df.dropna(subset=groupby)

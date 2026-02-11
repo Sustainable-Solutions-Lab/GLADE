@@ -23,6 +23,10 @@ scenarios:
     emissions:
       ghg_pricing_enabled: true
 
+macronutrients:
+  cal:
+    min: 2400  # kcal/person/day
+
 aggregation:
   regions:
     target_count: 200
