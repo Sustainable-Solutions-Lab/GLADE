@@ -128,6 +128,23 @@ Installation
 
    This may take a few minutes on first run as pixi downloads and configures the environment.
 
+   .. note::
+
+      **Older Linux systems (e.g. compute clusters)**: Pixi assumes a minimum glibc
+      version of 2.28 by default. If your system has an older glibc (check with
+      ``ldd --version``), dependency resolution may fail. To fix this, add a
+      ``[system-requirements]`` section to ``pixi.toml`` specifying your system's
+      glibc version:
+
+      .. code-block:: toml
+
+         [system-requirements]
+         libc = { family = "glibc", version = "2.17" }
+
+      Replace ``"2.17"`` with whatever version ``ldd --version`` reports on your
+      system. After adding this, run ``pixi update`` to re-resolve all dependencies
+      against the lower glibc constraint, then ``pixi install`` as normal.
+
 3. **Set up API credentials** for external data services:
 
    Copy the secrets template and fill in your credentials:
