@@ -17,6 +17,9 @@ The ``food-opt`` model uses `Snakemake <https://snakemake.readthedocs.io/>`__ fo
 5. **Visualization** (plots, maps, CSV exports)
 
 Each stage is defined by Snakemake rules that specify inputs, outputs, and a script or piece of code.
+Paths shown below use the default roots (``processing/``, ``results/``,
+``logs/``, ``benchmarks/``). These roots are configurable via
+``config.paths``.
 
 Validation Hook
 ---------------

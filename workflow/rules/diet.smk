@@ -19,16 +19,16 @@ rule prepare_gdd_dietary_intake:
         reference_year=config["health"]["reference_year"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
-        diet="processing/{name}/gdd_dietary_intake.csv",
+        diet="<processing>/{name}/gdd_dietary_intake.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=1000,
     log:
-        "logs/{name}/prepare_gdd_dietary_intake.log",
+        "<logs>/{name}/prepare_gdd_dietary_intake.log",
     benchmark:
-        "benchmarks/{name}/prepare_gdd_dietary_intake.tsv"
+        "<benchmarks>/{name}/prepare_gdd_dietary_intake.tsv"
     script:
         "../scripts/prepare_gdd_dietary_intake.py"
 
@@ -48,16 +48,16 @@ rule prepare_faostat_fbs_items:
         reference_year=config["diet"]["baseline_reference_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
-        fbs_items="processing/{name}/faostat_fbs_items.csv",
+        fbs_items="<processing>/{name}/faostat_fbs_items.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=3200,
     log:
-        "logs/{name}/prepare_faostat_fbs_items.log",
+        "<logs>/{name}/prepare_faostat_fbs_items.log",
     benchmark:
-        "benchmarks/{name}/prepare_faostat_fbs_items.tsv"
+        "<benchmarks>/{name}/prepare_faostat_fbs_items.tsv"
     script:
         "../scripts/prepare_faostat_fbs_items.py"
 
@@ -79,36 +79,36 @@ rule prepare_faostat_gdd_supplements:
             "meat-chicken"
         ],
     output:
-        supply="processing/{name}/faostat_gdd_supplements.csv",
+        supply="<processing>/{name}/faostat_gdd_supplements.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=3300,
     log:
-        "logs/{name}/prepare_faostat_gdd_supplements.log",
+        "<logs>/{name}/prepare_faostat_gdd_supplements.log",
     benchmark:
-        "benchmarks/{name}/prepare_faostat_gdd_supplements.tsv"
+        "<benchmarks>/{name}/prepare_faostat_gdd_supplements.tsv"
     script:
         "../scripts/prepare_faostat_gdd_supplements.py"
 
 
 rule merge_dietary_sources:
     input:
-        gdd="processing/{name}/gdd_dietary_intake.csv",
-        faostat="processing/{name}/faostat_gdd_supplements.csv",
-        food_loss_waste="processing/{name}/food_loss_waste.csv",
+        gdd="<processing>/{name}/gdd_dietary_intake.csv",
+        faostat="<processing>/{name}/faostat_gdd_supplements.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     output:
-        diet="processing/{name}/dietary_intake.csv",
+        diet="<processing>/{name}/dietary_intake.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/merge_dietary_sources.log",
+        "<logs>/{name}/merge_dietary_sources.log",
     benchmark:
-        "benchmarks/{name}/merge_dietary_sources.tsv"
+        "<benchmarks>/{name}/merge_dietary_sources.tsv"
     script:
         "../scripts/merge_dietary_sources.py"
 
@@ -116,9 +116,9 @@ rule merge_dietary_sources:
 rule prepare_food_loss_waste:
     input:
         m49="data/curated/M49-codes.csv",
-        animal_production="processing/{name}/faostat_animal_production.csv",
-        faostat_gdd_supplements="processing/{name}/faostat_gdd_supplements.csv",
-        population="processing/{name}/population.csv",
+        animal_production="<processing>/{name}/faostat_animal_production.csv",
+        faostat_gdd_supplements="<processing>/{name}/faostat_gdd_supplements.csv",
+        population="<processing>/{name}/population.csv",
         fbs_csv="data/downloads/faostat/FBS.csv",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
     params:
@@ -127,16 +127,16 @@ rule prepare_food_loss_waste:
         health_reference_year=config["health"]["reference_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
-        food_loss_waste="processing/{name}/food_loss_waste.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=3300,
     log:
-        "logs/{name}/prepare_food_loss_waste.log",
+        "<logs>/{name}/prepare_food_loss_waste.log",
     benchmark:
-        "benchmarks/{name}/prepare_food_loss_waste.tsv"
+        "<benchmarks>/{name}/prepare_food_loss_waste.tsv"
     script:
         "../scripts/prepare_food_loss_waste.py"
 
@@ -152,16 +152,16 @@ rule prepare_gbd_dietary_risk_exposure:
     params:
         reference_year=config["diet"]["baseline_reference_year"],
     output:
-        exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
+        exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=500,
     log:
-        "logs/{name}/prepare_gbd_dietary_risk_exposure.log",
+        "<logs>/{name}/prepare_gbd_dietary_risk_exposure.log",
     benchmark:
-        "benchmarks/{name}/prepare_gbd_dietary_risk_exposure.tsv"
+        "<benchmarks>/{name}/prepare_gbd_dietary_risk_exposure.tsv"
     script:
         "../scripts/prepare_gbd_dietary_risk_exposure.py"
 
@@ -173,15 +173,15 @@ rule estimate_baseline_diet:
     supply data to disaggregate group totals into per-food consumption estimates.
     """
     input:
-        dietary_intake="processing/{name}/dietary_intake.csv",
-        gbd_exposure="processing/{name}/gbd_dietary_risk_exposure.csv",
-        fbs_items="processing/{name}/faostat_fbs_items.csv",
-        crop_production="processing/{name}/faostat_crop_production.csv",
-        animal_production="processing/{name}/faostat_animal_production.csv",
+        dietary_intake="<processing>/{name}/dietary_intake.csv",
+        gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        fbs_items="<processing>/{name}/faostat_fbs_items.csv",
+        crop_production="<processing>/{name}/faostat_crop_production.csv",
+        animal_production="<processing>/{name}/faostat_animal_production.csv",
         food_item_map="data/curated/faostat_food_item_map.csv",
         qcl_resolution="data/curated/faostat_food_qcl_resolution.csv",
         food_groups="data/curated/food_groups.csv",
-        food_loss_waste="processing/{name}/food_loss_waste.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     params:
         reference_year=config["diet"]["baseline_reference_year"],
         baseline_age=config["diet"]["baseline_age"],
@@ -189,15 +189,15 @@ rule estimate_baseline_diet:
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
     output:
-        baseline_diet="processing/{name}/baseline_diet.csv",
+        baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/estimate_baseline_diet.log",
+        "<logs>/{name}/estimate_baseline_diet.log",
     benchmark:
-        "benchmarks/{name}/estimate_baseline_diet.tsv"
+        "<benchmarks>/{name}/estimate_baseline_diet.tsv"
     script:
         "../scripts/estimate_baseline_diet.py"

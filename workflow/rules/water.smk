@@ -19,37 +19,37 @@ rule prepare_fertilizer_application_rates:
         fubc_data="data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/FUBC_1_to_9_data.csv",
         mapping="data/curated/ifa_fubc_crop_mapping.csv",
     output:
-        "processing/{name}/fertilizer_application_rates.csv",
+        "<processing>/{name}/fertilizer_application_rates.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/prepare_fertilizer_application_rates.log",
+        "<logs>/{name}/prepare_fertilizer_application_rates.log",
     benchmark:
-        "benchmarks/{name}/prepare_fertilizer_application_rates.tsv"
+        "<benchmarks>/{name}/prepare_fertilizer_application_rates.tsv"
     script:
         "../scripts/prepare_fertilizer_application_rates.py"
 
 
 rule derive_global_fertilizer_rates:
     input:
-        fertilizer_rates="processing/{name}/fertilizer_application_rates.csv",
+        fertilizer_rates="<processing>/{name}/fertilizer_application_rates.csv",
     params:
         n_percentile=config["fertilizer"]["n_percentile"],
         crops=config["crops"],
     output:
-        "processing/{name}/global_fertilizer_n_rates.csv",
+        "<processing>/{name}/global_fertilizer_n_rates.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/derive_global_fertilizer_rates.log",
+        "<logs>/{name}/derive_global_fertilizer_rates.log",
     benchmark:
-        "benchmarks/{name}/derive_global_fertilizer_rates.tsv"
+        "<benchmarks>/{name}/derive_global_fertilizer_rates.tsv"
     script:
         "../scripts/derive_global_fertilizer_rates.py"
 
@@ -66,9 +66,9 @@ rule extract_waterfootprint_appendix:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/shared/extract_waterfootprint_appendix.log",
+        "<logs>/shared/extract_waterfootprint_appendix.log",
     benchmark:
-        "benchmarks/shared/extract_waterfootprint_appendix.tsv"
+        "<benchmarks>/shared/extract_waterfootprint_appendix.tsv"
     shell:
         r"""
         unzip -o {input.zip_path} -d data/downloads > {log} 2>&1
@@ -80,16 +80,16 @@ rule process_blue_water_availability:
         shapefile=rules.extract_waterfootprint_appendix.output.shapefile,
         excel=rules.extract_waterfootprint_appendix.output.excel,
     output:
-        "processing/{name}/water/blue_water_availability.csv",
+        "<processing>/{name}/water/blue_water_availability.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/process_blue_water_availability.log",
+        "<logs>/{name}/process_blue_water_availability.log",
     benchmark:
-        "benchmarks/{name}/process_blue_water_availability.tsv"
+        "<benchmarks>/{name}/process_blue_water_availability.tsv"
     script:
         "../scripts/process_blue_water_availability.py"
 
@@ -102,21 +102,21 @@ def crop_yield_file_list(w):
 rule build_region_water_sustainable:
     input:
         shapefile=rules.extract_waterfootprint_appendix.output.shapefile,
-        regions="processing/{name}/regions.geojson",
-        monthly="processing/{name}/water/blue_water_availability.csv",
+        regions="<processing>/{name}/regions.geojson",
+        monthly="<processing>/{name}/water/blue_water_availability.csv",
         crop_yields=crop_yield_file_list,
     output:
-        monthly_region="processing/{name}/water/sustainable/monthly_region_water.csv",
-        region_growing="processing/{name}/water/sustainable/region_growing_season_water.csv",
+        monthly_region="<processing>/{name}/water/sustainable/monthly_region_water.csv",
+        region_growing="<processing>/{name}/water/sustainable/region_growing_season_water.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=300,
     log:
-        "logs/{name}/build_region_water_sustainable.log",
+        "<logs>/{name}/build_region_water_sustainable.log",
     benchmark:
-        "benchmarks/{name}/build_region_water_sustainable.tsv"
+        "<benchmarks>/{name}/build_region_water_sustainable.tsv"
     script:
         "../scripts/build_region_water_availability.py"
 
@@ -125,22 +125,22 @@ rule build_region_water_sustainable:
 rule build_region_water_current_use:
     input:
         nc="data/downloads/huang_irrigation_water.nc",
-        regions="processing/{name}/regions.geojson",
+        regions="<processing>/{name}/regions.geojson",
         crop_yields=crop_yield_file_list,
     params:
         reference_year=config["water"]["huang_reference_year"],
     output:
-        monthly_region="processing/{name}/water/current_use/monthly_region_water.csv",
-        region_growing="processing/{name}/water/current_use/region_growing_season_water.csv",
+        monthly_region="<processing>/{name}/water/current_use/monthly_region_water.csv",
+        region_growing="<processing>/{name}/water/current_use/region_growing_season_water.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=400,
     log:
-        "logs/{name}/build_region_water_current_use.log",
+        "<logs>/{name}/build_region_water_current_use.log",
     benchmark:
-        "benchmarks/{name}/build_region_water_current_use.tsv"
+        "<benchmarks>/{name}/build_region_water_current_use.tsv"
     script:
         "../scripts/process_huang_irrigation_water.py"
 
@@ -148,13 +148,13 @@ rule build_region_water_current_use:
 def water_monthly_input(w):
     """Select monthly water input based on config."""
     scenario = config["water"]["supply_scenario"]
-    return f"processing/{w.name}/water/{scenario}/monthly_region_water.csv"
+    return f"<processing>/{w.name}/water/{scenario}/monthly_region_water.csv"
 
 
 def water_growing_input(w):
     """Select growing season water input based on config."""
     scenario = config["water"]["supply_scenario"]
-    return f"processing/{w.name}/water/{scenario}/region_growing_season_water.csv"
+    return f"<processing>/{w.name}/water/{scenario}/region_growing_season_water.csv"
 
 
 # Unified rule that creates symlinks to the selected water data source
@@ -164,17 +164,17 @@ rule select_water_scenario:
         monthly=water_monthly_input,
         growing=water_growing_input,
     output:
-        monthly_region="processing/{name}/water/monthly_region_water.csv",
-        region_growing="processing/{name}/water/region_growing_season_water.csv",
+        monthly_region="<processing>/{name}/water/monthly_region_water.csv",
+        region_growing="<processing>/{name}/water/region_growing_season_water.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=400,
     log:
-        "logs/{name}/select_water_scenario.log",
+        "<logs>/{name}/select_water_scenario.log",
     benchmark:
-        "benchmarks/{name}/select_water_scenario.tsv"
+        "<benchmarks>/{name}/select_water_scenario.tsv"
     run:
         import shutil
         from pathlib import Path

@@ -18,20 +18,20 @@ def yield_gap_raster_inputs(wildcards):
 rule yield_gap_by_country:
     input:
         unpack(yield_gap_raster_inputs),
-        regions="processing/{name}/regions.geojson",
+        regions="<processing>/{name}/regions.geojson",
     params:
         countries=config["countries"],
     output:
-        csv="processing/{name}/yield_gap_by_country_{crop}_{water_supply}.csv",
+        csv="<processing>/{name}/yield_gap_by_country_{crop}_{water_supply}.csv",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/yield_gap_by_country_{crop}_{water_supply}.log",
+        "<logs>/{name}/yield_gap_by_country_{crop}_{water_supply}.log",
     benchmark:
-        "benchmarks/{name}/yield_gap_by_country_{crop}_{water_supply}.tsv"
+        "<benchmarks>/{name}/yield_gap_by_country_{crop}_{water_supply}.tsv"
     script:
         "scripts/compute_yield_gap_by_country.py"
 
@@ -39,7 +39,7 @@ rule yield_gap_by_country:
 def yield_gap_country_csvs(wildcards):
     # Per-crop country CSVs produced by rule yield_gap_by_country
     return [
-        f"processing/{wildcards.name}/yield_gap_by_country_{crop}_{wildcards.water_supply}.csv"
+        f"<processing>/{wildcards.name}/yield_gap_by_country_{crop}_{wildcards.water_supply}.csv"
         for crop in config["crops"]
         if gaez_cfg["crops"][crop] in gaez_cfg["actual_yield_crops"]
     ]
@@ -50,15 +50,15 @@ rule average_yield_gap_by_country:
     input:
         yield_gap_country_csvs,
     output:
-        csv="processing/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
+        csv="<processing>/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/average_yield_gap_by_country_{water_supply}.log",
+        "<logs>/{name}/average_yield_gap_by_country_{water_supply}.log",
     benchmark:
-        "benchmarks/{name}/average_yield_gap_by_country_{water_supply}.tsv"
+        "<benchmarks>/{name}/average_yield_gap_by_country_{water_supply}.tsv"
     script:
         "scripts/aggregate_yield_gap_all_crops.py"

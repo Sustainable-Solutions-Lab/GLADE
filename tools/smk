@@ -49,10 +49,13 @@ if [[ -n "${SMK_MEM_MAX:-}" ]]; then
   SMK_MEM_MB_LIMIT="$(parse_mem_limit_to_mb "${SMK_MEM_MAX}")"
 fi
 
-# Run with local cache and tmp directories so coding agents don't have to write outside the project dir.
-mkdir -p "$PWD/.cache" "$PWD/.tmp"
-export XDG_CACHE_HOME=$PWD/.cache
-export TMPDIR=$PWD/.tmp
+# Run with local cache/tmp directories by default so coding agents don't have to
+# write outside the project dir. Can be overridden, e.g. to scratch storage.
+CACHE_ROOT=${SMK_CACHE_ROOT:-$PWD/.cache}
+TMP_ROOT=${SMK_TMP_ROOT:-$PWD/.tmp}
+mkdir -p "$CACHE_ROOT" "$TMP_ROOT"
+export XDG_CACHE_HOME="$CACHE_ROOT"
+export TMPDIR="$TMP_ROOT"
 
 # Parse environment and jobs arguments
 PIXI_ENV=""

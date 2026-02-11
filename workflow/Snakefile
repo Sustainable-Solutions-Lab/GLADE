@@ -25,6 +25,37 @@ config.setdefault("credentials", {}).update(secrets)
 validate(config, project_root=Path.cwd())
 
 
+def _resolve_path_root(raw_path: str, key: str) -> str:
+    """Resolve environment variables and user-home markers in a path root."""
+    resolved = os.path.expanduser(os.path.expandvars(raw_path))
+    if "$" in resolved:
+        raise ValueError(
+            f"Unresolved environment variable in config.paths.{key}: '{raw_path}'"
+        )
+    if resolved != "/":
+        resolved = resolved.rstrip("/")
+    return resolved
+
+
+PATH_ROOTS = {
+    "results": _resolve_path_root(config["paths"]["results_root"], "results_root"),
+    "processing": _resolve_path_root(
+        config["paths"]["processing_root"], "processing_root"
+    ),
+    "logs": _resolve_path_root(config["paths"]["logs_root"], "logs_root"),
+    "benchmarks": _resolve_path_root(
+        config["paths"]["benchmarks_root"], "benchmarks_root"
+    ),
+}
+
+
+pathvars:
+    results=PATH_ROOTS["results"],
+    processing=PATH_ROOTS["processing"],
+    logs=PATH_ROOTS["logs"],
+    benchmarks=PATH_ROOTS["benchmarks"],
+
+
 # Include common configuration and helper functions first
 include: "rules/common.smk"
 include: "rules/retrieve.smk"
@@ -64,56 +95,57 @@ wildcard_constraints:
 
 
 ALL_RULE_TARGETS = [
-    "results/{name}/solved/model_scen-default.nc",
+    "<results>/{name}/solved/model_scen-default.nc",
     # maps (not objective-specific, in base plots directory)
-    "results/{name}/plots/regions_map.pdf",
-    "results/{name}/plots/resource_classes_map.pdf",
-    "results/{name}/plots/food_consumption_comparison.pdf",
-    "results/{name}/plots/food_consumption_comparison.csv",
-    "results/{name}/plots/system_cost_comparison.pdf",
-    "results/{name}/plots/system_cost_comparison.csv",
-    "results/{name}/plots/relative_risk_curves.pdf",
+    "<results>/{name}/plots/regions_map.pdf",
+    "<results>/{name}/plots/resource_classes_map.pdf",
+    "<results>/{name}/plots/food_consumption_comparison.pdf",
+    "<results>/{name}/plots/food_consumption_comparison.csv",
+    "<results>/{name}/plots/system_cost_comparison.pdf",
+    "<results>/{name}/plots/system_cost_comparison.csv",
+    "<results>/{name}/plots/relative_risk_curves.pdf",
     # results plots
-    "results/{name}/plots/scen-default/consumption_balance.pdf",
-    "results/{name}/plots/scen-default/objective_breakdown.pdf",
-    "results/{name}/plots/scen-default/objective_breakdown.csv",
-    "results/{name}/plots/scen-default/emissions_breakdown.pdf",
-    "results/{name}/plots/scen-default/yll_global_by_cause.pdf",
-    # "results/{name}/plots/scen-default/health_risk_map.pdf",
-    # "results/{name}/plots/scen-default/health_risk_by_region.csv",
-    # "results/{name}/plots/scen-default/health_baseline_map.pdf",
-    # "results/{name}/plots/scen-default/health_baseline_by_region.csv",
+    "<results>/{name}/plots/scen-default/consumption_balance.pdf",
+    "<results>/{name}/plots/scen-default/objective_breakdown.pdf",
+    "<results>/{name}/plots/scen-default/objective_breakdown.csv",
+    "<results>/{name}/plots/scen-default/emissions_breakdown.pdf",
+    "<results>/{name}/plots/scen-default/yll_global_by_cause.pdf",
+    # "<results>/{name}/plots/scen-default/health_risk_map.pdf",
+    # "<results>/{name}/plots/scen-default/health_risk_by_region.csv",
+    # "<results>/{name}/plots/scen-default/health_baseline_map.pdf",
+    # "<results>/{name}/plots/scen-default/health_baseline_by_region.csv",
     # objective-specific maps
-    "results/{name}/plots/scen-default/crop_production_map.pdf",
-    "results/{name}/plots/scen-default/crop_use_breakdown.pdf",
-    "results/{name}/plots/scen-default/crop_use_breakdown.csv",
-    "results/{name}/plots/scen-default/feed_breakdown.pdf",
-    "results/{name}/plots/scen-default/feed_breakdown.csv",
-    "results/{name}/plots/scen-default/food_group_slack.pdf",
-    "results/{name}/plots/scen-default/food_group_slack.csv",
-    "results/{name}/plots/scen-default/slack_overview.pdf",
-    "results/{name}/plots/scen-default/slack_overview.csv",
-    "results/{name}/plots/scen-default/water_balance.pdf",
-    "results/{name}/plots/scen-default/water_balance.csv",
-    "results/{name}/plots/scen-default/water_use_map.pdf",
-    "results/{name}/plots/scen-default/water_use_by_region.csv",
-    # "results/{name}/plots/scen-default/water_value_map.pdf",   # Current not working
-    "results/{name}/plots/scen-default/food_consumption.pdf",
-    "results/{name}/plots/scen-default/food_consumption_map.pdf",
-    "results/{name}/plots/scen-default/food_consumption_baseline_map.pdf",
+    "<results>/{name}/plots/scen-default/crop_production_map.pdf",
+    "<results>/{name}/plots/scen-default/crop_use_breakdown.pdf",
+    "<results>/{name}/plots/scen-default/crop_use_breakdown.csv",
+    "<results>/{name}/plots/scen-default/feed_breakdown.pdf",
+    "<results>/{name}/plots/scen-default/feed_breakdown.csv",
+    "<results>/{name}/plots/scen-default/food_group_slack.pdf",
+    "<results>/{name}/plots/scen-default/food_group_slack.csv",
+    "<results>/{name}/plots/scen-default/slack_overview.pdf",
+    "<results>/{name}/plots/scen-default/slack_overview.csv",
+    "<results>/{name}/plots/scen-default/water_balance.pdf",
+    "<results>/{name}/plots/scen-default/water_balance.csv",
+    "<results>/{name}/plots/scen-default/water_use_map.pdf",
+    "<results>/{name}/plots/scen-default/water_use_by_region.csv",
+    # "<results>/{name}/plots/scen-default/water_value_map.pdf",   # Current not working
+    "<results>/{name}/plots/scen-default/food_consumption.pdf",
+    "<results>/{name}/plots/scen-default/food_consumption_map.pdf",
+    "<results>/{name}/plots/scen-default/food_consumption_baseline_map.pdf",
     # marginal damages analysis
-    "results/{name}/plots/scen-default/marginal_ghg_global.pdf",
-    "results/{name}/plots/scen-default/marginal_yll_global.pdf",
+    "<results>/{name}/plots/scen-default/marginal_ghg_global.pdf",
+    "<results>/{name}/plots/scen-default/marginal_yll_global.pdf",
 ]
 
 # Solve all configured scenarios without triggering plotting targets.
 SOLVE_ALL_SCENARIOS_TARGETS = [
-    f"results/{{name}}/solved/model_scen-{scenario}.nc" for scenario in list_scenarios()
+    f"<results>/{{name}}/solved/model_scen-{scenario}.nc"
+    for scenario in list_scenarios()
 ]
 
 # Run analysis for all configured scenarios.
 ANALYZE_ALL_SCENARIOS_TARGETS = [
-    f"results/{{name}}/analysis/scen-{scenario}/{output}"
+    f"<results>/{{name}}/analysis/scen-{scenario}/{output}"
     for scenario in list_scenarios()
     for output in [
         "crop_production.csv",
@@ -130,10 +162,10 @@ ANALYZE_ALL_SCENARIOS_TARGETS = [
 # comparison_scenarios is defined in plotting.smk (loaded above via include)
 for scenario_suffix in comparison_scenarios:
     # Add solved model for food consumption comparison
-    ALL_RULE_TARGETS.append(f"results/{{name}}/solved/model_{scenario_suffix}.nc")
+    ALL_RULE_TARGETS.append(f"<results>/{{name}}/solved/model_{scenario_suffix}.nc")
     # Add objective breakdown for system cost comparison
     ALL_RULE_TARGETS.append(
-        f"results/{{name}}/plots/{scenario_suffix}/objective_breakdown.csv"
+        f"<results>/{{name}}/plots/{scenario_suffix}/objective_breakdown.csv"
     )
 
 

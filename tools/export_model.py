@@ -21,6 +21,7 @@ The exported MPS file can then be used for Gurobi parameter tuning:
 import argparse
 import importlib.util
 import logging
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -55,6 +56,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def resolve_path_root(raw_path: str, key: str) -> Path:
+    """Resolve environment variables and user-home markers in a path root."""
+    resolved = os.path.expanduser(os.path.expandvars(raw_path))
+    if "$" in resolved:
+        raise ValueError(f"Unresolved environment variable in config.paths.{key}")
+    return Path(resolved)
+
+
 def load_config(config_path: str) -> dict:
     """Load a config file and merge with default.yaml."""
     project_root = Path(__file__).parent.parent
@@ -83,7 +92,10 @@ def build_and_export_model(
     apply_scenario_config(config, scenario)
 
     config_name = config["name"]
-    results_dir = Path(f"results/{config_name}")
+    paths_cfg = config["paths"]
+    results_dir = (
+        resolve_path_root(paths_cfg["results_root"], "results_root") / config_name
+    )
 
     # Determine output path
     if output_path is None:
@@ -97,7 +109,7 @@ def build_and_export_model(
         raise FileNotFoundError(
             f"Built network not found: {network_path}\n"
             f"First run: tools/smk -e gurobi -j4 --configfile {config_path} "
-            f"-- results/{config_name}/build/model_scen-{scenario}.nc"
+            f"-- {network_path}"
         )
 
     logger.info("Loading network from %s", network_path)
@@ -123,7 +135,9 @@ def build_and_export_model(
     n.optimize.create_model()
 
     # Load population data
-    processing_dir = Path(f"processing/{config_name}")
+    processing_dir = (
+        resolve_path_root(paths_cfg["processing_root"], "processing_root") / config_name
+    )
     population_path = processing_dir / "population.csv"
     if not population_path.exists():
         raise FileNotFoundError(f"Population data not found: {population_path}")
@@ -267,7 +281,10 @@ Example:
         "-o",
         type=Path,
         default=None,
-        help="Output MPS file path (default: results/{name}/exported/model_scen-{scenario}.mps)",
+        help=(
+            "Output MPS file path "
+            "(default: {paths.results_root}/{name}/exported/model_scen-{scenario}.mps)"
+        ),
     )
 
     args = parser.parse_args()

@@ -20,16 +20,16 @@ rule prepare_faostat_animal_production:
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
-        "processing/{name}/faostat_animal_production.csv",
+        "<processing>/{name}/faostat_animal_production.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=2800,
     log:
-        "logs/{name}/prepare_faostat_animal_production.log",
+        "<logs>/{name}/prepare_faostat_animal_production.log",
     benchmark:
-        "benchmarks/{name}/prepare_faostat_animal_production.tsv"
+        "<benchmarks>/{name}/prepare_faostat_animal_production.tsv"
     script:
         "../scripts/prepare_faostat_animal_production.py"
 
@@ -42,16 +42,16 @@ rule prepare_faostat_yields:
         cost_params=config["animal_costs"]["faostat"],
         averaging_period=config["animal_costs"]["averaging_period"],
     output:
-        "processing/{name}/faostat_animal_yields.csv",
+        "<processing>/{name}/faostat_animal_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=2800,
     log:
-        "logs/{name}/prepare_faostat_yields.log",
+        "<logs>/{name}/prepare_faostat_yields.log",
     benchmark:
-        "benchmarks/{name}/prepare_faostat_yields.tsv"
+        "<benchmarks>/{name}/prepare_faostat_yields.tsv"
     script:
         "../scripts/prepare_faostat_yields.py"
 
@@ -61,41 +61,41 @@ rule prepare_gleam_feed_properties:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
         gleam_mapping="data/curated/gleam_feed_mapping.csv",
     output:
-        ruminant="processing/{name}/ruminant_feed_properties.csv",
-        monogastric="processing/{name}/monogastric_feed_properties.csv",
+        ruminant="<processing>/{name}/ruminant_feed_properties.csv",
+        monogastric="<processing>/{name}/monogastric_feed_properties.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/prepare_gleam_feed_properties.log",
+        "<logs>/{name}/prepare_gleam_feed_properties.log",
     benchmark:
-        "benchmarks/{name}/prepare_gleam_feed_properties.tsv"
+        "<benchmarks>/{name}/prepare_gleam_feed_properties.tsv"
     script:
         "../scripts/prepare_gleam_feed_properties.py"
 
 
 rule categorize_feeds:
     input:
-        ruminant_feed_properties="processing/{name}/ruminant_feed_properties.csv",
-        monogastric_feed_properties="processing/{name}/monogastric_feed_properties.csv",
+        ruminant_feed_properties="<processing>/{name}/ruminant_feed_properties.csv",
+        monogastric_feed_properties="<processing>/{name}/monogastric_feed_properties.csv",
         enteric_methane_yields="data/curated/ipcc_enteric_methane_yields.csv",
         ash_content="data/curated/feed_ash_content.csv",
     output:
-        ruminant_categories="processing/{name}/ruminant_feed_categories.csv",
-        monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
-        ruminant_mapping="processing/{name}/ruminant_feed_mapping.csv",
-        monogastric_mapping="processing/{name}/monogastric_feed_mapping.csv",
+        ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
+        monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
+        ruminant_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
+        monogastric_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/categorize_feeds.log",
+        "<logs>/{name}/categorize_feeds.log",
     benchmark:
-        "benchmarks/{name}/categorize_feeds.tsv"
+        "<benchmarks>/{name}/categorize_feeds.tsv"
     script:
         "../scripts/categorize_feeds.py"
 
@@ -103,11 +103,11 @@ rule categorize_feeds:
 rule build_feed_to_animal_products:
     input:
         wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
-        ruminant_categories="processing/{name}/ruminant_feed_categories.csv",
-        monogastric_categories="processing/{name}/monogastric_feed_categories.csv",
+        ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
+        monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
         country_region_map="data/curated/country_wirsenius_region.csv",
     output:
-        "processing/{name}/feed_to_animal_products.csv",
+        "<processing>/{name}/feed_to_animal_products.csv",
     params:
         feed_efficiency_regions=config["animal_products"]["feed_efficiency_regions"],
         countries=config["countries"],
@@ -122,31 +122,31 @@ rule build_feed_to_animal_products:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/build_feed_to_animal_products.log",
+        "<logs>/{name}/build_feed_to_animal_products.log",
     benchmark:
-        "benchmarks/{name}/build_feed_to_animal_products.tsv"
+        "<benchmarks>/{name}/build_feed_to_animal_products.tsv"
     script:
         "../scripts/build_feed_to_animal_products.py"
 
 
 rule calculate_manure_emissions:
     input:
-        ruminant_feed_categories="processing/{name}/ruminant_feed_categories.csv",
-        monogastric_feed_categories="processing/{name}/monogastric_feed_categories.csv",
+        ruminant_feed_categories="<processing>/{name}/ruminant_feed_categories.csv",
+        monogastric_feed_categories="<processing>/{name}/monogastric_feed_categories.csv",
         b0_data="data/curated/ipcc_manure_methane_producing_capacity.csv",
         mcf_data="data/curated/ipcc_manure_methane_conversion_factors.csv",
         mms_fractions="data/curated/gleam_tables/manure_management_systems_fraction.csv",
         n2o_efs="data/curated/ipcc_manure_n2o_emission_factors.csv",
     output:
-        "processing/{name}/manure_emission_factors.csv",
+        "<processing>/{name}/manure_emission_factors.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/calculate_manure_emissions.log",
+        "<logs>/{name}/calculate_manure_emissions.log",
     benchmark:
-        "benchmarks/{name}/calculate_manure_emissions.tsv"
+        "<benchmarks>/{name}/calculate_manure_emissions.tsv"
     script:
         "../scripts/calculate_manure_emissions.py"

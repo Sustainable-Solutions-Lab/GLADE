@@ -23,19 +23,19 @@ rule extract_optimal_consumption:
     Population data is read from the network metadata.
     """
     input:
-        network="results/{name}/solved/model_scen-optimize.nc",
+        network="<results>/{name}/solved/model_scen-optimize.nc",
         food_groups="data/curated/food_groups.csv",
     output:
-        consumption="results/{name}/optimal_taxes/optimal_consumption.csv",
+        consumption="<results>/{name}/optimal_taxes/optimal_consumption.csv",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/extract_optimal_consumption.log",
+        "<logs>/{name}/extract_optimal_consumption.log",
     benchmark:
-        "benchmarks/{name}/extract_optimal_consumption.tsv"
+        "<benchmarks>/{name}/extract_optimal_consumption.tsv"
     script:
         "../scripts/extract_optimal_consumption.py"
 
@@ -48,18 +48,18 @@ rule extract_optimal_taxes:
     tax/subsidy needed to incentivize optimal consumption.
     """
     input:
-        network="results/{name}/solved/model_scen-extract_taxes.nc",
+        network="<results>/{name}/solved/model_scen-extract_taxes.nc",
     output:
-        taxes="results/{name}/optimal_taxes/taxes.csv",
+        taxes="<results>/{name}/optimal_taxes/taxes.csv",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/extract_optimal_taxes.log",
+        "<logs>/{name}/extract_optimal_taxes.log",
     benchmark:
-        "benchmarks/{name}/extract_optimal_taxes.tsv"
+        "<benchmarks>/{name}/extract_optimal_taxes.tsv"
     script:
         "../scripts/extract_optimal_taxes.py"
 
@@ -67,10 +67,10 @@ rule extract_optimal_taxes:
 rule plot_optimal_taxes:
     """Visualize optimal taxes/subsidies by food group."""
     input:
-        taxes="results/{name}/optimal_taxes/taxes.csv",
+        taxes="<results>/{name}/optimal_taxes/taxes.csv",
     output:
-        taxes_pdf="results/{name}/plots/optimal_taxes/taxes_by_food_group.pdf",
-        taxes_csv="results/{name}/plots/optimal_taxes/taxes_by_food_group.csv",
+        taxes_pdf="<results>/{name}/plots/optimal_taxes/taxes_by_food_group.pdf",
+        taxes_csv="<results>/{name}/plots/optimal_taxes/taxes_by_food_group.csv",
     params:
         group_colors=plotting_cfg.get("colors", {}).get("food_groups", {}),
     group:
@@ -79,9 +79,9 @@ rule plot_optimal_taxes:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/plot_optimal_taxes.log",
+        "<logs>/{name}/plot_optimal_taxes.log",
     benchmark:
-        "benchmarks/{name}/plot_optimal_taxes.tsv"
+        "<benchmarks>/{name}/plot_optimal_taxes.tsv"
     script:
         "../scripts/plotting/plot_optimal_taxes.py"
 
@@ -90,14 +90,14 @@ rule plot_optimal_taxes_diet_comparison:
     """Compare global average diet across the optimal taxes optimizations."""
     input:
         networks=[
-            "results/{name}/solved/model_scen-optimize.nc",
-            "results/{name}/solved/model_scen-extract_taxes.nc",
-            "results/{name}/solved/model_scen-apply_taxes.nc",
+            "<results>/{name}/solved/model_scen-optimize.nc",
+            "<results>/{name}/solved/model_scen-extract_taxes.nc",
+            "<results>/{name}/solved/model_scen-apply_taxes.nc",
         ],
         food_groups="data/curated/food_groups.csv",
     output:
-        pdf="results/{name}/plots/optimal_taxes/diet_comparison.pdf",
-        csv="results/{name}/plots/optimal_taxes/diet_comparison.csv",
+        pdf="<results>/{name}/plots/optimal_taxes/diet_comparison.pdf",
+        csv="<results>/{name}/plots/optimal_taxes/diet_comparison.csv",
     params:
         wildcards=[
             "Health/GHG optimized",
@@ -111,8 +111,8 @@ rule plot_optimal_taxes_diet_comparison:
         runtime="5m",
         mem_mb=2000,
     log:
-        "logs/{name}/plot_optimal_taxes_diet_comparison.log",
+        "<logs>/{name}/plot_optimal_taxes_diet_comparison.log",
     benchmark:
-        "benchmarks/{name}/plot_optimal_taxes_diet_comparison.tsv"
+        "<benchmarks>/{name}/plot_optimal_taxes_diet_comparison.tsv"
     script:
         "../scripts/plotting/plot_food_consumption_comparison.py"

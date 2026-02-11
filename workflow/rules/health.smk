@@ -26,9 +26,9 @@ rule retrieve_gdp_per_capita:
         runtime="15m",
         mem_mb=200,
     log:
-        "logs/retrieve_gdp_per_capita.log",
+        "<logs>/retrieve_gdp_per_capita.log",
     benchmark:
-        "benchmarks/retrieve_gdp_per_capita.tsv"
+        "<benchmarks>/retrieve_gdp_per_capita.tsv"
     script:
         "../scripts/retrieve_gdp_per_capita.py"
 
@@ -41,16 +41,16 @@ rule prepare_gbd_mortality:
         causes=config["health"]["causes"],
         reference_year=config["health"]["reference_year"],
     output:
-        mortality="processing/{name}/health/gbd_mortality_rates.csv",
+        mortality="<processing>/{name}/health/gbd_mortality_rates.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/prepare_gbd_mortality.log",
+        "<logs>/{name}/prepare_gbd_mortality.log",
     benchmark:
-        "benchmarks/{name}/prepare_gbd_mortality.tsv"
+        "<benchmarks>/{name}/prepare_gbd_mortality.tsv"
     script:
         "../scripts/prepare_gbd_mortality.py"
 
@@ -64,16 +64,16 @@ rule prepare_relative_risks:
         omega3_per_100g=config["health"]["omega3_per_100g_fish"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
-        relative_risks="processing/{name}/health/relative_risks.csv",
+        relative_risks="<processing>/{name}/health/relative_risks.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/prepare_relative_risks.log",
+        "<logs>/{name}/prepare_relative_risks.log",
     benchmark:
-        "benchmarks/{name}/prepare_relative_risks.tsv"
+        "<benchmarks>/{name}/prepare_relative_risks.tsv"
     script:
         "../scripts/prepare_relative_risks.py"
 
@@ -84,16 +84,16 @@ rule prepare_life_table:
     params:
         reference_year=config["health"]["reference_year"],
     output:
-        life_table="processing/{name}/health/life_table.csv",
+        life_table="<processing>/{name}/health/life_table.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=3800,
     log:
-        "logs/{name}/prepare_life_table.log",
+        "<logs>/{name}/prepare_life_table.log",
     benchmark:
-        "benchmarks/{name}/prepare_life_table.tsv"
+        "<benchmarks>/{name}/prepare_life_table.tsv"
     script:
         "../scripts/prepare_life_table.py"
 
@@ -106,33 +106,33 @@ rule prepare_health_costs:
     can vary by scenario.
     """
     input:
-        regions="processing/{name}/regions.geojson",
-        diet="processing/{name}/dietary_intake.csv",
-        relative_risks="processing/{name}/health/relative_risks.csv",
-        dr="processing/{name}/health/gbd_mortality_rates.csv",
-        population="processing/{name}/population_age.csv",
-        life_table="processing/{name}/health/life_table.csv",
+        regions="<processing>/{name}/regions.geojson",
+        diet="<processing>/{name}/dietary_intake.csv",
+        relative_risks="<processing>/{name}/health/relative_risks.csv",
+        dr="<processing>/{name}/health/gbd_mortality_rates.csv",
+        population="<processing>/{name}/population_age.csv",
+        life_table="<processing>/{name}/health/life_table.csv",
         food_groups="data/curated/food_groups.csv",
         gdp="data/downloads/gdp_per_capita.csv",
     params:
         countries=lambda w: get_effective_config(w.scenario)["countries"],
         health=lambda w: get_effective_config(w.scenario)["health"],
     output:
-        risk_breakpoints="processing/{name}/health/scen-{scenario}/risk_breakpoints.csv",
-        cluster_cause="processing/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
-        cause_log="processing/{name}/health/scen-{scenario}/cause_log_breakpoints.csv",
-        cluster_summary="processing/{name}/health/scen-{scenario}/cluster_summary.csv",
-        clusters="processing/{name}/health/scen-{scenario}/country_clusters.csv",
-        cluster_risk_baseline="processing/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
-        derived_tmrel="processing/{name}/health/scen-{scenario}/derived_tmrel.csv",
+        risk_breakpoints="<processing>/{name}/health/scen-{scenario}/risk_breakpoints.csv",
+        cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
+        cause_log="<processing>/{name}/health/scen-{scenario}/cause_log_breakpoints.csv",
+        cluster_summary="<processing>/{name}/health/scen-{scenario}/cluster_summary.csv",
+        clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
+        cluster_risk_baseline="<processing>/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
+        derived_tmrel="<processing>/{name}/health/scen-{scenario}/derived_tmrel.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=400,
     log:
-        "logs/{name}/prepare_health_costs_scen-{scenario}.log",
+        "<logs>/{name}/prepare_health_costs_scen-{scenario}.log",
     benchmark:
-        "benchmarks/{name}/prepare_health_costs_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/prepare_health_costs_scen-{scenario}.tsv"
     script:
         "../scripts/prepare_health_costs.py"

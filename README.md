@@ -70,7 +70,7 @@ tools/smk -e gurobi -j4 --configfile config/validation.yaml
 ### Notes
 
 - `tools/smk` wraps Snakemake with memory limits and environment configuration
-- Results are saved under `results/{config_name}/`
+- By default, results are saved under `results/{config_name}/` (path roots can be overridden via `config.paths`)
 - The workflow validates configuration and data before running
 
 ## Repository Layout

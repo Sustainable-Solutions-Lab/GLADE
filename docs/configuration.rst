@@ -30,7 +30,7 @@ Instead of modifying the default configuration file, it is recommended to explor
 
 Any keys omitted in your custom file fall back to the defaults shown in the sections below, so you can keep overrides concise.
 
-Results are saved under ``results/{name}/``, allowing multiple scenarios coming from different configuration files to coexist.
+By default, results are saved under ``results/{name}/``, allowing multiple scenarios coming from different configuration files to coexist. This root (and roots for ``processing``, ``logs``, and ``benchmarks``) can be overridden via ``paths`` in the config.
 
 To build and solve the model based on the above example configuration, you would run the following::
 
@@ -58,7 +58,7 @@ Each scenario preset in ``scenarios.yaml`` contains a set of configuration overr
      emissions:
        ghg_pricing_enabled: true
 
-The scenario name becomes part of all output paths:
+With default path roots, the scenario name becomes part of all output paths:
 
 - Built models: ``results/{name}/build/model_scen-{scenario}.nc``
 - Solved models: ``results/{name}/solved/model_scen-{scenario}.nc``
@@ -292,7 +292,26 @@ Download Options
 .. literalinclude:: ../config/default.yaml
    :language: yaml
    :start-after: # --- section: downloads ---
+   :end-before: # --- section: paths ---
+
+Path Options
+~~~~~~~~~~~~
+
+.. literalinclude:: ../config/default.yaml
+   :language: yaml
+   :start-after: # --- section: paths ---
+   :end-before: # --- section: netcdf ---
+
+NetCDF Options
+~~~~~~~~~~~~~~
+
+.. literalinclude:: ../config/default.yaml
+   :language: yaml
+   :start-after: # --- section: netcdf ---
    :end-before: # --- section: validation ---
+
+``paths.*_root`` values support environment-variable and ``~`` expansion in the
+Snakefile (for example ``"${GROUP_SCRATCH}/${USER}/food-opt/processing"``).
 
 Validation Options
 ~~~~~~~~~~~~~~~~~~

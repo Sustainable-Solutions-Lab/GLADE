@@ -12,6 +12,16 @@ currency_base_year: 2024  # Base year for inflation-adjusted USD values
 downloads:
   show_progress: true
 
+# --- section: paths ---
+# Root directories for workflow artifacts. Defaults keep everything under the
+# project directory, but these can be redirected (e.g. to scratch storage).
+# Environment variables and "~" are expanded by the Snakefile.
+paths:
+  results_root: "results"
+  processing_root: "processing"
+  logs_root: "logs"
+  benchmarks_root: "benchmarks"
+
 # --- section: netcdf ---
 # NetCDF export settings for PyPSA network files (build and solve outputs)
 netcdf:

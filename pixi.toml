@@ -99,7 +99,7 @@ pydot = ">=4.0.1,<5"                 # Python interface to Graphviz for workflow
 make = ">=4.4,<5"                    # Build tool for Sphinx Makefile
 
 [feature.dev.pypi-dependencies]
-snakefmt = ">=0.11.2, <0.12"         # Snakemake code formatter
+snakefmt = ">=0.11.4, <0.12"         # Snakemake code formatter
 pytest = ">=8.0.0, <9"              # Test framework
 
 [activation.env]

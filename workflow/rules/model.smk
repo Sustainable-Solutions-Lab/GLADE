@@ -22,7 +22,7 @@ def yield_inputs(wildcards):
         irrigated_crops = list(irr_cfg)
 
     return {
-        f"{crop}_yield_{water_supply}": f"processing/{{name}}/crop_yields/{crop}_{water_supply}.csv"
+        f"{crop}_yield_{water_supply}": f"<processing>/{{name}}/crop_yields/{crop}_{water_supply}.csv"
         for crop, water_supply in (
             list(zip(config["crops"], itertools.repeat("r")))  # Rainfed
             + list(zip(irrigated_crops, itertools.repeat("i")))
@@ -43,12 +43,12 @@ def harvested_area_model_inputs(_wildcards):
         irrigated_crops = list(irr_cfg)
 
     inputs = {
-        f"{crop}_harvested_r": f"processing/{{name}}/harvested_area/gaez/{crop}_r.csv"
+        f"{crop}_harvested_r": f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
         for crop in config["crops"]
     }
     for crop in irrigated_crops:
         inputs[f"{crop}_harvested_i"] = (
-            f"processing/{{name}}/harvested_area/gaez/{crop}_i.csv"
+            f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
         )
     return inputs
 
@@ -66,12 +66,12 @@ def production_stability_build_inputs(wildcards):
     inputs = {}
     if stability_cfg["crops"]["enabled"]:
         inputs["crop_production_baseline"] = (
-            f"processing/{wildcards.name}/faostat_crop_production.csv"
+            f"<processing>/{wildcards.name}/faostat_crop_production.csv"
         )
         inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
     if stability_cfg["animals"]["enabled"]:
         inputs["animal_production_baseline"] = (
-            f"processing/{wildcards.name}/faostat_animal_production.csv"
+            f"<processing>/{wildcards.name}/faostat_animal_production.csv"
         )
     return inputs
 
@@ -82,38 +82,38 @@ rule build_model:
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
         unpack(production_stability_build_inputs),
-        fertilizer_n_rates="processing/{name}/global_fertilizer_n_rates.csv",
+        fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
-        ruminant_feed_categories="processing/{name}/ruminant_feed_categories.csv",
-        ruminant_feed_mapping="processing/{name}/ruminant_feed_mapping.csv",
-        monogastric_feed_categories="processing/{name}/monogastric_feed_categories.csv",
-        monogastric_feed_mapping="processing/{name}/monogastric_feed_mapping.csv",
-        feed_to_products="processing/{name}/feed_to_animal_products.csv",
-        manure_emissions="processing/{name}/manure_emission_factors.csv",
+        ruminant_feed_categories="<processing>/{name}/ruminant_feed_categories.csv",
+        ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
+        monogastric_feed_categories="<processing>/{name}/monogastric_feed_categories.csv",
+        monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
+        feed_to_products="<processing>/{name}/feed_to_animal_products.csv",
+        manure_emissions="<processing>/{name}/manure_emission_factors.csv",
         food_groups="data/curated/food_groups.csv",
         nutrition="data/curated/nutrition.csv",
-        regions="processing/{name}/regions.geojson",
-        land_area_by_class="processing/{name}/land_area_by_class.csv",
-        cropland_baseline="processing/{name}/cropland_baseline_by_class.csv",
-        multi_cropping_area="processing/{name}/multi_cropping/eligible_area.csv",
-        multi_cropping_yields="processing/{name}/multi_cropping/cycle_yields.csv",
-        edible_portion="processing/{name}/fao_edible_portion.csv",
-        population="processing/{name}/population.csv",
-        baseline_diet="processing/{name}/dietary_intake.csv",
-        food_loss_waste="processing/{name}/food_loss_waste.csv",
-        costs="processing/{name}/crop_costs.csv",
-        animal_costs="processing/{name}/animal_costs.csv",
-        grassland_yields="processing/{name}/grassland_yields.csv",
-        monthly_region_water="processing/{name}/water/monthly_region_water.csv",
-        growing_season_water="processing/{name}/water/region_growing_season_water.csv",
-        blue_water_availability="processing/{name}/water/blue_water_availability.csv",
-        luc_carbon_coefficients="processing/{name}/luc/luc_carbon_coefficients.csv",
-        current_grassland_area="processing/{name}/luc/current_grassland_area_by_class.csv",
-        grazing_only_land="processing/{name}/land_grazing_only_by_class.csv",
-        health_cluster_summary="processing/{name}/health/scen-{scenario}/cluster_summary.csv",
-        health_cluster_cause="processing/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
-        health_clusters="processing/{name}/health/scen-{scenario}/country_clusters.csv",
+        regions="<processing>/{name}/regions.geojson",
+        land_area_by_class="<processing>/{name}/land_area_by_class.csv",
+        cropland_baseline="<processing>/{name}/cropland_baseline_by_class.csv",
+        multi_cropping_area="<processing>/{name}/multi_cropping/eligible_area.csv",
+        multi_cropping_yields="<processing>/{name}/multi_cropping/cycle_yields.csv",
+        edible_portion="<processing>/{name}/fao_edible_portion.csv",
+        population="<processing>/{name}/population.csv",
+        baseline_diet="<processing>/{name}/dietary_intake.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+        costs="<processing>/{name}/crop_costs.csv",
+        animal_costs="<processing>/{name}/animal_costs.csv",
+        grassland_yields="<processing>/{name}/grassland_yields.csv",
+        monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",
+        growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",
+        blue_water_availability="<processing>/{name}/water/blue_water_availability.csv",
+        luc_carbon_coefficients="<processing>/{name}/luc/luc_carbon_coefficients.csv",
+        current_grassland_area="<processing>/{name}/luc/current_grassland_area_by_class.csv",
+        grazing_only_land="<processing>/{name}/land_grazing_only_by_class.csv",
+        health_cluster_summary="<processing>/{name}/health/scen-{scenario}/cluster_summary.csv",
+        health_cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
+        health_clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
         build_scripts=expand(
             "workflow/scripts/build_model/{script}",
             script=[
@@ -172,16 +172,16 @@ rule build_model:
         # Only used to force correct reruns when scenario_defs changes.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
-        network="results/{name}/build/model_scen-{scenario}.nc",
+        network="<results>/{name}/build/model_scen-{scenario}.nc",
     group:
         "model_core"
     resources:
         runtime="1m",
         mem_mb=900,
     log:
-        "logs/{name}/build_model_scen-{scenario}.log",
+        "<logs>/{name}/build_model_scen-{scenario}.log",
     benchmark:
-        "benchmarks/{name}/build_model_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/build_model_scen-{scenario}.tsv"
     script:
         "../scripts/build_model.py"
 
@@ -193,16 +193,16 @@ def solve_model_inputs(w):
     only when validation mode is enabled.
     """
     inputs = {
-        "network": f"results/{w.name}/build/model_scen-{w.scenario}.nc",
+        "network": f"<results>/{w.name}/build/model_scen-{w.scenario}.nc",
         "m49": "data/curated/M49-codes.csv",
-        "health_risk_breakpoints": f"processing/{w.name}/health/scen-{w.scenario}/risk_breakpoints.csv",
-        "health_cluster_cause": f"processing/{w.name}/health/scen-{w.scenario}/cluster_cause_baseline.csv",
-        "health_cause_log": f"processing/{w.name}/health/scen-{w.scenario}/cause_log_breakpoints.csv",
-        "health_cluster_summary": f"processing/{w.name}/health/scen-{w.scenario}/cluster_summary.csv",
-        "health_clusters": f"processing/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
-        "health_derived_tmrel": f"processing/{w.name}/health/scen-{w.scenario}/derived_tmrel.csv",
+        "health_risk_breakpoints": f"<processing>/{w.name}/health/scen-{w.scenario}/risk_breakpoints.csv",
+        "health_cluster_cause": f"<processing>/{w.name}/health/scen-{w.scenario}/cluster_cause_baseline.csv",
+        "health_cause_log": f"<processing>/{w.name}/health/scen-{w.scenario}/cause_log_breakpoints.csv",
+        "health_cluster_summary": f"<processing>/{w.name}/health/scen-{w.scenario}/cluster_summary.csv",
+        "health_clusters": f"<processing>/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
+        "health_derived_tmrel": f"<processing>/{w.name}/health/scen-{w.scenario}/derived_tmrel.csv",
         "food_groups": "data/curated/food_groups.csv",
-        "baseline_diet": f"processing/{w.name}/baseline_diet.csv",
+        "baseline_diet": f"<processing>/{w.name}/baseline_diet.csv",
     }
 
     # Add food incentives input if enabled for this scenario
@@ -217,7 +217,7 @@ def solve_model_inputs(w):
     utility_cfg = eff_cfg["food_utility_piecewise"]
     if utility_cfg["enabled"]:
         inputs["food_utility_piecewise"] = (
-            f"results/{w.name}/consumer_values/utility_blocks.csv"
+            f"<results>/{w.name}/consumer_values/utility_blocks.csv"
         )
     equal_source = eff_cfg["food_groups"]["equal_by_country_source"]
     if equal_source:
@@ -229,24 +229,24 @@ def solve_model_inputs(w):
     # Add validation-specific inputs
     if config.get("validation", {}).get("use_actual_production", False):
         inputs["animal_production"] = (
-            f"processing/{w.name}/faostat_animal_production.csv"
+            f"<processing>/{w.name}/faostat_animal_production.csv"
         )
-        inputs["food_loss_waste"] = f"processing/{w.name}/food_loss_waste.csv"
+        inputs["food_loss_waste"] = f"<processing>/{w.name}/food_loss_waste.csv"
 
     # Add production stability inputs
     stability_cfg = eff_cfg["validation"]["production_stability"]
     if stability_cfg["enabled"]:
         if stability_cfg["crops"]["enabled"]:
             inputs["crop_production_baseline"] = (
-                f"processing/{w.name}/faostat_crop_production.csv"
+                f"<processing>/{w.name}/faostat_crop_production.csv"
             )
             # Include FAO item mapping to aggregate crops sharing an FAO item
             inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
         if stability_cfg["animals"]["enabled"]:
             inputs["animal_production_baseline"] = (
-                f"processing/{w.name}/faostat_animal_production.csv"
+                f"<processing>/{w.name}/faostat_animal_production.csv"
             )
-            inputs["food_loss_waste"] = f"processing/{w.name}/food_loss_waste.csv"
+            inputs["food_loss_waste"] = f"<processing>/{w.name}/food_loss_waste.csv"
 
     return inputs
 
@@ -334,7 +334,7 @@ rule solve_model:
         # Only used to force correct reruns when scenario_defs changes.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:
-        network="results/{name}/solved/model_scen-{scenario}.nc",
+        network="<results>/{name}/solved/model_scen-{scenario}.nc",
     retries: 2
     group:
         "model_core"
@@ -342,8 +342,8 @@ rule solve_model:
         runtime=solve_model_runtime,
         mem_mb=solve_model_mem_mb,
     log:
-        "logs/{name}/solve_model_scen-{scenario}.log",
+        "<logs>/{name}/solve_model_scen-{scenario}.log",
     benchmark:
-        "benchmarks/{name}/solve_model_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/solve_model_scen-{scenario}.tsv"
     script:
         "../scripts/solve_model.py"

@@ -64,7 +64,7 @@ DOC_FIGURES = [
 rule doc_fig_intro_global_coverage:
     """Generate global coverage map showing all modeled regions."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/intro_global_coverage.svg",
@@ -75,9 +75,9 @@ rule doc_fig_intro_global_coverage:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_intro_global_coverage.log",
+        "<logs>/shared/doc_fig_intro_global_coverage.log",
     benchmark:
-        "benchmarks/shared/doc_fig_intro_global_coverage.tsv"
+        "<benchmarks>/shared/doc_fig_intro_global_coverage.tsv"
     script:
         "../scripts/doc_figures/intro_global_coverage.py"
 
@@ -85,7 +85,7 @@ rule doc_fig_intro_global_coverage:
 rule doc_fig_model_topology:
     """Generate high-level model topology diagram showing material flows."""
     input:
-        model=f"results/{DOC_FIG_NAME}/build/model_scen-default.nc",
+        model=f"<results>/{DOC_FIG_NAME}/build/model_scen-default.nc",
     output:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",
@@ -95,9 +95,9 @@ rule doc_fig_model_topology:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_model_topology.log",
+        "<logs>/shared/doc_fig_model_topology.log",
     benchmark:
-        "benchmarks/shared/doc_fig_model_topology.tsv"
+        "<benchmarks>/shared/doc_fig_model_topology.tsv"
     script:
         "../scripts/visualize_model_topology.py"
 
@@ -115,9 +115,9 @@ rule doc_fig_land_flows:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_land_flows.log",
+        "<logs>/shared/doc_fig_land_flows.log",
     benchmark:
-        "benchmarks/shared/doc_fig_land_flows.tsv"
+        "<benchmarks>/shared/doc_fig_land_flows.tsv"
     script:
         "../scripts/doc_figures/land_flows.py"
 
@@ -125,8 +125,8 @@ rule doc_fig_land_flows:
 rule doc_fig_land_resource_classes:
     """Generate map showing resource class stratification."""
     input:
-        classes=f"processing/{DOC_FIG_NAME}/resource_classes.nc",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/land_resource_classes.svg",
@@ -137,9 +137,9 @@ rule doc_fig_land_resource_classes:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_land_resource_classes.log",
+        "<logs>/shared/doc_fig_land_resource_classes.log",
     benchmark:
-        "benchmarks/shared/doc_fig_land_resource_classes.tsv"
+        "<benchmarks>/shared/doc_fig_land_resource_classes.tsv"
     script:
         "../scripts/doc_figures/land_resource_classes.py"
 
@@ -147,11 +147,11 @@ rule doc_fig_land_resource_classes:
 rule doc_fig_environment_luc_inputs:
     """Visualise LUC carbon input datasets used in the model."""
     input:
-        lc_masks=f"processing/{DOC_FIG_NAME}/luc/lc_masks.nc",
-        agb=f"processing/{DOC_FIG_NAME}/luc/agb.nc",
-        soc=f"processing/{DOC_FIG_NAME}/luc/soc.nc",
-        regrowth="processing/shared/luc/regrowth_resampled.nc",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        lc_masks=f"<processing>/{DOC_FIG_NAME}/luc/lc_masks.nc",
+        agb=f"<processing>/{DOC_FIG_NAME}/luc/agb.nc",
+        soc=f"<processing>/{DOC_FIG_NAME}/luc/soc.nc",
+        regrowth="<processing>/shared/luc/regrowth_resampled.nc",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/environment_luc_inputs.svg",
@@ -162,9 +162,9 @@ rule doc_fig_environment_luc_inputs:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_environment_luc_inputs.log",
+        "<logs>/shared/doc_fig_environment_luc_inputs.log",
     benchmark:
-        "benchmarks/shared/doc_fig_environment_luc_inputs.tsv"
+        "<benchmarks>/shared/doc_fig_environment_luc_inputs.tsv"
     script:
         "../scripts/doc_figures/luc_inputs_map.py"
 
@@ -172,8 +172,8 @@ rule doc_fig_environment_luc_inputs:
 rule doc_fig_environment_luc_lef:
     """Visualise aggregated land-use change emission factors."""
     input:
-        annualized=f"processing/{DOC_FIG_NAME}/luc/annualized.nc",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        annualized=f"<processing>/{DOC_FIG_NAME}/luc/annualized.nc",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/environment_luc_lef.svg",
@@ -184,9 +184,9 @@ rule doc_fig_environment_luc_lef:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_environment_luc_lef.log",
+        "<logs>/shared/doc_fig_environment_luc_lef.log",
     benchmark:
-        "benchmarks/shared/doc_fig_environment_luc_lef.tsv"
+        "<benchmarks>/shared/doc_fig_environment_luc_lef.tsv"
     script:
         "../scripts/doc_figures/luc_lef_map.py"
 
@@ -195,7 +195,7 @@ rule doc_fig_crop_yield:
     """Generate crop yield potential maps for selected crops."""
     input:
         yield_raster=lambda w: gaez_path("yield", "r", w.crop),
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         conversions="data/curated/yield_unit_conversions.csv",
         style=DOC_FIG_STYLE,
     output:
@@ -207,9 +207,9 @@ rule doc_fig_crop_yield:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_crop_yield_{crop}.log",
+        "<logs>/shared/doc_fig_crop_yield_{crop}.log",
     benchmark:
-        "benchmarks/shared/doc_fig_crop_yield_{crop}.tsv"
+        "<benchmarks>/shared/doc_fig_crop_yield_{crop}.tsv"
     script:
         "../scripts/doc_figures/crop_yield_map.py"
 
@@ -217,8 +217,8 @@ rule doc_fig_crop_yield:
 rule doc_fig_crop_yield_resource_class:
     """Generate resource class yield comparison maps."""
     input:
-        crop_yields=f"processing/{DOC_FIG_NAME}/crop_yields/{{crop}}_r.csv",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        crop_yields=f"<processing>/{DOC_FIG_NAME}/crop_yields/{{crop}}_r.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/crop_yield_resource_class_{crop}.svg",
@@ -232,9 +232,9 @@ rule doc_fig_crop_yield_resource_class:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_crop_yield_resource_class_{crop}.log",
+        "<logs>/shared/doc_fig_crop_yield_resource_class_{crop}.log",
     benchmark:
-        "benchmarks/shared/doc_fig_crop_yield_resource_class_{crop}.tsv"
+        "<benchmarks>/shared/doc_fig_crop_yield_resource_class_{crop}.tsv"
     script:
         "../scripts/doc_figures/crop_yield_resource_class.py"
 
@@ -243,7 +243,7 @@ rule doc_fig_multi_cropping_potential_rainfed:
     """Visualise rain-fed multi-cropping zones and regional potential."""
     input:
         zone_raster=lambda w: gaez_path("multiple_cropping_zone", "r", "all"),
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/multi_cropping_potential_rainfed.svg",
@@ -256,9 +256,9 @@ rule doc_fig_multi_cropping_potential_rainfed:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_multi_cropping_potential_rainfed.log",
+        "<logs>/shared/doc_fig_multi_cropping_potential_rainfed.log",
     benchmark:
-        "benchmarks/shared/doc_fig_multi_cropping_potential_rainfed.tsv"
+        "<benchmarks>/shared/doc_fig_multi_cropping_potential_rainfed.tsv"
     script:
         "../scripts/doc_figures/multi_cropping_potential.py"
 
@@ -267,7 +267,7 @@ rule doc_fig_multi_cropping_potential_irrigated:
     """Visualise irrigated multi-cropping zones and regional potential."""
     input:
         zone_raster=lambda w: gaez_path("multiple_cropping_zone", "i", "all"),
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/multi_cropping_potential_irrigated.svg",
@@ -280,9 +280,9 @@ rule doc_fig_multi_cropping_potential_irrigated:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_multi_cropping_potential_irrigated.log",
+        "<logs>/shared/doc_fig_multi_cropping_potential_irrigated.log",
     benchmark:
-        "benchmarks/shared/doc_fig_multi_cropping_potential_irrigated.tsv"
+        "<benchmarks>/shared/doc_fig_multi_cropping_potential_irrigated.tsv"
     script:
         "../scripts/doc_figures/multi_cropping_potential.py"
 
@@ -291,7 +291,7 @@ rule doc_fig_water_basin_availability:
     """Generate basin water availability map."""
     input:
         basin_shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
-        water_data=f"processing/{DOC_FIG_NAME}/water/blue_water_availability.csv",
+        water_data=f"<processing>/{DOC_FIG_NAME}/water/blue_water_availability.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/water_basin_availability.svg",
@@ -302,9 +302,9 @@ rule doc_fig_water_basin_availability:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_water_basin_availability.log",
+        "<logs>/shared/doc_fig_water_basin_availability.log",
     benchmark:
-        "benchmarks/shared/doc_fig_water_basin_availability.tsv"
+        "<benchmarks>/shared/doc_fig_water_basin_availability.tsv"
     script:
         "../scripts/doc_figures/water_basin_availability.py"
 
@@ -312,8 +312,8 @@ rule doc_fig_water_basin_availability:
 rule doc_fig_water_region_availability:
     """Generate regional water availability map."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
-        water_data=f"processing/{DOC_FIG_NAME}/water/region_growing_season_water.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
+        water_data=f"<processing>/{DOC_FIG_NAME}/water/region_growing_season_water.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/water_region_availability.svg",
@@ -324,9 +324,9 @@ rule doc_fig_water_region_availability:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_water_region_availability.log",
+        "<logs>/shared/doc_fig_water_region_availability.log",
     benchmark:
-        "benchmarks/shared/doc_fig_water_region_availability.tsv"
+        "<benchmarks>/shared/doc_fig_water_region_availability.tsv"
     script:
         "../scripts/doc_figures/water_region_availability.py"
 
@@ -335,7 +335,7 @@ rule doc_fig_irrigated_land_fraction:
     """Generate irrigated land fraction map."""
     input:
         irrigated_fraction="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/irrigated_land_fraction.svg",
@@ -346,9 +346,9 @@ rule doc_fig_irrigated_land_fraction:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_irrigated_land_fraction.log",
+        "<logs>/shared/doc_fig_irrigated_land_fraction.log",
     benchmark:
-        "benchmarks/shared/doc_fig_irrigated_land_fraction.tsv"
+        "<benchmarks>/shared/doc_fig_irrigated_land_fraction.tsv"
     script:
         "../scripts/doc_figures/irrigated_land_fraction.py"
 
@@ -357,7 +357,7 @@ rule doc_fig_grassland_yield:
     """Generate managed grassland yield map."""
     input:
         grassland_yield="data/downloads/grassland_yield_historical.nc4",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/grassland_yield.svg",
@@ -368,9 +368,9 @@ rule doc_fig_grassland_yield:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_grassland_yield.log",
+        "<logs>/shared/doc_fig_grassland_yield.log",
     benchmark:
-        "benchmarks/shared/doc_fig_grassland_yield.tsv"
+        "<benchmarks>/shared/doc_fig_grassland_yield.tsv"
     script:
         "../scripts/doc_figures/grassland_yield_map.py"
 
@@ -378,9 +378,9 @@ rule doc_fig_grassland_yield:
 rule doc_fig_grazing_only_land_fraction:
     """Visualise grazing-only land availability."""
     input:
-        classes=f"processing/{DOC_FIG_NAME}/resource_classes.nc",
-        lc_masks=f"processing/{DOC_FIG_NAME}/luc/lc_masks.nc",
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
+        lc_masks=f"<processing>/{DOC_FIG_NAME}/luc/lc_masks.nc",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
         style=DOC_FIG_STYLE,
     output:
@@ -392,9 +392,9 @@ rule doc_fig_grazing_only_land_fraction:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_grazing_only_land_fraction.log",
+        "<logs>/shared/doc_fig_grazing_only_land_fraction.log",
     benchmark:
-        "benchmarks/shared/doc_fig_grazing_only_land_fraction.tsv"
+        "<benchmarks>/shared/doc_fig_grazing_only_land_fraction.tsv"
     script:
         "../scripts/doc_figures/grazing_only_land_fraction.py"
 
@@ -402,7 +402,7 @@ rule doc_fig_grazing_only_land_fraction:
 rule doc_fig_trade_network:
     """Generate trade network map showing hubs and links."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/trade_network.svg",
@@ -415,9 +415,9 @@ rule doc_fig_trade_network:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_trade_network.log",
+        "<logs>/shared/doc_fig_trade_network.log",
     benchmark:
-        "benchmarks/shared/doc_fig_trade_network.tsv"
+        "<benchmarks>/shared/doc_fig_trade_network.tsv"
     script:
         "../scripts/doc_figures/trade_network_map.py"
 
@@ -432,9 +432,9 @@ rule doc_fig_workflow_rulegraph_dot:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_workflow_rulegraph_dot.log",
+        "<logs>/shared/doc_fig_workflow_rulegraph_dot.log",
     benchmark:
-        "benchmarks/shared/doc_fig_workflow_rulegraph_dot.tsv"
+        "<benchmarks>/shared/doc_fig_workflow_rulegraph_dot.tsv"
     shell:
         """
         snakemake --rulegraph --config name=test > {output.dot} 2> {log}
@@ -453,9 +453,9 @@ rule doc_fig_workflow_rulegraph_styled:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_workflow_rulegraph_styled.log",
+        "<logs>/shared/doc_fig_workflow_rulegraph_styled.log",
     benchmark:
-        "benchmarks/shared/doc_fig_workflow_rulegraph_styled.tsv"
+        "<benchmarks>/shared/doc_fig_workflow_rulegraph_styled.tsv"
     script:
         "../scripts/doc_figures/style_workflow_graph.py"
 
@@ -473,9 +473,9 @@ rule doc_fig_workflow_rulegraph:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_workflow_rulegraph.log",
+        "<logs>/shared/doc_fig_workflow_rulegraph.log",
     benchmark:
-        "benchmarks/shared/doc_fig_workflow_rulegraph.tsv"
+        "<benchmarks>/shared/doc_fig_workflow_rulegraph.tsv"
     script:
         "../scripts/doc_figures/render_graph.py"
 
@@ -483,8 +483,8 @@ rule doc_fig_workflow_rulegraph:
 rule doc_fig_analysis_ghg_health:
     """Generate GHG and health impact bar charts for documentation."""
     input:
-        ghg_intensity=f"results/{DOC_FIG_NAME}/analysis/scen-default/ghg_intensity.csv",
-        health_marginals=f"results/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.csv",
+        ghg_intensity=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/ghg_intensity.csv",
+        health_marginals=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.csv",
         style=DOC_FIG_STYLE,
     output:
         ghg_svg="docs/_static/figures/analysis_marginal_ghg.svg",
@@ -497,9 +497,9 @@ rule doc_fig_analysis_ghg_health:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_analysis_ghg_health.log",
+        "<logs>/shared/doc_fig_analysis_ghg_health.log",
     benchmark:
-        "benchmarks/shared/doc_fig_analysis_ghg_health.tsv"
+        "<benchmarks>/shared/doc_fig_analysis_ghg_health.tsv"
     script:
         "../scripts/doc_figures/analysis_ghg_health.py"
 
@@ -507,8 +507,8 @@ rule doc_fig_analysis_ghg_health:
 rule doc_fig_health_clusters:
     """Generate health cluster map showing country groupings."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
-        clusters=f"processing/{DOC_FIG_NAME}/health/country_clusters.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
+        clusters=f"<processing>/{DOC_FIG_NAME}/health/country_clusters.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/health_clusters.svg",
@@ -519,9 +519,9 @@ rule doc_fig_health_clusters:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_health_clusters.log",
+        "<logs>/shared/doc_fig_health_clusters.log",
     benchmark:
-        "benchmarks/shared/doc_fig_health_clusters.tsv"
+        "<benchmarks>/shared/doc_fig_health_clusters.tsv"
     script:
         "../scripts/doc_figures/health_clusters_map.py"
 
@@ -529,10 +529,10 @@ rule doc_fig_health_clusters:
 rule doc_fig_health_burden:
     """Generate choropleth of baseline diet-attributable disease burden."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
-        clusters=f"processing/{DOC_FIG_NAME}/health/country_clusters.csv",
-        cluster_cause_baseline=f"processing/{DOC_FIG_NAME}/health/cluster_cause_baseline.csv",
-        cluster_summary=f"processing/{DOC_FIG_NAME}/health/cluster_summary.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
+        clusters=f"<processing>/{DOC_FIG_NAME}/health/country_clusters.csv",
+        cluster_cause_baseline=f"<processing>/{DOC_FIG_NAME}/health/cluster_cause_baseline.csv",
+        cluster_summary=f"<processing>/{DOC_FIG_NAME}/health/cluster_summary.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/health_burden.svg",
@@ -543,9 +543,9 @@ rule doc_fig_health_burden:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_health_burden.log",
+        "<logs>/shared/doc_fig_health_burden.log",
     benchmark:
-        "benchmarks/shared/doc_fig_health_burden.tsv"
+        "<benchmarks>/shared/doc_fig_health_burden.tsv"
     script:
         "../scripts/doc_figures/health_burden_map.py"
 
@@ -553,8 +553,8 @@ rule doc_fig_health_burden:
 rule doc_fig_baseline_diet_by_region:
     """Generate baseline diet by-region stacked bar chart."""
     input:
-        baseline_diet=f"processing/{DOC_FIG_NAME}/baseline_diet.csv",
-        population=f"processing/{DOC_FIG_NAME}/population.csv",
+        baseline_diet=f"<processing>/{DOC_FIG_NAME}/baseline_diet.csv",
+        population=f"<processing>/{DOC_FIG_NAME}/population.csv",
         m49_codes="data/curated/M49-codes.csv",
         style=DOC_FIG_STYLE,
     output:
@@ -566,9 +566,9 @@ rule doc_fig_baseline_diet_by_region:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_baseline_diet_by_region.log",
+        "<logs>/shared/doc_fig_baseline_diet_by_region.log",
     benchmark:
-        "benchmarks/shared/doc_fig_baseline_diet_by_region.tsv"
+        "<benchmarks>/shared/doc_fig_baseline_diet_by_region.tsv"
     script:
         "../scripts/doc_figures/baseline_diet_by_region.py"
 
@@ -576,8 +576,8 @@ rule doc_fig_baseline_diet_by_region:
 rule doc_fig_baseline_diet_by_food:
     """Generate baseline diet by-food stacked bar chart."""
     input:
-        baseline_diet=f"processing/{DOC_FIG_NAME}/baseline_diet.csv",
-        population=f"processing/{DOC_FIG_NAME}/population.csv",
+        baseline_diet=f"<processing>/{DOC_FIG_NAME}/baseline_diet.csv",
+        population=f"<processing>/{DOC_FIG_NAME}/population.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/baseline_diet_by_food.svg",
@@ -588,9 +588,9 @@ rule doc_fig_baseline_diet_by_food:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_baseline_diet_by_food.log",
+        "<logs>/shared/doc_fig_baseline_diet_by_food.log",
     benchmark:
-        "benchmarks/shared/doc_fig_baseline_diet_by_food.tsv"
+        "<benchmarks>/shared/doc_fig_baseline_diet_by_food.tsv"
     script:
         "../scripts/doc_figures/baseline_diet_by_food.py"
 
@@ -613,11 +613,11 @@ PRODUCTION_PATTERN_BAR_XMAX = 400
 rule doc_fig_production_pattern_frame:
     """Generate one production-pattern PNG frame for a trade scenario."""
     input:
-        regions=f"processing/{DOC_FIG_NAME}/regions.geojson",
-        resource_classes=f"processing/{DOC_FIG_NAME}/resource_classes.nc",
-        land_area_by_class=f"processing/{DOC_FIG_NAME}/land_area_by_class.csv",
-        land_grazing_only=f"processing/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
-        land_use=f"results/{DOC_FIG_NAME}/analysis/scen-{{trade_scenario}}/land_use.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
+        resource_classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
+        land_area_by_class=f"<processing>/{DOC_FIG_NAME}/land_area_by_class.csv",
+        land_grazing_only=f"<processing>/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
+        land_use=f"<results>/{DOC_FIG_NAME}/analysis/scen-{{trade_scenario}}/land_use.csv",
         style=DOC_FIG_STYLE,
     output:
         png="docs/_static/figures/production_pattern_{trade_scenario}.png",
@@ -630,9 +630,9 @@ rule doc_fig_production_pattern_frame:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_production_pattern_{trade_scenario}.log",
+        "<logs>/shared/doc_fig_production_pattern_{trade_scenario}.log",
     benchmark:
-        "benchmarks/shared/doc_fig_production_pattern_{trade_scenario}.tsv"
+        "<benchmarks>/shared/doc_fig_production_pattern_{trade_scenario}.tsv"
     script:
         "../scripts/doc_figures/production_pattern.py"
 
@@ -652,9 +652,9 @@ rule doc_fig_production_pattern_gif:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/doc_fig_production_pattern_gif.log",
+        "<logs>/shared/doc_fig_production_pattern_gif.log",
     benchmark:
-        "benchmarks/shared/doc_fig_production_pattern_gif.tsv"
+        "<benchmarks>/shared/doc_fig_production_pattern_gif.tsv"
     script:
         "../scripts/doc_figures/collate_production_gif.py"
 
@@ -682,9 +682,9 @@ rule build_docs:
         runtime="10m",
         mem_mb=2000,
     log:
-        "logs/shared/build_docs.log",
+        "<logs>/shared/build_docs.log",
     benchmark:
-        "benchmarks/shared/build_docs.tsv"
+        "<benchmarks>/shared/build_docs.tsv"
     shell:
         """
         cd docs && make html > ../{log} 2>&1

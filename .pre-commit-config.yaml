@@ -12,7 +12,7 @@ repos:
       - id: ruff-format
         name: ruff (formatter)
   - repo: https://github.com/snakemake/snakefmt
-    rev: v0.11.2
+    rev: v0.11.4
     hooks:
       - id: snakefmt
   - repo: https://github.com/fsfe/reuse-tool

@@ -20,16 +20,16 @@ rule prepare_faostat_crop_production:
         production_year=config["validation"]["production_year"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
-        "processing/{name}/faostat_crop_production.csv",
+        "<processing>/{name}/faostat_crop_production.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=2900,
     log:
-        "logs/{name}/prepare_faostat_crop_production.log",
+        "<logs>/{name}/prepare_faostat_crop_production.log",
     benchmark:
-        "benchmarks/{name}/prepare_faostat_crop_production.tsv"
+        "<benchmarks>/{name}/prepare_faostat_crop_production.tsv"
     script:
         "../scripts/prepare_faostat_crop_production.py"
 
@@ -41,16 +41,16 @@ rule prepare_fao_edible_portion:
     params:
         crops=config["crops"],
     output:
-        edible_portion="processing/{name}/fao_edible_portion.csv",
+        edible_portion="<processing>/{name}/fao_edible_portion.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/prepare_fao_edible_portion.log",
+        "<logs>/{name}/prepare_fao_edible_portion.log",
     benchmark:
-        "benchmarks/{name}/prepare_fao_edible_portion.tsv"
+        "<benchmarks>/{name}/prepare_fao_edible_portion.tsv"
     script:
         "../scripts/prepare_fao_edible_portion.py"
 
@@ -81,23 +81,23 @@ def yield_and_suitability_for_crop(w):
 rule build_crop_yields:
     input:
         unpack(yield_and_suitability_for_crop),
-        classes="processing/{name}/resource_classes.nc",
-        regions="processing/{name}/regions.geojson",
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
         yield_unit_conversions="data/curated/yield_unit_conversions.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
     params:
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
-        "processing/{name}/crop_yields/{crop}_{water_supply}.csv",
+        "<processing>/{name}/crop_yields/{crop}_{water_supply}.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=1300,
     log:
-        "logs/{name}/build_crop_yields_{crop}_{water_supply}.log",
+        "<logs>/{name}/build_crop_yields_{crop}_{water_supply}.log",
     benchmark:
-        "benchmarks/{name}/build_crop_yields_{crop}_{water_supply}.tsv"
+        "<benchmarks>/{name}/build_crop_yields_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_crop_yields.py"
 
@@ -107,23 +107,23 @@ rule build_harvested_area_gaez:
         harvested_area_raster=lambda w: gaez_path(
             "harvested_area", w.water_supply, w.crop
         ),
-        classes="processing/{name}/resource_classes.nc",
-        regions="processing/{name}/regions.geojson",
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
         crop_mapping="data/curated/gaez_crop_code_mapping.csv",
-        faostat_production="processing/{name}/faostat_crop_production.csv",
+        faostat_production="<processing>/{name}/faostat_crop_production.csv",
     params:
         non_food_crops=config["non_food_crops"],
     output:
-        "processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
+        "<processing>/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=700,
     log:
-        "logs/{name}/build_harvested_area_gaez_{crop}_{water_supply}.log",
+        "<logs>/{name}/build_harvested_area_gaez_{crop}_{water_supply}.log",
     benchmark:
-        "benchmarks/{name}/build_harvested_area_gaez_{crop}_{water_supply}.tsv"
+        "<benchmarks>/{name}/build_harvested_area_gaez_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_harvested_area.py"
 
@@ -143,8 +143,8 @@ def multi_cropping_inputs(_wildcards):
         "actual_yield" if config["validation"]["use_actual_yields"] else "yield"
     )
     inputs = {
-        "classes": "processing/{name}/resource_classes.nc",
-        "regions": "processing/{name}/regions.geojson",
+        "classes": "<processing>/{name}/resource_classes.nc",
+        "regions": "<processing>/{name}/regions.geojson",
         "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
     }
     for ws in ("r", "i"):
@@ -177,17 +177,17 @@ rule build_multi_cropping:
         combinations=lambda wildcards: config["multiple_cropping"],
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
-        eligible="processing/{name}/multi_cropping/eligible_area.csv",
-        yields="processing/{name}/multi_cropping/cycle_yields.csv",
+        eligible="<processing>/{name}/multi_cropping/eligible_area.csv",
+        yields="<processing>/{name}/multi_cropping/cycle_yields.csv",
     group:
         "prep"
     resources:
         runtime="2m",
         mem_mb=5500,
     log:
-        "logs/{name}/build_multi_cropping.log",
+        "<logs>/{name}/build_multi_cropping.log",
     benchmark:
-        "benchmarks/{name}/build_multi_cropping.tsv"
+        "<benchmarks>/{name}/build_multi_cropping.tsv"
     script:
         "../scripts/build_multi_cropping.py"
 
@@ -195,69 +195,69 @@ rule build_multi_cropping:
 rule build_grassland_yields:
     input:
         grassland="data/downloads/grassland_yield_historical.nc4",
-        classes="processing/{name}/resource_classes.nc",
-        regions="processing/{name}/regions.geojson",
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
     output:
-        "processing/{name}/isimip_grassland_yields.csv",
+        "<processing>/{name}/isimip_grassland_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=1500,
     log:
-        "logs/{name}/build_grassland_yields.log",
+        "<logs>/{name}/build_grassland_yields.log",
     benchmark:
-        "benchmarks/{name}/build_grassland_yields.tsv"
+        "<benchmarks>/{name}/build_grassland_yields.tsv"
     script:
         "../scripts/build_grassland_yields.py"
 
 
 rule build_luicube_grassland_yields:
     input:
-        luicube="processing/shared/luc/luicube_grassland.nc",
-        classes="processing/{name}/resource_classes.nc",
-        regions="processing/{name}/regions.geojson",
+        luicube="<processing>/shared/luc/luicube_grassland.nc",
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
     output:
-        "processing/{name}/luicube_grassland_yields.csv",
+        "<processing>/{name}/luicube_grassland_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=2600,
     log:
-        "logs/{name}/build_luicube_grassland_yields.log",
+        "<logs>/{name}/build_luicube_grassland_yields.log",
     benchmark:
-        "benchmarks/{name}/build_luicube_grassland_yields.tsv"
+        "<benchmarks>/{name}/build_luicube_grassland_yields.tsv"
     script:
         "../scripts/build_luicube_grassland_yields.py"
 
 
 rule merge_grassland_yields:
     input:
-        luicube="processing/{name}/luicube_grassland_yields.csv",
-        isimip="processing/{name}/isimip_grassland_yields.csv",
+        luicube="<processing>/{name}/luicube_grassland_yields.csv",
+        isimip="<processing>/{name}/isimip_grassland_yields.csv",
     params:
         isimip_utilization_rate=config["grazing"]["isimip_utilization_rate"],
     output:
-        "processing/{name}/grassland_yields.csv",
+        "<processing>/{name}/grassland_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=200,
     log:
-        "logs/{name}/merge_grassland_yields.log",
+        "<logs>/{name}/merge_grassland_yields.log",
     benchmark:
-        "benchmarks/{name}/merge_grassland_yields.tsv"
+        "<benchmarks>/{name}/merge_grassland_yields.tsv"
     script:
         "../scripts/merge_grassland_yields.py"
 
 
 rule build_crop_residue_yields:
     input:
-        yield_r=lambda wildcards: f"processing/{wildcards.name}/crop_yields/{wildcards.crop}_r.csv",
+        yield_r=lambda wildcards: f"<processing>/{wildcards.name}/crop_yields/{wildcards.crop}_r.csv",
         yield_i=lambda wildcards: (
-            f"processing/{wildcards.name}/crop_yields/{wildcards.crop}_i.csv"
+            f"<processing>/{wildcards.name}/crop_yields/{wildcards.crop}_i.csv"
             if config["irrigation"]["irrigated_crops"] == "all"
             or wildcards.crop in config["irrigation"]["irrigated_crops"]
             else []
@@ -265,25 +265,25 @@ rule build_crop_residue_yields:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
         ruminant_feed_table="data/curated/gleam_tables/ruminants_feed_yield_fractions.csv",
         monogastric_feed_table="data/curated/gleam_tables/monogastrics_feed_yeild_fractions.csv",
-        regions="processing/{name}/regions.geojson",
+        regions="<processing>/{name}/regions.geojson",
     output:
-        "processing/{name}/crop_residue_yields/{crop}.csv",
+        "<processing>/{name}/crop_residue_yields/{crop}.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=250,
     log:
-        "logs/{name}/build_crop_residue_yields_{crop}.log",
+        "<logs>/{name}/build_crop_residue_yields_{crop}.log",
     benchmark:
-        "benchmarks/{name}/build_crop_residue_yields_{crop}.tsv"
+        "<benchmarks>/{name}/build_crop_residue_yields_{crop}.tsv"
     script:
         "../scripts/build_crop_residue_yields.py"
 
 
 def residue_yield_inputs(_wildcards):
     return {
-        f"residue_{crop}": f"processing/{{name}}/crop_residue_yields/{crop}.csv"
+        f"residue_{crop}": f"<processing>/{{name}}/crop_residue_yields/{crop}.csv"
         for crop in (
             set(config["animal_products"]["residue_crops"]) & set(config["crops"])
         )

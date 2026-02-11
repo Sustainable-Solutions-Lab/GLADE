@@ -12,6 +12,7 @@ required:
   - planning_horizon
   - currency_base_year
   - downloads
+  - paths
   - netcdf
   - validation
   - food_incentives
@@ -76,6 +77,29 @@ properties:
       show_progress:
         type: boolean
         description: "Whether to show download progress bars"
+
+  paths:
+    type: object
+    required: [results_root, processing_root, logs_root, benchmarks_root]
+    additionalProperties: false
+    description: "Root directories for workflow artifacts; environment variables and ~ are expanded by the Snakefile"
+    properties:
+      results_root:
+        type: string
+        minLength: 1
+        description: "Root directory for result outputs"
+      processing_root:
+        type: string
+        minLength: 1
+        description: "Root directory for preprocessing outputs"
+      logs_root:
+        type: string
+        minLength: 1
+        description: "Root directory for rule logs"
+      benchmarks_root:
+        type: string
+        minLength: 1
+        description: "Root directory for Snakemake benchmark TSV files"
 
   netcdf:
     type: object
