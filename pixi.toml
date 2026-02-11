@@ -18,11 +18,16 @@ dev-gurobi = { features = ["dev", "gurobi"], solve-group = "default" }
 [dependencies]
 # Core
 python = ">=3.13.9,<3.14"
+packaging = "<26"                    # Snakemake requires <26
 
 # Scientific computing
 numpy = ">=2.3.5,<3"                 # Numerical arrays and computations
 pandas = ">=2.3.3,<3"                # Data frames and tabular data
 scikit-learn = ">=1.7.2,<2"          # Clustering for region aggregation
+
+# Optimization and solvers
+highspy = ">=1.10.0,<2"              # HiGHS LP/MIP solver (conda-forge build for py3.13 compatibility)
+levenshtein = ">=0.27.0,<1"          # String distance metrics (conda-forge build for py3.13 compatibility)
 
 # Visualization
 matplotlib = ">=3.10.8,<4"           # Plotting library
@@ -55,6 +60,8 @@ xgboost = ">=3.2.0,<4"
 [pypi-dependencies]
 # Workflow engine
 snakemake = ">=9.13.7, <10"
+# Vendored version with group job parallelism fix
+snakemake-executor-plugin-slurm = { path = "vendor/snakemake-executor-plugin-slurm", editable = true }
 
 # Data retrieval (HTTP range-based ZIP extraction for LUIcube)
 remotezip = ">=0.12, <1"
@@ -83,6 +90,10 @@ pydantic = ">=2.12.4, <3"
 # Sensitivity analysis (PCE-based)
 chaospy = ">=4.3, <5"
 
+[feature.gurobi.activation.env]
+# Point to Sherlock's cluster Gurobi license
+GRB_LICENSE_FILE = "/share/software/user/restricted/gurobi/13.0.1/licenses/gurobi.lic"
+
 [feature.gurobi.pypi-dependencies]
 gurobipy = ">=13.0.0, <14"           # Gurobi commercial MILP solver (requires license)
 
@@ -108,6 +119,10 @@ myst-nb = ">=1.1, <2"                # Render Jupyter notebooks in Sphinx
 [feature.dev.pypi-dependencies]
 snakefmt = ">=0.11.4, <0.12"         # Snakemake code formatter
 pytest = ">=8.0.0, <9"              # Test framework
+
+[system-requirements]
+linux = "3.10"
+libc = { family = "glibc", version = "2.17" }
 
 [activation.env]
 # Enable new PyPSA components API globally
