@@ -26,3 +26,4 @@ docs/_static/figures/*
 
 # Secrets (never commit credentials)
 config/secrets.yaml
+/tools/snakemake-logger-plugin-compact/build/

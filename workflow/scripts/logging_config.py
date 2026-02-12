@@ -22,15 +22,8 @@ def setup_script_logging(log_file=None, level=logging.INFO):
     """
     handlers = []
 
-    # Always add console handler
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(
-        logging.Formatter("[%(name)s] %(levelname)s: %(message)s")
-    )
-    handlers.append(console_handler)
-
-    # Add file handler if log file specified
     if log_file:
+        # When a log file is available, only log to file (no console noise)
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file)
@@ -38,6 +31,13 @@ def setup_script_logging(log_file=None, level=logging.INFO):
             logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         )
         handlers.append(file_handler)
+    else:
+        # Fallback: log to console when no log file is given
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(
+            logging.Formatter("[%(name)s] %(levelname)s: %(message)s")
+        )
+        handlers.append(console_handler)
 
     # Configure root logger
     logging.basicConfig(

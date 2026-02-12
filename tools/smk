@@ -94,6 +94,9 @@ if [ "$has_jobs_arg" = false ]; then
   set -- -j1 "$@"
 fi
 
+# Use compact logger by default
+set -- --logger compact --show-failed-logs "$@"
+
 # Forward explicit SMK_MEM_MAX to Snakemake scheduler when no mem_mb resource is set.
 if [[ -n "$SMK_MEM_MB_LIMIT" && "$has_mem_mb_resource_arg" = false ]]; then
   set -- --resources "mem_mb=${SMK_MEM_MB_LIMIT}" "$@"

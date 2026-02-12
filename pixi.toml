@@ -59,6 +59,9 @@ remotezip = ">=0.12, <1"
 # Editable install of workflow package for cross-script imports
 food-opt-workflow = { path = ".", editable = true }
 
+# Compact logger plugin for Snakemake (non-editable for plugin discovery)
+snakemake-logger-plugin-compact = { path = "tools/snakemake-logger-plugin-compact" }
+
 # Optimization and modeling; own branches of pypsa and linopy with custom features needed by food-opt
 pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.0.7.3+food.opt" }
 linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.6.1+food.opt" }
