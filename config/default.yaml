@@ -5,36 +5,15 @@
 # Default configuration - override in project-specific configs
 # --- section: scenario_metadata ---
 scenarios:
-  # Scenario Presets
-  # ----------------
   # Each key represents a named scenario that can be activated via the
-  # {scenario} wildcard in Snakemake (e.g., model_scen-HighGHG.nc).
+  # {scenario} wildcard in Snakemake (e.g., model_scen-default.nc).
   # The values are configuration overrides applied recursively on top
   # of the default configuration.
-
-  default:
-    health:
-      enabled: false
-    emissions:
-      ghg_pricing_enabled: false
-
-  H:
-    health:
-      enabled: true
-    emissions:
-      ghg_pricing_enabled: false
-
-  G:
-    health:
-      enabled: false
-    emissions:
-      ghg_pricing_enabled: true
-
-  HG:
-    health:
-      enabled: true
-    emissions:
-      ghg_pricing_enabled: true
+  default: {}
+  # Example:
+  # high_ghg:
+  #   emissions:
+  #     ghg_price: 500
 planning_horizon: 2030
 currency_base_year: 2024  # Base year for inflation-adjusted USD values
 
