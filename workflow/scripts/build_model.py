@@ -26,7 +26,6 @@ from workflow.scripts.build_model import (
     land,
     nutrition,
     primary_resources,
-    production_stability,
     sensitivity,
     trade,
     utils,
@@ -195,7 +194,7 @@ if __name__ == "__main__":
     else:
         expected_irrigated_crops = set(map(str, irrigation_cfg))
 
-    # Read yields data (and harvested area if needed) for each crop and water supply
+    # Read yields data and harvested area for each crop and water supply
     yields_data: dict[str, pd.DataFrame] = {}
     harvested_area_data: dict[str, pd.DataFrame] = {}
     for crop in snakemake.params.crops:
@@ -208,11 +207,10 @@ if __name__ == "__main__":
             yields_df, _ = utils._load_crop_yield_table(snakemake.input[yields_key])
             yields_data[yields_key] = yields_df
 
-            if use_actual_production:
-                harvest_key = f"{crop}_harvested_{ws}"
-                path = snakemake.input[harvest_key]
-                harvest_df, _ = utils._load_crop_yield_table(path)
-                harvested_area_data[harvest_key] = harvest_df
+            harvest_key = f"{crop}_harvested_{ws}"
+            path = snakemake.input[harvest_key]
+            harvest_df, _ = utils._load_crop_yield_table(path)
+            harvested_area_data[harvest_key] = harvest_df
 
     # Read regions
     regions_df = gpd.read_file(snakemake.input.regions)
@@ -614,7 +612,7 @@ if __name__ == "__main__":
         rice_methane_factor=rice_methane_factor,
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
-        harvested_area_data=harvested_area_data if use_actual_production else None,
+        harvested_area_data=harvested_area_data,
         use_actual_production=use_actual_production,
         min_yield_t_per_ha=min_crop_yield,
     )
@@ -789,39 +787,6 @@ if __name__ == "__main__":
         snakemake.input.health_cluster_cause,
         snakemake.config["health"],
     )
-
-    # Production stability stores (for l1/quadratic penalty modes)
-    stability_cfg = snakemake.params.production_stability
-    if stability_cfg["enabled"] and stability_cfg["penalty_mode"] in (
-        "l1",
-        "quadratic",
-    ):
-        crop_baseline = None
-        crop_to_fao_item: dict[str, str] = {}
-        animal_baseline = None
-
-        if stability_cfg["crops"]["enabled"]:
-            crop_baseline = read_csv(snakemake.input.crop_production_baseline)
-            fao_map_df = read_csv(snakemake.input.faostat_crop_item_map)
-            crop_to_fao_item = dict(
-                zip(
-                    fao_map_df["crop"].astype(str),
-                    fao_map_df["faostat_item"].astype(str),
-                )
-            )
-
-        if stability_cfg["animals"]["enabled"]:
-            animal_baseline = read_csv(snakemake.input.animal_production_baseline)
-
-        production_stability.add_production_stability_stores(
-            n,
-            stability_cfg,
-            crop_baseline,
-            animal_baseline,
-            crop_to_fao_item,
-            food_to_group,
-            food_loss_waste,
-        )
 
     # Compute and store health cluster populations from country populations
     cluster_map_df = read_csv(snakemake.input.health_clusters)

@@ -82,8 +82,9 @@ def add_regional_crop_production_links(
             key = f"{crop}_yield_{ws}"
             crop_yields = yields_data[key].copy()
 
-            if use_actual_production:
-                harvest_table = harvested_area_data[f"{crop}_harvested_{ws}"]
+            harvest_key = f"{crop}_harvested_{ws}"
+            if harvest_key in harvested_area_data:
+                harvest_table = harvested_area_data[harvest_key]
                 if (
                     not harvest_table.empty
                     and "harvested_area" in harvest_table.columns
@@ -184,6 +185,14 @@ def add_regional_crop_production_links(
             row_df["efficiency"] = pd.to_numeric(df["yield"], errors="coerce").to_numpy(
                 dtype=float
             )
+            ha = (
+                pd.to_numeric(df.get("harvested_area", 0), errors="coerce")
+                .fillna(0)
+                .to_numpy()
+            )
+            row_df["baseline_production_mt"] = (
+                ha / constants.HA_PER_MHA * row_df["efficiency"].to_numpy()
+            )
             row_df["bus2"] = water_bus
             row_df["efficiency2"] = water_eff
             row_df["bus3"] = ("fertilizer:" + df["country"].astype(str)).to_numpy()
@@ -269,6 +278,7 @@ def add_regional_crop_production_links(
         "region": all_df["region"],
         "resource_class": all_df["resource_class"],
         "water_supply": all_df["water_supply"],
+        "baseline_production_mt": all_df["baseline_production_mt"],
     }
 
     if use_actual_production:

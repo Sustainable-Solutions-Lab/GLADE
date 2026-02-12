@@ -30,12 +30,13 @@ def yield_inputs(wildcards):
     }
 
 
-def harvested_area_model_inputs(_wildcards):
-    """Return harvested area files when actual production mode is enabled."""
+def harvested_area_model_inputs(wildcards):
+    """Return harvested area files for all crops.
 
-    if not config["validation"]["use_actual_production"]:
-        return {}
-
+    Harvested area comes from the same GAEZ source as yields and is always
+    loaded so that ``baseline_production_mt`` can be computed on every crop
+    production link.
+    """
     irr_cfg = config["irrigation"]["irrigated_crops"]
     if irr_cfg == "all":
         irrigated_crops = config["crops"]
@@ -53,35 +54,11 @@ def harvested_area_model_inputs(_wildcards):
     return inputs
 
 
-def production_stability_build_inputs(wildcards):
-    """Return production stability baseline inputs when penalty mode is l1/quadratic."""
-    stability_cfg = get_effective_config(wildcards.scenario)["validation"][
-        "production_stability"
-    ]
-    if not stability_cfg["enabled"]:
-        return {}
-    if stability_cfg["penalty_mode"] not in ("l1", "quadratic"):
-        return {}
-
-    inputs = {}
-    if stability_cfg["crops"]["enabled"]:
-        inputs["crop_production_baseline"] = (
-            f"<processing>/{wildcards.name}/faostat_crop_production.csv"
-        )
-        inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
-    if stability_cfg["animals"]["enabled"]:
-        inputs["animal_production_baseline"] = (
-            f"<processing>/{wildcards.name}/faostat_animal_production.csv"
-        )
-    return inputs
-
-
 rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
-        unpack(production_stability_build_inputs),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
@@ -127,7 +104,6 @@ rule build_model:
                 "land.py",
                 "nutrition.py",
                 "primary_resources.py",
-                "production_stability.py",
                 "sensitivity.py",
                 "trade.py",
                 "utils.py",
@@ -236,12 +212,6 @@ def solve_model_inputs(w):
     # Add production stability inputs
     stability_cfg = eff_cfg["validation"]["production_stability"]
     if stability_cfg["enabled"]:
-        if stability_cfg["crops"]["enabled"]:
-            inputs["crop_production_baseline"] = (
-                f"<processing>/{w.name}/faostat_crop_production.csv"
-            )
-            # Include FAO item mapping to aggregate crops sharing an FAO item
-            inputs["faostat_crop_item_map"] = "data/curated/faostat_crop_item_map.csv"
         if stability_cfg["animals"]["enabled"]:
             inputs["animal_production_baseline"] = (
                 f"<processing>/{w.name}/faostat_animal_production.csv"

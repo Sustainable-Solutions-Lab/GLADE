@@ -799,9 +799,6 @@ def add_animal_production_constraints(
     )
 
 
-# Production stability constraints moved to workflow/scripts/solve_model/production_stability.py
-
-
 def add_within_group_ratio_constraints(
     n: pypsa.Network,
     ratios_df: pd.DataFrame,
@@ -987,12 +984,17 @@ def _run_solve() -> None:
     io_api = snakemake.params.io_api
     netcdf_config = snakemake.params.netcdf
 
-    # Configure Gurobi to write detailed logs to the same file
-    if solver_name.lower() == "gurobi" and snakemake.log:
-        if "LogFile" not in solver_options:
-            solver_options["LogFile"] = snakemake.log[0]
-        if "LogToConsole" not in solver_options:
-            solver_options["LogToConsole"] = 1  # Also print to console
+    # Configure Gurobi logging: write to log file, suppress console output.
+    # OutputFlag=0 on the Env silences the license banner and "Set parameter"
+    # messages that the C library prints to stdout during initialisation.
+    gurobi_env = None
+    if solver_name.lower() == "gurobi":
+        gurobi_env = {"OutputFlag": 0}
+        if snakemake.log:
+            if "LogFile" not in solver_options:
+                solver_options["LogFile"] = snakemake.log[0]
+            if "LogToConsole" not in solver_options:
+                solver_options["LogToConsole"] = 0
 
     # Get population from network metadata
     population_map = get_country_population(n)
@@ -1083,27 +1085,11 @@ def _run_solve() -> None:
     # Add production stability constraints
     stability_cfg = snakemake.params.production_stability
     if stability_cfg["enabled"]:
-        # Load food_to_group if not already loaded
-        if "food_to_group" not in dir():
-            food_groups_df = pd.read_csv(snakemake.input.food_groups)
-            food_to_group = food_groups_df.set_index("food")["group"].to_dict()
+        food_groups_df = pd.read_csv(snakemake.input.food_groups)
+        stability_food_to_group = food_groups_df.set_index("food")["group"].to_dict()
 
-        crop_baseline = None
-        crop_to_fao_item: dict[str, str] = {}
         animal_baseline = None
         food_loss_waste_df = pd.DataFrame()
-
-        if stability_cfg["crops"]["enabled"]:
-            crop_baseline = pd.read_csv(snakemake.input.crop_production_baseline)
-            # Load FAO item mapping to aggregate crops sharing an FAO item
-            fao_map_df = pd.read_csv(snakemake.input.faostat_crop_item_map)
-            crop_to_fao_item = dict(
-                zip(
-                    fao_map_df["crop"].astype(str),
-                    fao_map_df["faostat_item"].astype(str),
-                )
-            )
-
         if stability_cfg["animals"]["enabled"]:
             animal_baseline = pd.read_csv(snakemake.input.animal_production_baseline)
             food_loss_waste_df = pd.read_csv(snakemake.input.food_loss_waste)
@@ -1113,11 +1099,9 @@ def _run_solve() -> None:
         )
         add_production_stability_constraints(
             n,
-            crop_baseline,
-            crop_to_fao_item,
             animal_baseline,
             stability_cfg,
-            food_to_group,
+            stability_food_to_group,
             food_loss_waste_df,
             slack_marginal_cost,
         )
@@ -1157,6 +1141,7 @@ def _run_solve() -> None:
     status, condition = n.model.solve(
         solver_name=solver_name,
         io_api=io_api,
+        env=gurobi_env,
         calculate_fixed_duals=snakemake.params.calculate_fixed_duals,
         **solver_options,
     )
@@ -1232,6 +1217,30 @@ def _run_solve() -> None:
                     food_slack_total,
                     n.meta["food_slack_cost"],
                 )
+
+        # Store production stability penalty cost for objective breakdown.
+        # L1/quadratic penalties are linopy-level terms not visible to PyPSA
+        # statistics; record them in metadata so the breakdown can account
+        # for them.
+        stability_cost = 0.0
+        for var_name, cost_key in [
+            ("crop_stability_abs_dev", "l1_cost"),
+            ("animal_stability_abs_dev", "l1_cost"),
+        ]:
+            if var_name in n.model.variables:
+                sol = n.model.variables[var_name].solution
+                cost = float(stability_cfg.get(cost_key, 0))
+                stability_cost += cost * float(sol.sum())
+        for var_name, cost_key in [
+            ("crop_stability_dev", "quadratic_cost"),
+            ("animal_stability_dev", "quadratic_cost"),
+        ]:
+            if var_name in n.model.variables:
+                sol = n.model.variables[var_name].solution
+                cost = float(stability_cfg.get(cost_key, 0))
+                stability_cost += 0.5 * cost * float((sol * sol).sum())
+        if abs(stability_cost) > 1e-12:
+            n.meta["production_stability_cost"] = stability_cost
 
         # Free the linopy model before export; all values have been assigned.
         n._model = None
