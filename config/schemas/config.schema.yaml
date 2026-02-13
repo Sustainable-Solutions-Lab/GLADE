@@ -1398,6 +1398,9 @@ properties:
               - type: number
               - type: string
         description: "HiGHS solver options"
+      export_for_tuning:
+        type: boolean
+        description: "Export the fully-constructed model to MPS before solving (for Gurobi parameter tuning)"
       runtime:
         type: integer
         minimum: 1

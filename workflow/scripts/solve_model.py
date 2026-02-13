@@ -1142,6 +1142,20 @@ def _run_solve() -> None:
             tmrel_path=snakemake.input.health_derived_tmrel,
         )
 
+    # Export fully-constructed model to MPS for Gurobi parameter tuning
+    if snakemake.config["solving"].get("export_for_tuning"):
+        from pathlib import Path
+
+        output_path = Path(snakemake.output.network).with_suffix(".mps")
+        logger.info("Exporting model to %s for tuning...", output_path)
+        gp_model = n.model.to_gurobipy()
+        gp_model.update()
+        gp_model.write(str(output_path))
+        del gp_model
+        gc.collect()
+        logger.info("Model exported. Run tuning with:")
+        logger.info("  pixi run -e gurobi python tools/tune_model.py %s", output_path)
+
     status, condition = n.model.solve(
         solver_name=solver_name,
         io_api=io_api,

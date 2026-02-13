@@ -8,27 +8,36 @@
 This script runs Gurobi's parameter tuning on an exported MPS model file.
 
 Usage:
-    # Step 1: Export the model to MPS by enabling export_for_tuning in config
-    # Add to your config file (e.g., config/yll.yaml):
+    # Step 1: Export the model to MPS by enabling export_for_tuning in config.
+    # Add to your config file (e.g., config/sensitivity.yaml):
     #   solving:
     #     export_for_tuning: true
     #
-    # Then run the solve (it will export before solving):
-    tools/smk -e gurobi -j4 --configfile config/yll.yaml -- results/yll/solved/model_scen-yll_10000.nc
+    # Then run the solve (it will export the complete model before solving):
+    tools/smk -e gurobi -j4 --configfile config/sensitivity.yaml -- \\
+        results/sensitivity/solved/model_scen-ghg_0.nc
+
+    # The MPS file is written next to the solved network:
+    #   results/sensitivity/solved/model_scen-ghg_0.mps
 
     # Step 2: Run tuning on the exported MPS file:
-    pixi run -e gurobi python tools/tune_model.py results/yll/solved/model_scen-yll_10000.mps
-
-    # Optional arguments:
-    pixi run -e gurobi python tools/tune_model.py results/yll/solved/model_scen-yll_10000.mps \\
+    pixi run -e gurobi python tools/tune_model.py \\
+        results/sensitivity/solved/model_scen-ghg_0.mps \\
         --time-limit 7200 \\
         --tune-trials 5 \\
-        --tune-results 10
+        --tune-results 10 \\
+        --tune-jobs 5
+
+    # Optionally provide a .prm hint file to seed the search:
+    pixi run -e gurobi python tools/tune_model.py \\
+        results/sensitivity/solved/model_scen-ghg_0.mps \\
+        --hint results/sensitivity/solved/tuning/hint.prm
 
 The script will:
 1. Load the MPS model into Gurobi
-2. Run Gurobi's parameter tuning
-3. Save optimal parameters to .prm files
+2. Apply hint parameters (if provided) as a starting point
+3. Run Gurobi's parameter tuning (optionally in parallel)
+4. Save optimal parameters to .prm files
 """
 
 import argparse
@@ -51,6 +60,8 @@ def run_tuning(
     tune_trials: int,
     tune_results: int,
     threads: int | None,
+    tune_jobs: int | None,
+    hint_path: Path | None,
 ) -> Path | None:
     """Load MPS model and run Gurobi tuning."""
     if not mps_path.exists():
@@ -70,6 +81,27 @@ def run_tuning(
         model.NumConstrs,
     )
 
+    # Apply hint parameters as baseline for tuning
+    if hint_path is not None:
+        if not hint_path.exists():
+            raise FileNotFoundError(f"Hint file not found: {hint_path}")
+        logger.info("Loading hint parameters from %s", hint_path)
+        with open(hint_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parts = line.split()
+                    if len(parts) == 2:
+                        param_name, param_value = parts
+                        try:
+                            model.setParam(param_name, int(param_value))
+                        except (ValueError, TypeError):
+                            try:
+                                model.setParam(param_name, float(param_value))
+                            except (ValueError, TypeError):
+                                model.setParam(param_name, param_value)
+                        logger.info("  Hint: %s = %s", param_name, param_value)
+
     # Configure tuning parameters
     model.setParam("TuneTimeLimit", time_limit)
     model.setParam("TuneTrials", tune_trials)
@@ -78,6 +110,10 @@ def run_tuning(
     if threads is not None:
         model.setParam("Threads", threads)
         logger.info("Limiting to %d threads", threads)
+
+    if tune_jobs is not None:
+        model.setParam("TuneJobs", tune_jobs)
+        logger.info("Running %d parallel tuning jobs", tune_jobs)
 
     # Run tuning
     logger.info(
@@ -123,11 +159,14 @@ Example workflow:
   #    solving:
   #      export_for_tuning: true
 
-  # 2. Run the solve to export the model:
-  tools/smk -e gurobi -j4 --configfile config/yll.yaml -- results/yll/solved/model_scen-yll_10000.nc
+  # 2. Run the solve (exports MPS before solving):
+  tools/smk -e gurobi -j4 --configfile config/sensitivity.yaml -- \\
+      results/sensitivity/solved/model_scen-ghg_0.nc
 
-  # 3. Run tuning:
-  pixi run -e gurobi python tools/tune_model.py results/yll/solved/model_scen-yll_10000.mps
+  # 3. Run tuning (5 parallel jobs, starting from a hint):
+  pixi run -e gurobi python tools/tune_model.py \\
+      results/sensitivity/solved/model_scen-ghg_0.mps \\
+      --tune-jobs 5 --hint hint.prm
 
   # 4. Apply tuned parameters by adding to your config:
   #    solving:
@@ -170,7 +209,20 @@ Example workflow:
         "--threads",
         type=int,
         default=None,
-        help="Number of threads to use (default: all available)",
+        help="Number of threads to use per solve (default: all available)",
+    )
+    parser.add_argument(
+        "--tune-jobs",
+        "-j",
+        type=int,
+        default=None,
+        help="Number of parallel tuning jobs (default: 1, sequential)",
+    )
+    parser.add_argument(
+        "--hint",
+        type=Path,
+        default=None,
+        help="Path to a .prm file with parameters to seed the tuning search",
     )
 
     args = parser.parse_args()
@@ -183,6 +235,8 @@ Example workflow:
         args.tune_trials,
         args.tune_results,
         args.threads,
+        args.tune_jobs,
+        args.hint,
     )
 
     if best_prm:
