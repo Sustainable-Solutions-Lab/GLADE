@@ -25,7 +25,6 @@ from workflow.scripts.constants import (
     GRAMS_PER_MEGATONNE,
     PER_100K,
     PJ_TO_KCAL,
-    USD_TO_BNUSD,
 )
 
 # GWP values (AR5 100-year)
@@ -460,119 +459,6 @@ def load_food_to_group(project_root: Path) -> dict[str, str]:
 
 
 # -----------------------------------------------------------------------------
-# Worker functions for objective breakdown extraction
-# -----------------------------------------------------------------------------
-
-
-def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
-    """Group assets into high-level categories for system cost aggregation."""
-    static = n.components[component].static
-    if static.empty:
-        return pd.Series(dtype="object")
-
-    index = static.index
-
-    if component == "Generator":
-        carriers = static.get("carrier", pd.Series(dtype=str))
-        categories = []
-        for name in index:
-            name_str = str(name)
-            carrier = str(carriers.get(name, "")) if not carriers.empty else ""
-            if name_str.startswith("biomass:"):
-                categories.append("Biomass exports")
-            elif name_str.startswith("slack:"):
-                categories.append("Slack penalties")
-            elif carrier == "fertilizer":
-                categories.append("Fertilizer (synthetic)")
-            else:
-                categories.append("Other generators")
-        return pd.Series(categories, index=index, name="category")
-
-    if component == "Link":
-        mapping = {
-            "produce": "Crop production",
-            "trade": "Trade",
-            "convert": "Processing",
-            "consume": "Consumption",
-        }
-        categories = []
-        for name in index:
-            name_str = str(name)
-            if name_str.startswith("biomass:"):
-                categories.append("Biomass routing")
-                continue
-            categories.append(mapping.get(name_str.split(":", 1)[0], "Other links"))
-        return pd.Series(categories, index=index, name="category")
-
-    if component == "Store":
-        carriers = static["carrier"].astype(str)
-        categories = []
-        for _name, carrier in zip(index, carriers):
-            if carrier == "ghg":
-                categories.append("GHG storage")
-            elif carrier.startswith("yll_"):
-                categories.append("Health burden")
-            elif carrier.startswith("group_"):
-                categories.append("Consumer values")
-            else:
-                categories.append("Other stores")
-        return pd.Series(categories, index=index, name="category")
-
-    return pd.Series(component, index=index, name="category")
-
-
-def _extract_objective_breakdown_worker(args):
-    """Worker function for parallel objective extraction."""
-    network_path, constant_health_value, constant_ghg_price, usd_to_bnusd = args
-
-    n = pypsa.Network(network_path)
-
-    capex = n.statistics.capex(groupby=_objective_category)
-    opex = n.statistics.opex(groupby=_objective_category)
-
-    def _to_series(df_or_series):
-        if isinstance(df_or_series, pd.DataFrame):
-            df_or_series = df_or_series.iloc[:, 0]
-        if df_or_series.empty:
-            return pd.Series(dtype=float)
-        idx = df_or_series.index
-        if "category" not in idx.names:
-            idx = idx.set_names([*list(idx.names[:-1]), "category"])
-            df_or_series.index = idx
-        return df_or_series.groupby("category").sum()
-
-    capex_series = _to_series(capex)
-    opex_series = _to_series(opex)
-    total = capex_series.add(opex_series, fill_value=0.0)
-
-    if "Health burden" in total.index:
-        total = total.drop("Health burden")
-    if "GHG storage" in total.index:
-        total = total.drop("GHG storage")
-
-    snapshot = n.snapshots[-1] if len(n.snapshots) > 0 else None
-
-    if snapshot is not None and snapshot in n.stores.dynamic.e.index:
-        health_stores = n.stores.static[n.stores.static.carrier.str.startswith("yll_")]
-        if not health_stores.empty:
-            health_levels = n.stores.dynamic.e.loc[snapshot, health_stores.index]
-            total_myll = health_levels.sum()
-            health_cost_bnusd = constant_health_value * total_myll * 1e6 * usd_to_bnusd
-            total["Health burden"] = health_cost_bnusd
-
-    if snapshot is not None and snapshot in n.stores.dynamic.e.index:
-        ghg_stores = n.stores.static[n.stores.static.carrier == "ghg"]
-        if not ghg_stores.empty:
-            ghg_levels = n.stores.dynamic.e.loc[snapshot, ghg_stores.index]
-            total_mtco2eq = ghg_levels.sum()
-            ghg_cost_bnusd = constant_ghg_price * total_mtco2eq * 1e6 * usd_to_bnusd
-            total["GHG cost"] = ghg_cost_bnusd
-
-    total = total[total.abs() > 1e-6]
-    return total.sort_values(ascending=False)
-
-
-# -----------------------------------------------------------------------------
 # Data loading from workflow analysis outputs
 # -----------------------------------------------------------------------------
 
@@ -631,61 +517,48 @@ def load_consumption_from_statistics(
     return result.sort_index()
 
 
-def extract_objective_data(
+def load_objective_from_analysis(
     scenarios: list[tuple[float, str, Path]],
-    cache_path: Path,
+    project_root: Path,
+    config_name: str,
     param_name: str = "param_value",
-    constant_health_value: float = 10000,
-    constant_ghg_price: float = 100,
-    n_workers: int = 8,
 ) -> pd.DataFrame:
-    """Extract objective breakdown data for all scenarios.
+    """Load objective breakdown from precomputed analysis outputs.
+
+    Reads objective_breakdown.csv files produced by the extract_objective_breakdown
+    Snakemake rule.
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
-        cache_path: Path to cache file
+        project_root: Path to project root directory
+        config_name: Name of the config (e.g., 'sensitivity')
         param_name: Name for the parameter (used as index name)
-        constant_health_value: USD/YLL for health burden calculation
-        constant_ghg_price: USD/tCO2eq for GHG cost calculation
-        n_workers: Number of parallel workers
 
     Returns:
-        DataFrame with param_value as index and cost categories as columns
+        DataFrame with param_value as index and cost categories as columns (bn USD)
     """
-    network_paths = [f for _, _, f in scenarios]
+    results_dir = project_root / "results" / config_name
 
-    if is_cache_valid(cache_path, network_paths):
-        print(f"Loading objective data from cache: {cache_path}")
-        return pd.read_csv(cache_path, index_col=param_name)
+    data = {}
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            results_dir
+            / "analysis"
+            / f"scen-{scenario_name}"
+            / "objective_breakdown.csv"
+        )
+        if not csv_path.exists():
+            raise FileNotFoundError(
+                f"Objective breakdown file not found: {csv_path}. "
+                f"Run the extract_objective_breakdown rule first."
+            )
 
-    print(f"Extracting objective data using {n_workers} workers...")
+        row = pd.read_csv(csv_path).iloc[0]
+        data[param_value] = row
 
-    worker_args = [
-        (network_path, constant_health_value, constant_ghg_price, USD_TO_BNUSD)
-        for _, _, network_path in scenarios
-    ]
-    param_values = [pv for pv, _, _ in scenarios]
-
-    objective_data = {}
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        futures = {
-            executor.submit(_extract_objective_breakdown_worker, args): pv
-            for args, pv in zip(worker_args, param_values)
-        }
-
-        for future in as_completed(futures):
-            param_value = futures[future]
-            objective_data[param_value] = future.result()
-            print(f"  Loaded {param_name}={int(param_value)}")
-
-    df = pd.DataFrame(objective_data).T.fillna(0)
-    df.index.name = param_name
-    df = df.sort_index()
-
-    df.to_csv(cache_path)
-    print(f"Saved objective data to cache: {cache_path}")
-
-    return df
+    result = pd.DataFrame(data).T.fillna(0)
+    result.index.name = param_name
+    return result.sort_index()
 
 
 def load_ghg_from_statistics(
@@ -1238,17 +1111,43 @@ def aggregate_food_groups(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_objective_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare objective data: aggregate fertilizer into crop production and order categories."""
+    """Prepare objective data: rename to display names, aggregate, and order categories."""
     df_obj = df.copy()
 
-    if (
-        "Fertilizer (synthetic)" in df_obj.columns
-        and "Crop production" in df_obj.columns
-    ):
-        df_obj["Crop production"] = (
-            df_obj["Crop production"] + df_obj["Fertilizer (synthetic)"]
-        )
-        df_obj = df_obj.drop(columns=["Fertilizer (synthetic)"])
+    # Rename snake_case columns from precomputed CSVs to display names
+    snake_to_display = {
+        "crop_production": "Crop production",
+        "trade": "Trade",
+        "fertilizer": "Fertilizer",
+        "processing": "Processing",
+        "consumption": "Consumption",
+        "animal_production": "Animal production",
+        "feed_conversion": "Feed conversion",
+        "consumer_values": "Consumer values",
+        "biomass_exports": "Biomass exports",
+        "biomass_routing": "Biomass routing",
+        "health_burden": "Health burden",
+        "ghg_cost": "GHG cost",
+        "slack_penalties": "Slack penalties",
+        "production_stability": "Production stability",
+        "resource_supply": "Resource supply",
+        "nutrient_tracking": "Nutrient tracking",
+        "emissions_aggregation": "Emissions aggregation",
+        "land_use": "Land use",
+        "water": "Water",
+    }
+    df_obj = df_obj.rename(
+        columns={k: v for k, v in snake_to_display.items() if k in df_obj.columns}
+    )
+
+    # Merge fertilizer into crop production
+    if "Fertilizer" in df_obj.columns and "Crop production" in df_obj.columns:
+        df_obj["Crop production"] = df_obj["Crop production"] + df_obj["Fertilizer"]
+        df_obj = df_obj.drop(columns=["Fertilizer"])
+
+    # Drop negligible categories (max absolute value < 1 bn USD)
+    significant = df_obj.columns[df_obj.abs().max() >= 1.0]
+    df_obj = df_obj[significant]
 
     priority_order = ["Crop production", "Trade"]
     other_cats = [c for c in df_obj.columns if c not in priority_order]
