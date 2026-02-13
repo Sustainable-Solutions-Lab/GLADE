@@ -1090,6 +1090,348 @@ def extract_health_data(
     return df
 
 
+# Gas display names with subscripts
+GAS_DISPLAY = {
+    "CO2": "CO\u2082",
+    "CH4": "CH\u2084",
+    "N2O": "N\u2082O",
+    "co2": "CO\u2082",
+    "ch4": "CH\u2084",
+    "n2o": "N\u2082O",
+}
+
+# Gas-specific colormaps (matching plot_emissions_breakdown.py)
+GAS_CMAPS = {
+    "CO2": "Greys",
+    "CH4": "Greens",
+    "N2O": "Oranges",
+}
+
+# Pretty names for gases
+PRETTY_NAMES_GAS = {
+    GAS_DISPLAY["co2"]: GAS_DISPLAY["co2"],
+    GAS_DISPLAY["ch4"]: GAS_DISPLAY["ch4"],
+    GAS_DISPLAY["n2o"]: GAS_DISPLAY["n2o"],
+}
+
+# Pretty names for emission sources (matching categorize_emission_carrier output)
+PRETTY_NAMES_EMISSIONS = {
+    "Carbon sequestration": "Carbon sequestration",
+    "Crop residue incorporation": "Crop residues",
+    "Enteric fermentation": "Enteric fermentation",
+    "Enteric fermentation & Manure management": "Enteric ferm.\n& Manure mgmt",
+    "Land Use Change": "Land use change",
+    "Manure management & application": "Manure mgmt\n& application",
+    "Manure: managed systems": "Manure: managed",
+    "Manure: pasture deposition": "Manure: pasture",
+    "Rice cultivation": "Rice cultivation",
+    "Synthetic fertilizer application": "Synthetic fertilizer",
+}
+
+
+def load_net_emissions_by_gas(
+    scenarios: list[tuple[float, str, Path]],
+    project_root: Path,
+    config_name: str,
+    param_name: str = "param_value",
+) -> pd.DataFrame:
+    """Load per-gas net emissions (CO2, CH4, N2O) from net_emissions.csv across scenarios.
+
+    Each gas value is already in MtCO2eq (GWP-adjusted). Returns in GtCO2eq.
+
+    Args:
+        scenarios: List of (param_value, scenario_name, network_path) tuples
+        project_root: Path to project root directory
+        config_name: Name of the config
+        param_name: Name for the parameter (used as index name)
+
+    Returns:
+        DataFrame with param_value as index and gas names (CO2, CH4, N2O) as columns,
+        in GtCO2eq. Rows with missing CSV files are skipped.
+    """
+    results_dir = project_root / "results" / config_name
+
+    data = {}
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+        )
+        if not csv_path.exists():
+            continue
+
+        df = pd.read_csv(csv_path)
+        row = {}
+        for gas in ["co2", "ch4", "n2o"]:
+            gas_row = df[df["gas"] == gas]
+            if not gas_row.empty:
+                # Convert MtCO2eq to GtCO2eq
+                row[GAS_DISPLAY[gas]] = gas_row["net_mtco2eq"].iloc[0] / 1000
+        data[param_value] = row
+
+    if not data:
+        return pd.DataFrame()
+
+    result = pd.DataFrame(data).T.fillna(0)
+    result.index.name = param_name
+    return result.sort_index()
+
+
+def load_emissions_by_source(
+    scenarios: list[tuple[float, str, Path]],
+    project_root: Path,
+    config_name: str,
+    param_name: str = "param_value",
+    ch4_gwp: float = CH4_GWP,
+    n2o_gwp: float = N2O_GWP,
+    cache_path: Path | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Load per-source emissions breakdown for each gas across scenarios.
+
+    Uses extract_emissions_by_source from the plotting module to extract
+    detailed source-level breakdowns from solved networks.
+
+    Args:
+        scenarios: List of (param_value, scenario_name, network_path) tuples
+        project_root: Path to project root directory
+        config_name: Name of the config
+        param_name: Name for the parameter (used as index name)
+        ch4_gwp: Global warming potential for CH4
+        n2o_gwp: Global warming potential for N2O
+        cache_path: Optional directory for caching results
+
+    Returns:
+        Dict mapping gas name (CO2, CH4, N2O) to DataFrames with param_value
+        as index and emission sources as columns, in GtCO2eq.
+        Scenarios with missing network files are skipped.
+    """
+    from workflow.scripts.plotting.plot_emissions_breakdown import (
+        extract_emissions_by_source,
+    )
+
+    # Check cache
+    if cache_path is not None:
+        cache_path.mkdir(parents=True, exist_ok=True)
+        network_paths = [f for _, _, f in scenarios if f.exists()]
+        all_cached = True
+        for gas in ["CO2", "CH4", "N2O"]:
+            gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
+            if not is_cache_valid(gas_cache, network_paths):
+                all_cached = False
+                break
+        if all_cached:
+            print(f"Loading emissions by source from cache: {cache_path}")
+            result = {}
+            for gas in ["CO2", "CH4", "N2O"]:
+                gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
+                df = pd.read_csv(gas_cache, index_col=param_name)
+                result[gas] = df
+            return result
+
+    print(f"Extracting emissions by source from {len(scenarios)} scenarios...")
+    gas_data: dict[str, dict[float, dict[str, float]]] = {
+        "CO2": {},
+        "CH4": {},
+        "N2O": {},
+    }
+
+    for param_value, scenario_name, network_path in scenarios:
+        if not network_path.exists():
+            continue
+        print(f"  Loading {scenario_name}...")
+        n = pypsa.Network(network_path)
+        emissions = extract_emissions_by_source(n, ch4_gwp, n2o_gwp)
+        for gas in ["CO2", "CH4", "N2O"]:
+            # Convert MtCO2eq to GtCO2eq
+            gas_data[gas][param_value] = {
+                src: val / 1000 for src, val in emissions.get(gas, {}).items()
+            }
+
+    result = {}
+    for gas in ["CO2", "CH4", "N2O"]:
+        if not gas_data[gas]:
+            result[gas] = pd.DataFrame()
+            continue
+        df = pd.DataFrame(gas_data[gas]).T.fillna(0)
+        df.index.name = param_name
+        df = df.sort_index()
+        result[gas] = df
+
+    # Save cache
+    if cache_path is not None:
+        for gas in ["CO2", "CH4", "N2O"]:
+            gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
+            result[gas].to_csv(gas_cache)
+        print(f"Saved emissions by source to cache: {cache_path}")
+
+    return result
+
+
+def plot_stacked_emissions(
+    df: pd.DataFrame,
+    colors: dict,
+    ax: plt.Axes,
+    xlabel: str,
+    ylabel: str,
+    panel_label: str,
+    x_ticks: list[float],
+    x_ticklabels: list[str],
+    pretty_names: dict | None = None,
+    min_height_for_label: float = 0.3,
+):
+    """Stacked area plot handling both positive and negative values.
+
+    Positive parts of each column stack upward from zero, negative parts stack
+    downward.  This is needed for emissions data where CO2 can include both
+    land-use-change emissions (positive) and carbon sequestration (negative).
+
+    Args:
+        df: DataFrame with parameter values as index and groups as columns
+        colors: Dict mapping group names to colors
+        ax: Matplotlib axes to plot on
+        xlabel: X-axis label
+        ylabel: Y-axis label
+        panel_label: Panel label (e.g., 'a')
+        x_ticks: X-axis tick positions
+        x_ticklabels: X-axis tick labels
+        pretty_names: Custom pretty names dict
+        min_height_for_label: Minimum height to show a label (in data units)
+    """
+    if pretty_names is None:
+        pretty_names = {}
+
+    x_values = df.index.values
+    groups = df.columns.tolist()
+
+    zero_pos = log_scale_zero_position(x_values)
+    x_plot = np.where(x_values == 0, zero_pos, x_values)
+
+    tick_max = max(x_ticks) if x_ticks else 0
+    tick_min = min(x_ticks) if x_ticks else zero_pos
+    # Extend x range to cover all tick positions (the "0" tick may differ
+    # from the data zero position when only a subset of scenarios is solved)
+    x_min = min(zero_pos, tick_min)
+    x_max = max(x_plot.max(), tick_max) * 1.1
+    x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
+
+    y_smooth = {}
+    for group in groups:
+        y_smooth[group] = np.interp(
+            np.log10(x_smooth), np.log10(x_plot), df[group].values
+        )
+
+    # Build positive and negative stacks
+    y_pos_stack = [np.zeros(len(x_smooth))]
+    y_neg_stack = [np.zeros(len(x_smooth))]
+    pos_entries = []  # (group, bottom_array, top_array)
+    neg_entries = []
+
+    for group in groups:
+        y = y_smooth[group]
+        y_pos = np.maximum(y, 0)
+        y_neg = np.minimum(y, 0)
+
+        if np.any(y_pos > 1e-9):
+            bottom = y_pos_stack[-1].copy()
+            top = bottom + y_pos
+            y_pos_stack.append(top)
+            pos_entries.append((group, bottom, top))
+            ax.fill_between(
+                x_smooth,
+                bottom,
+                top,
+                color=colors.get(group, "#999999"),
+                alpha=0.8,
+                edgecolor="none",
+                linewidth=0,
+            )
+
+        if np.any(y_neg < -1e-9):
+            top = y_neg_stack[-1].copy()
+            bottom = top + y_neg
+            y_neg_stack.append(bottom)
+            neg_entries.append((group, bottom, top))
+            ax.fill_between(
+                x_smooth,
+                bottom,
+                top,
+                color=colors.get(group, "#999999"),
+                alpha=0.8,
+                edgecolor="none",
+                linewidth=0,
+            )
+
+    ax.axhline(0, color="black", linewidth=0.5)
+
+    # Labels — for each group, only label the part (pos or neg) with
+    # the larger mean area, to avoid duplicate labels when a group
+    # crosses zero.
+    bbox_style = {
+        "boxstyle": "round,pad=0.15",
+        "facecolor": "white",
+        "alpha": 0.7,
+        "edgecolor": "none",
+    }
+    label_fontsize = FONTSIZE_TICK_LABEL
+    log_x_min, log_x_max = np.log10(x_min), np.log10(x_max)
+    margin_frac = 0.15
+    log_margin = (log_x_max - log_x_min) * margin_frac
+
+    # Compute mean area for each (group, sign) entry to pick the dominant one
+    group_best_area = {}  # group -> (mean_area, entry_tuple)
+    for group, y_bottom, y_top in pos_entries + neg_entries:
+        mean_area = np.mean(np.abs(y_top - y_bottom))
+        if group not in group_best_area or mean_area > group_best_area[group][0]:
+            group_best_area[group] = (mean_area, (group, y_bottom, y_top))
+
+    for group, (_mean_area, (_, y_bottom, y_top)) in group_best_area.items():
+        heights = np.abs(y_top - y_bottom)
+        if heights.max() < min_height_for_label:
+            continue
+        max_idx = np.argmax(heights)
+        x_pos = x_smooth[max_idx]
+        log_x_pos = np.clip(
+            np.log10(x_pos), log_x_min + log_margin, log_x_max - log_margin
+        )
+        x_pos = 10**log_x_pos
+        idx = np.argmin(np.abs(x_smooth - x_pos))
+        y_pos = (y_bottom[idx] + y_top[idx]) / 2
+        label_text = pretty_names.get(group, PRETTY_NAMES.get(group, group))
+        ax.text(
+            x_pos,
+            y_pos,
+            label_text,
+            ha="center",
+            va="center",
+            fontsize=label_fontsize,
+            fontweight="bold",
+            color="black",
+            bbox=bbox_style,
+        )
+
+    ax.set_xscale("log")
+    ax.set_xlabel(xlabel, fontsize=FONTSIZE_AXIS_LABEL)
+    ax.set_ylabel(ylabel, fontsize=FONTSIZE_AXIS_LABEL)
+
+    ax.text(
+        -0.10,
+        1.05,
+        panel_label,
+        transform=ax.transAxes,
+        fontsize=FONTSIZE_PANEL_LABEL,
+        fontweight="bold",
+        va="top",
+        ha="left",
+    )
+
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticklabels)
+    ax.tick_params(axis="both", labelsize=FONTSIZE_TICK_LABEL)
+    ax.set_xlim(x_min, x_max)
+
+    ax.grid(True, alpha=0.3, which="both")
+    ax.set_axisbelow(True)
+
+
 # -----------------------------------------------------------------------------
 # Data preparation utilities
 # -----------------------------------------------------------------------------
