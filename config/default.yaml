@@ -58,7 +58,7 @@ validation:
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
     l1_cost: 1.0  # bn USD per deviation unit (only used when penalty_mode is "l1")
-    deviation_type: "relative"  # "absolute" or "relative" deviation from baseline
+    deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
       enabled: true
       max_relative_deviation: 0.2  # ±20%
