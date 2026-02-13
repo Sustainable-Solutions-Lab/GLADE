@@ -993,6 +993,7 @@ solving:
     OutputFlag: 1
     Method: 2
     MIPGap: 0.001  # target 0.1% relative optimality gap
+    MIPFocus: 2
   options_highs:
     solver: "choose"
     mip_rel_gap: 0.001  # align relative gap with gurobi setting
