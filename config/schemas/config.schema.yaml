@@ -211,7 +211,7 @@ properties:
             description: "For quadratic: absolute = (P - B)², relative = ((P - B) / B)². For L1: absolute = |P - B|, relative = |(P - B) / B|"
           crops:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack]
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
             additionalProperties: false
             properties:
               enabled:
@@ -225,9 +225,13 @@ properties:
               enable_slack:
                 type: boolean
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
+              min_baseline_mt:
+                type: number
+                minimum: 0
+                description: "Minimum crop baseline production (Mt) required to include a link in stability constraints"
           animals:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack]
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
             additionalProperties: false
             properties:
               enabled:
@@ -241,6 +245,10 @@ properties:
               enable_slack:
                 type: boolean
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
+              min_baseline_mt:
+                type: number
+                minimum: 0
+                description: "Minimum animal baseline production (Mt) required to include a target in stability constraints"
 
   food_incentives:
     type: object
@@ -258,7 +266,7 @@ properties:
 
   food_utility_piecewise:
     type: object
-    required: [enabled, n_blocks, decline_factor, total_width_multiplier]
+    required: [enabled, n_blocks, decline_factor, total_width_multiplier, min_block_width_mt]
     additionalProperties: false
     properties:
       enabled:
@@ -277,6 +285,10 @@ properties:
         type: number
         exclusiveMinimum: 0
         description: "Total incentivized quantity as multiple of baseline consumption"
+      min_block_width_mt:
+        type: number
+        minimum: 0
+        description: "Minimum per-block width floor (Mt/year) applied at solve time for numerical robustness"
 
   optimal_taxes:
     type: object

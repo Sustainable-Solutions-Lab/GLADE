@@ -972,7 +972,11 @@ def _run_solve() -> None:
                 "food_utility_piecewise cannot be combined with "
                 "validation.enforce_baseline_diet=true"
             )
-        add_piecewise_food_utility(n, snakemake.input.food_utility_piecewise)
+        add_piecewise_food_utility(
+            n,
+            snakemake.input.food_utility_piecewise,
+            float(piecewise_utility_cfg["min_block_width_mt"]),
+        )
 
     solver_name = snakemake.params.solver
     solver_threads = snakemake.params.solver_threads

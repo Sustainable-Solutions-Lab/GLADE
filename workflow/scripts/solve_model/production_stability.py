@@ -136,6 +136,7 @@ def add_production_stability_constraints(
                 links_df,
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
+                crops_cfg["min_baseline_mt"],
             )
         elif penalty_mode == "quadratic":
             _add_crop_quadratic_penalty(
@@ -144,6 +145,7 @@ def add_production_stability_constraints(
                 links_df,
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
+                crops_cfg["min_baseline_mt"],
             )
 
     # --- ANIMAL PRODUCTION ---
@@ -170,6 +172,7 @@ def add_production_stability_constraints(
                 loss_waste,
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
+                animals_cfg["min_baseline_mt"],
             )
         elif penalty_mode == "quadratic":
             _add_animal_quadratic_penalty(
@@ -181,13 +184,16 @@ def add_production_stability_constraints(
                 loss_waste,
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
+                animals_cfg["min_baseline_mt"],
             )
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _crop_production_and_baselines(link_p, links_df: pd.DataFrame) -> tuple | None:
+def _crop_production_and_baselines(
+    link_p, links_df: pd.DataFrame, min_baseline_mt: float
+) -> tuple | None:
     """Extract production expressions and baselines for constrained crop links.
 
     Returns ``(link_names, production, baselines)`` for crop production links
@@ -198,18 +204,33 @@ def _crop_production_and_baselines(link_p, links_df: pd.DataFrame) -> tuple | No
         logger.info("No crop production links with baselines; skipping crop stability")
         return None
 
-    # Only constrain links with positive baselines (fixes zero-baseline bug)
-    nonzero = crop_links[crop_links["baseline_production_mt"] > 0]
-    if nonzero.empty:
-        logger.info("All crop baselines are zero; skipping crop stability constraints")
+    baseline_floor = float(min_baseline_mt)
+
+    # Only constrain links with sufficiently large positive baselines.
+    eligible = crop_links[crop_links["baseline_production_mt"] > baseline_floor]
+    if eligible.empty:
+        logger.info(
+            "No crop baselines exceed %.6g Mt; skipping crop stability constraints",
+            baseline_floor,
+        )
         return None
 
-    link_names = nonzero.index
+    if baseline_floor > 0:
+        removed = len(crop_links) - len(eligible)
+        if removed > 0:
+            logger.info(
+                "Crop stability baseline filter removed %d/%d links below %.6g Mt",
+                removed,
+                len(crop_links),
+                baseline_floor,
+            )
+
+    link_names = eligible.index
     efficiencies = xr.DataArray(
-        nonzero["efficiency"].values, coords={"name": link_names}, dims="name"
+        eligible["efficiency"].values, coords={"name": link_names}, dims="name"
     )
     baselines = xr.DataArray(
-        nonzero["baseline_production_mt"].values,
+        eligible["baseline_production_mt"].values,
         coords={"name": link_names},
         dims="name",
     )
@@ -256,6 +277,7 @@ def _animal_production_and_baselines(
     animal_baseline: pd.DataFrame,
     food_to_group: dict[str, str],
     loss_waste: pd.DataFrame,
+    min_baseline_mt: float,
 ) -> tuple | None:
     """Compute animal production expressions and baselines for nonzero groups.
 
@@ -269,8 +291,18 @@ def _animal_production_and_baselines(
     target_series = _aggregate_animal_baseline(
         animal_baseline, food_to_group, loss_waste
     )
-    # Only constrain positive baselines
-    target_series = target_series[target_series > 0]
+    n_targets = len(target_series)
+    baseline_floor = float(min_baseline_mt)
+    # Only constrain sufficiently large positive baselines.
+    target_series = target_series[target_series > baseline_floor]
+    if baseline_floor > 0:
+        removed = n_targets - len(target_series)
+        if removed > 0:
+            logger.info(
+                "Animal stability baseline filter removed %d targets below %.6g Mt",
+                removed,
+                baseline_floor,
+            )
 
     common_index = model_index.intersection(target_series.index)
     if common_index.empty:
@@ -300,7 +332,9 @@ def _add_crop_hard_constraints(
 
     ``(1 - delta) * baseline <= p * efficiency <= (1 + delta) * baseline``
     """
-    result = _crop_production_and_baselines(link_p, links_df)
+    result = _crop_production_and_baselines(
+        link_p, links_df, crops_cfg["min_baseline_mt"]
+    )
     if result is None:
         return
 
@@ -311,7 +345,7 @@ def _add_crop_hard_constraints(
     lower_bounds = np.maximum(0.0, (1.0 - delta) * baselines)
     upper_bounds = (1.0 + delta) * baselines
 
-    enable_slack = crops_cfg.get("enable_slack", False)
+    enable_slack = crops_cfg["enable_slack"]
     if enable_slack:
         slack_coords = xr.DataArray(
             np.zeros(len(link_names)),
@@ -373,6 +407,7 @@ def _add_crop_l1_penalty(
     links_df: pd.DataFrame,
     deviation_type: str,
     l1_cost: float,
+    min_baseline_mt: float,
 ) -> None:
     """Add L1 (absolute-value) penalty on crop production deviations.
 
@@ -381,7 +416,7 @@ def _add_crop_l1_penalty(
       abs_dev >= -(production - baseline)
       objective += l1_cost * sum(abs_dev)
     """
-    result = _crop_production_and_baselines(link_p, links_df)
+    result = _crop_production_and_baselines(link_p, links_df, min_baseline_mt)
     if result is None:
         return
 
@@ -427,6 +462,7 @@ def _add_crop_quadratic_penalty(
     links_df: pd.DataFrame,
     deviation_type: str,
     quadratic_cost: float,
+    min_baseline_mt: float,
 ) -> None:
     """Add quadratic penalty on crop production deviations.
 
@@ -434,7 +470,7 @@ def _add_crop_quadratic_penalty(
       dev == production - baseline
       objective += 0.5 * quadratic_cost * sum(dev²)
     """
-    result = _crop_production_and_baselines(link_p, links_df)
+    result = _crop_production_and_baselines(link_p, links_df, min_baseline_mt)
     if result is None:
         return
 
@@ -481,7 +517,12 @@ def _add_animal_hard_constraints(
 ) -> None:
     """Add animal production stability bounds (hard mode)."""
     result = _animal_production_and_baselines(
-        link_p, links_df, animal_baseline, food_to_group, loss_waste
+        link_p,
+        links_df,
+        animal_baseline,
+        food_to_group,
+        loss_waste,
+        animals_cfg["min_baseline_mt"],
     )
     if result is None:
         return
@@ -493,7 +534,7 @@ def _add_animal_hard_constraints(
     lower_bounds = np.maximum(0.0, (1.0 - delta) * baselines)
     upper_bounds = (1.0 + delta) * baselines
 
-    enable_slack = animals_cfg.get("enable_slack", False)
+    enable_slack = animals_cfg["enable_slack"]
     if enable_slack:
         slack_coords = xr.DataArray(
             np.zeros(len(common_index)),
@@ -565,10 +606,16 @@ def _add_animal_l1_penalty(
     loss_waste: pd.DataFrame,
     deviation_type: str,
     l1_cost: float,
+    min_baseline_mt: float,
 ) -> None:
     """Add L1 penalty on animal production deviations."""
     result = _animal_production_and_baselines(
-        link_p, links_df, animal_baseline, food_to_group, loss_waste
+        link_p,
+        links_df,
+        animal_baseline,
+        food_to_group,
+        loss_waste,
+        min_baseline_mt,
     )
     if result is None:
         return
@@ -618,10 +665,16 @@ def _add_animal_quadratic_penalty(
     loss_waste: pd.DataFrame,
     deviation_type: str,
     quadratic_cost: float,
+    min_baseline_mt: float,
 ) -> None:
     """Add quadratic penalty on animal production deviations."""
     result = _animal_production_and_baselines(
-        link_p, links_df, animal_baseline, food_to_group, loss_waste
+        link_p,
+        links_df,
+        animal_baseline,
+        food_to_group,
+        loss_waste,
+        min_baseline_mt,
     )
     if result is None:
         return

@@ -63,10 +63,12 @@ validation:
       enabled: true
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
+      min_baseline_mt: 0.000001  # Ignore near-zero crop baselines below this threshold when building stability constraints
     animals:
       enabled: true
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
+      min_baseline_mt: 0.00001  # Ignore near-zero animal baselines below this threshold when building stability constraints
 
 # --- section: food_incentives ---
 food_incentives:
@@ -79,6 +81,7 @@ food_utility_piecewise:
   n_blocks: 4
   decline_factor: 0.7  # Multiplicative utility decay by block (0 < factor <= 1)
   total_width_multiplier: 2.0  # Total incentivized quantity as multiple of baseline consumption
+  min_block_width_mt: 0.00001  # Minimum width floor (Mt/year) for each utility block to avoid tiny upper bounds
 
 # --- section: optimal_taxes ---
 optimal_taxes:
