@@ -43,14 +43,17 @@ scenarios:
       ghg_price: 0
     health:
       value_per_yll: 0
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
     macronutrients:
       cal:
-        equal: 2400
+        equal_to_baseline: true
+    # food_groups:
+    #   fix_within_group_ratios:
+    #     enabled: true
+    # macronutrients:
+    #   protein:
+    #     min: 68.49
+    #   fat:
+    #     min: 56.13
 
   # =============================================================================
   # YLL Value Sensitivity (GHG price = 0)
@@ -61,14 +64,17 @@ scenarios:
       ghg_price: 0
     health:
       value_per_yll: 0
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
     macronutrients:
       cal:
-        equal: 2400
+        equal_to_baseline: true
+    # food_groups:
+    #   fix_within_group_ratios:
+    #     enabled: true
+    # macronutrients:
+    #   protein:
+    #     min: 68.49
+    #   fat:
+    #     min: 56.13
 
   # =============================================================================
   # Combined GHG+YLL Sensitivity (both vary together)
@@ -79,14 +85,17 @@ scenarios:
       ghg_price: 0
     health:
       value_per_yll: 0
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
     macronutrients:
       cal:
-        equal: 2400
+        equal_to_baseline: true
+    # food_groups:
+    #   fix_within_group_ratios:
+    #     enabled: true
+    # macronutrients:
+    #   protein:
+    #     min: 68.49
+    #   fat:
+    #     min: 56.13
 
   # =============================================================================
   # Generated Scenarios
@@ -107,14 +116,17 @@ scenarios:
           ghg_price: "{ghg}"
         health:
           value_per_yll: 0
-        food_utility_piecewise:
-          enabled: true
-        food_groups:
-          fix_within_group_ratios:
-            enabled: true
         macronutrients:
           cal:
-            equal: 2400
+            equal_to_baseline: true
+        # food_groups:
+        #   fix_within_group_ratios:
+        #     enabled: true
+        # macronutrients:
+        #   protein:
+        #     min: 68.49
+        #   fat:
+        #     min: 56.13
 
     # YLL value sensitivity: 5 to 100000 USD/YLL (log-spaced, 10 points)
     - name: yll_{yll}
@@ -130,14 +142,17 @@ scenarios:
           ghg_price: 0
         health:
           value_per_yll: "{yll}"
-        food_utility_piecewise:
-          enabled: true
-        food_groups:
-          fix_within_group_ratios:
-            enabled: true
         macronutrients:
           cal:
-            equal: 2400
+            equal_to_baseline: true
+        # food_groups:
+        #   fix_within_group_ratios:
+        #     enabled: true
+        # macronutrients:
+        #   protein:
+        #     min: 68.49
+        #   fat:
+        #     min: 56.13
 
     # Combined sensitivity: both parameters vary together (log-spaced, 10 points each)
     - name: ghg_yll_{ghg}
@@ -160,14 +175,17 @@ scenarios:
           ghg_price: "{ghg}"
         health:
           value_per_yll: "{yll}"
-        food_utility_piecewise:
-          enabled: true
-        food_groups:
-          fix_within_group_ratios:
-            enabled: true
         macronutrients:
           cal:
-            equal: 2400
+            equal_to_baseline: true
+        # food_groups:
+        #   fix_within_group_ratios:
+        #     enabled: true
+        # macronutrients:
+        #   protein:
+        #     min: 68.49
+        #   fat:
+        #     min: 56.13
 
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
@@ -178,6 +196,7 @@ validation:
   production_stability:
     enabled: true
     penalty_mode: "l1"
+    l1_cost: 0.5
 
 animal_products:
   # Use regionalized feed efficiency values
@@ -191,8 +210,10 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 2
+  mem_mb: 6000
+  export_for_tuning: true
   options_gurobi:
     Method: 2
     MIPGap: 0.001
     MIPFocus: 2
-    VarBranch: 0
+    # VarBranch: 0

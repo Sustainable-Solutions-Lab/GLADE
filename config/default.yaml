@@ -238,17 +238,21 @@ multiple_cropping:
 
 # --- section: macronutrients ---
 macronutrients: {}
-  # For each of "carb", "protein", "fat" and "kcal" we support "min",
+  # For each of "carb", "protein", "fat" and "cal" we support "min",
   # "max" and "equal" keywords, which are given in g/person/day; see
-  # example below.
+  # example below. Alternatively, use "equal_to_baseline: true" to
+  # enforce per-country equality at the level implied by each country's
+  # baseline diet (mutually exclusive with min/max/equal).
   # carb:
-  #   min: 250     # g/person/day
+  #   min: 250              # g/person/day
+  #   # equal_to_baseline: true  # per-country g/person/day from baseline diet
   # protein:
   #   min: 50      # g/person/day
   # fat:
   #   min: 50      # g/person/day
   # cal:
   #   min: 2000    # kcal/person/day
+  #   # equal_to_baseline: true  # per-country kcal/person/day from baseline diet
 
 # --- section: sensitivity ---
 # Multiplicative adjustment factors for sensitivity analysis. Applied after

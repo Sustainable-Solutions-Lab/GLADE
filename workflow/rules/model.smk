@@ -201,6 +201,12 @@ def solve_model_inputs(w):
             name=w.name,
             scenario=w.scenario,
         )
+    macronutrient_cfg = eff_cfg["macronutrients"]
+    if any(
+        isinstance(bounds, dict) and bounds.get("equal_to_baseline")
+        for bounds in macronutrient_cfg.values()
+    ):
+        inputs["nutrition"] = "data/curated/nutrition.csv"
 
     # Add validation-specific inputs
     if eff_cfg["validation"]["use_actual_production"]:

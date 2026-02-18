@@ -568,12 +568,27 @@ properties:
       "^(carb|protein|fat|cal)$":
         type: object
         additionalProperties: false
+        properties:
+          equal_to_baseline:
+            type: boolean
+            description: "Enforce per-country equality at baseline diet level (derived from baseline_diet.csv × nutrition.csv)"
         patternProperties:
           "^(min|max|equal)$":
             type: number
             minimum: 0
             description: "g/person/day or kcal/person/day"
-    description: "Optional macronutrient constraints (min/max/equal in g or kcal per person per day)"
+        if:
+          properties:
+            equal_to_baseline:
+              const: true
+          required: [equal_to_baseline]
+        then:
+          not:
+            anyOf:
+              - required: [min]
+              - required: [max]
+              - required: [equal]
+    description: "Optional macronutrient constraints (min/max/equal in g or kcal per person per day; or equal_to_baseline: true for country-specific baseline values)"
 
   byproducts:
     type: array

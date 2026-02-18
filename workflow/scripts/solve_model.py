@@ -43,13 +43,29 @@ class _ShadowPriceLogFilter(logging.Filter):
 
 
 def add_macronutrient_constraints(
-    n: pypsa.Network, macronutrient_cfg: dict | None, population: dict[str, float]
+    n: pypsa.Network,
+    macronutrient_cfg: dict | None,
+    population: dict[str, float],
+    baseline_by_nutrient: dict[str, dict[str, float]] | None = None,
 ) -> None:
     """Add per-country macronutrient bounds directly to the linopy model.
 
     The bounds are expressed on the storage level of each macronutrient store.
     RHS values are converted from per-person-per-day units using stored
     population and nutrient unit metadata.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    macronutrient_cfg : dict | None
+        Macronutrient constraint configuration keyed by nutrient name.
+    population : dict[str, float]
+        Country → population (thousands of people).
+    baseline_by_nutrient : dict[str, dict[str, float]] | None
+        Pre-computed per-country baseline values keyed by nutrient name
+        (country → per-capita daily intake). Required when any nutrient
+        has ``equal_to_baseline: true``.
     """
 
     if not macronutrient_cfg:
@@ -70,7 +86,7 @@ def add_macronutrient_constraints(
         lhs = store_e.sel(name=nutrient_stores.index)
 
         def rhs_from(
-            value: float,
+            value: float | dict[str, float],
             carrier_unit=carrier_unit,
             countries=countries,
             nutrient_stores=nutrient_stores,
@@ -79,13 +95,14 @@ def add_macronutrient_constraints(
             if carrier_unit == "Mt":
                 rhs_vals = [
                     _per_capita_mass_to_mt_per_year(
-                        float(value), float(population[country])
+                        float(value[country] if isinstance(value, dict) else value),
+                        float(population[country]),
                     )
                     for country in countries
                 ]
             else:
                 rhs_vals = [
-                    float(value)
+                    float(value[country] if isinstance(value, dict) else value)
                     * float(population[country])
                     * constants.DAYS_PER_YEAR
                     * constants.KCAL_TO_PJ
@@ -100,12 +117,15 @@ def add_macronutrient_constraints(
             ("min", ">=", "min"),
             ("max", "<=", "max"),
         ):
-            if bounds.get(key) is None:
-                continue
-            rhs = rhs_from(bounds[key])
-            constr_name = f"macronutrient_{label}_{nutrient}"
+            if key == "equal":
+                if bounds.get("equal_to_baseline"):
+                    rhs = rhs_from(baseline_by_nutrient[nutrient])
+                elif bounds.get("equal") is not None:
+                    rhs = rhs_from(bounds["equal"])
+                else:
+                    continue  # no equality constraint
 
-            if operator == "==":
+                constr_name = f"macronutrient_equal_{nutrient}"
                 m.add_constraints(lhs == rhs, name=f"GlobalConstraint-{constr_name}")
                 n.global_constraints.add(
                     f"{constr_name}_" + nutrient_stores.index,
@@ -115,7 +135,12 @@ def add_macronutrient_constraints(
                     country=countries.values,
                     nutrient=nutrient,
                 )
-                break
+                break  # equality silences min/max
+
+            if bounds.get(key) is None:
+                continue
+            rhs = rhs_from(bounds[key])
+            constr_name = f"macronutrient_{label}_{nutrient}"
 
             if operator == ">=":
                 m.add_constraints(lhs >= rhs, name=f"GlobalConstraint-{constr_name}")
@@ -360,6 +385,40 @@ def _prepare_baseline_diet_for_food_constraints(
         lower=min_consumption_g_per_day
     )
     return df
+
+
+def _compute_baseline_macronutrient_by_country(
+    baseline_df: pd.DataFrame,
+    nutrition_df: pd.DataFrame,
+    nutrient: str,
+) -> dict[str, float]:
+    """Compute per-country per-capita macronutrient intake from the baseline diet.
+
+    Parameters
+    ----------
+    baseline_df : pd.DataFrame
+        Baseline diet with columns: country, food, consumption_g_per_day.
+        Should already be filtered to foods present in the model.
+    nutrition_df : pd.DataFrame
+        Nutrition table with columns: food, nutrient, unit, value.
+        Values are per 100 g of food.
+    nutrient : str
+        Nutrient identifier matching nutrition_df (e.g. "cal", "carb").
+
+    Returns
+    -------
+    dict[str, float]
+        Country → per-capita daily intake (g/person/day for mass nutrients,
+        kcal/person/day for "cal").
+    """
+    nut_vals = nutrition_df[nutrition_df["nutrient"] == nutrient].set_index("food")[
+        "value"
+    ]
+    df = baseline_df[baseline_df["food"].isin(nut_vals.index)].copy()
+    df["nutrient_per_day"] = (
+        df["consumption_g_per_day"] * df["food"].map(nut_vals) / 100
+    )
+    return df.groupby("country")["nutrient_per_day"].sum().to_dict()
 
 
 def _build_ratios_from_baseline(baseline_df: pd.DataFrame) -> pd.DataFrame:
@@ -1058,7 +1117,25 @@ def _run_solve() -> None:
                 )
             per_country_equal[str(group)] = values
 
-    add_macronutrient_constraints(n, snakemake.params.macronutrients, population_map)
+    macronutrient_cfg = snakemake.params.macronutrients or {}
+    baseline_by_nutrient: dict[str, dict[str, float]] | None = None
+    needs_baseline = any(
+        isinstance(bounds, dict) and bounds.get("equal_to_baseline")
+        for bounds in macronutrient_cfg.values()
+    )
+    if needs_baseline:
+        nutrition_df = pd.read_csv(snakemake.input.nutrition)
+        baseline_by_nutrient = {
+            nutrient: _compute_baseline_macronutrient_by_country(
+                prepared_baseline_df, nutrition_df, nutrient
+            )
+            for nutrient, bounds in macronutrient_cfg.items()
+            if isinstance(bounds, dict) and bounds.get("equal_to_baseline")
+        }
+
+    add_macronutrient_constraints(
+        n, macronutrient_cfg, population_map, baseline_by_nutrient
+    )
     add_food_group_constraints(
         n,
         snakemake.params.food_group_constraints,
