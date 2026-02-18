@@ -351,7 +351,7 @@ Building Documentation Locally
 
 ::
 
-    tools/smk -e dev -j4 --configfile config/doc_figures.yaml -- build_docs
+    tools/build-docs -j4
     # Open docs/_build/html/index.html in browser
 
 
@@ -361,7 +361,7 @@ Updating Documentation
 1. **Edit** ``.rst`` files in ``docs/``
 2. **Rebuild**::
 
-       tools/smk -e dev -j4 --configfile config/doc_figures.yaml -- build_docs
+       tools/build-docs -j4
 
 3. **Check** for warnings/errors
 4. **Commit** documentation changes

@@ -29,14 +29,14 @@ fi
 # Check if figures directory exists and has PNG files
 if [ ! -d "$FIGURES_DIR" ]; then
     echo "Error: Figures directory not found: $FIGURES_DIR"
-    echo "Generate figures first with: tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs"
+    echo "Generate figures first with: tools/smk -j4 --configfile docs/config/doc_figures.yaml -- build_docs"
     exit 1
 fi
 
 FILE_COUNT=$(find "$FIGURES_DIR" \( -name "*.png" -o -name "*.gif" \) | wc -l)
 if [ "$FILE_COUNT" -eq 0 ]; then
     echo "Error: No PNG/GIF files found in $FIGURES_DIR"
-    echo "Generate figures first with: tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs"
+    echo "Generate figures first with: tools/smk -j4 --configfile docs/config/doc_figures.yaml -- build_docs"
     exit 1
 fi
 

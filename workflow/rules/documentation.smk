@@ -14,6 +14,10 @@ from glob import glob
 # Documentation figures are generated using the doc_figures config
 DOC_FIG_NAME = "doc_figures"
 
+# Validation figures use a separate config with top-level validation settings
+# so that processing rules (which read config[...] directly) see them.
+DOC_VAL_NAME = "doc_validation"
+
 # Shared styling files tracked as inputs so Snakemake reruns figures when
 # font sizes, colormaps, or other styling parameters change.
 DOC_FIG_STYLE = [
@@ -58,6 +62,15 @@ DOC_FIGURES = [
     # Current diets figures
     "baseline_diet_by_region",
     "baseline_diet_by_food",
+]
+
+# Validation figures use the doc_validation config (separate from doc_figures)
+DOC_VALIDATION_FIGURES = [
+    "validation_crop_production",
+    "validation_pasture",
+    "validation_food_group_slack",
+    "validation_slack_overview",
+    "validation_feed_breakdown",
 ]
 
 
@@ -595,6 +608,122 @@ rule doc_fig_baseline_diet_by_food:
         "../scripts/doc_figures/baseline_diet_by_food.py"
 
 
+# --- Validation figures ---
+
+
+rule doc_fig_validation_crop_production:
+    """Generate validation crop production map (excluding pasture)."""
+    input:
+        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.csv",
+        regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
+        resource_classes=f"<processing>/{DOC_VAL_NAME}/resource_classes.nc",
+        land_area_by_class=f"<processing>/{DOC_VAL_NAME}/land_area_by_class.csv",
+        land_grazing_only=f"<processing>/{DOC_VAL_NAME}/land_grazing_only_by_class.csv",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_crop_production.svg",
+        png="docs/_static/figures/validation_crop_production.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_crop_production.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_crop_production.tsv"
+    script:
+        "../scripts/doc_figures/validation_crop_production_map.py"
+
+
+rule doc_fig_validation_pasture:
+    """Generate validation pasture/grassland intensity map."""
+    input:
+        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.csv",
+        regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
+        resource_classes=f"<processing>/{DOC_VAL_NAME}/resource_classes.nc",
+        land_area_by_class=f"<processing>/{DOC_VAL_NAME}/land_area_by_class.csv",
+        land_grazing_only=f"<processing>/{DOC_VAL_NAME}/land_grazing_only_by_class.csv",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_pasture.svg",
+        png="docs/_static/figures/validation_pasture.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_pasture.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_pasture.tsv"
+    script:
+        "../scripts/doc_figures/validation_pasture_map.py"
+
+
+rule doc_fig_validation_food_group_slack:
+    """Generate two-panel food group slack figure for validation."""
+    input:
+        network=f"<results>/{DOC_VAL_NAME}/solved/model_scen-default.nc",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_food_group_slack.svg",
+        png="docs/_static/figures/validation_food_group_slack.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_food_group_slack.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_food_group_slack.tsv"
+    script:
+        "../scripts/doc_figures/validation_food_group_slack.py"
+
+
+rule doc_fig_validation_slack_overview:
+    """Generate overall slack overview figure for validation."""
+    input:
+        network=f"<results>/{DOC_VAL_NAME}/solved/model_scen-default.nc",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_slack_overview.svg",
+        png="docs/_static/figures/validation_slack_overview.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_slack_overview.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_slack_overview.tsv"
+    script:
+        "../scripts/doc_figures/validation_slack_overview.py"
+
+
+rule doc_fig_validation_feed_breakdown:
+    """Generate feed breakdown figure for validation."""
+    input:
+        network=f"<results>/{DOC_VAL_NAME}/solved/model_scen-default.nc",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_feed_breakdown.svg",
+        png="docs/_static/figures/validation_feed_breakdown.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_feed_breakdown.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_feed_breakdown.tsv"
+    script:
+        "../scripts/doc_figures/validation_feed_breakdown.py"
+
+
 # --- Trade friction production pattern GIF ---
 
 TRADE_SCENARIOS = ["free_trade", "default_trade", "costly_trade", "autarky"]
@@ -665,6 +794,8 @@ rule build_docs:
         # Figures
         expand("docs/_static/figures/{fig}.svg", fig=DOC_FIGURES),
         expand("docs/_static/figures/{fig}.png", fig=DOC_FIGURES),
+        # NOTE: Validation figures are NOT listed here. They are generated
+        # separately via tools/build-docs using the doc_validation config.
         # Production pattern GIF (landing page)
         "docs/_static/figures/production_pattern.gif",
         expand(

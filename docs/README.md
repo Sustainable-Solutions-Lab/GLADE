@@ -24,10 +24,13 @@ pixi install --environment dev
 Using pixi tasks (recommended):
 
 ```bash
-# From project root - build docs with figures via Snakemake
+# From project root - build docs with figures (validation + regular)
 pixi run --environment dev build-docs
 
-# Build with local figures for testing
+# Or directly via the script
+tools/build-docs -j4
+
+# Build with local figures for testing (Sphinx only, no figure generation)
 pixi run --environment dev docs-local
 ```
 
@@ -90,7 +93,7 @@ Documentation figures are **not tracked in git** to avoid repository bloat. Inst
 Generate all documentation figures using the lightweight `doc_figures` configuration:
 
 ```bash
-tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs
+tools/build-docs -j4
 ```
 
 This creates figures in `docs/_static/figures/` (ignored by git).

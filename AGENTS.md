@@ -217,8 +217,8 @@ tools/smk -j4 --configfile config/<name>.yaml -- results/{config_name}/build/mod
 # Solve model only (after build)
 tools/smk -j4 --configfile config/<name>.yaml -- results/{config_name}/solved/model_scen-default.nc
 
-# Build the docs, including figures; this needs the 'dev' environment
-tools/smk -e dev -j4 --configfile config/doc_figures.yaml -- build_docs
+# Build the docs, including figures
+tools/build-docs -j4
 
 # Test small snippets of code
 pixi run python <...>
@@ -354,7 +354,7 @@ The workflow validates that all required credentials are present at startup (bef
 ### Documentation Figures
 
 **Important**: Documentation figures are **NOT tracked in git**. They are:
-- Generated locally via Snakemake using the lightweight `config/doc_figures.yaml` configuration
+- Generated locally via Snakemake using `docs/config/doc_figures.yaml` and `docs/config/doc_validation.yaml`
 - Uploaded to a GitHub Release (tag: `doc-figures`)
 - Referenced in `.rst` files via GitHub release URLs
 - Located in `docs/_static/figures/*` (ignored by `.gitignore`)
@@ -362,8 +362,8 @@ The workflow validates that all required credentials are present at startup (bef
 When updating documentation figures:
 
 ```bash
-# 1. Generate figures
-tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs
+# 1. Generate figures (handles both validation and regular configs)
+tools/build-docs -j4
 
 # 2. Upload to GitHub release (requires gh CLI authentication)
 tools/upload-doc-figures

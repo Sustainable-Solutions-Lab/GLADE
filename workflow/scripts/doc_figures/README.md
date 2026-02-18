@@ -21,21 +21,21 @@ Documentation figures are:
 ### Generate a single figure
 
 ```bash
-tools/smk --configfile config/default.yaml --configfile config/doc_figures.yaml \
+tools/smk --configfile config/default.yaml --configfile docs/config/doc_figures.yaml \
   -- docs/_static/figures/intro_global_coverage.svg
 ```
 
 ### Generate all doc figures
 
 ```bash
-tools/smk --configfile config/default.yaml --configfile config/doc_figures.yaml \
+tools/smk --configfile config/default.yaml --configfile docs/config/doc_figures.yaml \
   -- generate_all_doc_figures
 ```
 
 ### Build documentation with figures
 
 ```bash
-tools/smk --configfile config/default.yaml --configfile config/doc_figures.yaml \
+tools/smk --configfile config/default.yaml --configfile docs/config/doc_figures.yaml \
   -- build_docs
 ```
 
@@ -59,7 +59,7 @@ Styling is defined in two places:
 
 ### Scenario Configuration
 
-`config/doc_figures.yaml` defines a coarse-resolution scenario:
+`docs/config/doc_figures.yaml` defines a coarse-resolution scenario:
 - 250 regions (vs 400 in default)
 - 3 resource classes (vs 4)
 - 10 trade hubs (vs 20)

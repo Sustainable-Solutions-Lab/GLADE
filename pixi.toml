@@ -127,6 +127,6 @@ format-snakemake = { cmd = "snakefmt workflow/" }
 format-all = { depends-on = ["format", "format-snakemake"] }
 
 # Documentation tasks
-build-docs = { cmd = "tools/smk -j4 --configfile config/doc_figures.yaml -- build_docs" }
+build-docs = { cmd = "tools/build-docs -j4" }
 upload-doc-figures = { cmd = "tools/upload-doc-figures" }
 docs-local = { cmd = "sphinx-build -b html docs docs/_build/html" }

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Build documentation figures and Sphinx docs.
+#
+# Validation figures use a separate config (doc_validation) because several
+# settings (planning_horizon, water.supply_scenario, etc.) are consumed by
+# processing rules that read config[...] directly — scenario overrides don't
+# reach them. This script runs the validation config first, then builds
+# everything else with the doc_figures config.
+#
+# All arguments are forwarded to tools/smk (e.g., -j4, -e dev-gurobi).
+#
+# Usage:
+#   tools/build-docs -j4
+#   tools/build-docs -e dev-gurobi -j4
+
+set -euo pipefail
+
+SMK_ARGS=("$@")
+
+echo "=== Step 1/2: Building validation figures ==="
+tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_validation.yaml -- \
+    docs/_static/figures/validation_crop_production.svg \
+    docs/_static/figures/validation_crop_production.png \
+    docs/_static/figures/validation_pasture.svg \
+    docs/_static/figures/validation_pasture.png \
+    docs/_static/figures/validation_food_group_slack.svg \
+    docs/_static/figures/validation_food_group_slack.png \
+    docs/_static/figures/validation_slack_overview.svg \
+    docs/_static/figures/validation_slack_overview.png \
+    docs/_static/figures/validation_feed_breakdown.svg \
+    docs/_static/figures/validation_feed_breakdown.png
+
+echo "=== Step 2/2: Building doc figures and Sphinx docs ==="
+tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_figures.yaml -- build_docs
