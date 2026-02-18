@@ -327,7 +327,8 @@ the ``diet.baseline_age`` and ``diet.baseline_reference_year`` settings determin
 cohort/year is enforced. Use ``validation.food_group_slack_marginal_cost`` to set the
 penalty (USD\ :sub:`2024` per Mt) for the slack generators that backstop those fixed
 food-group loads. Keep the value high so slack only activates when recorded production
-cannot meet the enforced demand targets.
+cannot meet the enforced demand targets. See :doc:`validation` for a detailed
+walkthrough of the validation workflow and diagnostic figures.
 
 Consumer Utility Options
 ^^^^^^^^^^^^^^^^^^^^^^^^

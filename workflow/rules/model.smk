@@ -203,7 +203,7 @@ def solve_model_inputs(w):
         )
 
     # Add validation-specific inputs
-    if config.get("validation", {}).get("use_actual_production", False):
+    if eff_cfg["validation"]["use_actual_production"]:
         inputs["animal_production"] = (
             f"<processing>/{w.name}/faostat_animal_production.csv"
         )

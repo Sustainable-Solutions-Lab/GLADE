@@ -208,6 +208,8 @@ The repository includes a pre-configured validation scenario that you can run im
    tools/smk -j4 --configfile config/validation.yaml
 
 This runs a scenario designed to validate model behavior against observed data.
+See :doc:`validation` for details on how validation works and what the results
+reveal.
 
 **Option 2: Create your own scenario**
 

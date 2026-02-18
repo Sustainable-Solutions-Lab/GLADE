@@ -360,3 +360,9 @@ The script validates that extracted categories sum to the model's reported
 objective value and raises an error if they don't match (within 1% tolerance).
 It also raises errors for unrecognized component patterns to ensure the
 analysis is updated when the model structure changes.
+
+.. seealso::
+
+   :doc:`validation`
+      A complementary analysis approach that fixes production and demand to
+      observed values, using slack variables to reveal data inconsistencies.
