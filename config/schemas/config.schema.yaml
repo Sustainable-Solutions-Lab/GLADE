@@ -131,6 +131,7 @@ properties:
       - use_actual_yields
       - use_actual_production
       - enforce_baseline_diet
+      - enforce_baseline_feed
       - land_slack
       - disable_new_cropland
       - disable_new_pasture
@@ -152,6 +153,9 @@ properties:
       enforce_baseline_diet:
         type: boolean
         description: "Set food consumption equal to current day values"
+      enforce_baseline_feed:
+        type: boolean
+        description: "Fix animal feed use to GLEAM baseline values"
       land_slack:
         type: boolean
         description: "Enable land slack generators (allows exceeding regional land limits at cost)"

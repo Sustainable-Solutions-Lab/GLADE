@@ -81,6 +81,7 @@ rule build_model:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         costs="<processing>/{name}/crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
+        gleam_feed_baseline="<processing>/{name}/gleam_feed_baseline.csv",
         grassland_yields="<processing>/{name}/grassland_yields.csv",
         monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",
         growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",
@@ -163,11 +164,7 @@ rule build_model:
 
 
 def solve_model_inputs(w):
-    """Get input files for solve_model rule.
-
-    Includes validation-specific inputs (e.g., FAO animal production data)
-    only when validation mode is enabled.
-    """
+    """Get input files for solve_model rule."""
     inputs = {
         "network": f"<results>/{w.name}/build/model_scen-{w.scenario}.nc",
         "m49": "data/curated/M49-codes.csv",
@@ -207,22 +204,6 @@ def solve_model_inputs(w):
         for bounds in macronutrient_cfg.values()
     ):
         inputs["nutrition"] = "data/curated/nutrition.csv"
-
-    # Add validation-specific inputs
-    if eff_cfg["validation"]["use_actual_production"]:
-        inputs["animal_production"] = (
-            f"<processing>/{w.name}/faostat_animal_production.csv"
-        )
-        inputs["food_loss_waste"] = f"<processing>/{w.name}/food_loss_waste.csv"
-
-    # Add production stability inputs
-    stability_cfg = eff_cfg["validation"]["production_stability"]
-    if stability_cfg["enabled"]:
-        if stability_cfg["animals"]["enabled"]:
-            inputs["animal_production_baseline"] = (
-                f"<processing>/{w.name}/faostat_animal_production.csv"
-            )
-            inputs["food_loss_waste"] = f"<processing>/{w.name}/food_loss_waste.csv"
 
     return inputs
 

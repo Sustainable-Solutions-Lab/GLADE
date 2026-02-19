@@ -15,10 +15,13 @@ Crop stability operates at the **per-link** level: each crop production link is
 individually constrained to stay near its own baseline (GAEZ harvested area x
 yield, computed during model building and stored as ``baseline_production_mt``).
 
-Animal stability operates at the **(product, country)** aggregate level.
+Animal stability operates at the **per-link** level: each animal production link
+is individually constrained to stay near its GLEAM feed-use baseline (stored as
+``baseline_feed_use_mt_dm`` during model building). Feed use is constrained
+directly (no efficiency multiplication needed).
 
-Only links/groups with positive baselines are constrained. Links without GAEZ
-data (zero baseline) are left unconstrained, avoiding the zero-forcing bug.
+Only links with positive baselines are constrained. Links without baseline data
+(zero baseline) are left unconstrained, avoiding the zero-forcing bug.
 """
 
 import logging
@@ -31,85 +34,30 @@ import xarray as xr
 logger = logging.getLogger(__name__)
 
 
-def _aggregate_animal_baseline(
-    animal_baseline: pd.DataFrame,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
-) -> pd.Series:
-    """Aggregate animal baseline by (product, country) with FLW adjustment.
-
-    Parameters
-    ----------
-    animal_baseline
-        FAO animal production with columns: country, product, production_mt.
-    food_to_group
-        Mapping from product names to food group names for FLW lookup.
-    loss_waste
-        Food loss and waste fractions with columns: country, food_group,
-        loss_fraction, waste_fraction.
-
-    Returns
-    -------
-    pd.Series
-        FLW-adjusted baseline production in Mt indexed by (product, country).
-    """
-    # Build FLW lookup
-    flw_multipliers: dict[tuple[str, str], float] = {}
-    for _, row in loss_waste.iterrows():
-        key = (str(row["country"]), str(row["food_group"]))
-        loss_frac = float(row["loss_fraction"])
-        waste_frac = float(row["waste_fraction"])
-        flw_multipliers[key] = (1.0 - loss_frac) * (1.0 - waste_frac)
-
-    target_series = animal_baseline.set_index(["product", "country"])[
-        "production_mt"
-    ].astype(float)
-
-    # Adjust by FLW
-    adjusted_targets = []
-    for product, country in target_series.index:
-        gross_value = target_series.loc[(product, country)]
-        group = food_to_group.get(product, product)
-        multiplier = flw_multipliers.get((country, group), 1.0)
-        adjusted_targets.append(gross_value * multiplier)
-
-    return pd.Series(adjusted_targets, index=target_series.index)
-
-
 def add_production_stability_constraints(
     n: pypsa.Network,
-    animal_baseline: pd.DataFrame | None,
     stability_cfg: dict,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     slack_marginal_cost: float,
 ) -> None:
     """Add constraints limiting production deviation from baseline levels.
 
     For crops: per-link bounds using ``baseline_production_mt`` set during build.
-    For animals: per-(product, country) aggregate bounds.
+    For animals: per-link bounds using ``baseline_feed_use_mt_dm`` set during build.
 
     Three penalty modes are supported:
     - hard: inequality bounds ``(1 ± delta) * baseline``
     - l1: linear penalty via linopy abs-deviation variables
     - quadratic: quadratic penalty via linopy deviation variables
 
-    Only links/groups with positive baselines are constrained.
+    Only links with positive baselines are constrained.
 
     Parameters
     ----------
     n : pypsa.Network
         The network containing the model.
-    animal_baseline : pd.DataFrame | None
-        FAO animal production with columns: country, product, production_mt.
     stability_cfg : dict
         Configuration with enabled, penalty_mode, l1_cost, quadratic_cost,
         deviation_type, crops.max_relative_deviation, etc.
-    food_to_group : dict[str, str]
-        Mapping from product names to food group names for FLW lookup.
-    loss_waste : pd.DataFrame
-        Food loss and waste fractions with columns: country, food_group,
-        loss_fraction, waste_fraction.
     slack_marginal_cost : float
         Penalty cost in bn USD per Mt for production stability slack.
     """
@@ -148,28 +96,18 @@ def add_production_stability_constraints(
                 crops_cfg["min_baseline_mt"],
             )
 
-    # --- ANIMAL PRODUCTION ---
+    # --- ANIMAL FEED USE ---
     animals_cfg = stability_cfg["animals"]
-    if animals_cfg["enabled"] and animal_baseline is not None:
+    if animals_cfg["enabled"]:
         if penalty_mode == "hard":
             _add_animal_hard_constraints(
-                n,
-                link_p,
-                links_df,
-                animal_baseline,
-                animals_cfg,
-                food_to_group,
-                loss_waste,
-                slack_marginal_cost,
+                n, link_p, links_df, animals_cfg, slack_marginal_cost
             )
         elif penalty_mode == "l1":
             _add_animal_l1_penalty(
                 n,
                 link_p,
                 links_df,
-                animal_baseline,
-                food_to_group,
-                loss_waste,
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
                 animals_cfg["min_baseline_mt"],
@@ -179,9 +117,6 @@ def add_production_stability_constraints(
                 n,
                 link_p,
                 links_df,
-                animal_baseline,
-                food_to_group,
-                loss_waste,
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
                 animals_cfg["min_baseline_mt"],
@@ -238,84 +173,53 @@ def _crop_production_and_baselines(
     return link_names, production, baselines
 
 
-def _compute_total_animal_production(
-    link_p, links_df: pd.DataFrame
-) -> tuple[xr.DataArray, pd.Index]:
-    """Compute total animal production grouped by (product, country).
-
-    Returns (total_production DataArray, model_index).
-    """
-    prod_mask = links_df["product"].notna() & (links_df["product"] != "")
-    prod_links = links_df[prod_mask]
-
-    if prod_links.empty:
-        return xr.DataArray(), pd.Index([])
-
-    products = prod_links["product"].astype(str)
-    countries = prod_links["country"].astype(str)
-    link_names = prod_links.index
-
-    efficiencies = xr.DataArray(
-        prod_links["efficiency"].values, coords={"name": link_names}, dims="name"
-    )
-    production_vars = link_p.sel(name=link_names)
-
-    grouper = pd.MultiIndex.from_arrays(
-        [products.values, countries.values], names=["product", "country"]
-    )
-    da_grouper = xr.DataArray(grouper, coords={"name": link_names}, dims="name")
-
-    total_production = (production_vars * efficiencies).groupby(da_grouper).sum()
-    model_index = pd.Index(total_production.coords["group"].values, name="group")
-
-    return total_production, model_index
-
-
-def _animal_production_and_baselines(
-    link_p,
-    links_df: pd.DataFrame,
-    animal_baseline: pd.DataFrame,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
-    min_baseline_mt: float,
+def _animal_feed_and_baselines(
+    link_p, links_df: pd.DataFrame, min_baseline_mt: float
 ) -> tuple | None:
-    """Compute animal production expressions and baselines for nonzero groups.
+    """Extract feed use expressions and baselines for animal links.
 
-    Returns ``(common_index, production, baselines)`` or ``None``.
+    Returns ``(link_names, feed_use, baselines)`` for animal production links
+    with positive ``baseline_feed_use_mt_dm``, or ``None`` if there are none.
+
+    Feed use is ``link_p`` directly (p0 = feed input in Mt DM), so no
+    efficiency multiplication is needed.
     """
-    total_production, model_index = _compute_total_animal_production(link_p, links_df)
-    if total_production.sizes.get("group", 0) == 0:
-        logger.info("No animal production to constrain")
+    animal_links = links_df[links_df["carrier"] == "animal_production"]
+    if animal_links.empty or "baseline_feed_use_mt_dm" not in animal_links.columns:
+        logger.info(
+            "No animal production links with feed baselines; skipping animal stability"
+        )
         return None
 
-    target_series = _aggregate_animal_baseline(
-        animal_baseline, food_to_group, loss_waste
-    )
-    n_targets = len(target_series)
     baseline_floor = float(min_baseline_mt)
-    # Only constrain sufficiently large positive baselines.
-    target_series = target_series[target_series > baseline_floor]
+
+    eligible = animal_links[animal_links["baseline_feed_use_mt_dm"] > baseline_floor]
+    if eligible.empty:
+        logger.info(
+            "No animal feed baselines exceed %.6g Mt; "
+            "skipping animal stability constraints",
+            baseline_floor,
+        )
+        return None
+
     if baseline_floor > 0:
-        removed = n_targets - len(target_series)
+        removed = len(animal_links) - len(eligible)
         if removed > 0:
             logger.info(
-                "Animal stability baseline filter removed %d targets below %.6g Mt",
+                "Animal stability baseline filter removed %d/%d links below %.6g Mt",
                 removed,
+                len(animal_links),
                 baseline_floor,
             )
 
-    common_index = model_index.intersection(target_series.index)
-    if common_index.empty:
-        logger.warning("No matching animal production targets for stability bounds")
-        return None
-
-    baselines_arr = xr.DataArray(
-        target_series.loc[common_index].values,
-        coords={"group": common_index},
-        dims="group",
+    link_names = eligible.index
+    feed_use = link_p.sel(name=link_names)
+    baselines = xr.DataArray(
+        eligible["baseline_feed_use_mt_dm"].values,
+        coords={"name": link_names},
+        dims="name",
     )
-    production = total_production.sel(group=common_index)
-    return common_index, production, baselines_arr
+    return link_names, feed_use, baselines
 
 
 # ─── Crop: hard constraints ──────────────────────────────────────────────────
@@ -509,26 +413,21 @@ def _add_animal_hard_constraints(
     n: pypsa.Network,
     link_p,
     links_df: pd.DataFrame,
-    animal_baseline: pd.DataFrame,
     animals_cfg: dict,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     slack_marginal_cost: float,
 ) -> None:
-    """Add animal production stability bounds (hard mode)."""
-    result = _animal_production_and_baselines(
-        link_p,
-        links_df,
-        animal_baseline,
-        food_to_group,
-        loss_waste,
-        animals_cfg["min_baseline_mt"],
+    """Add per-link animal feed use stability bounds (hard mode).
+
+    ``(1 - delta) * baseline <= feed_use <= (1 + delta) * baseline``
+    """
+    result = _animal_feed_and_baselines(
+        link_p, links_df, animals_cfg["min_baseline_mt"]
     )
     if result is None:
         return
 
     m = n.model
-    common_index, production, baselines = result
+    link_names, feed_use, baselines = result
     delta = animals_cfg["max_relative_deviation"]
 
     lower_bounds = np.maximum(0.0, (1.0 - delta) * baselines)
@@ -537,9 +436,9 @@ def _add_animal_hard_constraints(
     enable_slack = animals_cfg["enable_slack"]
     if enable_slack:
         slack_coords = xr.DataArray(
-            np.zeros(len(common_index)),
-            coords={"group": common_index},
-            dims="group",
+            np.zeros(len(link_names)),
+            coords={"name": link_names},
+            dims="name",
         ).coords
         animal_slack = m.add_variables(
             lower=0,
@@ -547,49 +446,43 @@ def _add_animal_hard_constraints(
             name="animal_production_slack",
         )
         m.add_constraints(
-            production + animal_slack >= lower_bounds,
+            feed_use + animal_slack >= lower_bounds,
             name="GlobalConstraint-animal_production_min",
         )
         m.objective += slack_marginal_cost * animal_slack.sum()
         logger.info(
-            "Added animal production slack variables for %d (product, country) pairs "
+            "Added animal feed use slack variables for %d links "
             "(cost=%.1f bn USD/Mt)",
-            len(common_index),
+            len(link_names),
             slack_marginal_cost,
         )
     else:
         m.add_constraints(
-            production >= lower_bounds,
+            feed_use >= lower_bounds,
             name="GlobalConstraint-animal_production_min",
         )
 
     m.add_constraints(
-        production <= upper_bounds,
+        feed_use <= upper_bounds,
         name="GlobalConstraint-animal_production_max",
     )
 
-    gc_products = [prod for prod, _country in common_index]
-    gc_countries = [country for _prod, country in common_index]
     n.global_constraints.add(
-        [f"animal_production_min_{prod}_{country}" for prod, country in common_index],
+        [f"animal_production_min_{name}" for name in link_names],
         sense=">=",
         constant=lower_bounds.values,
         type="production_stability",
-        country=gc_countries,
-        product=gc_products,
     )
     n.global_constraints.add(
-        [f"animal_production_max_{prod}_{country}" for prod, country in common_index],
+        [f"animal_production_max_{name}" for name in link_names],
         sense="<=",
         constant=upper_bounds.values,
         type="production_stability",
-        country=gc_countries,
-        product=gc_products,
     )
 
     logger.info(
-        "Added %d animal production stability constraints (delta=%.0f%%)",
-        2 * len(common_index),
+        "Added %d per-link animal feed use stability constraints (delta=%.0f%%)",
+        2 * len(link_names),
         delta * 100,
     )
 
@@ -601,37 +494,27 @@ def _add_animal_l1_penalty(
     n: pypsa.Network,
     link_p,
     links_df: pd.DataFrame,
-    animal_baseline: pd.DataFrame,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     deviation_type: str,
     l1_cost: float,
     min_baseline_mt: float,
 ) -> None:
-    """Add L1 penalty on animal production deviations."""
-    result = _animal_production_and_baselines(
-        link_p,
-        links_df,
-        animal_baseline,
-        food_to_group,
-        loss_waste,
-        min_baseline_mt,
-    )
+    """Add L1 penalty on animal feed use deviations."""
+    result = _animal_feed_and_baselines(link_p, links_df, min_baseline_mt)
     if result is None:
         return
 
     m = n.model
-    common_index, production, baselines = result
+    link_names, feed_use, baselines = result
 
     if deviation_type == "relative":
-        deviation = (production - baselines) / baselines
+        deviation = (feed_use - baselines) / baselines
     else:
-        deviation = production - baselines
+        deviation = feed_use - baselines
 
     abs_dev = m.add_variables(
         lower=0,
-        coords=[common_index],
-        dims=["group"],
+        coords=[link_names],
+        dims=["name"],
         name="animal_stability_abs_dev",
     )
 
@@ -646,8 +529,8 @@ def _add_animal_l1_penalty(
     m.objective += l1_cost * abs_dev.sum()
 
     logger.info(
-        "Added %d animal L1 stability penalties (cost=%.4f, mode=%s)",
-        len(common_index),
+        "Added %d per-link animal L1 stability penalties (cost=%.4f, mode=%s)",
+        len(link_names),
         l1_cost,
         deviation_type,
     )
@@ -660,36 +543,26 @@ def _add_animal_quadratic_penalty(
     n: pypsa.Network,
     link_p,
     links_df: pd.DataFrame,
-    animal_baseline: pd.DataFrame,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     deviation_type: str,
     quadratic_cost: float,
     min_baseline_mt: float,
 ) -> None:
-    """Add quadratic penalty on animal production deviations."""
-    result = _animal_production_and_baselines(
-        link_p,
-        links_df,
-        animal_baseline,
-        food_to_group,
-        loss_waste,
-        min_baseline_mt,
-    )
+    """Add quadratic penalty on animal feed use deviations."""
+    result = _animal_feed_and_baselines(link_p, links_df, min_baseline_mt)
     if result is None:
         return
 
     m = n.model
-    common_index, production, baselines = result
+    link_names, feed_use, baselines = result
 
     if deviation_type == "relative":
-        deviation = (production - baselines) / baselines
+        deviation = (feed_use - baselines) / baselines
     else:
-        deviation = production - baselines
+        deviation = feed_use - baselines
 
     dev = m.add_variables(
-        coords=[common_index],
-        dims=["group"],
+        coords=[link_names],
+        dims=["name"],
         name="animal_stability_dev",
     )
 
@@ -700,8 +573,8 @@ def _add_animal_quadratic_penalty(
     m.objective += 0.5 * quadratic_cost * (dev * dev).sum()
 
     logger.info(
-        "Added %d animal quadratic stability penalties (cost=%.4f, mode=%s)",
-        len(common_index),
+        "Added %d per-link animal quadratic stability penalties (cost=%.4f, mode=%s)",
+        len(link_names),
         quadratic_cost,
         deviation_type,
     )

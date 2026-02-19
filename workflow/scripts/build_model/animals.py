@@ -30,20 +30,13 @@ def add_feed_slack_generators(
     marginal_cost: float,
     allow_negative_grassland_slack: bool = False,
 ) -> None:
-    """Add slack generators and stores to feed buses for validation mode feasibility.
+    """Add slack generators to feed buses for validation mode feasibility.
 
-    When both grassland production and animal production are fixed at baseline/FAO levels,
-    the system may have either insufficient feed (needs positive slack) or excess feed
-    (needs negative slack). Following the pattern from food group slack:
-    - Generators provide positive slack (add feed when production is insufficient)
-    - Stores absorb negative slack (consume feed when production exceeds requirements)
-
-    Note: Positive slack is only added for ruminant grassland feeds to prevent the model
-    from filling feed gaps with high-protein feeds (which would overestimate N2O emissions).
-    Negative slack is only added for non-grassland feeds by default. When
-    ``allow_negative_grassland_slack`` is True (validation mode with fixed
-    grassland dispatch), grassland buses also get negative slack to absorb
-    unavoidable overproduction.
+    When crop production, grassland production and animal feed use are all fixed
+    at baseline levels, small mismatches between supply-side and demand-side
+    data sources make exact bus balance impossible. Bidirectional slack on every
+    feed bus absorbs these discrepancies at a high marginal cost (so the solver
+    only uses slack where truly necessary).
 
     Parameters
     ----------
@@ -52,7 +45,8 @@ def add_feed_slack_generators(
     marginal_cost : float
         Cost per Mt of slack (billion USD/Mt)
     allow_negative_grassland_slack : bool, optional
-        Whether negative slack should also be added to grassland feed buses.
+        Kept for backward compatibility; ignored (all buses now get both
+        positive and negative slack).
     """
     # Find all feed buses (named feed:{category}:{country})
     feed_mask = n.buses.static.index.str.startswith("feed:")
@@ -62,67 +56,49 @@ def add_feed_slack_generators(
         logger.info("No feed buses found; skipping feed slack")
         return
 
-    # Only add positive slack for ruminant grassland (to avoid inflating N2O via protein feed)
-    grassland_mask = feed_buses.str.contains("ruminant_grassland")
-    grassland_buses = feed_buses[grassland_mask]
-
     # Add carriers for slack
     n.carriers.add(
         ["slack_positive_feed", "slack_negative_feed"],
         unit="Mt",
     )
 
-    # Add positive slack generators only for grassland (provide feed when insufficient)
-    if not grassland_buses.empty:
-        gen_pos_names = pd.Index(
-            "slack:feed_positive:"
-            + pd.Series(grassland_buses, index=grassland_buses).str.split(":").str[-1],
-            dtype="object",
-        )
-        pos_df = pd.DataFrame(index=gen_pos_names)
-        pos_df["bus"] = grassland_buses.to_numpy()
-        n.generators.add(
-            pos_df.index,
-            bus=pos_df["bus"],
-            carrier="slack_positive_feed",
-            p_nom_extendable=True,
-            marginal_cost=marginal_cost,
-        )
-        logger.info(
-            "Added %d positive feed slack generators (grassland only)",
-            len(gen_pos_names),
-        )
+    # Extract category and country from bus names for naming
+    bus_series = pd.Series(feed_buses, index=feed_buses)
+    parts = bus_series.str.extract(r"^feed:(?P<category>[^:]+):(?P<country>.+)$")
 
-    # Add negative slack stores to absorb excess feed.
-    if allow_negative_grassland_slack:
-        negative_slack_buses = feed_buses
-    else:
-        negative_slack_buses = feed_buses[~grassland_mask]
+    # Positive slack generators (provide feed when supply is insufficient)
+    pos_names = pd.Index(
+        "slack:feed_positive_" + parts["category"] + ":" + parts["country"],
+        dtype="object",
+    )
+    n.generators.add(
+        pos_names,
+        bus=feed_buses,
+        carrier="slack_positive_feed",
+        p_nom_extendable=True,
+        marginal_cost=marginal_cost,
+    )
 
-    if not negative_slack_buses.empty:
-        # Build unique names: extract category and country from index
-        # Convention exception: using str.extract on bus names for category/country
-        neg_df = pd.DataFrame(index=negative_slack_buses)
-        neg_df["bus"] = negative_slack_buses.to_numpy()
-        _ng = neg_df["bus"].str.extract(r"^feed:(?P<category>[^:]+):(?P<country>.+)$")
-        neg_df.index = pd.Index(
-            "slack:feed_negative_" + _ng["category"] + ":" + _ng["country"],
-            dtype="object",
-        )
-        n.generators.add(
-            neg_df.index,
-            bus=neg_df["bus"],
-            carrier="slack_negative_feed",
-            p_nom_extendable=True,
-            p_min_pu=-1.0,
-            p_max_pu=0.0,
-            marginal_cost=-marginal_cost,
-        )
+    # Negative slack generators (absorb feed when supply exceeds demand)
+    neg_names = pd.Index(
+        "slack:feed_negative_" + parts["category"] + ":" + parts["country"],
+        dtype="object",
+    )
+    n.generators.add(
+        neg_names,
+        bus=feed_buses,
+        carrier="slack_negative_feed",
+        p_nom_extendable=True,
+        p_min_pu=-1.0,
+        p_max_pu=0.0,
+        marginal_cost=-marginal_cost,
+    )
 
-        logger.info(
-            "Added %d negative feed slack stores for validation feasibility",
-            len(neg_df),
-        )
+    logger.info(
+        "Added %d positive + %d negative feed slack generators",
+        len(pos_names),
+        len(neg_names),
+    )
 
 
 def add_feed_to_animal_product_links(
@@ -139,6 +115,8 @@ def add_feed_to_animal_product_links(
     food_to_group: dict[str, str],
     loss_waste: pd.DataFrame,
     animal_costs: pd.Series | None = None,
+    feed_baseline: pd.DataFrame | None = None,
+    enforce_baseline_feed: bool = False,
 ) -> None:
     """Add links that convert feed pools into animal products with emissions and manure N.
 
@@ -429,6 +407,49 @@ def add_feed_to_animal_product_links(
         manure_ch4_share=link_df["manure_ch4_share"],
         pasture_n2o_share=link_df["pasture_n2o_share"],
     )
+
+    # Store GLEAM feed baseline on links (for production stability)
+    if feed_baseline is not None and not feed_baseline.empty:
+        bl = feed_baseline.copy()
+        bl["country"] = bl["country"].astype(str)
+        bl["product"] = bl["product"].astype(str)
+        bl["feed_category"] = bl["feed_category"].astype(str)
+        lookup = bl.set_index(["country", "product", "feed_category"])[
+            "feed_use_mt_dm"
+        ].to_dict()
+        baseline_values = pd.Series(
+            [
+                lookup.get(
+                    (
+                        n.links.static.at[i, "country"],
+                        n.links.static.at[i, "product"],
+                        n.links.static.at[i, "feed_category"],
+                    ),
+                    0.0,
+                )
+                for i in link_df.index
+            ],
+            index=link_df.index,
+        )
+        n.links.static.loc[link_df.index, "baseline_feed_use_mt_dm"] = (
+            baseline_values.values
+        )
+        n_with_baseline = int((baseline_values > 0).sum())
+        logger.info(
+            "Stored GLEAM feed baselines on %d/%d animal links",
+            n_with_baseline,
+            len(link_df),
+        )
+
+        if enforce_baseline_feed:
+            n.links.static.loc[link_df.index, "p_nom"] = baseline_values.values
+            n.links.static.loc[link_df.index, "p_nom_extendable"] = False
+            n.links.static.loc[link_df.index, "p_min_pu"] = 1.0
+            n.links.static.loc[link_df.index, "p_max_pu"] = 1.0
+            logger.info(
+                "Fixed %d animal links at GLEAM feed baseline values",
+                len(link_df),
+            )
 
     logger.info(
         "Added %d feed→animal product links with outputs: product, CH4 (enteric+manure), manure N fertilizer, N2O",

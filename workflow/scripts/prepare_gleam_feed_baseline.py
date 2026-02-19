@@ -667,8 +667,33 @@ def main() -> None:
 
     result = result.drop(columns=["species", "region"])
 
-    # Remove zero/tiny entries
-    result = result[result["feed_use_mt_dm"] > 1e-6]
+    # Expand to all valid (country, product, feed_category) combinations,
+    # filling 0 where GLEAM has no data.  This ensures every model link gets
+    # an explicit baseline rather than relying on implicit defaults.
+    ruminant_products = [p for sp in RUMINANT_SPECIES for p in SPECIES_PRODUCTS[sp]]
+    all_products = [p for prods in SPECIES_PRODUCTS.values() for p in prods]
+    monogastric_products = [p for p in all_products if p not in ruminant_products]
+
+    ruminant_feed_cats = sorted(
+        set(ROUGHAGE_COMPONENT_MAPPING.values()) | set(RUMINANT_FEED_MAPPING.values())
+    )
+    monogastric_feed_cats = sorted(set(MONOGASTRIC_FEED_MAPPING.values()))
+
+    product_feed_cats = [
+        (p, fc) for p in ruminant_products for fc in ruminant_feed_cats
+    ] + [(p, fc) for p in monogastric_products for fc in monogastric_feed_cats]
+
+    full_index = pd.MultiIndex.from_tuples(
+        [(c, p, fc) for c in countries for p, fc in product_feed_cats],
+        names=["country", "product", "feed_category"],
+    )
+
+    result = (
+        result.set_index(["country", "product", "feed_category"])["feed_use_mt_dm"]
+        .reindex(full_index, fill_value=0.0)
+        .reset_index()
+    )
+
     result = result.sort_values(["country", "product", "feed_category"])
 
     # -- Write output --------------------------------------------------
@@ -688,9 +713,11 @@ def main() -> None:
             logger.info("    %s: %.1f Mt DM", cat, cat_total)
 
     n_countries = result["country"].nunique()
+    n_nonzero = int((result["feed_use_mt_dm"] > 0).sum())
     logger.info(
-        "Saved %d records (%d countries) to %s",
+        "Saved %d records (%d nonzero, %d countries) to %s",
         len(result),
+        n_nonzero,
         n_countries,
         output_path,
     )

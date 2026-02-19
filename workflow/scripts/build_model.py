@@ -63,6 +63,7 @@ if __name__ == "__main__":
     validation_cfg = snakemake.params.validation  # type: ignore[attr-defined]
     use_actual_production = bool(validation_cfg["use_actual_production"])
     enforce_baseline = bool(validation_cfg["enforce_baseline_diet"])
+    enforce_baseline_feed = bool(validation_cfg["enforce_baseline_feed"])
     # Enable land slack if explicitly requested or when using actual production
     enable_land_slack = bool(validation_cfg["land_slack"]) or use_actual_production
     validation_slack_cost = float(
@@ -162,6 +163,9 @@ if __name__ == "__main__":
     else:
         residue_feed_items = []
         residue_lookup = {}
+
+    # Read GLEAM feed baseline (per-country, per-product, per-feed-category)
+    gleam_feed_baseline = read_csv(snakemake.input.gleam_feed_baseline)
 
     # Read feed requirements for animal products (feed pools -> foods)
     feed_to_products = read_csv(snakemake.input.feed_to_products)
@@ -725,10 +729,12 @@ if __name__ == "__main__":
         food_to_group,
         food_loss_waste,
         animal_costs_per_mt,
+        feed_baseline=gleam_feed_baseline,
+        enforce_baseline_feed=enforce_baseline_feed,
     )
 
     # Add feed slack generators for validation mode feasibility
-    if use_actual_production:
+    if use_actual_production or enforce_baseline_feed:
         animals.add_feed_slack_generators(
             n,
             marginal_cost=validation_slack_cost,

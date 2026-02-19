@@ -732,132 +732,6 @@ def add_residue_feed_constraints(
     )
 
 
-def add_animal_production_constraints(
-    n: pypsa.Network,
-    fao_production: pd.DataFrame,
-    food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
-) -> None:
-    """Add constraints to fix animal production at FAO levels per country.
-
-    For each (country, product) combination in the FAO data, adds a constraint
-    that total production from all feed categories equals the FAO target,
-    adjusted for food loss and waste. Since the model applies FLW to the
-    feed→product efficiency, the constraint target must also be adjusted
-    to net production (gross FAO production * (1-loss) * (1-waste)).
-
-    Parameters
-    ----------
-    n : pypsa.Network
-        The network containing the model.
-    fao_production : pd.DataFrame
-        FAO production data with columns: country, product, production_mt.
-    food_to_group : dict[str, str]
-        Mapping from product names to food group names for FLW lookup.
-    loss_waste : pd.DataFrame
-        Food loss and waste fractions with columns: country, food_group,
-        loss_fraction, waste_fraction.
-    """
-    if fao_production.empty:
-        logger.warning(
-            "No FAO animal production data available; skipping production constraints"
-        )
-        return
-
-    # Build FLW lookup: (country, food_group) -> (1-loss)*(1-waste)
-    flw_multipliers: dict[tuple[str, str], float] = {}
-    for _, row in loss_waste.iterrows():
-        key = (str(row["country"]), str(row["food_group"]))
-        loss_frac = float(row["loss_fraction"])
-        waste_frac = float(row["waste_fraction"])
-        flw_multipliers[key] = (1.0 - loss_frac) * (1.0 - waste_frac)
-
-    m = n.model
-    link_p = m.variables["Link-p"].sel(snapshot="now")
-    links_df = n.links.static
-
-    # Filter to animal production links using carrier
-    # Animal production links have carrier "animal_production"
-    prod_mask = links_df["carrier"] == "animal_production"
-    prod_links = links_df[prod_mask]
-
-    if prod_links.empty:
-        logger.info("No animal production links found.")
-        return
-
-    products = prod_links["product"].astype(str)
-    countries = prod_links["country"].astype(str)
-
-    # Prepare DataArrays aligned with the filtered links
-    link_names = prod_links.index
-
-    # Efficiencies
-    efficiencies = xr.DataArray(
-        prod_links["efficiency"].values, coords={"name": link_names}, dims="name"
-    )
-
-    # Production = p * efficiency
-    # Group by (product, country) and sum
-    production_vars = link_p.sel(name=link_names)
-
-    grouper = pd.MultiIndex.from_arrays(
-        [products.values, countries.values], names=["product", "country"]
-    )
-    da_grouper = xr.DataArray(grouper, coords={"name": link_names}, dims="name")
-
-    total_production = (production_vars * efficiencies).groupby(da_grouper).sum()
-
-    target_series = fao_production.set_index(["product", "country"])[
-        "production_mt"
-    ].astype(float)
-
-    # Adjust targets by FLW: net_target = gross_target * (1-loss) * (1-waste)
-    adjusted_targets = []
-    for product, country in target_series.index:
-        gross_value = target_series.loc[(product, country)]
-        group = food_to_group[product]
-        multiplier = flw_multipliers[(country, group)]
-        adjusted_targets.append(gross_value * multiplier)
-    target_series = pd.Series(adjusted_targets, index=target_series.index)
-
-    model_index = pd.Index(total_production.coords["group"].values, name="group")
-    common_index = model_index.intersection(target_series.index)
-
-    if common_index.empty:
-        logger.warning(
-            "No matching animal production targets found for model structure."
-        )
-        return
-
-    lhs = total_production.sel(group=common_index)
-    rhs = xr.DataArray(
-        target_series.loc[common_index].values,
-        coords={"group": common_index},
-        dims="group",
-    )
-
-    constr_name = "animal_production_target"
-    m.add_constraints(lhs == rhs, name=f"GlobalConstraint-{constr_name}")
-
-    # Add GlobalConstraints for shadow price tracking
-    gc_names = [f"{constr_name}_{prod}_{country}" for prod, country in common_index]
-    gc_products = [prod for prod, _country in common_index]
-    gc_countries = [country for _prod, country in common_index]
-    n.global_constraints.add(
-        gc_names,
-        sense="==",
-        constant=rhs.values,
-        type="production_target",
-        country=gc_countries,
-        product=gc_products,
-    )
-
-    logger.info(
-        "Added %d country-level animal production constraints (FLW-adjusted)",
-        len(common_index),
-    )
-
-
 def add_within_group_ratio_constraints(
     n: pypsa.Network,
     ratios_df: pd.DataFrame,
@@ -1154,42 +1028,13 @@ def _run_solve() -> None:
     )
     add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
-    # Add animal production constraints in validation mode
-    use_actual_production = bool(
-        snakemake.config["validation"]["use_actual_production"]
-    )
-    if use_actual_production:
-        fao_animal_production = pd.read_csv(snakemake.input.animal_production)
-        food_groups_df = pd.read_csv(snakemake.input.food_groups)
-        food_to_group = food_groups_df.set_index("food")["group"].to_dict()
-        food_loss_waste = pd.read_csv(snakemake.input.food_loss_waste)
-        add_animal_production_constraints(
-            n, fao_animal_production, food_to_group, food_loss_waste
-        )
-
-    # Add production stability constraints
+    # Add production stability constraints (per-link for both crops and animals)
     stability_cfg = snakemake.params.production_stability
     if stability_cfg["enabled"]:
-        food_groups_df = pd.read_csv(snakemake.input.food_groups)
-        stability_food_to_group = food_groups_df.set_index("food")["group"].to_dict()
-
-        animal_baseline = None
-        food_loss_waste_df = pd.DataFrame()
-        if stability_cfg["animals"]["enabled"]:
-            animal_baseline = pd.read_csv(snakemake.input.animal_production_baseline)
-            food_loss_waste_df = pd.read_csv(snakemake.input.food_loss_waste)
-
         slack_marginal_cost = float(
             snakemake.config["validation"]["slack_marginal_cost"]
         )
-        add_production_stability_constraints(
-            n,
-            animal_baseline,
-            stability_cfg,
-            stability_food_to_group,
-            food_loss_waste_df,
-            slack_marginal_cost,
-        )
+        add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
 
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = snakemake.params.fix_within_group_ratios
@@ -1248,7 +1093,12 @@ def _run_solve() -> None:
 
     # Free solver-internal model (Gurobi/HiGHS); solution is already stored
     # in linopy variables so assign_solution/assign_duals still work.
-    if hasattr(n.model, "solver_model") and n.model.solver_model is not None:
+    # Keep the solver model alive when infeasible so IIS can be computed.
+    if (
+        condition not in ("infeasible", "infeasible_or_unbounded")
+        and hasattr(n.model, "solver_model")
+        and n.model.solver_model is not None
+    ):
         with contextlib.suppress(AttributeError):
             n.model.solver_model.dispose()
         n.model.solver_model = None

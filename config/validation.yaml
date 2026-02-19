@@ -12,11 +12,12 @@ validation:
   use_actual_yields: true
   use_actual_production: true
   enforce_baseline_diet: true
+  enforce_baseline_feed: true
   disable_spared_cropland: true
   disable_spared_grassland: true
   slack_marginal_cost: 10
-  grassland_yield_multiplier: 1.2
-  feed_efficiency_multiplier: 1.15
+  # grassland_yield_multiplier: 1.2
+  # feed_efficiency_multiplier: 1.15
 
 water:
   supply_scenario: current_use
@@ -43,7 +44,12 @@ land:
 health:
   enabled: false
 
+emissions:
+  ghg_pricing_enabled: false
+
 solving:
   io_api: "direct"
-  solver: "highs"
-  threads: 1
+  solver: "gurobi"
+  threads: 2
+  options_gurobi:
+    DualReductions: 0

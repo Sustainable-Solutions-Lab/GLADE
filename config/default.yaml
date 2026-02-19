@@ -44,6 +44,7 @@ validation:
   use_actual_yields: false
   use_actual_production: false
   enforce_baseline_diet: false # Set food consumption equal to current day values
+  enforce_baseline_feed: false # Fix animal feed use to GLEAM baseline values
   land_slack: false # Enable land slack generators (allows exceeding regional land limits at cost)
   disable_new_cropland: false # If true, no new land can supply the cropland pool
   disable_new_pasture: false # If true, no new land can supply the pasture pool
