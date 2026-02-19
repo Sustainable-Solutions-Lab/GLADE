@@ -19,6 +19,7 @@ rule prepare_faostat_animal_production:
         countries=config["countries"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
+        faostat_items=config["animal_products"]["faostat_items"],
     output:
         "<processing>/{name}/faostat_animal_production.csv",
     group:
@@ -127,6 +128,40 @@ rule build_feed_to_animal_products:
         "<benchmarks>/{name}/build_feed_to_animal_products.tsv"
     script:
         "../scripts/build_feed_to_animal_products.py"
+
+
+rule prepare_gleam_feed_baseline:
+    input:
+        si_table_2="data/curated/gleam_2_0_global_livestock_feed_intake_2010.csv",
+        si_table_4="data/curated/gleam_tables/gleam_2_0_si4_dairy_cattle_composition.csv",
+        si_table_5="data/curated/gleam_tables/gleam_2_0_si5_beef_cattle_composition.csv",
+        oecd_status="data/curated/country_oecd_status.csv",
+        gleam_regions="data/curated/country_gleam_region.csv",
+        wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
+        country_wirsenius_region="data/curated/country_wirsenius_region.csv",
+        qcl_csv="data/downloads/faostat/QCL.csv",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        reference_year=config["validation"]["production_year"],
+        countries=config["countries"],
+        net_to_me_conversion=config["animal_products"][
+            "net_to_metabolizable_energy_conversion"
+        ],
+        feed_proxy_map=config["animal_products"]["feed_proxy_map"],
+        faostat_items=config["animal_products"]["faostat_items"],
+    output:
+        "<processing>/{name}/gleam_feed_baseline.csv",
+    group:
+        "prep"
+    resources:
+        runtime="2m",
+        mem_mb=2800,
+    log:
+        "<logs>/{name}/prepare_gleam_feed_baseline.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_gleam_feed_baseline.tsv"
+    script:
+        "../scripts/prepare_gleam_feed_baseline.py"
 
 
 rule calculate_manure_emissions:

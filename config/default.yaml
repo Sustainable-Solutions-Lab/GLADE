@@ -313,6 +313,31 @@ animal_products:
     meat-sheep: 0.63   # kg boneless retail lamb per kg carcass (slightly lower than beef)
     # meat-sheep: 0.8336 (would close validation gap)
     dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
+  # FAOSTAT QCL item names to aggregate for each model product.
+  # First item is the primary product; additional items are proxied species
+  # whose production is lumped into the model product.
+  faostat_items:
+    dairy:
+      - "Raw milk of cattle"
+      - "Raw milk of goats"       # proxy: goat milk → dairy
+      - "Raw milk of sheep"       # proxy: sheep milk → dairy
+      - "Raw milk of camel"       # proxy: camel milk → dairy
+    meat-cattle:
+      - "Meat of cattle with the bone, fresh or chilled"
+    meat-pig:
+      - "Meat of pig with the bone, fresh or chilled"
+    meat-chicken:
+      - "Meat of chickens, fresh or chilled"
+      - "Meat of ducks, fresh or chilled"            # proxy: duck → chicken
+      - "Meat of turkeys, fresh or chilled"           # proxy: turkey → chicken
+      - "Meat of pigeons and other birds n.e.c., fresh, chilled or frozen"
+    eggs:
+      - "Hen eggs in shell, fresh"
+    dairy-buffalo:
+      - "Raw milk of buffalo"
+    meat-sheep:
+      - "Meat of sheep, fresh or chilled"
+      - "Meat of goat, fresh or chilled"              # proxy: goat → sheep
   feed_proxy_map:
     dairy-buffalo: dairy
     meat-sheep: meat-cattle

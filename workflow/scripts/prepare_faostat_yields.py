@@ -13,11 +13,10 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from workflow.scripts.animal_utils import load_faostat_qcl
 from workflow.scripts.faostat_bulk import (
     filter_bulk,
-    get_item_map,
     int_str,
-    load_bulk_csv,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -161,9 +160,7 @@ if __name__ == "__main__":
             all_items.add(stock_item)
 
     # Load bulk CSV and get item map
-    logger.info("Loading FAOSTAT QCL bulk CSV")
-    bulk = load_bulk_csv(qcl_csv)
-    bulk_item_map = get_item_map(bulk)
+    bulk, bulk_item_map = load_faostat_qcl(qcl_csv)
 
     # Map item names to FAOSTAT codes
     item_name_to_code = map_items_to_codes(list(all_items), bulk_item_map)

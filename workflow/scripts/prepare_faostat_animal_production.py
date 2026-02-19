@@ -19,51 +19,15 @@ from pathlib import Path
 
 import pandas as pd
 
+from workflow.scripts.animal_utils import load_faostat_qcl
 from workflow.scripts.faostat_bulk import (
-    add_iso3_column,
     filter_bulk,
-    get_item_map,
     int_str,
-    load_bulk_csv,
-    load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
 logger = logging.getLogger(__name__)
-
-# Mapping from model product names to FAOSTAT item names
-ANIMAL_PRODUCT_MAPPING = {
-    "dairy": "Raw milk of cattle",
-    "meat-cattle": "Meat of cattle with the bone, fresh or chilled",
-    "meat-pig": "Meat of pig with the bone, fresh or chilled",
-    "meat-chicken": "Meat of chickens, fresh or chilled",
-    "eggs": "Hen eggs in shell, fresh",
-    "dairy-buffalo": "Raw milk of buffalo",
-    "meat-sheep": "Meat of sheep, fresh or chilled",
-}
-
-# Additional milk sources to include in dairy totals (not modeled explicitly,
-# but added to production targets so cattle/buffalo stand in for all milk)
-ADDITIONAL_DAIRY_SOURCES = {
-    "Raw milk of goats": "dairy",
-    "Raw milk of sheep": "dairy",
-    "Raw milk of camel": "dairy",
-}
-
-# Additional poultry species to include in meat-chicken totals (not modeled
-# explicitly as separate commodities).
-ADDITIONAL_POULTRY_SOURCES = {
-    "Meat of ducks, fresh or chilled": "meat-chicken",
-    "Meat of turkeys, fresh or chilled": "meat-chicken",
-    "Meat of pigeons and other birds n.e.c., fresh, chilled or frozen": "meat-chicken",
-}
-
-# Additional red-meat species to include in meat-sheep totals (not modeled
-# explicitly as separate commodities).
-ADDITIONAL_RED_MEAT_SOURCES = {
-    "Meat of goat, fresh or chilled": "meat-sheep",
-}
 
 
 def main() -> None:
@@ -75,11 +39,10 @@ def main() -> None:
     carcass_to_retail = dict(  # type: ignore[name-defined]
         snakemake.params.carcass_to_retail_meat
     )
+    faostat_items: dict[str, list[str]] = dict(snakemake.params.faostat_items)  # type: ignore[name-defined]
 
-    # Load bulk CSV and extract metadata
-    logger.info("Loading FAOSTAT QCL bulk CSV")
-    bulk = load_bulk_csv(qcl_csv)
-    item_map = get_item_map(bulk)
+    # Load bulk CSV, extract metadata, and add ISO3 column
+    bulk, item_map = load_faostat_qcl(qcl_csv, m49_codes)
 
     element_code = str(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
     logger.info("Using FAOSTAT element 'Production' (code %s)", element_code)
@@ -88,84 +51,27 @@ def main() -> None:
     faostat_to_model: dict[str, str] = {}  # faostat_item_code -> model_product
     item_codes: list[str] = []
 
-    for model_product, faostat_item in ANIMAL_PRODUCT_MAPPING.items():
-        if faostat_item not in item_map:
-            logger.warning(
-                "FAOSTAT item '%s' not found for product '%s'; skipping",
-                faostat_item,
+    for model_product, fao_items in faostat_items.items():
+        for faostat_item in fao_items:
+            if faostat_item not in item_map:
+                logger.warning(
+                    "FAOSTAT item '%s' not found for product '%s'; skipping",
+                    faostat_item,
+                    model_product,
+                )
+                continue
+            item_code = item_map[faostat_item]
+            item_codes.append(str(item_code))
+            faostat_to_model[str(item_code)] = model_product
+            logger.info(
+                "Mapped '%s' -> FAOSTAT item '%s' (code %s)",
                 model_product,
-            )
-            continue
-        item_code = item_map[faostat_item]
-        item_codes.append(str(item_code))
-        faostat_to_model[str(item_code)] = model_product
-        logger.info(
-            "Mapped '%s' -> FAOSTAT item '%s' (code %s)",
-            model_product,
-            faostat_item,
-            item_code,
-        )
-
-    # Add additional dairy sources (goat, sheep, camel milk -> dairy)
-    for faostat_item, model_product in ADDITIONAL_DAIRY_SOURCES.items():
-        if faostat_item not in item_map:
-            logger.warning(
-                "FAOSTAT item '%s' not found; skipping additional dairy source",
                 faostat_item,
+                item_code,
             )
-            continue
-        item_code = item_map[faostat_item]
-        item_codes.append(str(item_code))
-        faostat_to_model[str(item_code)] = model_product
-        logger.info(
-            "Mapped additional dairy source '%s' -> '%s' (code %s)",
-            faostat_item,
-            model_product,
-            item_code,
-        )
-
-    # Add additional poultry sources (duck/turkey/other birds -> meat-chicken)
-    for faostat_item, model_product in ADDITIONAL_POULTRY_SOURCES.items():
-        if faostat_item not in item_map:
-            logger.warning(
-                "FAOSTAT item '%s' not found; skipping additional poultry source",
-                faostat_item,
-            )
-            continue
-        item_code = item_map[faostat_item]
-        item_codes.append(str(item_code))
-        faostat_to_model[str(item_code)] = model_product
-        logger.info(
-            "Mapped additional poultry source '%s' -> '%s' (code %s)",
-            faostat_item,
-            model_product,
-            item_code,
-        )
-
-    # Add additional red-meat sources (goat -> meat-sheep)
-    for faostat_item, model_product in ADDITIONAL_RED_MEAT_SOURCES.items():
-        if faostat_item not in item_map:
-            logger.warning(
-                "FAOSTAT item '%s' not found; skipping additional red-meat source",
-                faostat_item,
-            )
-            continue
-        item_code = item_map[faostat_item]
-        item_codes.append(str(item_code))
-        faostat_to_model[str(item_code)] = model_product
-        logger.info(
-            "Mapped additional red-meat source '%s' -> '%s' (code %s)",
-            faostat_item,
-            model_product,
-            item_code,
-        )
 
     if not item_codes:
         raise RuntimeError("No FAOSTAT items could be mapped")
-
-    # Add ISO3 column from M49 codes
-    m49_to_iso3 = load_m49_to_iso3(m49_codes)
-    bulk = add_iso3_column(bulk, m49_to_iso3)
 
     # Filter bulk data
     logger.info(
@@ -306,7 +212,7 @@ def main() -> None:
         )
 
     # Check for countries with missing products and fill with zeros
-    all_products = list(ANIMAL_PRODUCT_MAPPING.keys())
+    all_products = list(faostat_items.keys())
     missing_records = []
     for country in countries:
         existing = set(result[result["country"] == country]["product"])
