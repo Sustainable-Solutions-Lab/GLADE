@@ -21,14 +21,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 import logging
 from math import exp
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pypsa
 
 from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE, PER_100K
-from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
@@ -391,61 +389,3 @@ def extract_yll_totals(n: pypsa.Network) -> pd.DataFrame:
     # Note: model stores are in million YLL, so no conversion needed
 
     return result.sort_values("health_cluster").reset_index(drop=True)
-
-
-def main() -> None:
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
-
-    # Load network for YLL totals
-    n = pypsa.Network(snakemake.input.network)
-    logger.info("Loaded network with %d stores", len(n.stores))
-
-    # Load food group consumption from extract_statistics output
-    food_group_consumption = pd.read_csv(snakemake.input.food_group_consumption)
-    logger.info("Loaded %d food group consumption records", len(food_group_consumption))
-
-    # Load health data
-    health_data = load_health_data(
-        {
-            "risk_breakpoints": snakemake.input.risk_breakpoints,
-            "health_cluster_cause": snakemake.input.health_cluster_cause,
-            "health_cause_log": snakemake.input.health_cause_log,
-            "health_clusters": snakemake.input.health_clusters,
-            "population": snakemake.input.population,
-        }
-    )
-
-    # Get params
-    value_per_yll = float(snakemake.params.value_per_yll)
-    risk_factors = list(snakemake.params.health_risk_factors)
-
-    logger.info("Computing health marginals...")
-    result = compute_health_marginals(food_group_consumption, health_data, risk_factors)
-    logger.info("Computed health for %d food_group-country pairs", len(result))
-
-    logger.info("Adding monetary values...")
-    result = add_monetary_value(result, value_per_yll)
-
-    # Sort for consistent output
-    result = result.sort_values(["country", "food_group"]).reset_index(drop=True)
-
-    # Extract YLL totals from network stores
-    logger.info("Extracting YLL totals from network...")
-    totals = extract_yll_totals(n)
-    total_yll = totals["yll_myll"].sum()
-    logger.info("Total YLL: %.4f MYLL across %d clusters", total_yll, len(totals))
-
-    # Write outputs
-    output_path = Path(snakemake.output.marginals)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    result.to_csv(output_path, index=False)
-    logger.info("Wrote health marginals to %s (%d rows)", output_path, len(result))
-
-    totals_path = Path(snakemake.output.totals)
-    totals.to_csv(totals_path, index=False)
-    logger.info("Wrote health totals to %s (%d rows)", totals_path, len(totals))
-
-
-if __name__ == "__main__":
-    main()

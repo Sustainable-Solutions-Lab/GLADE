@@ -38,15 +38,8 @@ It also raises errors for unrecognized component patterns to ensure the
 analysis is updated when the model structure changes.
 """
 
-import logging
-from pathlib import Path
-
 import pandas as pd
 import pypsa
-
-from workflow.scripts.logging_config import setup_script_logging
-
-logger = logging.getLogger(__name__)
 
 # Relative tolerance for objective validation
 OBJECTIVE_RTOL = 0.01  # 1% tolerance
@@ -287,24 +280,3 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     result = result.rename(columns=column_map)
 
     return result
-
-
-def main() -> None:
-    logger = setup_script_logging(snakemake.log[0])
-
-    # Load network
-    n = pypsa.Network(snakemake.input.network)
-    logger.info("Loaded network with objective value: %.4f bn USD", n.objective)
-
-    # Extract breakdown
-    breakdown = extract_objective_breakdown(n)
-
-    # Write output
-    output_path = Path(snakemake.output.objective_breakdown)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    breakdown.to_csv(output_path, index=False)
-    logger.info("Wrote objective breakdown to %s", output_path)
-
-
-if __name__ == "__main__":
-    main()

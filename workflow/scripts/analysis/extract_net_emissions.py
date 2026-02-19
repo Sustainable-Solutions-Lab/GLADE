@@ -15,12 +15,9 @@ Output: net_emissions.csv with columns gas, net_mtco2eq.
 """
 
 import logging
-from pathlib import Path
 
 import pandas as pd
 import pypsa
-
-from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
@@ -62,25 +59,3 @@ def extract_net_emissions(n: pypsa.Network) -> pd.DataFrame:
     rows.append({"gas": "total", "net_mtco2eq": total})
 
     return pd.DataFrame(rows)
-
-
-def main() -> None:
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
-
-    n = pypsa.Network(snakemake.input.network)
-    logger.info("Loaded network with %d links", len(n.links))
-
-    df = extract_net_emissions(n)
-
-    for _, row in df.iterrows():
-        logger.info("  %s: %.2f MtCO2eq", row["gas"], row["net_mtco2eq"])
-
-    output_path = Path(snakemake.output.csv)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
-    logger.info("Wrote net emissions to %s", output_path)
-
-
-if __name__ == "__main__":
-    main()

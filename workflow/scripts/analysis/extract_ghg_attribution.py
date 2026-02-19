@@ -17,14 +17,12 @@ Outputs:
 """
 
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pypsa
 
 from workflow.scripts.constants import TONNE_TO_MEGATONNE
-from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
@@ -293,62 +291,3 @@ def compute_ghg_totals(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     return totals
-
-
-def main() -> None:
-    global logger
-    logger = setup_script_logging(snakemake.log[0])
-
-    # Load network
-    n = pypsa.Network(snakemake.input.network)
-    logger.info("Loaded network with %d links", len(n.links))
-
-    # Load food consumption from extract_statistics output
-    food_consumption = pd.read_csv(snakemake.input.food_consumption)
-    logger.info("Loaded %d food consumption records", len(food_consumption))
-
-    # Load food groups
-    food_groups = pd.read_csv(snakemake.input.food_groups)
-
-    # Get params
-    ghg_price = float(snakemake.params.ghg_price)
-    ch4_gwp = float(snakemake.params.ch4_gwp)
-    n2o_gwp = float(snakemake.params.n2o_gwp)
-
-    logger.info("Computing bus intensities...")
-    bus_intensities = compute_bus_intensities(n, ch4_gwp, n2o_gwp)
-    logger.info("Computed intensities for %d buses", len(bus_intensities))
-
-    logger.info("Joining intensities to consumption data...")
-    result = join_intensities_to_consumption(
-        food_consumption, food_groups, bus_intensities
-    )
-    logger.info("Computed GHG for %d food-country pairs", len(result))
-
-    logger.info("Adding monetary values...")
-    result = add_monetary_value(result, ghg_price)
-
-    # Sort for consistent output
-    result = result.sort_values(["country", "food"]).reset_index(drop=True)
-
-    # Compute totals by country and food_group
-    logger.info("Computing GHG totals...")
-    totals = compute_ghg_totals(result)
-    total_ghg = totals["ghg_mtco2eq"].sum()
-    logger.info(
-        "Total GHG: %.4f MtCO2eq across %d country-group pairs", total_ghg, len(totals)
-    )
-
-    # Write outputs
-    output_path = Path(snakemake.output.csv)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    result.to_csv(output_path, index=False)
-    logger.info("Wrote GHG intensity to %s (%d rows)", output_path, len(result))
-
-    totals_path = Path(snakemake.output.totals)
-    totals.to_csv(totals_path, index=False)
-    logger.info("Wrote GHG totals to %s (%d rows)", totals_path, len(totals))
-
-
-if __name__ == "__main__":
-    main()

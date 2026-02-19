@@ -16,14 +16,12 @@ Uses actual dispatch flows (p0, p1, etc.) rather than p_nom_opt * efficiency
 for more accurate results that reflect actual model solutions.
 """
 
-from pathlib import Path
 import re
 
 import pandas as pd
 import pypsa
 
 from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE, PJ_TO_KCAL
-from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_country_population
 
 
@@ -630,48 +628,3 @@ def extract_food_group_consumption(n: pypsa.Network) -> pd.DataFrame:
     return _extract_consumption(
         n, groupby=["food_group", "country"], group_col="food_group"
     )
-
-
-def main() -> None:
-    logger = setup_script_logging(snakemake.log[0])
-
-    # Load network
-    n = pypsa.Network(snakemake.input.network)
-    logger.info("Loaded network with %d links", len(n.links))
-
-    # Extract statistics
-    logger.info("Extracting crop production...")
-    crop_production = extract_crop_production(n)
-    logger.info("Extracted %d crop production records", len(crop_production))
-
-    logger.info("Extracting land use...")
-    land_use = extract_land_use(n)
-    logger.info("Extracted %d land use records", len(land_use))
-
-    logger.info("Extracting animal production...")
-    animal_production = extract_animal_production(n)
-    logger.info("Extracted %d animal production records", len(animal_production))
-
-    logger.info("Extracting food consumption...")
-    food_consumption = extract_food_consumption(n)
-    logger.info("Extracted %d food consumption records", len(food_consumption))
-
-    logger.info("Extracting food group consumption...")
-    food_group_consumption = extract_food_group_consumption(n)
-    logger.info(
-        "Extracted %d food group consumption records", len(food_group_consumption)
-    )
-
-    # Write outputs
-    output_dir = Path(snakemake.output.crop_production).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    crop_production.to_csv(snakemake.output.crop_production, index=False)
-    land_use.to_csv(snakemake.output.land_use, index=False)
-    animal_production.to_csv(snakemake.output.animal_production, index=False)
-    food_consumption.to_csv(snakemake.output.food_consumption, index=False)
-    food_group_consumption.to_csv(snakemake.output.food_group_consumption, index=False)
-
-
-if __name__ == "__main__":
-    main()
