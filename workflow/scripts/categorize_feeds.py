@@ -65,6 +65,13 @@ def categorize_ruminant_feeds(
         if row["feed_item"] == "grassland":
             return "grassland"
 
+        # All crop residues are roughage regardless of digestibility.
+        # GLEAM groups all residues together under "crop residues" in the
+        # roughage decomposition (SI Tables 4-5), and they share the same
+        # role in the feed system.
+        if row["source_type"] == "residue":
+            return "roughage"
+
         # Protein category takes precedence for high-N feeds (like monogastrics)
         # Threshold of 50 g N/kg DM captures protein meals (rapeseed, soybean, etc.)
         if row["N_g_per_kg_DM"] > 50:
@@ -130,8 +137,7 @@ def categorize_monogastric_feeds(
 
     Categories:
     - low_quality: ME < 11 MJ/kg (residues, bran)
-    - grain: ME 11-15.5 MJ/kg, N < 35 g/kg (cereals)
-    - energy: ME > 15.5 MJ/kg, N < 35 g/kg (high-energy feeds)
+    - grain: ME >= 11 MJ/kg, N < 35 g/kg (cereals, energy crops)
     - protein: N > 35 g/kg (legumes, meals)
 
     Returns
@@ -160,18 +166,16 @@ def categorize_monogastric_feeds(
 
     # Assign categories
     def assign_category(row):
-        me = row["ME_MJ_per_kg_DM"]
         n = row["N_g_per_kg_DM"]
+        me = row["ME_MJ_per_kg_DM"]
 
         # Protein category takes precedence
         if n > 35:
             return "protein"
         elif me < 11:
             return "low_quality"
-        elif me < 15.5:
-            return "grain"
         else:
-            return "energy"
+            return "grain"
 
     df["category"] = df.apply(assign_category, axis=1)
 

@@ -498,7 +498,6 @@ trade:
       - ruminant_grain
       - ruminant_protein
       - monogastric_grain
-      - monogastric_energy
       - monogastric_protein
     forage:
       cost_per_km: 0.012  # USD_2024 per tonne per km (1.2e-2) - 2x grain cost

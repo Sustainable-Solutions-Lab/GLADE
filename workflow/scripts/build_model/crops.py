@@ -1009,6 +1009,7 @@ def add_residue_soil_incorporation_links(
         efficiency=cross["n2o_efficiency"],
         marginal_cost=0.0,  # No cost to incorporate residues
         p_nom_extendable=True,
+        country=cross["country"],
     )
 
     logger.info(

@@ -38,7 +38,6 @@ FEED_CATEGORIES = [
     "ruminant_protein",
     "monogastric_low_quality",
     "monogastric_grain",
-    "monogastric_energy",
     "monogastric_protein",
 ]
 

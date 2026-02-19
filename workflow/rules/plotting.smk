@@ -294,6 +294,25 @@ rule plot_food_group_slack:
         "../scripts/plotting/plot_food_group_slack.py"
 
 
+rule plot_feed_slack:
+    input:
+        network="<results>/{name}/solved/model_scen-{scenario}.nc",
+    output:
+        pdf="<results>/{name}/plots/scen-{scenario}/feed_slack.pdf",
+        csv="<results>/{name}/plots/scen-{scenario}/feed_slack.csv",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="1m",
+        mem_mb=950,
+    log:
+        "<logs>/{name}/plot_feed_slack_scen-{scenario}.log",
+    benchmark:
+        "<benchmarks>/{name}/plot_feed_slack_scen-{scenario}.tsv"
+    script:
+        "../scripts/plotting/plot_feed_slack.py"
+
+
 rule plot_slack_overview:
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",

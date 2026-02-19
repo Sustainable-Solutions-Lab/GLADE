@@ -1468,7 +1468,6 @@ FEED_CATEGORY_LABELS = {
     "ruminant_grain": "Grains",
     "ruminant_protein": "Oilseed cakes",
     "monogastric_grain": "Grains",
-    "monogastric_energy": "Fodder crops",
     "monogastric_low_quality": "By-products",
     "monogastric_protein": "Oilseed cakes",
 }
