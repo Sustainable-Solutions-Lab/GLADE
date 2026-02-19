@@ -1047,12 +1047,16 @@ def _run_solve() -> None:
     io_api = snakemake.params.io_api
     netcdf_config = snakemake.params.netcdf
 
-    # Configure Gurobi logging: write to log file, suppress console output.
-    # OutputFlag=0 on the Env silences the license banner and "Set parameter"
-    # messages that the C library prints to stdout during initialisation.
+    # Configure Gurobi logging: write to log file, suppress console
+    # output. Explicitly creating an Env with OutputFlag=0 silences
+    # the license banner and "Set parameter" messages that are
+    # otherwise printed to stdout before linopy starts solving.
     gurobi_env = None
     if solver_name.lower() == "gurobi":
-        gurobi_env = {"OutputFlag": 0}
+        import gurobipy as gp
+
+        gurobi_env = gp.Env(params={"OutputFlag": 0})
+
         if snakemake.log:
             if "LogFile" not in solver_options:
                 solver_options["LogFile"] = snakemake.log[0]
@@ -1225,7 +1229,7 @@ def _run_solve() -> None:
 
         output_path = Path(snakemake.output.network).with_suffix(".mps")
         logger.info("Exporting model to %s for tuning...", output_path)
-        gp_model = n.model.to_gurobipy()
+        gp_model = n.model.to_gurobipy(env=gurobi_env)
         gp_model.update()
         gp_model.write(str(output_path))
         del gp_model
