@@ -321,9 +321,11 @@ Data Sources
   decompose the aggregate "Roughages" entry into model-specific feed pools.
 
 * **FAOSTAT QCL**: National animal product output for 2010 (the GLEAM
-  reference year) and the model's configured reference year
-  (``validation.production_year``). Used both to disaggregate GLEAM totals
-  to individual countries and to scale the baseline forward in time.
+  reference year), the model's configured reference year
+  (``validation.production_year``), and the calibration year
+  (``validation.gleam_calibration_year``). Used to disaggregate GLEAM totals
+  to individual countries, scale the baseline forward in time, and calibrate
+  the efficiency correction.
 
 * **Wirsenius (2000) [1]_** feed energy requirements: Regional metabolizable
   energy demand per unit of product output, used to split feed between
@@ -333,7 +335,7 @@ Disaggregation Pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Global GLEAM totals are converted to a country × product × feed-category
-matrix through five sequential steps.
+matrix through six sequential steps.
 
 **Step 1 — Country disaggregation**
 
@@ -433,6 +435,42 @@ trends:
 After scaling, totals within each OECD/Non-OECD group are normalized to
 match the scaled GLEAM group total, correcting for countries with incomplete
 FAOSTAT coverage.
+
+**Step 6 — Efficiency calibration**
+
+The production-based scaling in Step 5 assumes constant feed conversion
+efficiency, but efficiencies improved between 2010 and the reference year.
+GLEAM 3.0 (FAO 2023 [5]_) reports a global feed total of
+approximately 6.2 Gt DM for its 2015 baseline, whereas naively scaling the
+6.0 Gt DM GLEAM 2.0 total (2010) by production growth predicts a
+substantially higher figure—roughly 6.7 Gt for 2015.
+
+The pipeline calibrates against this known data point. First, a
+constant-efficiency prediction for the calibration year is computed using
+species-level production growth from FAOSTAT:
+
+.. math::
+
+   \hat{T}_{\text{cal}} = \sum_s T_{s,2010}
+       \times \frac{\text{production}_{s,\text{cal}}}
+                   {\text{production}_{s,2010}}
+
+The ratio of the known GLEAM 3.0 total to this naive prediction yields the
+cumulative efficiency improvement at the calibration year.  Assuming a
+constant annual rate, the correction for the reference year is:
+
+.. math::
+
+   r = \left(
+       \frac{T_{\text{known}}}{\hat{T}_{\text{cal}}}
+   \right)^{1/(\text{cal\_year} - 2010)}
+
+   \text{correction} = r^{\,\text{ref\_year} - 2010}
+
+All feed values are multiplied by this correction factor.  The two
+configuration keys ``validation.gleam_calibration_year`` (default: 2015) and
+``validation.gleam_calibration_total_gt_dm`` (default: 6.2) control the
+calibration data point.
 
 Output
 ~~~~~~
@@ -683,3 +721,5 @@ References
 .. [3] Havlík, P., Valin, H., Herrero, M., Obersteiner, M., Schmid, E., Rufino, M. C., ... & Notenbaert, A. (2014). Climate change mitigation through livestock system transitions. *Proceedings of the National Academy of Sciences*, 111(10), 3709-3714, https://doi.org/10.1073/pnas.130804411. See the supporting information, Section 2.4.
 
 .. [4] Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1–8. https://doi.org/10.1016/j.gfs.2017.01.001. The supplementary tables of this paper provide the GLEAM 2.0 global feed intake data used in this model.
+
+.. [5] FAO (2023). *Pathways towards lower emissions – A global assessment of the greenhouse gas emissions and mitigation options from livestock agrifood systems*. Rome. https://doi.org/10.4060/cc9029en. This GLEAM 3.0-based assessment (2015 baseline) reports updated global feed totals reflecting improved efficiencies relative to the GLEAM 2.0 (2010) estimates.

@@ -36,6 +36,7 @@ the 2020 baseline by enabling several flags:
      use_actual_yields: true          # Use observed yields instead of potential
      use_actual_production: true      # Fix harvested areas to observed values
      enforce_baseline_diet: true      # Fix consumption to baseline diet
+     enforce_baseline_feed: true      # Fix animal feed use to GLEAM baseline
      disable_spared_cropland: true    # No cropland retirement
      disable_spared_grassland: true   # No grassland retirement
      slack_marginal_cost: 10          # bn USD per Mt/Mha slack penalty
@@ -50,7 +51,8 @@ These settings collectively remove the optimizer's degrees of freedom:
   pinned (see :doc:`livestock`).
 - **Demand side**: ``enforce_baseline_diet`` adds per-food, per-country equality
   constraints that force consumption to match the processed GDD baseline diet
-  (see :doc:`current_diets`).
+  (see :doc:`current_diets`). ``enforce_baseline_feed`` pins animal feed use to
+  GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
 - **Land use**: Sparing of existing cropland and grassland is disabled so the
   model matches the historical land footprint (see :doc:`land_use`).
 - **Calibration multipliers**: ``grassland_yield_multiplier`` and

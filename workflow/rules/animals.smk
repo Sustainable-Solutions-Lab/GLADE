@@ -143,6 +143,8 @@ rule prepare_gleam_feed_baseline:
         m49_codes="data/curated/M49-codes.csv",
     params:
         reference_year=config["validation"]["production_year"],
+        calibration_year=config["validation"]["gleam_calibration_year"],
+        calibration_total_gt_dm=config["validation"]["gleam_calibration_total_gt_dm"],
         countries=config["countries"],
         net_to_me_conversion=config["animal_products"][
             "net_to_metabolizable_energy_conversion"

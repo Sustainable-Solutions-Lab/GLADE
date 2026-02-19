@@ -357,6 +357,8 @@ def main() -> None:
     m49_codes_path = snakemake.input.m49_codes  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     reference_year = int(snakemake.params.reference_year)  # type: ignore[name-defined]
+    calibration_year = int(snakemake.params.calibration_year)  # type: ignore[name-defined]
+    calibration_total_gt_dm = float(snakemake.params.calibration_total_gt_dm)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
     net_to_me = snakemake.params.net_to_me_conversion  # type: ignore[name-defined]
     feed_proxy_map = dict(snakemake.params.feed_proxy_map)  # type: ignore[name-defined]
@@ -402,6 +404,13 @@ def main() -> None:
     logger.info("Loading FAO %d production for scaling", reference_year)
     fao_ref = load_fao_production(
         bulk, item_map, reference_year, countries, faostat_items
+    )
+
+    logger.info(
+        "Loading FAO %d production for efficiency calibration", calibration_year
+    )
+    fao_cal = load_fao_production(
+        bulk, item_map, calibration_year, countries, faostat_items
     )
 
     # -- Step 2: Compute species-level country shares ------------------
@@ -666,6 +675,72 @@ def main() -> None:
                 result.loc[group_mask, "feed_use_mt_dm"] *= correction
 
     result = result.drop(columns=["species", "region"])
+
+    # -- Step 7: Efficiency calibration ------------------------------------
+    # The production-based scaling (Step 5) assumes constant feed conversion
+    # efficiency, but efficiencies improved between 2010 and the reference
+    # year.  We calibrate against the known GLEAM 3.0 global feed total at
+    # the calibration year to derive an annual efficiency improvement rate,
+    # then extrapolate to the reference year.
+    logger.info(
+        "Applying efficiency calibration (GLEAM 3.0: %.1f Gt DM in %d)",
+        calibration_total_gt_dm,
+        calibration_year,
+    )
+
+    # SI2 totals per species (Mt DM, excluding Swill)
+    non_swill_cols = [c for c in feed_cols if c != "Swill"]
+    si2_species_totals = si2_data.groupby("Species")[non_swill_cols].sum().sum(axis=1)
+
+    # Compute naive (constant-efficiency) prediction for calibration year
+    # by applying species-level production growth from 2010 to cal year
+    naive_cal_total = 0.0
+    for species, feed_total in si2_species_totals.items():
+        species_products = SPECIES_PRODUCTS[species]
+        prod_2010_s = fao_2010[fao_2010["product"].isin(species_products)][
+            "production_tonnes"
+        ].sum()
+        prod_cal_s = fao_cal[fao_cal["product"].isin(species_products)][
+            "production_tonnes"
+        ].sum()
+        scale_s = prod_cal_s / prod_2010_s if prod_2010_s > 0 else 1.0
+        naive_cal_total += feed_total * scale_s
+        logger.info(
+            "  %s: SI2=%.0f Mt, production scale 2010->%d = %.3f",
+            species,
+            feed_total,
+            calibration_year,
+            scale_s,
+        )
+
+    calibration_total_mt = calibration_total_gt_dm * 1000.0
+    logger.info(
+        "  Naive %d total: %.0f Mt DM; known: %.0f Mt DM",
+        calibration_year,
+        naive_cal_total,
+        calibration_total_mt,
+    )
+
+    efficiency_ratio = calibration_total_mt / naive_cal_total
+    years_cal = calibration_year - 2010
+    annual_rate = efficiency_ratio ** (1.0 / years_cal)
+    years_ref = reference_year - 2010
+    correction = annual_rate**years_ref
+
+    logger.info(
+        "  Efficiency ratio at %d: %.4f (annual: %.4f)",
+        calibration_year,
+        efficiency_ratio,
+        annual_rate,
+    )
+    logger.info(
+        "  Correction for %d (%.0f years): %.4f",
+        reference_year,
+        years_ref,
+        correction,
+    )
+
+    result["feed_use_mt_dm"] *= correction
 
     # Expand to all valid (country, product, feed_category) combinations,
     # filling 0 where GLEAM has no data.  This ensures every model link gets

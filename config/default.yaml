@@ -54,6 +54,8 @@ validation:
   grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
   feed_efficiency_multiplier: 1.0 # Multiplier applied to feed->animal conversion efficiency (product per feed)
   production_year: 2018 # To match with GDD baseline year
+  gleam_calibration_year: 2015  # Year of GLEAM 3.0 baseline for efficiency calibration
+  gleam_calibration_total_gt_dm: 6.2  # Known global feed total (Gt DM) at calibration year (GLEAM 3.0)
   production_stability:
     enabled: false
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty

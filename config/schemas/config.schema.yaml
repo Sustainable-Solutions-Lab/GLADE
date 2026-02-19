@@ -141,6 +141,8 @@ properties:
       - grassland_yield_multiplier
       - feed_efficiency_multiplier
       - production_year
+      - gleam_calibration_year
+      - gleam_calibration_total_gt_dm
       - production_stability
     additionalProperties: false
     properties:
@@ -188,6 +190,15 @@ properties:
         minimum: 1990
         maximum: 2024
         description: "Reference year for production data"
+      gleam_calibration_year:
+        type: integer
+        minimum: 2010
+        maximum: 2024
+        description: "Year of GLEAM 3.0 baseline for efficiency calibration"
+      gleam_calibration_total_gt_dm:
+        type: number
+        exclusiveMinimum: 0
+        description: "Known global feed total (Gt DM) at calibration year from GLEAM 3.0"
       production_stability:
         type: object
         required: [enabled, penalty_mode, crops, animals]

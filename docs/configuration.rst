@@ -327,8 +327,16 @@ the ``diet.baseline_age`` and ``diet.baseline_reference_year`` settings determin
 cohort/year is enforced. Use ``validation.food_group_slack_marginal_cost`` to set the
 penalty (USD\ :sub:`2024` per Mt) for the slack generators that backstop those fixed
 food-group loads. Keep the value high so slack only activates when recorded production
-cannot meet the enforced demand targets. See :doc:`validation` for a detailed
-walkthrough of the validation workflow and diagnostic figures.
+cannot meet the enforced demand targets.
+
+Set ``validation.enforce_baseline_feed`` to ``true`` to fix animal feed use to
+GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`). The baseline is
+scaled from GLEAM 2.0 (2010) to the reference year and calibrated against the
+known GLEAM 3.0 global total using ``validation.gleam_calibration_year`` and
+``validation.gleam_calibration_total_gt_dm``.
+
+See :doc:`validation` for a detailed walkthrough of the validation workflow and
+diagnostic figures.
 
 Consumer Utility Options
 ^^^^^^^^^^^^^^^^^^^^^^^^
