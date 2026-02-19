@@ -288,6 +288,185 @@ Feed requirements vary significantly by region due to differences in production 
   * Sub-Saharan Africa shows significantly higher requirements due to less intensive production systems
   * North America and Western Europe have lowest requirements, reflecting highly optimized industrial systems
 
+.. _gleam-feed-baseline:
+
+Baseline Feed Intake
+--------------------
+
+To ground the livestock module in observed feed flows, the model constructs a
+country-level baseline from GLEAM 2.0 (Mottet et al. 2017 [4]_) that
+describes how much dry-matter feed of each category each animal product
+consumed in the reference year. In validation mode this baseline can pin the
+model to observed feed mixes; in optimisation runs it serves as a reference
+point for comparison with solved results.
+
+The script ``workflow/scripts/prepare_gleam_feed_baseline.py`` produces
+``processing/{name}/gleam_feed_baseline.csv``.
+
+Data Sources
+~~~~~~~~~~~~
+
+* **GLEAM 2.0 SI Table 2** (``data/curated/gleam_tables/gleam_2_0_si2_global_livestock_feed_intake.csv``):
+  Global dry-matter feed intake by species (Cattle & buffaloes, Small
+  Ruminants, Poultry, Pigs), production system (Grazing, Mixed, Feedlots,
+  Layers, Broilers, Backyard, Intermediate, Industrial), and feed type
+  (Roughages, Cereal grains, Brans, Soybean cakes, Oil seed cakes, Other
+  edible, Other non-edible, Swill). Totals are reported separately for OECD
+  and Non-OECD country groups.
+
+* **GLEAM 2.0 SI Tables 4–5** (``gleam_2_0_si4_dairy_cattle_composition.csv``,
+  ``gleam_2_0_si5_beef_cattle_composition.csv``):
+  Percentage breakdown of ruminant roughage into components (fresh grass,
+  hay, legumes & silage, crop residues, etc.) by GLEAM region, used to
+  decompose the aggregate "Roughages" entry into model-specific feed pools.
+
+* **FAOSTAT QCL**: National animal product output for 2010 (the GLEAM
+  reference year) and the model's configured reference year
+  (``validation.production_year``). Used both to disaggregate GLEAM totals
+  to individual countries and to scale the baseline forward in time.
+
+* **Wirsenius (2000) [1]_** feed energy requirements: Regional metabolizable
+  energy demand per unit of product output, used to split feed between
+  co-products in multi-product production systems.
+
+Disaggregation Pipeline
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Global GLEAM totals are converted to a country × product × feed-category
+matrix through five sequential steps.
+
+**Step 1 — Country disaggregation**
+
+GLEAM Table 2 reports totals for OECD and Non-OECD groups. Each country is
+assigned to one group, and its share of the group's total species-level output
+in 2010 (from FAOSTAT) determines how much of the group's feed is allocated
+to it:
+
+.. math::
+
+   \text{share}_{c,s} = \frac{\text{production}_{c,s,2010}}
+                              {\sum_{c' \in \text{group}(c)} \text{production}_{c',s,2010}}
+
+   \text{intake}_{c,s,f} = \text{intake}_{\text{GLEAM},\,\text{group}(c),s,f}
+                            \times \text{share}_{c,s}
+
+**Step 2 — Product split for multi-product systems**
+
+Several GLEAM systems serve more than one model product simultaneously:
+cattle Grazing and Mixed systems supply dairy, dairy-buffalo, and meat-cattle;
+poultry Backyard systems supply both eggs and meat-chicken. Feed is allocated
+between co-products in proportion to their energy demand, using ME
+requirements from Wirsenius (2000):
+
+.. math::
+
+   \text{product\_share}_{p} =
+       \frac{\text{production}_{c,p} \times \text{FCR}_{c,p}}
+            {\sum_{p'} \text{production}_{c,p'} \times \text{FCR}_{c,p'}}
+
+Countries with no reported production for a co-product fall back to equal
+sharing.
+
+**Step 3 — Roughage decomposition**
+
+GLEAM Table 2 lumps all ruminant roughage into a single "Roughages" entry. SI
+Tables 4 and 5 supply regional percentage breakdowns of this roughage into
+specific components. These percentages are applied to country-level roughage
+totals and the components are mapped to model feed categories:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 30
+
+   * - Roughage component
+     - Model feed category
+   * - Fresh grass, Hay
+     - ``ruminant_grassland``
+   * - Legumes and silage
+     - ``ruminant_forage``
+   * - Crop residues, Sugarcane tops, Leaves
+     - ``ruminant_roughage``
+
+Dairy and dairy-buffalo products use Table 4 (dairy cattle composition);
+meat-cattle and meat-sheep use Table 5 (beef cattle composition).
+
+**Step 4 — Mapping remaining GLEAM feed types**
+
+Feed types other than "Roughages" (handled above) and "Swill" (excluded) are
+mapped directly to model categories:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 28 28
+
+   * - GLEAM feed type
+     - Ruminant category
+     - Monogastric category
+   * - Cereal grains, Other edible
+     - ``ruminant_grain``
+     - ``monogastric_grain``
+   * - 2nd grade grain
+     - —
+     - ``monogastric_grain``
+   * - Brans, spent brewer & biofuel grains
+     - ``ruminant_grain``
+     - ``monogastric_low_quality``
+   * - Soybean cakes, Other oil seed cakes
+     - ``ruminant_protein``
+     - ``monogastric_protein``
+   * - Other non-edible
+     - ``ruminant_grain``
+     - ``monogastric_low_quality``
+
+**Step 5 — Scaling to the reference year and normalization**
+
+The GLEAM baseline reflects 2010 conditions. Country- and product-level feed
+intakes are scaled to the configured reference year using FAO production
+trends:
+
+.. math::
+
+   \text{feed}_{\text{ref}} = \text{feed}_{2010}
+       \times \frac{\text{production}_{\text{ref}}}
+                   {\text{production}_{2010}}
+
+After scaling, totals within each OECD/Non-OECD group are normalized to
+match the scaled GLEAM group total, correcting for countries with incomplete
+FAOSTAT coverage.
+
+Output
+~~~~~~
+
+``processing/{name}/gleam_feed_baseline.csv`` contains one row per
+(country, product, feed category) combination:
+
+* ``country``: ISO 3166-1 alpha-3 country code
+* ``product``: Animal product (``dairy``, ``dairy-buffalo``, ``meat-cattle``,
+  ``meat-sheep``, ``eggs``, ``meat-chicken``, ``meat-pig``)
+* ``feed_category``: Feed pool (e.g., ``ruminant_grassland``,
+  ``ruminant_grain``, ``monogastric_protein``)
+* ``feed_use_mt_dm``: Dry-matter feed consumption (Mt DM) in the reference year
+
+All (country, product, feed category) combinations are always present,
+including zeros, so every animal production link in the model has an explicit
+baseline entry.
+
+Model Integration
+~~~~~~~~~~~~~~~~~
+
+The baseline participates in the model in two distinct ways:
+
+1. **Validation mode**: When ``validation.enforce_baseline_feed: true``, the
+   baseline feed quantities are imposed as equality constraints on the model,
+   fixing the feed mix to GLEAM-derived estimates. This removes a degree of
+   freedom and is useful for diagnosing supply-side inconsistencies—any
+   imbalance shows up as feed slack (see :ref:`validation-feed-breakdown`).
+
+2. **Optimisation mode**: The model is free to choose any feed mix within the
+   bounds set by available supply and feed conversion efficiencies. The
+   baseline is not enforced but is available for post-hoc comparison with
+   solved solutions.
+
 Model Implementation
 --------------------
 
@@ -502,3 +681,5 @@ References
 .. [2] Organisation for Economic Co-operation and Development / Food and Agriculture Organization of the United Nations (2023). *OECD-FAO Agricultural Outlook 2023-2032*, Box 6.1: Meat. https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2023-2032_08801ab7-en/full-report/meat_7b036d52.html#title-a5a1984180
 
 .. [3] Havlík, P., Valin, H., Herrero, M., Obersteiner, M., Schmid, E., Rufino, M. C., ... & Notenbaert, A. (2014). Climate change mitigation through livestock system transitions. *Proceedings of the National Academy of Sciences*, 111(10), 3709-3714, https://doi.org/10.1073/pnas.130804411. See the supporting information, Section 2.4.
+
+.. [4] Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1–8. https://doi.org/10.1016/j.gfs.2017.01.001. The supplementary tables of this paper provide the GLEAM 2.0 global feed intake data used in this model.
