@@ -243,11 +243,12 @@ Brief descriptions of key external datasets used by this project, with links and
 
 - Description: Global livestock feed intake data from the second version of FAO's Global Livestock Environmental Assessment Model (GLEAM 2.0). Provides total feed use (Mt DM/year, 2010) disaggregated by OECD/Non-OECD region, species (cattle & buffaloes, small ruminants, poultry, pigs), production system (grazing, mixed, feedlot, backyard, intermediate, industrial, layers, broilers), and feed type (roughages, cereal grains, soybean cakes, etc.). Supplementary tables provide per-animal rations (kg DM/animal/year) and regional composition percentages for ruminant and monogastric diets across 9 GLEAM regions.
 - Source publication: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8. https://doi.org/10.1016/j.gfs.2017.01.001
-- Version/format: Supplementary information PDF (Tables SI 2-17), manually digitized into CSV files in `data/curated/gleam_tables/`.
+- Version/format: Supplementary information PDF (Tables SI 2-17), manually digitized into CSV files.
 - Coverage: Global; reference year 2010. Regional composition data for 9 GLEAM regions (NA, RUSS, WE, EE, NENA, ESEA, OC, SA, LAC, SSA).
-- License/terms (summary): Published as open-access supplementary material under Elsevier's user license. Data may be used for non-commercial research with proper citation.
+- License/terms: **Copyright Elsevier. Not redistributed with this repository.** Contact the maintainer to obtain the files.
+- Availability: Files must be placed in `data/curated/gleam_tables/mottet_2017/` (gitignored). The workflow will raise an informative error if they are absent.
 - Citation: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8.
-- Workflow integration: CSV files in `data/curated/gleam_tables/` (SI Tables 2-5, 6-15, 17). Processed by `prepare_gleam_feed_baseline.py` which disaggregates global totals to countries using FAO production shares, decomposes ruminant roughage using regional composition tables, and scales to a reference year.
+- Workflow integration: CSV files in `data/curated/gleam_tables/mottet_2017/` (SI Tables 2-5, 6-15, 17). Processed by `prepare_gleam_feed_baseline.py` which disaggregates global totals to countries using FAO production shares, decomposes ruminant roughage using regional composition tables, and scales to a reference year.
 
 ## IFA FUBC — Global Fertilizer Use by Crop and Country
 

@@ -132,9 +132,9 @@ rule build_feed_to_animal_products:
 
 rule prepare_gleam_feed_baseline:
     input:
-        si_table_2="data/curated/gleam_tables/gleam_2_0_si2_global_livestock_feed_intake.csv",
-        si_table_4="data/curated/gleam_tables/gleam_2_0_si4_dairy_cattle_composition.csv",
-        si_table_5="data/curated/gleam_tables/gleam_2_0_si5_beef_cattle_composition.csv",
+        si_table_2="data/curated/gleam_tables/mottet_2017/gleam_2_0_si2_global_livestock_feed_intake.csv",
+        si_table_4="data/curated/gleam_tables/mottet_2017/gleam_2_0_si4_dairy_cattle_composition.csv",
+        si_table_5="data/curated/gleam_tables/mottet_2017/gleam_2_0_si5_beef_cattle_composition.csv",
         oecd_status="data/curated/country_oecd_status.csv",
         gleam_regions="data/curated/country_gleam_region.csv",
         wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",

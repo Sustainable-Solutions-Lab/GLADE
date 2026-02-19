@@ -24,6 +24,9 @@ vendor
 /.tmp/
 docs/_static/figures/*
 
+# Restricted data — not redistributable (Elsevier copyright; contact maintainer)
+data/curated/gleam_tables/mottet_2017/
+
 # Secrets (never commit credentials)
 config/secrets.yaml
 /tools/snakemake-logger-plugin-compact/build/

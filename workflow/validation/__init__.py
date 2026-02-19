@@ -19,6 +19,7 @@ from .gaez_crop_mapping import validate_gaez_crop_mapping
 from .health_map import validate_health_map
 from .multi_cropping import validate_multi_cropping
 from .optimal_taxes import validate_optimal_taxes
+from .restricted_data import validate_restricted_data
 from .secrets import load_secrets_with_env_fallback
 from .sensitivity_generator import validate_sensitivity_generator
 
@@ -26,6 +27,7 @@ Validator = Callable[[dict, Path], None]
 
 _CHECKS: dict[str, Validator] = {
     "config_schema": validate_config_schema,
+    "restricted_data": validate_restricted_data,
     "consumer_values": validate_consumer_values,
     "optimal_taxes": validate_optimal_taxes,
     "country_regions": validate_country_regions,
