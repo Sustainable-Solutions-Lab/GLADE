@@ -88,17 +88,6 @@ ROUGHAGE_COMPONENT_MAPPING = {
     "Leaves": "ruminant_roughage",
 }
 
-# Composition components that are by-products/concentrates (not roughage)
-# but appear in SI4/5 tables. These are mapped to ruminant feed categories
-# and used to account for concentrate portions in the roughage decomposition.
-CONCENTRATE_COMPONENT_MAPPING = {
-    "Bran": "ruminant_grain",
-    "Oilseed meals": "ruminant_protein",
-    "Wet distillers grain": "ruminant_grain",
-    "Grains": "ruminant_grain",
-    "Molasses": "ruminant_grain",
-    "Pulp": "ruminant_protein",
-}
 
 # Species that are classified as ruminants (vs. monogastrics)
 RUMINANT_SPECIES = {"Cattle & buffaloes", "Small Ruminants"}
