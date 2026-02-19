@@ -239,6 +239,16 @@ Brief descriptions of key external datasets used by this project, with links and
 - License/terms (summary): Material may be copied, downloaded, and printed for private study, research and teaching purposes, or for use in non-commercial products or services, provided that appropriate acknowledgement of FAO as the source and copyright holder is given and that FAO's endorsement of users' views, products or services is not implied in any way.
 - Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
 
+## GLEAM 2.0 Feed Intake Data — Mottet et al. (2017)
+
+- Description: Global livestock feed intake data from the second version of FAO's Global Livestock Environmental Assessment Model (GLEAM 2.0). Provides total feed use (Mt DM/year, 2010) disaggregated by OECD/Non-OECD region, species (cattle & buffaloes, small ruminants, poultry, pigs), production system (grazing, mixed, feedlot, backyard, intermediate, industrial, layers, broilers), and feed type (roughages, cereal grains, soybean cakes, etc.). Supplementary tables provide per-animal rations (kg DM/animal/year) and regional composition percentages for ruminant and monogastric diets across 9 GLEAM regions.
+- Source publication: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8. https://doi.org/10.1016/j.gfs.2017.01.001
+- Version/format: Supplementary information PDF (Tables SI 2-17), manually digitized into CSV files in `data/curated/gleam_tables/`.
+- Coverage: Global; reference year 2010. Regional composition data for 9 GLEAM regions (NA, RUSS, WE, EE, NENA, ESEA, OC, SA, LAC, SSA).
+- License/terms (summary): Published as open-access supplementary material under Elsevier's user license. Data may be used for non-commercial research with proper citation.
+- Citation: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8.
+- Workflow integration: CSV files in `data/curated/gleam_tables/` (SI Tables 2-5, 6-15, 17). Processed by `prepare_gleam_feed_baseline.py` which disaggregates global totals to countries using FAO production shares, decomposes ruminant roughage using regional composition tables, and scales to a reference year.
+
 ## IFA FUBC — Global Fertilizer Use by Crop and Country
 
 - Description: Global dataset on inorganic fertilizer application rates (N, P₂O₅, K₂O) by crop and country based on expert surveys conducted by the International Fertilizer Association (IFA) and partners. The dataset includes historical data from 8 previous reports (1986–2014/15) and the most recent survey for the 2017–18 period, covering fertilizer application rates (kg/ha) and total consumption (thousand tonnes) for major crops worldwide.
