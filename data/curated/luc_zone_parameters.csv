@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 # SPDX-License-Identifier: CC-BY-4.0
 # TODO: these are mock values that need to be updated to IPCC guidelines
-zone,bgb_ratio_nat,bgb_ratio_ag_crop,agb_crop_tc_per_ha,bgb_ratio_ag_past,agb_past_tc_per_ha,soc_factor_crop,soc_factor_past,soc_depth_factor
-tropical,0.24,0.0,0.0,1.4,5.0,0.58,0.83,2.27
-temperate,0.27,0.0,0.0,1.2,4.0,0.66,0.90,1.80
-boreal,0.30,0.0,0.0,1.1,3.0,0.76,0.95,1.60
+zone,bgb_ratio_nat,bgb_ratio_ag_crop,agb_crop_tc_per_ha,bgb_ratio_ag_past,agb_past_tc_per_ha,soc_factor_crop,soc_factor_past,soc_depth_factor,agb_nonforest_tc_per_ha,bgb_ratio_nonforest
+tropical,0.24,0.0,0.0,1.4,5.0,0.58,0.83,2.27,20.0,0.40
+temperate,0.27,0.0,0.0,1.2,4.0,0.66,0.90,1.80,10.0,0.46
+boreal,0.30,0.0,0.0,1.1,3.0,0.76,0.95,1.60,8.0,0.50

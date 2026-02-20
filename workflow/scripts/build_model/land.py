@@ -9,7 +9,7 @@ import pandas as pd
 import pypsa
 
 from . import primary_resources
-from .utils import merge_lef
+from .utils import merge_lef, merge_lef_with_share
 
 HA_PER_MHA = 1e6
 
@@ -415,72 +415,100 @@ def add_land_components(
             water_supply=new_gen_df["water_supply"],
         )
 
-        # Links: new → cropland pool (with LUC emissions)
+        # Links: new → cropland pool (with LUC emissions, split by forest/nonforest)
         if not disable_new_cropland:
-            if not lef_df.empty:
-                luc_cropland = merge_lef(
-                    expansion_rows, lef_df, "cropland", allow_missing=False
+            for cover_type in ("forest", "nonforest"):
+                use_key = f"cropland_{cover_type}"
+                if not lef_df.empty:
+                    lef_share = merge_lef_with_share(expansion_rows, lef_df, use_key)
+                else:
+                    lef_share = pd.DataFrame(
+                        {"lef": 0.0, "conversion_share": 0.0},
+                        index=expansion_rows.index,
+                    )
+                # Skip this cover type entirely if no region has a nonzero share
+                if (lef_share["conversion_share"] <= 0).all():
+                    continue
+                sub = expansion_rows.copy()
+                sub["luc_lef"] = lef_share["lef"].to_numpy()
+                sub["conv_share"] = lef_share["conversion_share"].to_numpy()
+                sub["link_name"] = f"convert:new_land_{cover_type}:" + expansion_suffix
+                sub["p_nom_mha"] = sub["new_available_mha"] * sub["conv_share"]
+                # Drop rows with zero capacity
+                sub = sub[sub["p_nom_mha"] > 0].copy()
+                if sub.empty:
+                    continue
+                link_df = sub.set_index("link_name")
+                # tCO2/ha = MtCO2/Mha numerically, no conversion needed
+                n.links.add(
+                    link_df.index,
+                    carrier="land_conversion",
+                    bus0=link_df["new_bus"],
+                    bus1=link_df["cropland_bus"],
+                    efficiency=1.0,
+                    bus2="emission:co2",
+                    efficiency2=link_df["luc_lef"],
+                    p_nom_extendable=True,
+                    p_nom_max=link_df["p_nom_mha"],
+                    region=link_df["region"],
+                    resource_class=link_df["resource_class"],
+                    water_supply=link_df["water_supply"],
                 )
-            else:
-                luc_cropland = pd.Series(0.0, index=expansion_rows.index)
-            expansion_rows["luc_cropland"] = luc_cropland.to_numpy()
-            new_to_cropland_df = expansion_rows.set_index("new_to_cropland_name")
-            # tCO2/ha = MtCO2/Mha numerically, no conversion needed
-            n.links.add(
-                new_to_cropland_df.index,
-                carrier="land_conversion",
-                bus0=new_to_cropland_df["new_bus"],
-                bus1=new_to_cropland_df["cropland_bus"],
-                efficiency=1.0,
-                bus2="emission:co2",
-                efficiency2=new_to_cropland_df["luc_cropland"],
-                p_nom_extendable=True,
-                p_nom_max=new_to_cropland_df["new_available_mha"],
-                region=new_to_cropland_df["region"],
-                resource_class=new_to_cropland_df["resource_class"],
-                water_supply=new_to_cropland_df["water_supply"],
-            )
 
-        # Links: new → pasture pool (rainfed only, with LUC emissions)
+        # Links: new → pasture pool (rainfed only, with LUC emissions, split by forest/nonforest)
         if not disable_new_pasture:
             rainfed_expansion = expansion_rows[
                 expansion_rows["water_supply"] == "r"
             ].copy()
             if not rainfed_expansion.empty:
-                if not lef_df.empty:
-                    luc_pasture = merge_lef(
-                        rainfed_expansion, lef_df, "pasture", allow_missing=False
-                    )
-                else:
-                    luc_pasture = pd.Series(0.0, index=rainfed_expansion.index)
-
                 rainfed_expansion_suffix = (
                     rainfed_expansion["region"].astype(str)
                     + "_c"
                     + rainfed_expansion["resource_class"].astype(int).astype(str)
                 )
-                rainfed_expansion["new_to_pasture_name"] = (
-                    "convert:new_to_pasture:" + rainfed_expansion_suffix
-                )
                 rainfed_expansion["new_available_mha"] = (
                     rainfed_expansion["new_available_ha"] / HA_PER_MHA
                 )
-                rainfed_expansion["luc_pasture"] = luc_pasture.to_numpy()
-                new_to_pasture_df = rainfed_expansion.set_index("new_to_pasture_name")
-                n.links.add(
-                    new_to_pasture_df.index,
-                    carrier="new_to_pasture",
-                    bus0=new_to_pasture_df["new_bus"],
-                    bus1=new_to_pasture_df["pasture_bus"],
-                    efficiency=1.0,
-                    bus2="emission:co2",
-                    efficiency2=new_to_pasture_df["luc_pasture"],
-                    p_nom_extendable=True,
-                    p_nom_max=new_to_pasture_df["new_available_mha"],
-                    region=new_to_pasture_df["region"],
-                    resource_class=new_to_pasture_df["resource_class"],
-                    water_supply=new_to_pasture_df["water_supply"],
-                )
+
+                for cover_type in ("forest", "nonforest"):
+                    use_key = f"pasture_{cover_type}"
+                    if not lef_df.empty:
+                        lef_share = merge_lef_with_share(
+                            rainfed_expansion, lef_df, use_key
+                        )
+                    else:
+                        lef_share = pd.DataFrame(
+                            {"lef": 0.0, "conversion_share": 0.0},
+                            index=rainfed_expansion.index,
+                        )
+                    if (lef_share["conversion_share"] <= 0).all():
+                        continue
+                    sub = rainfed_expansion.copy()
+                    sub["luc_lef"] = lef_share["lef"].to_numpy()
+                    sub["conv_share"] = lef_share["conversion_share"].to_numpy()
+                    sub["link_name"] = (
+                        f"convert:new_to_pasture_{cover_type}:"
+                        + rainfed_expansion_suffix
+                    )
+                    sub["p_nom_mha"] = sub["new_available_mha"] * sub["conv_share"]
+                    sub = sub[sub["p_nom_mha"] > 0].copy()
+                    if sub.empty:
+                        continue
+                    link_df = sub.set_index("link_name")
+                    n.links.add(
+                        link_df.index,
+                        carrier="new_to_pasture",
+                        bus0=link_df["new_bus"],
+                        bus1=link_df["pasture_bus"],
+                        efficiency=1.0,
+                        bus2="emission:co2",
+                        efficiency2=link_df["luc_lef"],
+                        p_nom_extendable=True,
+                        p_nom_max=link_df["p_nom_mha"],
+                        region=link_df["region"],
+                        resource_class=link_df["resource_class"],
+                        water_supply=link_df["water_supply"],
+                    )
 
     # Add slack generators to both pool types if enabled
     if enable_land_slack:

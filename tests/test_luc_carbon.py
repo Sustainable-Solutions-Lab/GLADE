@@ -16,6 +16,8 @@ import xarray as xr
 
 from workflow.scripts.build_luc_carbon_coefficients import (
     CO2_PER_C,
+    _correct_subpixel_soc,
+    _decompose_agb,
     _ensure_mode_zero,
     _zone_index,
     _zone_parameters,
@@ -371,6 +373,184 @@ class TestCarbonStockArithmetic:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Sub-pixel stock correction
+# ---------------------------------------------------------------------------
+
+
+class TestCorrectSubpixelSOC:
+    """Tests for _correct_subpixel_soc."""
+
+    def test_pure_natural_pixel_unchanged(self):
+        """A pixel with no agriculture returns observed SOC."""
+        soc = np.array([[50.0]], dtype=np.float32)
+        crop_f = np.array([[0.0]], dtype=np.float32)
+        grass_f = np.array([[0.0]], dtype=np.float32)
+        nonag_f = np.array([[1.0]], dtype=np.float32)
+        soc_fc = np.array([[0.7]], dtype=np.float32)
+        soc_fp = np.array([[0.9]], dtype=np.float32)
+
+        soc_c = _correct_subpixel_soc(
+            soc,
+            crop_f,
+            grass_f,
+            nonag_f,
+            soc_fc,
+            soc_fp,
+        )
+        assert soc_c[0, 0] == pytest.approx(50.0)
+
+    def test_mixed_pixel_soc_scales_up(self):
+        """SOC should increase for a pixel with depleted agricultural soil.
+
+        observed = soc_nat * (0.4 + 0.3*0.7 + 0.3*0.9) = soc_nat * 0.88
+        So soc_nat = 50 / 0.88 = 56.818...
+        """
+        soc = np.array([[50.0]], dtype=np.float32)
+        crop_f = np.array([[0.3]], dtype=np.float32)
+        grass_f = np.array([[0.3]], dtype=np.float32)
+        nonag_f = np.array([[0.4]], dtype=np.float32)
+        soc_fc = np.array([[0.7]], dtype=np.float32)
+        soc_fp = np.array([[0.9]], dtype=np.float32)
+
+        soc_c = _correct_subpixel_soc(
+            soc,
+            crop_f,
+            grass_f,
+            nonag_f,
+            soc_fc,
+            soc_fp,
+        )
+        expected = 50.0 / (0.4 + 0.3 * 0.7 + 0.3 * 0.9)
+        assert soc_c[0, 0] == pytest.approx(expected, rel=1e-4)
+
+    def test_zero_nonag_soc_correction(self):
+        """When nonag_frac is zero, SOC correction still applies via soc_denom."""
+        soc = np.array([[40.0]], dtype=np.float32)
+        crop_f = np.array([[0.5]], dtype=np.float32)
+        grass_f = np.array([[0.5]], dtype=np.float32)
+        nonag_f = np.array([[0.0]], dtype=np.float32)
+        soc_fc = np.array([[0.7]], dtype=np.float32)
+        soc_fp = np.array([[0.9]], dtype=np.float32)
+
+        soc_c = _correct_subpixel_soc(
+            soc,
+            crop_f,
+            grass_f,
+            nonag_f,
+            soc_fc,
+            soc_fp,
+        )
+        # soc_denom = 0 + 0.5*0.7 + 0.5*0.9 = 0.8 > 0, so correction applies
+        assert soc_c[0, 0] == pytest.approx(40.0 / 0.8, rel=1e-4)
+
+
+class TestDecomposeAGB:
+    """Tests for _decompose_agb."""
+
+    def test_pure_forest_pixel(self):
+        """A pixel that is entirely forest returns observed AGB as forest AGB."""
+        agb_obs = np.array([[100.0]], dtype=np.float32)
+        crop_f = np.array([[0.0]], dtype=np.float32)
+        grass_f = np.array([[0.0]], dtype=np.float32)
+        forest_f = np.array([[1.0]], dtype=np.float32)
+        nonforest_f = np.array([[0.0]], dtype=np.float32)
+        agb_crop = np.array([[0.0]], dtype=np.float32)
+        agb_past = np.array([[5.0]], dtype=np.float32)
+        agb_nf_zone = np.array([[10.0]], dtype=np.float32)
+
+        agb_forest, agb_nf = _decompose_agb(
+            agb_obs,
+            crop_f,
+            grass_f,
+            forest_f,
+            nonforest_f,
+            agb_crop,
+            agb_past,
+            agb_nf_zone,
+        )
+        assert agb_forest[0, 0] == pytest.approx(100.0)
+        assert agb_nf[0, 0] == pytest.approx(0.0)
+
+    def test_mixed_forest_nonforest_pixel(self):
+        """AGB decomposition for a pixel with forest and shrubland.
+
+        Pixel: 30% crop (AGB=0), 20% grass (AGB=5), 30% forest, 20% shrub (zone AGB=10).
+        Observed = 0.3*0 + 0.2*5 + 0.3*agb_forest + 0.2*10 = 1 + 0.3*F + 2 = 3 + 0.3*F
+        If observed = 48, then 0.3*F = 45, so F = 150.
+        """
+        agb_obs = np.array([[48.0]], dtype=np.float32)
+        crop_f = np.array([[0.3]], dtype=np.float32)
+        grass_f = np.array([[0.2]], dtype=np.float32)
+        forest_f = np.array([[0.3]], dtype=np.float32)
+        nonforest_f = np.array([[0.2]], dtype=np.float32)
+        agb_crop = np.array([[0.0]], dtype=np.float32)
+        agb_past = np.array([[5.0]], dtype=np.float32)
+        agb_nf_zone = np.array([[10.0]], dtype=np.float32)
+
+        agb_forest, agb_nf = _decompose_agb(
+            agb_obs,
+            crop_f,
+            grass_f,
+            forest_f,
+            nonforest_f,
+            agb_crop,
+            agb_past,
+            agb_nf_zone,
+        )
+        assert agb_forest[0, 0] == pytest.approx(150.0, rel=1e-4)
+        assert agb_nf[0, 0] == pytest.approx(10.0)
+
+    def test_no_forest_pixel(self):
+        """A pixel with no forest returns zero forest AGB."""
+        agb_obs = np.array([[10.0]], dtype=np.float32)
+        crop_f = np.array([[0.5]], dtype=np.float32)
+        grass_f = np.array([[0.2]], dtype=np.float32)
+        forest_f = np.array([[0.0]], dtype=np.float32)
+        nonforest_f = np.array([[0.3]], dtype=np.float32)
+        agb_crop = np.array([[0.0]], dtype=np.float32)
+        agb_past = np.array([[5.0]], dtype=np.float32)
+        agb_nf_zone = np.array([[10.0]], dtype=np.float32)
+
+        agb_forest, agb_nf = _decompose_agb(
+            agb_obs,
+            crop_f,
+            grass_f,
+            forest_f,
+            nonforest_f,
+            agb_crop,
+            agb_past,
+            agb_nf_zone,
+        )
+        assert agb_forest[0, 0] == pytest.approx(0.0)
+        assert agb_nf[0, 0] == pytest.approx(10.0)
+
+    def test_forest_agb_clipped_to_zero(self):
+        """If residual AGB is negative (noise), forest AGB clips to 0."""
+        # observed AGB is very low, but nonforest zone AGB explains most of it
+        agb_obs = np.array([[3.0]], dtype=np.float32)
+        crop_f = np.array([[0.0]], dtype=np.float32)
+        grass_f = np.array([[0.0]], dtype=np.float32)
+        forest_f = np.array([[0.3]], dtype=np.float32)
+        nonforest_f = np.array([[0.7]], dtype=np.float32)
+        agb_crop = np.array([[0.0]], dtype=np.float32)
+        agb_past = np.array([[0.0]], dtype=np.float32)
+        agb_nf_zone = np.array([[10.0]], dtype=np.float32)
+
+        agb_forest, _ = _decompose_agb(
+            agb_obs,
+            crop_f,
+            grass_f,
+            forest_f,
+            nonforest_f,
+            agb_crop,
+            agb_past,
+            agb_nf_zone,
+        )
+        # (3.0 - 0.7*10) / 0.3 = (3 - 7) / 0.3 = -13.3 → clipped to 0
+        assert agb_forest[0, 0] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
 # Tests: Land-cover-weighted aggregation
 # ---------------------------------------------------------------------------
 
@@ -389,7 +569,7 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     Land-cover fractions:
         cropland_frac:  [[0.6, 0.0],  [0.0, 0.4]]
         grassland_frac: [[0.0, 0.8],  [0.2, 0.0]]
-        natural_frac:   [[0.4, 0.2],  [0.8, 0.6]]  (clipped 1 - crop - grass)
+        nonag_frac:     [[0.4, 0.2],  [0.8, 0.6]]  (clipped 1 - crop - grass)
     """
     transform = Affine(1.0, 0.0, 0.0, 0.0, -1.0, float(height))
     lon = np.array([0.5, 1.5], dtype=np.float32)
@@ -410,8 +590,8 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     classes_path = tmp_path / "classes.nc"
     classes_ds.to_netcdf(str(classes_path))
 
-    # AGB: uniform 10 tC/ha (below threshold -> spared credits active)
-    agb_arr = np.full((height, width), 10.0, dtype=np.float32)
+    # AGB: uniform 80 tC/ha — high enough for forest AGB to exceed nonforest zone AGB
+    agb_arr = np.full((height, width), 80.0, dtype=np.float32)
     agb_ds = xr.Dataset(
         {"agb_tc_per_ha": (("y", "x"), agb_arr)},
         coords={"y": lat, "x": lon},
@@ -442,11 +622,16 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     grassland_frac = np.array([[0.0, 0.8], [0.2, 0.0]], dtype=np.float32)
     # pasture_fraction ≤ grassland_fraction at each pixel (managed subset)
     pasture_frac = np.array([[0.0, 0.5], [0.1, 0.0]], dtype=np.float32)
+    # forest_fraction: portion of nonag land that is forest
+    # nonag = 1 - crop - grass = [[0.4, 0.2], [0.8, 0.6]]
+    # forest ≤ nonag
+    forest_frac = np.array([[0.3, 0.1], [0.5, 0.3]], dtype=np.float32)
     lc_ds = xr.Dataset(
         {
             "cropland_fraction": (("y", "x"), cropland_frac),
             "grassland_fraction": (("y", "x"), grassland_frac),
             "pasture_fraction": (("y", "x"), pasture_frac),
+            "forest_fraction": (("y", "x"), forest_frac),
         },
         coords={"y": lat, "x": lon},
     )
@@ -455,10 +640,10 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
 
     # Zone parameters (all cells are tropical at lat < 23.5)
     zone_csv = textwrap.dedent("""\
-        zone,bgb_ratio_nat,soc_depth_factor,agb_crop_tc_per_ha,bgb_ratio_ag_crop,agb_past_tc_per_ha,bgb_ratio_ag_past,soc_factor_crop,soc_factor_past
-        tropical,0.25,1.5,5.0,0.2,8.0,0.4,0.7,0.9
-        temperate,0.26,1.4,5.0,0.2,8.0,0.4,0.7,0.9
-        boreal,0.39,1.2,5.0,0.2,8.0,0.4,0.7,0.9
+        zone,bgb_ratio_nat,soc_depth_factor,agb_crop_tc_per_ha,bgb_ratio_ag_crop,agb_past_tc_per_ha,bgb_ratio_ag_past,soc_factor_crop,soc_factor_past,agb_nonforest_tc_per_ha,bgb_ratio_nonforest
+        tropical,0.25,1.5,5.0,0.2,8.0,0.4,0.7,0.9,20.0,0.40
+        temperate,0.26,1.4,5.0,0.2,8.0,0.4,0.7,0.9,10.0,0.46
+        boreal,0.39,1.2,5.0,0.2,8.0,0.4,0.7,0.9,8.0,0.50
     """)
     zone_path = tmp_path / "zone_params.csv"
     zone_path.write_text(zone_csv)
@@ -483,53 +668,54 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     }
 
 
+def _run_main_with_mock(paths, tmp_path):
+    """Helper to run main() with mock snakemake, returning the coefficients CSV."""
+
+    class _NS:
+        pass
+
+    snakemake_mock = _NS()
+    snakemake_mock.input = _NS()
+    snakemake_mock.output = _NS()
+    snakemake_mock.params = _NS()
+
+    for k, v in paths.items():
+        setattr(snakemake_mock.input, k, v)
+    snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
+    snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
+    coeffs_out = str(tmp_path / "coefficients.csv")
+    snakemake_mock.output.coefficients = coeffs_out
+    snakemake_mock.params.horizon_years = 25
+    snakemake_mock.params.managed_flux_mode = "zero"
+
+    import workflow.scripts.build_luc_carbon_coefficients as mod
+
+    orig = mod.__dict__.get("snakemake")
+    try:
+        mod.__dict__["snakemake"] = snakemake_mock
+        mod.main()
+    finally:
+        if orig is None:
+            mod.__dict__.pop("snakemake", None)
+        else:
+            mod.__dict__["snakemake"] = orig
+
+    return pd.read_csv(coeffs_out)
+
+
 class TestWeightedAggregation:
     """Tests for land-cover-weighted LEF aggregation."""
 
-    def test_output_has_four_use_types(self, tmp_path):
-        """Output CSV has cropland, pasture, spared_cropland, spared_grassland."""
+    def test_output_has_six_use_types(self, tmp_path):
+        """Output CSV has forest/nonforest split for cropland and pasture."""
         paths = _make_synthetic_inputs(tmp_path)
-
-        pulses_out = str(tmp_path / "pulses.nc")
-        annual_out = str(tmp_path / "annualized.nc")
-        coeffs_out = str(tmp_path / "coefficients.csv")
-
-        # Build a mock snakemake object
-        class _NS:
-            pass
-
-        snakemake_mock = _NS()
-        snakemake_mock.input = _NS()
-        snakemake_mock.output = _NS()
-        snakemake_mock.params = _NS()
-
-        for k, v in paths.items():
-            setattr(snakemake_mock.input, k, v)
-        snakemake_mock.output.pulses = pulses_out
-        snakemake_mock.output.annualized = annual_out
-        snakemake_mock.output.coefficients = coeffs_out
-        snakemake_mock.params.horizon_years = 25
-        snakemake_mock.params.managed_flux_mode = "zero"
-        snakemake_mock.params.agb_threshold = 20.0
-
-        # Run the script by injecting the mock
-        import workflow.scripts.build_luc_carbon_coefficients as mod
-
-        orig = mod.__dict__.get("snakemake")
-        try:
-            mod.__dict__["snakemake"] = snakemake_mock
-            mod.main()
-        finally:
-            if orig is None:
-                mod.__dict__.pop("snakemake", None)
-            else:
-                mod.__dict__["snakemake"] = orig
-
-        coeffs = pd.read_csv(coeffs_out)
+        coeffs = _run_main_with_mock(paths, tmp_path)
         use_types = set(coeffs["use"].unique())
         assert use_types == {
-            "cropland",
-            "pasture",
+            "cropland_forest",
+            "cropland_nonforest",
+            "pasture_forest",
+            "pasture_nonforest",
             "spared_cropland",
             "spared_grassland",
         }
@@ -537,38 +723,7 @@ class TestWeightedAggregation:
     def test_spared_lefs_are_negative(self, tmp_path):
         """Spared LEFs should be negative (sequestration credits)."""
         paths = _make_synthetic_inputs(tmp_path)
-        coeffs_out = str(tmp_path / "coefficients.csv")
-
-        class _NS:
-            pass
-
-        snakemake_mock = _NS()
-        snakemake_mock.input = _NS()
-        snakemake_mock.output = _NS()
-        snakemake_mock.params = _NS()
-
-        for k, v in paths.items():
-            setattr(snakemake_mock.input, k, v)
-        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
-        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
-        snakemake_mock.output.coefficients = coeffs_out
-        snakemake_mock.params.horizon_years = 25
-        snakemake_mock.params.managed_flux_mode = "zero"
-        snakemake_mock.params.agb_threshold = 20.0
-
-        import workflow.scripts.build_luc_carbon_coefficients as mod
-
-        orig = mod.__dict__.get("snakemake")
-        try:
-            mod.__dict__["snakemake"] = snakemake_mock
-            mod.main()
-        finally:
-            if orig is None:
-                mod.__dict__.pop("snakemake", None)
-            else:
-                mod.__dict__["snakemake"] = orig
-
-        coeffs = pd.read_csv(coeffs_out)
+        coeffs = _run_main_with_mock(paths, tmp_path)
         for use in ("spared_cropland", "spared_grassland"):
             rows = coeffs[coeffs["use"] == use]
             assert not rows.empty, f"No rows for use={use}"
@@ -577,85 +732,72 @@ class TestWeightedAggregation:
             ).all(), f"Expected negative LEFs for {use}"
 
     def test_conversion_lefs_are_positive(self, tmp_path):
-        """Conversion LEFs (cropland, pasture) should be positive."""
+        """Forest and nonforest conversion LEFs should be positive."""
         paths = _make_synthetic_inputs(tmp_path)
-        coeffs_out = str(tmp_path / "coefficients.csv")
-
-        class _NS:
-            pass
-
-        snakemake_mock = _NS()
-        snakemake_mock.input = _NS()
-        snakemake_mock.output = _NS()
-        snakemake_mock.params = _NS()
-
-        for k, v in paths.items():
-            setattr(snakemake_mock.input, k, v)
-        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
-        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
-        snakemake_mock.output.coefficients = coeffs_out
-        snakemake_mock.params.horizon_years = 25
-        snakemake_mock.params.managed_flux_mode = "zero"
-        snakemake_mock.params.agb_threshold = 20.0
-
-        import workflow.scripts.build_luc_carbon_coefficients as mod
-
-        orig = mod.__dict__.get("snakemake")
-        try:
-            mod.__dict__["snakemake"] = snakemake_mock
-            mod.main()
-        finally:
-            if orig is None:
-                mod.__dict__.pop("snakemake", None)
-            else:
-                mod.__dict__["snakemake"] = orig
-
-        coeffs = pd.read_csv(coeffs_out)
-        for use in ("cropland", "pasture"):
+        coeffs = _run_main_with_mock(paths, tmp_path)
+        for use in (
+            "cropland_forest",
+            "cropland_nonforest",
+            "pasture_forest",
+            "pasture_nonforest",
+        ):
             rows = coeffs[coeffs["use"] == use]
             assert not rows.empty, f"No rows for use={use}"
             assert (
                 rows["LEF_tCO2_per_ha_yr"] > 0
             ).all(), f"Expected positive LEFs for {use}"
 
-    def test_water_options_correct(self, tmp_path):
-        """Cropland and spared_cropland have r+i; pasture and spared_grassland only r."""
+    def test_forest_lefs_exceed_nonforest(self, tmp_path):
+        """Forest conversion LEFs should be higher than non-forest LEFs."""
         paths = _make_synthetic_inputs(tmp_path)
-        coeffs_out = str(tmp_path / "coefficients.csv")
+        coeffs = _run_main_with_mock(paths, tmp_path)
+        for dest in ("cropland", "pasture"):
+            forest_lef = coeffs[coeffs["use"] == f"{dest}_forest"][
+                "LEF_tCO2_per_ha_yr"
+            ].mean()
+            nonforest_lef = coeffs[coeffs["use"] == f"{dest}_nonforest"][
+                "LEF_tCO2_per_ha_yr"
+            ].mean()
+            assert forest_lef > nonforest_lef, (
+                f"Expected forest LEF > nonforest LEF for {dest}, "
+                f"got {forest_lef:.2f} <= {nonforest_lef:.2f}"
+            )
 
-        class _NS:
-            pass
+    def test_conversion_shares_valid(self, tmp_path):
+        """Conversion shares should be between 0 and 1."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs = _run_main_with_mock(paths, tmp_path)
+        assert "conversion_share" in coeffs.columns
+        for use in (
+            "cropland_forest",
+            "cropland_nonforest",
+            "pasture_forest",
+            "pasture_nonforest",
+        ):
+            rows = coeffs[coeffs["use"] == use]
+            assert (rows["conversion_share"] >= 0).all()
+            assert (rows["conversion_share"] <= 1).all()
 
-        snakemake_mock = _NS()
-        snakemake_mock.input = _NS()
-        snakemake_mock.output = _NS()
-        snakemake_mock.params = _NS()
+    def test_spared_conversion_shares_are_one(self, tmp_path):
+        """Spared use types should have conversion_share = 1."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs = _run_main_with_mock(paths, tmp_path)
+        for use in ("spared_cropland", "spared_grassland"):
+            rows = coeffs[coeffs["use"] == use]
+            assert not rows.empty, f"No rows for use={use}"
+            np.testing.assert_allclose(rows["conversion_share"].values, 1.0, atol=1e-6)
 
-        for k, v in paths.items():
-            setattr(snakemake_mock.input, k, v)
-        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
-        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
-        snakemake_mock.output.coefficients = coeffs_out
-        snakemake_mock.params.horizon_years = 25
-        snakemake_mock.params.managed_flux_mode = "zero"
-        snakemake_mock.params.agb_threshold = 20.0
-
-        import workflow.scripts.build_luc_carbon_coefficients as mod
-
-        orig = mod.__dict__.get("snakemake")
-        try:
-            mod.__dict__["snakemake"] = snakemake_mock
-            mod.main()
-        finally:
-            if orig is None:
-                mod.__dict__.pop("snakemake", None)
-            else:
-                mod.__dict__["snakemake"] = orig
-
-        coeffs = pd.read_csv(coeffs_out)
-        for use in ("cropland", "spared_cropland"):
+    def test_water_options_correct(self, tmp_path):
+        """Cropland uses have r+i; pasture uses and spared_grassland have only r."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs = _run_main_with_mock(paths, tmp_path)
+        for use in ("cropland_forest", "cropland_nonforest", "spared_cropland"):
             waters = set(coeffs[coeffs["use"] == use]["water"].unique())
             assert waters == {"r", "i"}, f"Expected r+i for {use}, got {waters}"
-        for use in ("pasture", "spared_grassland"):
+        for use in (
+            "pasture_forest",
+            "pasture_nonforest",
+            "spared_grassland",
+        ):
             waters = set(coeffs[coeffs["use"] == use]["water"].unique())
             assert waters == {"r"}, f"Expected only r for {use}, got {waters}"

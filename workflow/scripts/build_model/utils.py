@@ -174,19 +174,33 @@ def _fresh_mass_conversion_factors(
 
 def _build_luc_lef_lookup(df: pd.DataFrame) -> pd.DataFrame:
     """Return LEF (tCO2/ha/yr) as a DataFrame with columns:
-    region, resource_class, water_supply, use, lef.
+    region, resource_class, water_supply, use, lef, conversion_share.
     """
 
-    if df.empty:
-        return pd.DataFrame(
-            columns=["region", "resource_class", "water_supply", "use", "lef"]
-        )
+    cols = [
+        "region",
+        "resource_class",
+        "water_supply",
+        "use",
+        "lef",
+        "conversion_share",
+    ]
 
-    out = df.rename(columns={"water": "water_supply", "LEF_tCO2_per_ha_yr": "lef"})[
-        ["region", "resource_class", "water_supply", "use", "lef"]
-    ].copy()
+    if df.empty:
+        return pd.DataFrame(columns=cols)
+
+    rename_map = {"water": "water_supply", "LEF_tCO2_per_ha_yr": "lef"}
+    out = df.rename(columns=rename_map)
+
+    if "conversion_share" not in out.columns:
+        out["conversion_share"] = 1.0
+
+    out = out[cols].copy()
     out["resource_class"] = out["resource_class"].astype(int)
     out["lef"] = pd.to_numeric(out["lef"], errors="coerce")
+    out["conversion_share"] = pd.to_numeric(
+        out["conversion_share"], errors="coerce"
+    ).fillna(1.0)
     out = out[np.isfinite(out["lef"])].reset_index(drop=True)
     return out
 
@@ -241,6 +255,29 @@ def merge_lef(
         merged["lef"] = merged["lef"].fillna(0.0)
 
     return merged["lef"].set_axis(df.index)
+
+
+def merge_lef_with_share(
+    df: pd.DataFrame,
+    lef_df: pd.DataFrame,
+    use: str,
+    *,
+    on: list[str] | None = None,
+) -> pd.DataFrame:
+    """Merge LEF and conversion_share values onto *df* for a given use type.
+
+    Like :func:`merge_lef` but returns both ``lef`` and ``conversion_share``
+    columns in a DataFrame aligned to *df*'s index.  Rows without a matching
+    LEF entry are dropped (conversion share is zero → no link needed).
+    """
+    if on is None:
+        on = ["region", "resource_class", "water_supply"]
+
+    subset = lef_df.loc[lef_df["use"] == use, [*on, "lef", "conversion_share"]]
+    merged = df[on].merge(subset, on=on, how="left")
+    merged["lef"] = merged["lef"].fillna(0.0)
+    merged["conversion_share"] = merged["conversion_share"].fillna(0.0)
+    return merged[["lef", "conversion_share"]].set_axis(df.index)
 
 
 def _calculate_manure_n_outputs(

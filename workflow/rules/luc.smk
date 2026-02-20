@@ -286,7 +286,6 @@ rule build_luc_carbon_coefficients:
     params:
         horizon_years=config["luc"]["horizon_years"],
         managed_flux_mode=config["luc"]["managed_flux_mode"],
-        agb_threshold=config["luc"]["spared_land_agb_threshold_tc_per_ha"],
     output:
         pulses="<processing>/{name}/luc/pulses.nc",
         annualized="<processing>/{name}/luc/annualized.nc",

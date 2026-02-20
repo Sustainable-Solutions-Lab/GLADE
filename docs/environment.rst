@@ -62,7 +62,7 @@ Sources of Emissions
   * CO₂ from feed production (indirect)
 
 **Land Use Change**:
-  * CO₂ from converting natural land to new cropland (charged on ``convert_new_land_*`` links)
+  * CO₂ from converting non-agricultural land to new cropland (charged on ``convert_new_land_*`` links)
   * Soil carbon losses embodied in the cropland LEFs; spared land on existing cropland can generate regrowth credits
 
 Direct N₂O emission factors
@@ -682,40 +682,67 @@ Conceptual overview
 
 For every grid cell on the common suitability grid, the workflow computes three main quantities:
 
-* **Pulse emissions** (:math:`P_{i,u}`) – the one-off release (or uptake) that occurs when land transitions from its natural state to land use :math:`u` (cropland or pasture). We estimate above-ground biomass (AGB), below-ground biomass (BGB), and soil organic carbon (SOC) stocks for both the natural and agricultural equilibria, then convert the difference to CO₂ using the stoichiometric factor :math:`44/12`.
-* **Annual regrowth** (:math:`R_i`) – the ongoing sequestration potential when land is spared and allowed to regrow. Regrowth rates are derived from Cook-Patton & Griscom (2020), which quantifies carbon accumulation in young regenerating forests. Credits are only granted where current above-ground biomass is below a threshold (default 20 tC/ha), ensuring that only recently cleared or degraded land—not mature forest—receives regrowth credits.
+* **Pulse emissions** (:math:`P_{i,u,c}`) – the one-off release (or uptake) that occurs when land transitions from its natural state to land use :math:`u` (cropland or pasture). Pulse emissions are computed separately for **forest** (:math:`c = \mathrm{forest}`) and **non-forest** (:math:`c = \mathrm{nonforest}`) portions of the non-agricultural land in each pixel, since these have very different carbon stocks. Forest AGB is recovered from the pixel-average observation by subtracting agricultural and non-forest contributions; non-forest natural AGB (shrubland, savanna) uses zone-specific estimates from ``data/curated/luc_zone_parameters.csv``.
+* **Annual regrowth** (:math:`R_i`) – the ongoing sequestration potential when land is spared and allowed to regrow. Regrowth rates are derived from Cook-Patton & Griscom (2020), which quantifies carbon accumulation in young regenerating forests. Spared-land LEFs are already area-weighted by the relevant land-cover fraction (cropland or pasture), so pixels without regrowth potential naturally receive zero credit.
 * **Managed flux** (:math:`M_{i,u}`) – ongoing emissions from managed systems (e.g., peat oxidation, continuous tillage). The current implementation sets :math:`M_{i,u} = 0` everywhere as a simplifying assumption.
 
-The per-hectare land-use change factor (LEF) for **conversion** (cropland or pasture) includes only amortised pulse emissions:
+The per-hectare land-use change factor (LEF) for **conversion** is split by cover type:
 
 .. math::
 
-   \mathrm{LEF}_{\mathrm{crop}} = \frac{P_{\mathrm{crop}}}{H}, \quad \mathrm{LEF}_{\mathrm{pasture}} = \frac{P_{\mathrm{pasture}}}{H}
+   \mathrm{LEF}_{\mathrm{crop,forest}} = \frac{P_{\mathrm{crop,forest}}}{H}, \quad \mathrm{LEF}_{\mathrm{crop,nonforest}} = \frac{P_{\mathrm{crop,nonforest}}}{H}
 
-where :math:`H` is the amortization horizon in years (configured via ``luc.horizon_years``, default 25 years). Spreading the one-off pulse over this period converts a stock change into an annualised flow that is comparable to the other per-year emission terms in the model.
+and similarly for pasture. Here :math:`H` is the amortization horizon in years (configured via ``luc.horizon_years``, default 25 years). Spreading the one-off pulse over this period converts a stock change into an annualised flow that is comparable to the other per-year emission terms in the model. Each cover type also gets a **conversion share** — the fraction of convertible (non-agricultural) land that is forest vs. non-forest — which caps the capacity of the corresponding conversion link in the model.
 
 The LEF for **spared land** provides sequestration credits through regrowth:
 
 .. math::
 
-   \mathrm{LEF}_{\mathrm{spared}} = \begin{cases} -R_i & \text{if AGB} \leq \text{threshold} \\ 0 & \text{otherwise} \end{cases}
+   \mathrm{LEF}_{\mathrm{spared}} = -R_i
 
 Regrowth is *not* included in the conversion LEFs to avoid double-counting: the model explicitly represents the reforestation alternative via separate ``spare_land`` links.
+
+Sub-pixel stock correction
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+At the modelling resolution (~0.5°), most grid cells contain a mix of land cover types. The observed AGB and SOC rasters report pixel-area averages that blend non-agricultural land (high biomass, undepleted SOC) with cropland and grassland (low biomass, depleted SOC). Using these averages directly would underestimate the carbon cost of converting remaining forest and overestimate the cost of converting non-forest natural land.
+
+The workflow decomposes observed pixel-average AGB into **forest** and **non-forest** components. Non-forest natural AGB (shrubland, savanna, tundra) uses zone-level estimates from ``data/curated/luc_zone_parameters.csv``. Forest AGB is then recovered as the residual:
+
+.. math::
+
+   \mathrm{AGB}_\mathrm{forest} = \frac{\mathrm{AGB}_\mathrm{obs} - f_\mathrm{crop} \cdot \mathrm{AGB}_\mathrm{crop} - f_\mathrm{grass} \cdot \mathrm{AGB}_\mathrm{grass} - f_\mathrm{nonforest} \cdot \mathrm{AGB}_\mathrm{nonforest,zone}}{f_\mathrm{forest}}
+
+where :math:`f_\mathrm{forest}` comes from the Copernicus forest fraction layer and :math:`f_\mathrm{nonforest} = f_\mathrm{nonag} - f_\mathrm{forest}`. If the residual is negative (observational noise), forest AGB is clipped to zero. Pixels with no forest (:math:`f_\mathrm{forest} = 0`) receive zero forest AGB and produce no forest conversion links.
+
+For SOC, the correction is unchanged — SOC does not vary as dramatically as AGB between forest and non-forest natural land:
+
+.. math::
+
+   \mathrm{SOC}_\mathrm{nat} = \frac{\mathrm{SOC}_\mathrm{obs}}{f_\mathrm{nonag} + f_\mathrm{crop} \cdot k_\mathrm{crop} + f_\mathrm{grass} \cdot k_\mathrm{past}}
+
+where :math:`k_\mathrm{crop}` and :math:`k_\mathrm{past}` are the IPCC Tier 1 SOC retention factors under cropland and pasture, respectively.
 
 LEF aggregation
 ^^^^^^^^^^^^^^^
 
 Per-pixel LEFs are aggregated to region/resource-class coefficients using ``exact_extract`` with **land-cover-weighted** averaging. Each use type is paired with a land-cover fraction that acts as an additional weight during aggregation:
 
-* **Conversion LEFs** (cropland and pasture) are weighted by the **natural-land fraction** (1 − cropland − grassland) of each pixel. This ensures that only pixels with remaining natural vegetation contribute to the conversion cost, avoiding dilution by pixels already under agriculture.
+* **Forest conversion LEFs** (cropland_forest, pasture_forest) are weighted by the **forest fraction** of each pixel.
+* **Non-forest conversion LEFs** (cropland_nonforest, pasture_nonforest) are weighted by the **non-forest natural fraction** (nonag − forest).
 * **Spared cropland LEFs** are weighted by the **cropland fraction**, so only pixels currently under crops contribute to the sequestration potential of sparing cropland.
 * **Spared grassland LEFs** are weighted by the **managed pasture fraction** (LUIcube grassland fraction × grazing intensity), so only pixels with active grazing contribute to the sequestration potential. Natural grassland (savanna, tundra, steppe) with near-zero grazing intensity is excluded.
 
+Alongside each conversion LEF, the aggregation also computes the area-weighted **conversion share** — the fraction of non-agricultural land that is forest vs. non-forest. This share is used in the model builder to split the total new-land capacity between forest and non-forest conversion links.
+
 The composite weight for each pixel is the product of the resource-class mask and the relevant land-cover fraction. Regions or classes where the composite weight sums to zero produce NaN (no data), which is dropped from the output.
 
-The AGB diagnostic (mean above-ground biomass per region/class) is still weighted by the resource-class mask alone, since it characterises the entire area rather than a specific land-cover subset.
+Application in the optimisation distinguishes new conversion from existing area. For each (region, class, water supply) combination, two conversion links are created:
 
-Application in the optimisation distinguishes new conversion from existing area: cropland LEFs are charged only when land expands (``convert_new_land_*``), while baseline cropland can be spared to earn the spared cropland LEF. Pasture LEFs attach to grazing supply links so that expanding pasture bears its conversion cost. Spared grassland LEFs apply to existing grassland pools via ``spare_existing_grassland_*`` links.
+* ``convert:new_land_forest:*`` — converts forest to cropland, capped at ``new_available * share_forest``
+* ``convert:new_land_nonforest:*`` — converts non-forest natural land to cropland, capped at ``new_available * share_nonforest``
+
+Similarly for pasture expansion (``convert:new_to_pasture_forest:*`` and ``convert:new_to_pasture_nonforest:*``). This gives the optimizer distinct costs for deforestation vs. shrubland/savanna conversion. Baseline cropland can still be spared to earn the spared cropland LEF, and existing grassland pools can be spared via ``spare_existing_grassland_*`` links.
 
 Input datasets
 ~~~~~~~~~~~~~~
@@ -751,7 +778,7 @@ The land-use change workflow:
 During model construction, ``build_model.py`` loads these inputs, converts LEFs to marginal CO₂ flows (MtCO₂ per Mha-year), and applies them by land state:
 
 * Baseline cropland enters via fixed ``land_existing_cropland_*`` generators. It does **not** pay conversion costs but can be **spared** via ``spare_land_*`` links that earn regrowth credits.
-* Expansion cropland lives on ``land_new_*`` buses up to the suitability cap; ``convert_new_land_*`` links move this expansion into ``land:cropland:*`` (applying cropland LEFs), and ``convert_new_to_pasture_*`` links move it into ``land:pasture:*`` (applying pasture LEFs).
+* Expansion cropland lives on ``land_new_*`` buses up to the suitability cap; two conversion links per (region, class, water) move this expansion into ``land:cropland:*`` — ``convert_new_land_forest_*`` (applying forest-to-cropland LEFs) and ``convert_new_land_nonforest_*`` (applying nonforest-to-cropland LEFs) — each capped by its conversion share. Similarly, ``convert_new_to_pasture_forest_*`` and ``convert_new_to_pasture_nonforest_*`` links move expansion into ``land:pasture:*``.
 * Current grassland is split into ``land_existing_grassland_convertible_*`` and ``land_existing_grassland_marginal_*`` generators; both flow to the pasture pool via ``existing_grassland_to_pasture`` links and can be spared via ``spare_existing_grassland`` links.
 * Only the convertible grassland pool is deducted from rainfed conversion potential when computing ``land_new_*`` capacities.
 
@@ -783,29 +810,16 @@ Both cropland sources use the GAEZ "land equipped for irrigation" share raster t
 
 .. _luc-spared-land-filtering:
 
-Spared land filtering
-~~~~~~~~~~~~~~~~~~~~~
+Spared land regrowth
+~~~~~~~~~~~~~~~~~~~~
 
-Regrowth sequestration rates from Cook-Patton et al. (2020) represent **young regenerating forest** (0-30 years) on previously cleared or degraded land. They do not apply to mature forests, which have already accumulated most of their carbon stock and exhibit near-zero net sequestration.
-
-To avoid incorrectly crediting sequestration on mature forest, the LEF calculation for spared land includes a conditional that sets the sequestration benefit to zero where **current above-ground biomass (AGB)** exceeds a configurable threshold (``luc.spared_land_agb_threshold_tc_per_ha``, default 20 tC/ha). Specifically:
-
-Regrowth credits are granted only when **both** of the following hold:
+Regrowth sequestration rates from Cook-Patton et al. (2020) represent **young regenerating forest** (0-30 years) on previously cleared or degraded land. The spared-land LEF is simply the negated regrowth rate:
 
 .. math::
 
-   \mathrm{LEF}_{\mathrm{spared}} = \begin{cases}
-   -R & \text{if } \mathrm{forest\_mask} = 1 \text{ and } \mathrm{AGB} \leq \text{threshold} \\
-   0 & \text{otherwise}
-   \end{cases}
+   \mathrm{LEF}_{\mathrm{spared}} = -R_i
 
-This ensures:
-
-* Low-biomass areas (recently cleared or degraded land suitable for agriculture) receive negative LEFs (sequestration credits) if left unused
-* Cells flagged as potential forest by the land-cover dataset are eligible for credits provided their AGB is low enough, representing areas that could regrow quickly if spared
-* High-biomass areas (mature tropical rainforest, boreal forest) receive zero spared-land LEF—their carbon value is already captured via high pulse emissions if converted, but they are not credited for additional regrowth
-
-The threshold of 20 tC/ha is intermediate between typical agricultural land (0-10 tC/ha) and mature forest (50-200+ tC/ha). Areas above this threshold are assumed to represent established vegetation that would not exhibit the rapid early-successional regrowth rates quantified by Cook-Patton et al.
+Pixels without regrowth potential have :math:`R_i = 0` from the Cook-Patton data, so they naturally receive zero credit. Spared LEFs are area-weighted by ``cropland_frac`` (for spared cropland) or ``pasture_frac`` (for spared grassland) during aggregation, so only land currently under agriculture contributes.
 
 Only baseline cropland (existing managed area) and current grassland pools (both convertible and marginal) can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
 

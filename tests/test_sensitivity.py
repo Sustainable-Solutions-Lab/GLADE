@@ -24,14 +24,26 @@ def mock_network():
 
     # Add carriers
     n.carriers.add(
-        ["crop_production", "animal_production", "land_conversion", "yll_heart"],
+        [
+            "crop_production",
+            "animal_production",
+            "land_conversion",
+            "new_to_pasture",
+            "yll_heart",
+        ],
         unit="Mt",
     )
 
     # Add buses
     n.buses.add(
-        ["crop:wheat:USA", "crop:maize:USA", "food:beef:USA", "emission:ch4"],
-        carrier=["crop_wheat", "crop_maize", "food_beef", "ch4"],
+        [
+            "crop:wheat:USA",
+            "crop:maize:USA",
+            "food:beef:USA",
+            "emission:ch4",
+            "land:pasture:region1_c1",
+        ],
+        carrier=["crop_wheat", "crop_maize", "food_beef", "ch4", "land_pasture"],
     )
 
     # Add crop production links
@@ -57,14 +69,22 @@ def mock_network():
         marginal_cost=[0.5],
     )
 
-    # Add land conversion links
+    # Add land conversion links (forest/nonforest split)
     n.links.add(
-        ["convert:new_land:region1_c1_r"],
+        ["convert:new_land_forest:region1_c1_r"],
         bus0=["land:new:region1_c1_r"],
         bus1=["land:cropland:region1_c1_r"],
         carrier="land_conversion",
         efficiency=[1.0],
         efficiency2=[50.0],  # CO2 emissions
+    )
+    n.links.add(
+        ["convert:new_to_pasture_nonforest:region1_c1"],
+        bus0=["land:new:region1_c1_r"],
+        bus1=["land:pasture:region1_c1"],
+        carrier="new_to_pasture",
+        efficiency=[1.0],
+        efficiency2=[20.0],  # CO2 emissions
     )
 
     # Add health stores
@@ -168,14 +188,25 @@ class TestApplyEmissionFactors:
         np.testing.assert_allclose(result, original * 0.8)
 
     def test_luc_factor(self, mock_network):
-        """Test applying LUC emission factor."""
+        """Test applying LUC emission factor to both land_conversion and new_to_pasture."""
         n = mock_network
-        original = n.links.static.loc["convert:new_land:region1_c1_r", "efficiency2"]
+        orig_crop = n.links.static.loc[
+            "convert:new_land_forest:region1_c1_r", "efficiency2"
+        ]
+        orig_past = n.links.static.loc[
+            "convert:new_to_pasture_nonforest:region1_c1", "efficiency2"
+        ]
 
         _apply_emission_factors(n, {"luc": 0.5})
 
-        result = n.links.static.loc["convert:new_land:region1_c1_r", "efficiency2"]
-        np.testing.assert_allclose(result, original * 0.5)
+        result_crop = n.links.static.loc[
+            "convert:new_land_forest:region1_c1_r", "efficiency2"
+        ]
+        result_past = n.links.static.loc[
+            "convert:new_to_pasture_nonforest:region1_c1", "efficiency2"
+        ]
+        np.testing.assert_allclose(result_crop, orig_crop * 0.5)
+        np.testing.assert_allclose(result_past, orig_past * 0.5)
 
     def test_multiple_factors(self, mock_network):
         """Test applying multiple emission factors simultaneously."""
@@ -183,14 +214,16 @@ class TestApplyEmissionFactors:
         original_ch4 = n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"]
         original_n2o = n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"]
         original_luc = n.links.static.loc[
-            "convert:new_land:region1_c1_r", "efficiency2"
+            "convert:new_land_forest:region1_c1_r", "efficiency2"
         ]
 
         _apply_emission_factors(n, {"ch4": 1.3, "n2o": 0.7, "luc": 1.5})
 
         result_ch4 = n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"]
         result_n2o = n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"]
-        result_luc = n.links.static.loc["convert:new_land:region1_c1_r", "efficiency2"]
+        result_luc = n.links.static.loc[
+            "convert:new_land_forest:region1_c1_r", "efficiency2"
+        ]
 
         np.testing.assert_allclose(result_ch4, original_ch4 * 1.3)
         np.testing.assert_allclose(result_n2o, original_n2o * 0.7)

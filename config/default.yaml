@@ -149,7 +149,6 @@ luc:
   horizon_years: 25
   managed_flux_mode: "zero"
   forest_fraction_threshold: 0.2  # Minimum forest fraction (0-1) to apply regrowth sequestration
-  spared_land_agb_threshold_tc_per_ha: 20.0  # Max AGB (tC/ha) for spared land eligibility
   # Data source for cropland baseline area:
   # - "gaez": GAEZ RES06-HAR (2010-2019 average harvested area), consistent with production stability
   # - "esa": ESA CCI land cover satellite data

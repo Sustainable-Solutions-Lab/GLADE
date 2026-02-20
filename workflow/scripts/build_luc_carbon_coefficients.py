@@ -57,6 +57,71 @@ def _zone_parameters(path: str) -> dict[str, np.ndarray]:
     return {key: ordered[key].to_numpy(dtype=np.float32) for key in ordered.columns}
 
 
+def _correct_subpixel_soc(
+    soc_0_30: np.ndarray,
+    cropland_frac: np.ndarray,
+    grassland_frac: np.ndarray,
+    nonag_frac: np.ndarray,
+    soc_factor_crop: np.ndarray,
+    soc_factor_past: np.ndarray,
+) -> np.ndarray:
+    """Recover natural-state SOC from observed pixel-average values.
+
+    The observed 0-30 cm SOC is a mixture of natural-state SOC and
+    depleted agricultural SOC (``soc_natural * soc_factor``).  We
+    invert the mixing to recover the natural-state SOC.
+    """
+    soc_denom = (
+        nonag_frac + cropland_frac * soc_factor_crop + grassland_frac * soc_factor_past
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        soc_corrected = np.where(soc_denom > 0, soc_0_30 / soc_denom, soc_0_30)
+
+    return soc_corrected.astype(np.float32)
+
+
+def _decompose_agb(
+    agb_obs: np.ndarray,
+    cropland_frac: np.ndarray,
+    grassland_frac: np.ndarray,
+    forest_frac: np.ndarray,
+    nonforest_frac: np.ndarray,
+    agb_crop: np.ndarray,
+    agb_past: np.ndarray,
+    agb_nonforest_zone: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Decompose observed pixel-average AGB into forest and non-forest components.
+
+    Forest AGB is isolated by subtracting the estimated agricultural and
+    non-forest natural AGB contributions from the observed pixel average,
+    then dividing by the forest fraction.  Non-forest natural AGB uses
+    zone-level estimates (shrubland/savanna defaults).
+
+    Returns
+    -------
+    agb_forest : np.ndarray
+        Estimated forest AGB (tC/ha).  Zero where ``forest_frac == 0``.
+    agb_nonforest : np.ndarray
+        Non-forest natural AGB (tC/ha).  Zone-level value where
+        ``nonforest_frac > 0``, zero otherwise.
+    """
+    ag_agb = cropland_frac * agb_crop + grassland_frac * agb_past
+    agb_nonforest = np.where(nonforest_frac > 0, agb_nonforest_zone, 0.0)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        agb_forest = np.where(
+            forest_frac > 0,
+            np.clip(
+                (agb_obs - ag_agb - nonforest_frac * agb_nonforest_zone) / forest_frac,
+                0.0,
+                None,
+            ),
+            0.0,
+        )
+
+    return agb_forest.astype(np.float32), agb_nonforest.astype(np.float32)
+
+
 def _ensure_mode_zero(mode: str) -> None:
     if mode.lower() != "zero":
         raise ValueError(
@@ -104,9 +169,12 @@ def main() -> None:
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
     grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
     pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
-    natural_frac = np.clip(1.0 - cropland_frac - grassland_frac, 0.0, 1.0)
+    forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
+    nonag_frac = np.clip(1.0 - cropland_frac - grassland_frac, 0.0, 1.0)
+    nonforest_frac = np.clip(nonag_frac - forest_frac, 0.0, None)
 
     bgb_ratio_nat = params["bgb_ratio_nat"][zone_idx]
+    bgb_ratio_nonforest = params["bgb_ratio_nonforest"][zone_idx]
     soc_depth_factor = params["soc_depth_factor"][zone_idx]
     agb_crop = params["agb_crop_tc_per_ha"][zone_idx]
     bgb_ratio_crop = params["bgb_ratio_ag_crop"][zone_idx]
@@ -114,22 +182,58 @@ def main() -> None:
     bgb_ratio_past = params["bgb_ratio_ag_past"][zone_idx]
     soc_factor_crop = params["soc_factor_crop"][zone_idx]
     soc_factor_past = params["soc_factor_past"][zone_idx]
+    agb_nonforest_zone = params["agb_nonforest_tc_per_ha"][zone_idx]
 
-    agb = np.where(np.isfinite(agb), agb, np.nan)
+    agb_obs = np.where(np.isfinite(agb), agb, np.nan)
     soc_0_30 = np.where(np.isfinite(soc_0_30), soc_0_30, np.nan)
 
-    soc_nat = soc_0_30 * soc_depth_factor
-    bgb_nat = agb * bgb_ratio_nat
-    s_nat = agb + bgb_nat + soc_nat
+    # Sub-pixel SOC correction: recover natural-state SOC from observed
+    # pixel averages that are depleted by the agricultural portion.
+    soc_0_30_nat = _correct_subpixel_soc(
+        soc_0_30,
+        cropland_frac,
+        grassland_frac,
+        nonag_frac,
+        soc_factor_crop,
+        soc_factor_past,
+    )
 
+    # Decompose observed AGB into forest and non-forest natural components.
+    agb_forest, agb_nonforest = _decompose_agb(
+        agb_obs,
+        cropland_frac,
+        grassland_frac,
+        forest_frac,
+        nonforest_frac,
+        agb_crop,
+        agb_past,
+        agb_nonforest_zone,
+    )
+
+    # SOC is not differentiated between forest and non-forest natural land
+    # (0-30 cm SOC doesn't vary as dramatically as AGB between cover types).
+    soc_nat = soc_0_30_nat * soc_depth_factor
+
+    # --- Forest carbon stocks ---
+    bgb_forest = agb_forest * bgb_ratio_nat
+    s_forest = agb_forest + bgb_forest + soc_nat
+
+    # --- Non-forest natural carbon stocks ---
+    bgb_nonforest = agb_nonforest * bgb_ratio_nonforest
+    s_nonforest = agb_nonforest + bgb_nonforest + soc_nat
+
+    # --- Agricultural carbon stocks ---
     bgb_crop = agb_crop * bgb_ratio_crop
     s_ag_crop = agb_crop + bgb_crop + soc_nat * soc_factor_crop
 
     bgb_past = agb_past * bgb_ratio_past
     s_ag_past = agb_past + bgb_past + soc_nat * soc_factor_past
 
-    p_crop = (s_nat - s_ag_crop) * CO2_PER_C
-    p_past = (s_nat - s_ag_past) * CO2_PER_C
+    # --- Pulse emissions (tCO2/ha) for 4 conversion pathways ---
+    p_crop_forest = (s_forest - s_ag_crop) * CO2_PER_C
+    p_crop_nonforest = (s_nonforest - s_ag_crop) * CO2_PER_C
+    p_past_forest = (s_forest - s_ag_past) * CO2_PER_C
+    p_past_nonforest = (s_nonforest - s_ag_past) * CO2_PER_C
 
     # Convert regrowth rates from tC to tCO2
     regrowth = np.where(np.isfinite(regrowth_tc), regrowth_tc, 0.0) * CO2_PER_C
@@ -138,36 +242,64 @@ def main() -> None:
     # Regrowth opportunity cost is NOT included here to avoid double-counting:
     # the model explicitly represents the alternative (spare land for regrowth)
     # via separate spare_land links with lef_spared.
-    lef_crop = p_crop / horizon_years
-    lef_past = p_past / horizon_years
+    lef_crop_forest = p_crop_forest / horizon_years
+    lef_crop_nonforest = p_crop_nonforest / horizon_years
+    lef_past_forest = p_past_forest / horizon_years
+    lef_past_nonforest = p_past_nonforest / horizon_years
 
-    # Spared land provides negative emissions (sequestration through regrowth) if:
-    # 1. Cook-Patton regrowth data exists for this cell (potential forest area)
-    # 2. Current above-ground biomass is below threshold (recently cleared/degraded)
-    # Areas with high existing biomass (mature forest) are already at equilibrium
-    # and do not exhibit the rapid early-successional regrowth that Cook-Patton quantifies.
-    agb_threshold: float = float(snakemake.params.agb_threshold)  # type: ignore[name-defined]
-    lef_spared = np.where(agb <= agb_threshold, -regrowth, 0.0)
+    # Spared land provides negative emissions (sequestration through regrowth).
+    # Cook-Patton regrowth data is zero where no regrowth potential exists,
+    # and LEFs are already area-weighted by cropland_frac / pasture_frac.
+    lef_spared = -regrowth
+
+    # --- Conversion shares: fraction of convertible land that is forest vs. non-forest ---
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share_forest = np.where(nonag_frac > 0, forest_frac / nonag_frac, 0.0).astype(
+            np.float32
+        )
+        share_nonforest = np.where(
+            nonag_frac > 0, nonforest_frac / nonag_frac, 0.0
+        ).astype(np.float32)
 
     pulses_ds = xr.Dataset(
         {
-            "P_crop_tCO2_per_ha": (("y", "x"), p_crop.astype(np.float32)),
-            "P_pasture_tCO2_per_ha": (("y", "x"), p_past.astype(np.float32)),
+            "P_crop_forest_tCO2_per_ha": (
+                ("y", "x"),
+                p_crop_forest.astype(np.float32),
+            ),
+            "P_crop_nonforest_tCO2_per_ha": (
+                ("y", "x"),
+                p_crop_nonforest.astype(np.float32),
+            ),
+            "P_pasture_forest_tCO2_per_ha": (
+                ("y", "x"),
+                p_past_forest.astype(np.float32),
+            ),
+            "P_pasture_nonforest_tCO2_per_ha": (
+                ("y", "x"),
+                p_past_nonforest.astype(np.float32),
+            ),
         },
         coords={"y": lat, "x": lon},
     )
     pulses_ds.to_netcdf(
         pulses_out,
-        encoding={
-            "P_crop_tCO2_per_ha": {"zlib": True, "dtype": "float32"},
-            "P_pasture_tCO2_per_ha": {"zlib": True, "dtype": "float32"},
-        },
+        encoding={v: {"zlib": True, "dtype": "float32"} for v in pulses_ds.data_vars},
     )
 
+    use_names = [
+        "cropland_forest",
+        "cropland_nonforest",
+        "pasture_forest",
+        "pasture_nonforest",
+        "spared",
+    ]
     lef_stack = np.stack(
         [
-            lef_crop.astype(np.float32),
-            lef_past.astype(np.float32),
+            lef_crop_forest.astype(np.float32),
+            lef_crop_nonforest.astype(np.float32),
+            lef_past_forest.astype(np.float32),
+            lef_past_nonforest.astype(np.float32),
             lef_spared.astype(np.float32),
         ],
         axis=0,
@@ -180,7 +312,7 @@ def main() -> None:
             )
         },
         coords={
-            "use": np.array(["cropland", "pasture", "spared"], dtype="U8"),
+            "use": np.array(use_names, dtype="U20"),
             "y": lat,
             "x": lon,
         },
@@ -214,15 +346,47 @@ def main() -> None:
         "srs_wkt": crs_wkt,
     }
 
-    weighted_uses = {
-        "cropland": (lef_crop.astype(np.float32), natural_frac),
-        "pasture": (lef_past.astype(np.float32), natural_frac),
-        "spared_cropland": (lef_spared.astype(np.float32), cropland_frac),
-        "spared_grassland": (lef_spared.astype(np.float32), pasture_frac),
+    # For conversion uses, the LEF is weighted by the relevant land-cover
+    # fraction (forest or nonforest), and the conversion_share tracks how
+    # much of the convertible (nonag) land each sub-type represents.
+    weighted_uses: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {
+        # (lef_array, area_weight, conversion_share)
+        "cropland_forest": (
+            lef_crop_forest.astype(np.float32),
+            forest_frac,
+            share_forest,
+        ),
+        "cropland_nonforest": (
+            lef_crop_nonforest.astype(np.float32),
+            nonforest_frac,
+            share_nonforest,
+        ),
+        "pasture_forest": (
+            lef_past_forest.astype(np.float32),
+            forest_frac,
+            share_forest,
+        ),
+        "pasture_nonforest": (
+            lef_past_nonforest.astype(np.float32),
+            nonforest_frac,
+            share_nonforest,
+        ),
+        "spared_cropland": (
+            lef_spared.astype(np.float32),
+            cropland_frac,
+            np.ones_like(share_forest),
+        ),
+        "spared_grassland": (
+            lef_spared.astype(np.float32),
+            pasture_frac,
+            np.ones_like(share_forest),
+        ),
     }
     water_options = {
-        "cropland": ("r", "i"),
-        "pasture": ("r",),
+        "cropland_forest": ("r", "i"),
+        "cropland_nonforest": ("r", "i"),
+        "pasture_forest": ("r",),
+        "pasture_nonforest": ("r",),
         "spared_cropland": ("r", "i"),
         "spared_grassland": ("r",),
     }
@@ -239,8 +403,8 @@ def main() -> None:
         if not np.any(mask_float > 0):
             continue
 
-        # Area-weighted mean LEF per region for each use type
-        for use, (lef_arr, lc_weight) in weighted_uses.items():
+        # Area-weighted mean LEF and conversion share per region for each use type
+        for use, (lef_arr, lc_weight, conv_share) in weighted_uses.items():
             composite_weight = mask_float * lc_weight
             composite_src = NumPyRasterSource(
                 composite_weight,
@@ -260,13 +424,42 @@ def main() -> None:
                 output="pandas",
             )
 
+            # Aggregate conversion_share using the same weight (nonag area)
+            share_src = NumPyRasterSource(
+                conv_share.astype(np.float32), **raster_kwargs
+            )
+            # Weight shares by nonag_frac * mask to get area-weighted mean share
+            nonag_weight = mask_float * nonag_frac
+            nonag_weight_src = NumPyRasterSource(
+                nonag_weight.astype(np.float32),
+                xmin=xmin,
+                ymin=ymin,
+                xmax=xmax,
+                ymax=ymax,
+                srs_wkt=crs_wkt,
+            )
+            share_stats = exact_extract(
+                share_src,
+                regions_for_extract,
+                ["weighted_mean"],
+                weights=nonag_weight_src,
+                include_cols=["region"],
+                output="pandas",
+            )
+
             merged = lef_stats.rename(columns={"weighted_mean": "LEF_tCO2_per_ha_yr"})
+            merged["conversion_share"] = share_stats["weighted_mean"]
             merged["resource_class"] = cls
             merged["use"] = use
             merged = merged.dropna(subset=["LEF_tCO2_per_ha_yr"])
             merged = merged[np.isfinite(merged["LEF_tCO2_per_ha_yr"])]
             if merged.empty:
                 continue
+
+            # Fill NaN conversion_share with 0 (can happen with zero nonag weight)
+            merged["conversion_share"] = (
+                merged["conversion_share"].fillna(0.0).clip(0.0, 1.0)
+            )
 
             # Expand water supply options for this use type
             for water in water_options[use]:
@@ -276,6 +469,7 @@ def main() -> None:
                         "resource_class",
                         "use",
                         "LEF_tCO2_per_ha_yr",
+                        "conversion_share",
                     ]
                 ].copy()
                 frame["water"] = water
@@ -291,6 +485,7 @@ def main() -> None:
                 "water",
                 "use",
                 "LEF_tCO2_per_ha_yr",
+                "conversion_share",
             ]
         )
     coeffs_df.sort_values(["region", "resource_class", "water", "use"], inplace=True)

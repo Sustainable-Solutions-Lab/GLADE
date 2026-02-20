@@ -508,7 +508,6 @@ properties:
       - horizon_years
       - managed_flux_mode
       - forest_fraction_threshold
-      - spared_land_agb_threshold_tc_per_ha
       - cropland_source
     additionalProperties: false
     properties:
@@ -525,10 +524,6 @@ properties:
         minimum: 0
         maximum: 1
         description: "Minimum forest fraction to apply regrowth sequestration"
-      spared_land_agb_threshold_tc_per_ha:
-        type: number
-        minimum: 0
-        description: "Max AGB (tC/ha) for spared land eligibility"
       cropland_source:
         type: string
         enum: [gaez, esa]
