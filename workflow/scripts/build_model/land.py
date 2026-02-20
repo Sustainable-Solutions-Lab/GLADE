@@ -637,7 +637,7 @@ def add_land_components(
             grassland_supply["spare_lef"] = merge_lef(
                 spare_lef_input,
                 lef_df,
-                "spared",
+                "spared_grassland",
                 allow_missing=True,
             ).to_numpy()
 

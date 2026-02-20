@@ -769,7 +769,7 @@ def add_spared_land_links(
         logger.info("No baseline cropland available for sparing; skipping spared links")
         return
 
-    df["lef"] = merge_lef(df, lef_df, "spared", allow_missing=True)
+    df["lef"] = merge_lef(df, lef_df, "spared_cropland", allow_missing=True)
 
     df = df[(df["lef"] != 0.0) & (df["area_ha"] > 0)].copy()
 

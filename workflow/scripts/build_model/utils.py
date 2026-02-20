@@ -208,7 +208,8 @@ def merge_lef(
     lef_df : pd.DataFrame
         LEF lookup from :func:`_build_luc_lef_lookup`.
     use : str
-        Land-use type to filter (e.g. ``"cropland"``, ``"pasture"``, ``"spared"``).
+        Land-use type to filter (e.g. ``"cropland"``, ``"pasture"``,
+        ``"spared_cropland"``, ``"spared_grassland"``).
     on : list[str], optional
         Columns to merge on.  Defaults to ``["region", "resource_class", "water_supply"]``.
     allow_missing : bool

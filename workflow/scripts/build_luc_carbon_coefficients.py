@@ -99,6 +99,12 @@ def main() -> None:
         .values
     )
 
+    lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
+    lc_ds = xr.load_dataset(lc_masks_path)
+    cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
+    grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
+    natural_frac = np.clip(1.0 - cropland_frac - grassland_frac, 0.0, 1.0)
+
     bgb_ratio_nat = params["bgb_ratio_nat"][zone_idx]
     soc_depth_factor = params["soc_depth_factor"][zone_idx]
     agb_crop = params["agb_crop_tc_per_ha"][zone_idx]
@@ -207,20 +213,18 @@ def main() -> None:
         "srs_wkt": crs_wkt,
     }
 
-    uses = {
-        "cropland": lef_crop.astype(np.float32),
-        "pasture": lef_past.astype(np.float32),
-        "spared": lef_spared.astype(np.float32),
+    weighted_uses = {
+        "cropland": (lef_crop.astype(np.float32), natural_frac),
+        "pasture": (lef_past.astype(np.float32), natural_frac),
+        "spared_cropland": (lef_spared.astype(np.float32), cropland_frac),
+        "spared_grassland": (lef_spared.astype(np.float32), grassland_frac),
     }
     water_options = {
         "cropland": ("r", "i"),
         "pasture": ("r",),
-        "spared": ("r", "i"),
+        "spared_cropland": ("r", "i"),
+        "spared_grassland": ("r",),
     }
-
-    agb_src = NumPyRasterSource(
-        np.where(np.isfinite(agb), agb, np.nan).astype(np.float32), **raster_kwargs
-    )
 
     n_classes = (
         int(np.nanmax(resource_class)) + 1
@@ -234,46 +238,34 @@ def main() -> None:
         if not np.any(mask_float > 0):
             continue
 
-        # Class mask as weight (0 = not this class, 1 = this class).
-        # Don't set nodata so 0s are treated as zero weight, not missing.
-        mask_src = NumPyRasterSource(
-            mask_float, xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax, srs_wkt=crs_wkt
-        )
-
-        # Area-weighted mean AGB per region for this class
-        agb_stats = exact_extract(
-            agb_src,
-            regions_for_extract,
-            ["weighted_mean"],
-            weights=mask_src,
-            include_cols=["region"],
-            output="pandas",
-        )
-
         # Area-weighted mean LEF per region for each use type
-        for use, lef_arr in uses.items():
+        for use, (lef_arr, lc_weight) in weighted_uses.items():
+            composite_weight = mask_float * lc_weight
+            composite_src = NumPyRasterSource(
+                composite_weight,
+                xmin=xmin,
+                ymin=ymin,
+                xmax=xmax,
+                ymax=ymax,
+                srs_wkt=crs_wkt,
+            )
             lef_src = NumPyRasterSource(lef_arr, **raster_kwargs)
             lef_stats = exact_extract(
                 lef_src,
                 regions_for_extract,
                 ["weighted_mean"],
-                weights=mask_src,
+                weights=composite_src,
                 include_cols=["region"],
                 output="pandas",
             )
 
-            # Merge and filter to rows with finite LEFs
             merged = lef_stats.rename(columns={"weighted_mean": "LEF_tCO2_per_ha_yr"})
-            merged["mean_agb_tc_per_ha"] = agb_stats["weighted_mean"]
             merged["resource_class"] = cls
             merged["use"] = use
             merged = merged.dropna(subset=["LEF_tCO2_per_ha_yr"])
             merged = merged[np.isfinite(merged["LEF_tCO2_per_ha_yr"])]
             if merged.empty:
                 continue
-
-            # Fill NaN AGB with 0 (regions outside AGB coverage)
-            merged["mean_agb_tc_per_ha"] = merged["mean_agb_tc_per_ha"].fillna(0.0)
 
             # Expand water supply options for this use type
             for water in water_options[use]:
@@ -283,7 +275,6 @@ def main() -> None:
                         "resource_class",
                         "use",
                         "LEF_tCO2_per_ha_yr",
-                        "mean_agb_tc_per_ha",
                     ]
                 ].copy()
                 frame["water"] = water
@@ -299,7 +290,6 @@ def main() -> None:
                 "water",
                 "use",
                 "LEF_tCO2_per_ha_yr",
-                "mean_agb_tc_per_ha",
             ]
         )
     coeffs_df.sort_values(["region", "resource_class", "water", "use"], inplace=True)

@@ -6,8 +6,13 @@
 
 import textwrap
 
+from affine import Affine
+import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pytest
+from shapely.geometry import box
+import xarray as xr
 
 from workflow.scripts.build_luc_carbon_coefficients import (
     CO2_PER_C,
@@ -363,3 +368,291 @@ class TestCarbonStockArithmetic:
         assert p_crop == pytest.approx(27.6 * 44.0 / 12.0)
         assert lef_crop == pytest.approx(p_crop / 30.0)
         assert lef_crop > 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: Land-cover-weighted aggregation
+# ---------------------------------------------------------------------------
+
+
+def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
+    """Create minimal synthetic datasets for aggregation tests.
+
+    Builds a 2x2 grid with one region covering the full extent and one
+    resource class (class 0).  Returns paths to all required inputs.
+
+    Grid layout (each cell 1°x1°, origin at lon=0, lat=1):
+
+        (row=0, col=0)  (row=0, col=1)
+        (row=1, col=0)  (row=1, col=1)
+
+    Land-cover fractions:
+        cropland_frac:  [[0.6, 0.0],  [0.0, 0.4]]
+        grassland_frac: [[0.0, 0.8],  [0.2, 0.0]]
+        natural_frac:   [[0.4, 0.2],  [0.8, 0.6]]  (clipped 1 - crop - grass)
+    """
+    transform = Affine(1.0, 0.0, 0.0, 0.0, -1.0, float(height))
+    lon = np.array([0.5, 1.5], dtype=np.float32)
+    lat = np.array([1.5, 0.5], dtype=np.float32)  # row 0 = lat 1.5, row 1 = lat 0.5
+
+    # Resource classes: all class 0
+    rc = np.zeros((height, width), dtype=np.int16)
+    classes_ds = xr.Dataset(
+        {"resource_class": (("y", "x"), rc)},
+        coords={"y": lat, "x": lon},
+        attrs={
+            "transform": list(transform.to_gdal()),
+            "height": height,
+            "width": width,
+            "crs_wkt": "EPSG:4326",
+        },
+    )
+    classes_path = tmp_path / "classes.nc"
+    classes_ds.to_netcdf(str(classes_path))
+
+    # AGB: uniform 10 tC/ha (below threshold -> spared credits active)
+    agb_arr = np.full((height, width), 10.0, dtype=np.float32)
+    agb_ds = xr.Dataset(
+        {"agb_tc_per_ha": (("y", "x"), agb_arr)},
+        coords={"y": lat, "x": lon},
+    )
+    agb_path = tmp_path / "agb.nc"
+    agb_ds.to_netcdf(str(agb_path))
+
+    # SOC: uniform 50 tC/ha
+    soc_arr = np.full((height, width), 50.0, dtype=np.float32)
+    soc_ds = xr.Dataset(
+        {"soc_0_30_tc_per_ha": (("y", "x"), soc_arr)},
+        coords={"y": lat, "x": lon},
+    )
+    soc_path = tmp_path / "soc.nc"
+    soc_ds.to_netcdf(str(soc_path))
+
+    # Regrowth: uniform 5 tC/ha/yr
+    regrowth_arr = np.full((height, width), 5.0, dtype=np.float32)
+    regrowth_ds = xr.Dataset(
+        {"regrowth_tc_per_ha_yr": (("y", "x"), regrowth_arr)},
+        coords={"y": lat, "x": lon},
+    )
+    regrowth_path = tmp_path / "regrowth.nc"
+    regrowth_ds.to_netcdf(str(regrowth_path))
+
+    # Land-cover masks
+    cropland_frac = np.array([[0.6, 0.0], [0.0, 0.4]], dtype=np.float32)
+    grassland_frac = np.array([[0.0, 0.8], [0.2, 0.0]], dtype=np.float32)
+    lc_ds = xr.Dataset(
+        {
+            "cropland_fraction": (("y", "x"), cropland_frac),
+            "grassland_fraction": (("y", "x"), grassland_frac),
+        },
+        coords={"y": lat, "x": lon},
+    )
+    lc_path = tmp_path / "lc_masks.nc"
+    lc_ds.to_netcdf(str(lc_path))
+
+    # Zone parameters (all cells are tropical at lat < 23.5)
+    zone_csv = textwrap.dedent("""\
+        zone,bgb_ratio_nat,soc_depth_factor,agb_crop_tc_per_ha,bgb_ratio_ag_crop,agb_past_tc_per_ha,bgb_ratio_ag_past,soc_factor_crop,soc_factor_past
+        tropical,0.25,1.5,5.0,0.2,8.0,0.4,0.7,0.9
+        temperate,0.26,1.4,5.0,0.2,8.0,0.4,0.7,0.9
+        boreal,0.39,1.2,5.0,0.2,8.0,0.4,0.7,0.9
+    """)
+    zone_path = tmp_path / "zone_params.csv"
+    zone_path.write_text(zone_csv)
+
+    # Region GeoDataFrame: one region covering the full grid
+    region_gdf = gpd.GeoDataFrame(
+        {"region": ["test_region"]},
+        geometry=[box(0, 0, 2, 2)],
+        crs="EPSG:4326",
+    )
+    regions_path = tmp_path / "regions.geojson"
+    region_gdf.to_file(str(regions_path), driver="GeoJSON")
+
+    return {
+        "classes": str(classes_path),
+        "regions": str(regions_path),
+        "agb": str(agb_path),
+        "soc": str(soc_path),
+        "regrowth": str(regrowth_path),
+        "lc_masks": str(lc_path),
+        "zone_parameters": str(zone_path),
+    }
+
+
+class TestWeightedAggregation:
+    """Tests for land-cover-weighted LEF aggregation."""
+
+    def test_output_has_four_use_types(self, tmp_path):
+        """Output CSV has cropland, pasture, spared_cropland, spared_grassland."""
+        paths = _make_synthetic_inputs(tmp_path)
+
+        pulses_out = str(tmp_path / "pulses.nc")
+        annual_out = str(tmp_path / "annualized.nc")
+        coeffs_out = str(tmp_path / "coefficients.csv")
+
+        # Build a mock snakemake object
+        class _NS:
+            pass
+
+        snakemake_mock = _NS()
+        snakemake_mock.input = _NS()
+        snakemake_mock.output = _NS()
+        snakemake_mock.params = _NS()
+
+        for k, v in paths.items():
+            setattr(snakemake_mock.input, k, v)
+        snakemake_mock.output.pulses = pulses_out
+        snakemake_mock.output.annualized = annual_out
+        snakemake_mock.output.coefficients = coeffs_out
+        snakemake_mock.params.horizon_years = 25
+        snakemake_mock.params.managed_flux_mode = "zero"
+        snakemake_mock.params.agb_threshold = 20.0
+
+        # Run the script by injecting the mock
+        import workflow.scripts.build_luc_carbon_coefficients as mod
+
+        orig = mod.__dict__.get("snakemake")
+        try:
+            mod.__dict__["snakemake"] = snakemake_mock
+            mod.main()
+        finally:
+            if orig is None:
+                mod.__dict__.pop("snakemake", None)
+            else:
+                mod.__dict__["snakemake"] = orig
+
+        coeffs = pd.read_csv(coeffs_out)
+        use_types = set(coeffs["use"].unique())
+        assert use_types == {
+            "cropland",
+            "pasture",
+            "spared_cropland",
+            "spared_grassland",
+        }
+
+    def test_spared_lefs_are_negative(self, tmp_path):
+        """Spared LEFs should be negative (sequestration credits)."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs_out = str(tmp_path / "coefficients.csv")
+
+        class _NS:
+            pass
+
+        snakemake_mock = _NS()
+        snakemake_mock.input = _NS()
+        snakemake_mock.output = _NS()
+        snakemake_mock.params = _NS()
+
+        for k, v in paths.items():
+            setattr(snakemake_mock.input, k, v)
+        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
+        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
+        snakemake_mock.output.coefficients = coeffs_out
+        snakemake_mock.params.horizon_years = 25
+        snakemake_mock.params.managed_flux_mode = "zero"
+        snakemake_mock.params.agb_threshold = 20.0
+
+        import workflow.scripts.build_luc_carbon_coefficients as mod
+
+        orig = mod.__dict__.get("snakemake")
+        try:
+            mod.__dict__["snakemake"] = snakemake_mock
+            mod.main()
+        finally:
+            if orig is None:
+                mod.__dict__.pop("snakemake", None)
+            else:
+                mod.__dict__["snakemake"] = orig
+
+        coeffs = pd.read_csv(coeffs_out)
+        for use in ("spared_cropland", "spared_grassland"):
+            rows = coeffs[coeffs["use"] == use]
+            assert not rows.empty, f"No rows for use={use}"
+            assert (
+                rows["LEF_tCO2_per_ha_yr"] < 0
+            ).all(), f"Expected negative LEFs for {use}"
+
+    def test_conversion_lefs_are_positive(self, tmp_path):
+        """Conversion LEFs (cropland, pasture) should be positive."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs_out = str(tmp_path / "coefficients.csv")
+
+        class _NS:
+            pass
+
+        snakemake_mock = _NS()
+        snakemake_mock.input = _NS()
+        snakemake_mock.output = _NS()
+        snakemake_mock.params = _NS()
+
+        for k, v in paths.items():
+            setattr(snakemake_mock.input, k, v)
+        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
+        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
+        snakemake_mock.output.coefficients = coeffs_out
+        snakemake_mock.params.horizon_years = 25
+        snakemake_mock.params.managed_flux_mode = "zero"
+        snakemake_mock.params.agb_threshold = 20.0
+
+        import workflow.scripts.build_luc_carbon_coefficients as mod
+
+        orig = mod.__dict__.get("snakemake")
+        try:
+            mod.__dict__["snakemake"] = snakemake_mock
+            mod.main()
+        finally:
+            if orig is None:
+                mod.__dict__.pop("snakemake", None)
+            else:
+                mod.__dict__["snakemake"] = orig
+
+        coeffs = pd.read_csv(coeffs_out)
+        for use in ("cropland", "pasture"):
+            rows = coeffs[coeffs["use"] == use]
+            assert not rows.empty, f"No rows for use={use}"
+            assert (
+                rows["LEF_tCO2_per_ha_yr"] > 0
+            ).all(), f"Expected positive LEFs for {use}"
+
+    def test_water_options_correct(self, tmp_path):
+        """Cropland and spared_cropland have r+i; pasture and spared_grassland only r."""
+        paths = _make_synthetic_inputs(tmp_path)
+        coeffs_out = str(tmp_path / "coefficients.csv")
+
+        class _NS:
+            pass
+
+        snakemake_mock = _NS()
+        snakemake_mock.input = _NS()
+        snakemake_mock.output = _NS()
+        snakemake_mock.params = _NS()
+
+        for k, v in paths.items():
+            setattr(snakemake_mock.input, k, v)
+        snakemake_mock.output.pulses = str(tmp_path / "pulses.nc")
+        snakemake_mock.output.annualized = str(tmp_path / "annualized.nc")
+        snakemake_mock.output.coefficients = coeffs_out
+        snakemake_mock.params.horizon_years = 25
+        snakemake_mock.params.managed_flux_mode = "zero"
+        snakemake_mock.params.agb_threshold = 20.0
+
+        import workflow.scripts.build_luc_carbon_coefficients as mod
+
+        orig = mod.__dict__.get("snakemake")
+        try:
+            mod.__dict__["snakemake"] = snakemake_mock
+            mod.main()
+        finally:
+            if orig is None:
+                mod.__dict__.pop("snakemake", None)
+            else:
+                mod.__dict__["snakemake"] = orig
+
+        coeffs = pd.read_csv(coeffs_out)
+        for use in ("cropland", "spared_cropland"):
+            waters = set(coeffs[coeffs["use"] == use]["water"].unique())
+            assert waters == {"r", "i"}, f"Expected r+i for {use}, got {waters}"
+        for use in ("pasture", "spared_grassland"):
+            waters = set(coeffs[coeffs["use"] == use]["water"].unique())
+            assert waters == {"r"}, f"Expected only r for {use}, got {waters}"

@@ -280,6 +280,7 @@ rule build_luc_carbon_coefficients:
         agb=rules.prepare_luc_inputs.output.agb,
         soc=rules.prepare_luc_inputs.output.soc,
         regrowth=rules.prepare_luc_inputs.output.regrowth,
+        lc_masks=rules.prepare_luc_inputs.output.lc_masks,
         zone_parameters="data/curated/luc_zone_parameters.csv",
     params:
         horizon_years=config["luc"]["horizon_years"],
