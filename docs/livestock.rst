@@ -386,15 +386,26 @@ totals and the components are mapped to model feed categories:
      - ``ruminant_grassland``
    * - Legumes and silage
      - ``ruminant_forage``
-   * - Crop residues, Sugarcane tops, Leaves
+   * - Crop residues, Sugarcane tops
      - ``ruminant_roughage``
+   * - Leaves (tree leaves/browse)
+     - ``ruminant_roughage`` (tracked as exogenous)
 
 Dairy and dairy-buffalo products use Table 4 (dairy cattle composition);
 meat-cattle and meat-sheep use Table 5 (beef cattle composition).
 
+Tree leaves and forest browse are mapped to ``ruminant_roughage`` but
+tracked separately via the ``exogenous_mt_dm`` column, since the model
+has no endogenous production route for these feeds.
+
 **Step 4 — Mapping remaining GLEAM feed types**
 
-Feed types other than "Roughages" (handled above) and "Swill" (excluded) are
+**Swill** (food waste recycled as animal feed) is mapped to
+``monogastric_low_quality`` for monogastrics and ``ruminant_grain`` for
+ruminants, with the full amount marked as exogenous since swill is not
+produced endogenously by the model.
+
+Feed types other than "Roughages" and "Swill" (handled above) are
 mapped directly to model categories:
 
 .. list-table::
@@ -484,6 +495,9 @@ Output
 * ``feed_category``: Feed pool (e.g., ``ruminant_grassland``,
   ``ruminant_grain``, ``monogastric_protein``)
 * ``feed_use_mt_dm``: Dry-matter feed consumption (Mt DM) in the reference year
+* ``exogenous_mt_dm``: Portion of feed demand that must be supplied
+  exogenously (Mt DM) — tree leaves/browse for ruminants and swill for
+  monogastrics
 
 All (country, product, feed category) combinations are always present,
 including zeros, so every animal production link in the model has an explicit
@@ -504,6 +518,26 @@ The baseline participates in the model in two distinct ways:
    bounds set by available supply and feed conversion efficiencies. The
    baseline is not enforced but is available for post-hoc comparison with
    solved solutions.
+
+Exogenous Feed Supply
+~~~~~~~~~~~~~~~~~~~~~
+
+Some GLEAM feed types have no endogenous supply route in the model:
+
+* **Tree leaves/browse** (~100–150 Mt DM globally): Forest browse consumed
+  by ruminants, mapped to ``ruminant_roughage``.
+* **Swill** (~75 Mt DM globally): Food waste recycled as pig/poultry feed,
+  mapped to ``monogastric_low_quality`` (or ``ruminant_grain`` for
+  ruminants).
+
+These are tracked in the ``exogenous_mt_dm`` column of the baseline and
+supplied via ``exogenous_feed`` generators on the corresponding feed buses
+(named ``supply:exogenous_{category}:{country}``).
+
+In **validation mode**, these generators are fixed at the baseline amount
+(forced dispatch).  In **optimisation mode**, they are extendable up to the
+baseline amount at zero marginal cost, allowing the solver to use them if
+beneficial but not requiring it.
 
 Model Implementation
 --------------------

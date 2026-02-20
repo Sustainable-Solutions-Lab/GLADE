@@ -53,9 +53,9 @@ class TestConstants:
             if species in ruminant_species:
                 ruminant_products.update(products)
         for p in ruminant_products:
-            assert p in PRODUCT_COMPOSITION, (
-                f"Ruminant product '{p}' missing from PRODUCT_COMPOSITION"
-            )
+            assert (
+                p in PRODUCT_COMPOSITION
+            ), f"Ruminant product '{p}' missing from PRODUCT_COMPOSITION"
 
     def test_all_feed_mappings_produce_valid_categories(self):
         """Ruminant and monogastric feed mappings produce prefixed categories."""
@@ -159,31 +159,34 @@ class TestDecomposeRoughage:
         )
 
     def test_zero_roughage(self, simple_comp):
-        """Zero roughage returns empty dict."""
-        assert decompose_roughage(0.0, "R1", simple_comp) == {}
+        """Zero roughage returns empty dict and zero leaves."""
+        assert decompose_roughage(0.0, "R1", simple_comp) == ({}, 0.0)
 
     def test_negative_roughage(self, simple_comp):
-        """Negative roughage returns empty dict."""
-        assert decompose_roughage(-1.0, "R1", simple_comp) == {}
+        """Negative roughage returns empty dict and zero leaves."""
+        assert decompose_roughage(-1.0, "R1", simple_comp) == ({}, 0.0)
 
     def test_basic_decomposition(self, simple_comp):
         """Roughage is split by composition percentages."""
-        result = decompose_roughage(100.0, "R1", simple_comp)
+        result, leaves = decompose_roughage(100.0, "R1", simple_comp)
         # Only roughage components used: grass 60%, hay 20%, crop residues 10%
         # Total from roughage components = 90% -> normalized to 100
         assert "ruminant_grassland" in result  # Fresh grass + Hay
         assert "ruminant_roughage" in result  # Crop residues
         # "Grains" is a concentrate component, not in ROUGHAGE_COMPONENT_MAPPING
         assert sum(result.values()) == pytest.approx(100.0)
+        # No Leaves in simple_comp -> leaves == 0
+        assert leaves == pytest.approx(0.0)
 
     def test_unknown_region_returns_empty(self, simple_comp):
         """Unknown GLEAM region yields empty decomposition."""
-        result = decompose_roughage(100.0, "UNKNOWN", simple_comp)
+        result, leaves = decompose_roughage(100.0, "UNKNOWN", simple_comp)
         assert result == {}
+        assert leaves == pytest.approx(0.0)
 
     def test_all_categories_are_ruminant(self, simple_comp):
         """Decomposition only produces ruminant_* feed categories."""
-        result = decompose_roughage(50.0, "R1", simple_comp)
+        result, _ = decompose_roughage(50.0, "R1", simple_comp)
         for cat in result:
             assert cat.startswith("ruminant_")
 
@@ -200,8 +203,28 @@ class TestDecomposeRoughage:
                 "Leaves",
             ],
         )
-        result = decompose_roughage(200.0, "R1", comp)
+        result, _ = decompose_roughage(200.0, "R1", comp)
         assert sum(result.values()) == pytest.approx(200.0)
+
+    def test_leaves_tracked_separately(self):
+        """Leaves portion is tracked separately from other roughage."""
+        comp = pd.DataFrame(
+            {"R1": [40.0, 20.0, 5.0, 10.0, 2.0, 8.0]},
+            index=[
+                "Fresh grass",
+                "Hay",
+                "Legumes and silage",
+                "Crop residues",
+                "Sugarcane tops",
+                "Leaves",
+            ],
+        )
+        result, leaves = decompose_roughage(100.0, "R1", comp)
+        assert leaves > 0
+        # Leaves are included in ruminant_roughage but must be smaller
+        assert leaves < result["ruminant_roughage"]
+        # Total still preserved
+        assert sum(result.values()) == pytest.approx(100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +247,9 @@ class TestComputeCountryShares:
         oecd = {"USA": True, "DEU": True, "IND": False, "BRA": False}
         shares = compute_country_shares(fao, oecd)
         for (species, region), group in shares.groupby(["species", "region"]):
-            assert group["share"].sum() == pytest.approx(1.0), (
-                f"Shares don't sum to 1 for {species}/{region}"
-            )
+            assert group["share"].sum() == pytest.approx(
+                1.0
+            ), f"Shares don't sum to 1 for {species}/{region}"
 
     def test_single_country_gets_full_share(self):
         """A sole producer in its OECD group gets share 1.0."""

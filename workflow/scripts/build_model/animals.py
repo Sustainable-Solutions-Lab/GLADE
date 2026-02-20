@@ -101,6 +101,98 @@ def add_feed_slack_generators(
     )
 
 
+def add_exogenous_feed_generators(
+    n: pypsa.Network,
+    feed_baseline: pd.DataFrame,
+    enforce_baseline_feed: bool,
+) -> None:
+    """Add generators for exogenous feed supply (leaves/browse, swill).
+
+    Some GLEAM feed types cannot be produced endogenously by the model (tree
+    leaves and forest browse for ruminants, food-waste swill for monogastrics).
+    This function reads the ``exogenous_mt_dm`` column from the feed baseline
+    and creates fixed-capacity generators on the relevant feed buses.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network to add generators to.
+    feed_baseline : pd.DataFrame
+        GLEAM feed baseline with columns: country, product, feed_category,
+        feed_use_mt_dm, exogenous_mt_dm.
+    enforce_baseline_feed : bool
+        If True (validation mode), generators are fixed at the exogenous
+        amount.  If False (optimisation mode), generators are extendable up
+        to the exogenous amount at zero cost.
+    """
+    if "exogenous_mt_dm" not in feed_baseline.columns:
+        logger.info("No exogenous_mt_dm column in feed baseline; skipping")
+        return
+
+    # Aggregate to (country, feed_category) — product dimension is irrelevant
+    # for supply generators on per-country feed buses
+    agg = (
+        feed_baseline.groupby(["country", "feed_category"])["exogenous_mt_dm"]
+        .sum()
+        .reset_index()
+    )
+    agg = agg[agg["exogenous_mt_dm"] > 0].copy()
+
+    if agg.empty:
+        logger.info("No exogenous feed amounts; skipping")
+        return
+
+    # Filter to entries with existing feed buses
+    agg["bus"] = "feed:" + agg["feed_category"] + ":" + agg["country"]
+    bus_exists = agg["bus"].isin(n.buses.static.index)
+    agg = agg[bus_exists].copy()
+
+    if agg.empty:
+        logger.info("No matching feed buses for exogenous feed; skipping")
+        return
+
+    # Add carrier
+    if "exogenous_feed" not in n.carriers.static.index:
+        n.carriers.add("exogenous_feed", unit="Mt")
+
+    names = pd.Index(
+        "supply:exogenous_" + agg["feed_category"] + ":" + agg["country"],
+        dtype="object",
+    )
+
+    if enforce_baseline_feed:
+        # Validation mode: forced dispatch at baseline level
+        n.generators.add(
+            names,
+            bus=agg["bus"].values,
+            carrier="exogenous_feed",
+            p_nom=agg["exogenous_mt_dm"].values,
+            p_nom_extendable=False,
+            p_min_pu=1.0,
+            p_max_pu=1.0,
+            country=agg["country"].values,
+            feed_category=agg["feed_category"].values,
+        )
+    else:
+        # Optimisation mode: available up to baseline, free
+        n.generators.add(
+            names,
+            bus=agg["bus"].values,
+            carrier="exogenous_feed",
+            p_nom_extendable=True,
+            p_nom_max=agg["exogenous_mt_dm"].values,
+            marginal_cost=0.0,
+            country=agg["country"].values,
+            feed_category=agg["feed_category"].values,
+        )
+
+    logger.info(
+        "Added %d exogenous feed generators (%.1f Mt DM total)",
+        len(names),
+        agg["exogenous_mt_dm"].sum(),
+    )
+
+
 def add_feed_to_animal_product_links(
     n: pypsa.Network,
     animal_products: list,

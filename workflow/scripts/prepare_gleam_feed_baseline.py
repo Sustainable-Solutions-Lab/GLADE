@@ -11,7 +11,9 @@ systems using FCR-weighted shares from Wirsenius (2000), decomposes ruminant
 roughage using regional composition tables (SI 4-5), maps to model feed
 categories, and scales to the configured reference year.
 
-Output: CSV with columns (country, product, feed_category, feed_use_mt_dm).
+Output: CSV with columns (country, product, feed_category, feed_use_mt_dm,
+exogenous_mt_dm).  The exogenous_mt_dm column tracks feed demand that the
+model cannot produce endogenously (tree leaves/browse, swill).
 """
 
 import logging
@@ -303,26 +305,33 @@ def decompose_roughage(
     roughage_mt: float,
     gleam_region: str,
     composition: pd.DataFrame,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], float]:
     """Decompose a roughage total using regional composition percentages.
 
     Uses the specified composition table (dairy or beef cattle). Only applies
     the roughage portion of the composition (Fresh grass, Hay, Legumes and
     silage, Crop residues, Sugarcane tops, Leaves).
 
-    Returns dict mapping model feed category to Mt DM.
+    Returns a tuple of (dict mapping model feed category to Mt DM, leaves Mt DM).
+    The leaves amount is the portion of ruminant_roughage attributable to tree
+    leaves/browse, tracked separately for exogenous supply since the model has
+    no endogenous production route for leaves.
     """
     if roughage_mt <= 0:
-        return {}
+        return {}, 0.0
 
     result: dict[str, float] = {}
+    leaves_raw = 0.0
 
     for component, feed_cat in ROUGHAGE_COMPONENT_MAPPING.items():
         pct = 0.0
         if component in composition.index and gleam_region in composition.columns:
             pct = composition.loc[component, gleam_region]
         if pct > 0:
-            result[feed_cat] = result.get(feed_cat, 0) + roughage_mt * pct / 100.0
+            amount = roughage_mt * pct / 100.0
+            result[feed_cat] = result.get(feed_cat, 0) + amount
+            if component == "Leaves":
+                leaves_raw = amount
 
     # Normalize: ensure decomposed amounts sum to the roughage total.
     # Any residual is distributed proportionally across existing categories.
@@ -330,8 +339,9 @@ def decompose_roughage(
     if decomposed_total > 0 and abs(decomposed_total - roughage_mt) > 0.01:
         scale = roughage_mt / decomposed_total
         result = {k: v * scale for k, v in result.items()}
+        leaves_raw *= scale
 
-    return result
+    return result, leaves_raw
 
 
 def main() -> None:
@@ -495,6 +505,7 @@ def main() -> None:
                                     "product": product,
                                     "feed_category": "ruminant_roughage",
                                     "feed_use_mt_dm": amount,
+                                    "exogenous_mt_dm": 0.0,
                                 }
                             )
                             continue
@@ -507,27 +518,47 @@ def main() -> None:
                                     "product": product,
                                     "feed_category": "ruminant_roughage",
                                     "feed_use_mt_dm": amount,
+                                    "exogenous_mt_dm": 0.0,
                                 }
                             )
                             continue
 
                         composition = dairy_comp if comp_type == "dairy" else beef_comp
-                        decomposed = decompose_roughage(
+                        decomposed, leaves_amount = decompose_roughage(
                             amount, gleam_region, composition
                         )
                         for feed_cat, cat_amount in decomposed.items():
                             if cat_amount > 0:
+                                exogenous = (
+                                    leaves_amount
+                                    if feed_cat == "ruminant_roughage"
+                                    else 0.0
+                                )
                                 records.append(
                                     {
                                         "country": country,
                                         "product": product,
                                         "feed_category": feed_cat,
                                         "feed_use_mt_dm": cat_amount,
+                                        "exogenous_mt_dm": exogenous,
                                     }
                                 )
 
                     elif feed_type == "Swill":
-                        continue
+                        feed_cat = (
+                            "monogastric_low_quality"
+                            if not is_ruminant
+                            else "ruminant_grain"
+                        )
+                        records.append(
+                            {
+                                "country": country,
+                                "product": product,
+                                "feed_category": feed_cat,
+                                "feed_use_mt_dm": amount,
+                                "exogenous_mt_dm": amount,
+                            }
+                        )
 
                     elif feed_type == "Roughages" and not is_ruminant:
                         # Monogastric roughages are rare (pig backyard);
@@ -538,6 +569,7 @@ def main() -> None:
                                 "product": product,
                                 "feed_category": "monogastric_low_quality",
                                 "feed_use_mt_dm": amount,
+                                "exogenous_mt_dm": 0.0,
                             }
                         )
 
@@ -561,6 +593,7 @@ def main() -> None:
                                 "product": product,
                                 "feed_category": feed_cat,
                                 "feed_use_mt_dm": amount,
+                                "exogenous_mt_dm": 0.0,
                             }
                         )
 
@@ -571,7 +604,7 @@ def main() -> None:
 
     # Aggregate duplicate (country, product, feed_category) entries
     result = result.groupby(["country", "product", "feed_category"], as_index=False)[
-        "feed_use_mt_dm"
+        ["feed_use_mt_dm", "exogenous_mt_dm"]
     ].sum()
 
     # -- Step 5: Scale to reference year -------------------------------
@@ -606,6 +639,7 @@ def main() -> None:
     )
     result["scale"] = result["scale"].fillna(1.0)
     result["feed_use_mt_dm"] = result["feed_use_mt_dm"] * result["scale"]
+    result["exogenous_mt_dm"] = result["exogenous_mt_dm"] * result["scale"]
     result = result.drop(columns=["scale"])
 
     # -- Step 6: Normalize ---------------------------------------------
@@ -649,8 +683,6 @@ def main() -> None:
 
         si2_row = si2_totals.loc[(region, species)]
         expected_total = si2_row[feed_cols].sum() * avg_scale
-        # Subtract swill from expected total
-        expected_total -= si2_row.get("Swill", 0) * avg_scale
 
         if actual_total > 0 and expected_total > 0:
             correction = expected_total / actual_total
@@ -662,6 +694,7 @@ def main() -> None:
                     correction,
                 )
                 result.loc[group_mask, "feed_use_mt_dm"] *= correction
+                result.loc[group_mask, "exogenous_mt_dm"] *= correction
 
     result = result.drop(columns=["species", "region"])
 
@@ -677,9 +710,8 @@ def main() -> None:
         calibration_year,
     )
 
-    # SI2 totals per species (Mt DM, excluding Swill)
-    non_swill_cols = [c for c in feed_cols if c != "Swill"]
-    si2_species_totals = si2_data.groupby("Species")[non_swill_cols].sum().sum(axis=1)
+    # SI2 totals per species (Mt DM, including Swill since it is now modeled)
+    si2_species_totals = si2_data.groupby("Species")[feed_cols].sum().sum(axis=1)
 
     # Compute naive (constant-efficiency) prediction for calibration year
     # by applying species-level production growth from 2010 to cal year
@@ -730,6 +762,7 @@ def main() -> None:
     )
 
     result["feed_use_mt_dm"] *= correction
+    result["exogenous_mt_dm"] *= correction
 
     # Expand to all valid (country, product, feed_category) combinations,
     # filling 0 where GLEAM has no data.  This ensures every model link gets
@@ -753,7 +786,9 @@ def main() -> None:
     )
 
     result = (
-        result.set_index(["country", "product", "feed_category"])["feed_use_mt_dm"]
+        result.set_index(["country", "product", "feed_category"])[
+            ["feed_use_mt_dm", "exogenous_mt_dm"]
+        ]
         .reindex(full_index, fill_value=0.0)
         .reset_index()
     )

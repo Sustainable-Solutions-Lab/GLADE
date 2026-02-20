@@ -733,6 +733,13 @@ if __name__ == "__main__":
         enforce_baseline_feed=enforce_baseline_feed,
     )
 
+    # Add exogenous feed generators (leaves/browse, swill)
+    animals.add_exogenous_feed_generators(
+        n,
+        gleam_feed_baseline,
+        enforce_baseline_feed=enforce_baseline_feed,
+    )
+
     # Add feed slack generators for validation mode feasibility
     if use_actual_production or enforce_baseline_feed:
         animals.add_feed_slack_generators(
