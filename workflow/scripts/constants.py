@@ -29,9 +29,8 @@ HA_PER_MHA = 1e6  # convert million hectares to hectares
 DAYS_PER_YEAR = 365
 N2O_N_TO_N2O = 44.0 / 28.0  # molecular weight ratio to convert N2O-N to N2O
 
-# Feed categories: 5 ruminant + 4 monogastric quality classes
+# Feed categories: 4 ruminant + 3 monogastric quality classes
 FEED_CATEGORIES = [
-    "ruminant_grassland",
     "ruminant_roughage",
     "ruminant_forage",
     "ruminant_grain",

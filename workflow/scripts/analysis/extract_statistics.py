@@ -169,7 +169,7 @@ def extract_crop_production(n: pypsa.Network) -> pd.DataFrame:
         df = df.dropna(subset=["crop", "region", "country"])
         results.append(df)
 
-    # Grassland production: output to feed bus (feed_ruminant_grassland)
+    # Grassland production: output to feed bus (feed_ruminant_forage)
     feed_bus_carriers = [
         c for c in n.buses.static["carrier"].unique() if c.startswith("feed_")
     ]

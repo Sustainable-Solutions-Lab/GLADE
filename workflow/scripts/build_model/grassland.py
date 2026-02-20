@@ -60,9 +60,9 @@ def calculate_grazing_cost_per_tonne_dm(
 
     # Filter feed_to_products for grass-based feed categories
     # The costs are allocated from "Grazed feed" item in USDA/FADN,
-    # which corresponds to the "ruminant_grassland" feed category.
+    # which corresponds to grassland production routed to ruminant_forage.
     grass_feeds = feed_to_products_df[
-        feed_to_products_df["feed_category"] == "ruminant_grassland"
+        feed_to_products_df["feed_category"] == "ruminant_forage"
     ].copy()
 
     # Merge costs and efficiencies
@@ -201,7 +201,7 @@ def add_grassland_feed_links(
     suffix = work["region"] + "_c" + work["resource_class"].astype(str)
     work["name"] = "produce:grassland:" + suffix
     work["bus0"] = "land:pasture:" + suffix
-    work["bus1"] = "feed:ruminant_grassland:" + work["country"]
+    work["bus1"] = "feed:ruminant_forage:" + work["country"]
 
     available_mha = work["available_area"].to_numpy() / HA_PER_MHA
 

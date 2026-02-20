@@ -507,22 +507,8 @@ class TestGetMmsFractionsForLps:
 class TestCalculateN2oFactorsForFeedCategory:
     """Tests for calculate_n2o_factors_for_feed_category."""
 
-    def test_ruminant_grassland_uses_grassland_lps(self, mms_fractions_df, n2o_efs_df):
-        """Ruminant grassland feed should use Grassland LPS."""
-        result = calculate_n2o_factors_for_feed_category(
-            "meat-cattle",
-            "ruminant_grassland",
-            mms_fractions_df,
-            n2o_efs_df,
-        )
-
-        # Grassland LPS for Cattle: pasture & paddock = 70%
-        assert result["pasture_fraction"] == pytest.approx(0.70)
-        # Cattle uses EF3PRP_CATTLE
-        assert result["pasture_n2o_ef"] == pytest.approx(EF3PRP_CATTLE)
-
     def test_ruminant_forage_uses_mixed_lps(self, mms_fractions_df, n2o_efs_df):
-        """Non-grassland ruminant feed should use Mixed LPS."""
+        """All ruminant feed categories should use Mixed LPS."""
         result = calculate_n2o_factors_for_feed_category(
             "meat-cattle",
             "ruminant_forage",
@@ -537,22 +523,22 @@ class TestCalculateN2oFactorsForFeedCategory:
 
     def test_sheep_uses_ef3prp_other(self, mms_fractions_df, n2o_efs_df):
         """Sheep should use EF3PRP_OTHER."""
-        # Need Sheep in the MMS data
+        # Need Sheep with Mixed LPS in the MMS data
         sheep_row = pd.DataFrame(
             {
                 "area": ["Global"],
                 "animal": ["Sheep"],
-                "lps": ["Grassland"],
-                "pasture & paddock": [80.0],
-                "drylot": [5.0],
-                "liquid/slurry": [5.0],
-                "solid storage": [10.0],
+                "lps": ["Mixed"],
+                "pasture & paddock": [60.0],
+                "drylot": [10.0],
+                "liquid/slurry": [10.0],
+                "solid storage": [20.0],
             }
         )
         mms_with_sheep = pd.concat([mms_fractions_df, sheep_row], ignore_index=True)
         result = calculate_n2o_factors_for_feed_category(
             "meat-sheep",
-            "ruminant_grassland",
+            "ruminant_forage",
             mms_with_sheep,
             n2o_efs_df,
         )
@@ -581,23 +567,23 @@ class TestCalculateN2oFactorsForFeedCategory:
             0.01125 + MANURE_N_RECOVERY * EF1_APPLICATION
         )
 
-    def test_grassland_lps_storage_ef(self, mms_fractions_df, n2o_efs_df):
-        """Verify storage EF for Cattle Grassland LPS.
+    def test_ruminant_roughage_uses_mixed_lps(self, mms_fractions_df, n2o_efs_df):
+        """Verify storage EF for Cattle Mixed LPS with roughage feed.
 
-        non-pasture MMS = drylot (10%), liquid/slurry (5%), solid storage (15%)
-        total non-pasture = 30%
-        weighted storage_ef = (0.10*0.02 + 0.05*0.005 + 0.15*0.01) / 0.30
-                            = (0.002 + 0.00025 + 0.0015) / 0.30
-                            = 0.00375 / 0.30
-                            = 0.0125
+        non-pasture MMS = drylot (30%), liquid/slurry (40%), solid storage (10%)
+        total non-pasture = 80%
+        weighted storage_ef = (0.30*0.02 + 0.40*0.005 + 0.10*0.01) / 0.80
+                            = (0.006 + 0.002 + 0.001) / 0.80
+                            = 0.009 / 0.80
+                            = 0.01125
         """
         result = calculate_n2o_factors_for_feed_category(
             "meat-cattle",
-            "ruminant_grassland",
+            "ruminant_roughage",
             mms_fractions_df,
             n2o_efs_df,
         )
-        assert result["storage_n2o_ef"] == pytest.approx(0.0125)
+        assert result["storage_n2o_ef"] == pytest.approx(0.01125)
 
     def test_monogastric_uses_product_lps_mapping(self, mms_fractions_df, n2o_efs_df):
         """Monogastrics should use MONOGASTRIC_LPS_MAPPING."""
@@ -618,7 +604,7 @@ class TestCalculateN2oFactorsForFeedCategory:
             {
                 "area": ["Global"],
                 "animal": ["Cattle"],
-                "lps": ["Grassland"],
+                "lps": ["Mixed"],
                 "pasture & paddock": [100.0],
                 "drylot": [0.0],
                 "liquid/slurry": [0.0],
@@ -627,7 +613,7 @@ class TestCalculateN2oFactorsForFeedCategory:
         )
         result = calculate_n2o_factors_for_feed_category(
             "meat-cattle",
-            "ruminant_grassland",
+            "ruminant_forage",
             mms_all_pasture,
             n2o_efs_df,
         )

@@ -174,6 +174,16 @@ class TestComputeProductShares:
 class TestDecomposeRoughage:
     """Tests for roughage decomposition using composition tables."""
 
+    # Explicit component → category mapping (grassland items → ruminant_forage)
+    COMPONENT_CATEGORIES: ClassVar[dict[str, str]] = {
+        "Fresh grass": "ruminant_forage",
+        "Hay": "ruminant_forage",
+        "Legumes and silage": "ruminant_forage",
+        "Crop residues": "ruminant_roughage",
+        "Sugarcane tops": "ruminant_roughage",
+        "Leaves": "ruminant_roughage",
+    }
+
     @pytest.fixture()
     def simple_comp(self):
         """Composition table with two roughage components in one region."""
@@ -184,18 +194,24 @@ class TestDecomposeRoughage:
 
     def test_zero_roughage(self, simple_comp):
         """Zero roughage returns empty dict and zero leaves."""
-        assert decompose_roughage(0.0, "R1", simple_comp) == ({}, 0.0)
+        assert decompose_roughage(
+            0.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
+        ) == ({}, 0.0)
 
     def test_negative_roughage(self, simple_comp):
         """Negative roughage returns empty dict and zero leaves."""
-        assert decompose_roughage(-1.0, "R1", simple_comp) == ({}, 0.0)
+        assert decompose_roughage(
+            -1.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
+        ) == ({}, 0.0)
 
     def test_basic_decomposition(self, simple_comp):
         """Roughage is split by composition percentages."""
-        result, leaves = decompose_roughage(100.0, "R1", simple_comp)
+        result, leaves = decompose_roughage(
+            100.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
+        )
         # Only roughage components used: grass 60%, hay 20%, crop residues 10%
         # Total from roughage components = 90% -> normalized to 100
-        assert "ruminant_grassland" in result  # Fresh grass + Hay
+        assert "ruminant_forage" in result  # Fresh grass + Hay
         assert "ruminant_roughage" in result  # Crop residues
         # "Grains" is a concentrate component, not in ROUGHAGE_COMPONENT_MAPPING
         assert sum(result.values()) == pytest.approx(100.0)
@@ -204,13 +220,17 @@ class TestDecomposeRoughage:
 
     def test_unknown_region_returns_empty(self, simple_comp):
         """Unknown GLEAM region yields empty decomposition."""
-        result, leaves = decompose_roughage(100.0, "UNKNOWN", simple_comp)
+        result, leaves = decompose_roughage(
+            100.0, "UNKNOWN", simple_comp, self.COMPONENT_CATEGORIES
+        )
         assert result == {}
         assert leaves == pytest.approx(0.0)
 
     def test_all_categories_are_ruminant(self, simple_comp):
         """Decomposition only produces ruminant_* feed categories."""
-        result, _ = decompose_roughage(50.0, "R1", simple_comp)
+        result, _ = decompose_roughage(
+            50.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
+        )
         for cat in result:
             assert cat.startswith("ruminant_")
 
@@ -227,7 +247,7 @@ class TestDecomposeRoughage:
                 "Leaves",
             ],
         )
-        result, _ = decompose_roughage(200.0, "R1", comp)
+        result, _ = decompose_roughage(200.0, "R1", comp, self.COMPONENT_CATEGORIES)
         assert sum(result.values()) == pytest.approx(200.0)
 
     def test_leaves_tracked_separately(self):
@@ -243,7 +263,9 @@ class TestDecomposeRoughage:
                 "Leaves",
             ],
         )
-        result, leaves = decompose_roughage(100.0, "R1", comp)
+        result, leaves = decompose_roughage(
+            100.0, "R1", comp, self.COMPONENT_CATEGORIES
+        )
         assert leaves > 0
         # Leaves are included in ruminant_roughage but must be smaller
         assert leaves < result["ruminant_roughage"]

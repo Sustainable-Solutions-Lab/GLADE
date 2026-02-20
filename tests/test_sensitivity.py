@@ -48,7 +48,7 @@ def mock_network():
     # Add animal production links
     n.links.add(
         ["animal:beef_grassfed:USA"],
-        bus0=["feed:ruminant_grassland:USA"],
+        bus0=["feed:ruminant_forage:USA"],
         bus1=["food:beef:USA"],
         carrier="animal_production",
         efficiency=[0.05],

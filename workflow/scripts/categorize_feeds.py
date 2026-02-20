@@ -27,10 +27,9 @@ def categorize_ruminant_feeds(
 
     Categories align with IPCC CH4 emission factors:
     - roughage: low digestibility (< 0.55), high CH4
-    - forage: medium digestibility (0.55-0.70), medium CH4
+    - forage: medium digestibility (0.55-0.70), medium CH4 (includes grassland)
     - grain: high digestibility (0.70-0.90), low CH4
     - protein: very high digestibility (> 0.90), low CH4
-    - grassland: managed pasture grazing (treated separately for N management)
 
     Returns
     -------
@@ -63,7 +62,7 @@ def categorize_ruminant_feeds(
     # Grassland gets its own category for special N management
     def assign_category(row):
         if row["feed_item"] == "grassland":
-            return "grassland"
+            return "forage"
 
         # All crop residues are roughage regardless of digestibility.
         # GLEAM groups all residues together under "crop residues" in the
@@ -232,7 +231,6 @@ def add_methane_yields(
         "forage": "forage",
         "grain": "concentrate",
         "protein": "concentrate",
-        "grassland": "forage",  # Grassland treated as forage quality for CH4
     }
 
     # Merge with methane yields

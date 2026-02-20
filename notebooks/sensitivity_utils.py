@@ -1462,8 +1462,7 @@ def load_luc_breakdown(
 
 # Re-export constants from the plotting module for notebook use
 FEED_CATEGORY_LABELS = {
-    "ruminant_grassland": "Grass & leaves",
-    "ruminant_forage": "Fodder crops",
+    "ruminant_forage": "Grass & fodder",
     "ruminant_roughage": "Crop residues",
     "ruminant_grain": "Grains",
     "ruminant_protein": "Oilseed cakes",

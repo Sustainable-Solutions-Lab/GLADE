@@ -25,7 +25,7 @@ Buses::
 
     crop:{crop}:{country}           e.g., crop:wheat:USA
     food:{food}:{country}           e.g., food:bread:USA
-    feed:{category}:{country}       e.g., feed:ruminant_grassland:USA
+    feed:{category}:{country}       e.g., feed:ruminant_forage:USA
     residue:{item}:{country}        e.g., residue:wheat_straw:USA
     group:{group}:{country}         e.g., group:cereals:USA
     nutrient:{nutrient}:{country}   e.g., nutrient:protein:USA

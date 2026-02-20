@@ -344,7 +344,7 @@ def _calculate_manure_n_outputs(
             product,
             feed_category,
         )
-        pasture_fraction = 1.0 if feed_category.endswith("_grassland") else 0.0
+        pasture_fraction = 0.0
         pasture_n2o_ef = 0.02 if "cattle" in product or "dairy" in product else 0.01
         managed_n2o_ef = 0.0095  # storage (0.005) + application (0.75 * 0.006)
     else:
@@ -437,15 +437,11 @@ def _calculate_ch4_per_feed_intake(
             enteric_t_per_t = enteric_my_lookup[category] / 1000.0
             total_ch4_per_t_feed += enteric_t_per_t
 
-    # Add manure CH4 (confined systems only, not pasture)
-    # For grassland grazing, manure is deposited on pasture where aerobic
-    # decomposition results in negligible CH4 (IPCC MCF ~0.5% for PRP).
-    # We therefore skip manure CH4 for grassland feed categories.
-    if not feed_category.endswith("_grassland"):
-        manure_t_per_t = manure_ch4_lookup.get((country, product, feed_category))
-        if manure_t_per_t is not None:
-            # kg CH4/kg DM = t CH4/t DM (ratio is scale-invariant)
-            total_ch4_per_t_feed += manure_t_per_t
-            manure_ch4_per_t_feed += manure_t_per_t
+    # Add manure CH4
+    manure_t_per_t = manure_ch4_lookup.get((country, product, feed_category))
+    if manure_t_per_t is not None:
+        # kg CH4/kg DM = t CH4/t DM (ratio is scale-invariant)
+        total_ch4_per_t_feed += manure_t_per_t
+        manure_ch4_per_t_feed += manure_t_per_t
 
     return total_ch4_per_t_feed, manure_ch4_per_t_feed

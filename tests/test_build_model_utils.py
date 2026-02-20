@@ -22,8 +22,8 @@ def ruminant_categories():
     """Ruminant feed categories with nitrogen content."""
     return pd.DataFrame(
         {
-            "category": ["grassland", "roughage", "forage", "grain", "protein"],
-            "N_g_per_kg_DM": [20.0, 18.0, 25.0, 22.0, 50.0],
+            "category": ["roughage", "forage", "grain", "protein"],
+            "N_g_per_kg_DM": [18.0, 25.0, 22.0, 50.0],
         }
     )
 
@@ -80,7 +80,7 @@ def manure_emissions():
             ],
             "feed_category": [
                 "ruminant_forage",
-                "ruminant_grassland",
+                "ruminant_forage",
                 "ruminant_roughage",
                 "monogastric_grain",
                 "monogastric_grain",
@@ -334,7 +334,7 @@ class TestCalculateManureNOutputs:
         # And NOT equal to the raw N2O-N value
         assert n2o != pytest.approx(total_n2o_n)
 
-    def test_grassland_pasture_dominant(
+    def test_forage_pasture_present(
         self,
         ruminant_categories,
         monogastric_categories,
@@ -342,11 +342,11 @@ class TestCalculateManureNOutputs:
         manure_emissions,
         default_indirect_params,
     ):
-        """Grassland feed: high pasture fraction means pasture N2O dominates."""
+        """Forage feed: pasture fraction from MMS data contributes to N2O."""
         efficiency = 0.03
         n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
             product="meat-cattle",
-            feed_category="ruminant_grassland",
+            feed_category="ruminant_forage",
             efficiency=efficiency,
             ruminant_categories=ruminant_categories,
             monogastric_categories=monogastric_categories,
@@ -355,9 +355,8 @@ class TestCalculateManureNOutputs:
             **default_indirect_params,
         )
 
-        # pasture_fraction = 0.9 for ruminant_grassland
-        # pasture N2O should dominate
-        assert pasture_share > 0.8
+        # pasture_fraction = 0.3 for ruminant_forage (from fixture)
+        assert pasture_share > 0.0
         assert n2o > 0
 
     def test_missing_protein_data_defaults_to_zero(
@@ -404,32 +403,32 @@ class TestCalculateCh4PerFeedIntake:
     def enteric_my_lookup(self):
         """Enteric methane yield by ruminant feed category (g CH4/kg DMI)."""
         return {
-            "grassland": 22.0,
             "roughage": 20.0,
             "forage": 18.0,
             "grain": 12.0,
             "protein": 10.0,
         }
 
-    def test_ruminant_grassland_enteric_only(
+    def test_ruminant_forage_enteric_and_manure(
         self,
         enteric_my_lookup,
         manure_emissions,
     ):
-        """Ruminant with grassland feed: enteric only, no manure CH4."""
+        """Ruminant forage feed: both enteric and manure CH4."""
         total, manure = _calculate_ch4_per_feed_intake(
             product="meat-cattle",
-            feed_category="ruminant_grassland",
+            feed_category="ruminant_forage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
             manure_emissions=manure_emissions,
         )
 
-        # Enteric: 22 g/kg DM = 0.022 t/t
-        expected_enteric = 22.0 / 1000.0
-        assert total == pytest.approx(expected_enteric)
-        # No manure CH4 for grassland (skipped because ends with _grassland)
-        assert manure == pytest.approx(0.0)
+        # Enteric: 18 g/kg DM = 0.018 t/t
+        expected_enteric = 18.0 / 1000.0
+        # Manure: 0.005 kg/kg DMI = 0.005 t/t (from fixture)
+        expected_manure = 0.005
+        assert total == pytest.approx(expected_enteric + expected_manure)
+        assert manure == pytest.approx(expected_manure)
 
     def test_ruminant_non_grassland_both_enteric_and_manure(
         self,
@@ -530,14 +529,14 @@ class TestCalculateCh4PerFeedIntake:
         """Enteric CH4 conversion: g CH4/kg DM -> t CH4/t DM (divide by 1000)."""
         total, manure = _calculate_ch4_per_feed_intake(
             product="meat-cattle",
-            feed_category="ruminant_grassland",
+            feed_category="ruminant_roughage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
             manure_emissions=manure_emissions,
         )
 
-        # 22 g/kg DM = 22/1000 t/t DM = 0.022
-        assert total == pytest.approx(0.022)
+        # 20 g/kg DM = 20/1000 t/t DM = 0.020, no manure data for roughage/USA
+        assert total == pytest.approx(0.020)
 
     def test_different_country_uses_correct_manure_data(
         self,

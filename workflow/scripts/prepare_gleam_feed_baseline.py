@@ -327,24 +327,11 @@ def resolve_roughage_categories(
     return result
 
 
-# Default component → category mapping for decompose_roughage, used in unit
-# tests that don't have access to CSV mapping data.  Matches the categories
-# produced by resolve_roughage_categories with the validation config.
-_DEFAULT_ROUGHAGE_CATEGORIES = {
-    "Fresh grass": "ruminant_grassland",
-    "Hay": "ruminant_grassland",
-    "Legumes and silage": "ruminant_forage",
-    "Crop residues": "ruminant_roughage",
-    "Sugarcane tops": "ruminant_roughage",
-    "Leaves": "ruminant_roughage",
-}
-
-
 def decompose_roughage(
     roughage_mt: float,
     gleam_region: str,
     composition: pd.DataFrame,
-    component_to_category: dict[str, str] | None = None,
+    component_to_category: dict[str, str],
 ) -> tuple[dict[str, float], float]:
     """Decompose a roughage total using regional composition percentages.
 
@@ -353,7 +340,7 @@ def decompose_roughage(
     silage, Crop residues, Sugarcane tops, Leaves).
 
     *component_to_category* maps roughage component names to prefixed model
-    feed categories.  When ``None``, uses ``_DEFAULT_ROUGHAGE_CATEGORIES``.
+    feed categories.
 
     Returns a tuple of (dict mapping model feed category to Mt DM, leaves Mt DM).
     The leaves amount is the portion of ruminant_roughage attributable to tree
@@ -362,9 +349,6 @@ def decompose_roughage(
     """
     if roughage_mt <= 0:
         return {}, 0.0
-
-    if component_to_category is None:
-        component_to_category = _DEFAULT_ROUGHAGE_CATEGORIES
 
     result: dict[str, float] = {}
     leaves_raw = 0.0

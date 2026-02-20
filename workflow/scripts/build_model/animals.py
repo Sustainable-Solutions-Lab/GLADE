@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 def add_feed_slack_generators(
     n: pypsa.Network,
     marginal_cost: float,
-    allow_negative_grassland_slack: bool = False,
 ) -> None:
     """Add slack generators to feed buses for validation mode feasibility.
 
@@ -44,9 +43,6 @@ def add_feed_slack_generators(
         The network to add slack components to
     marginal_cost : float
         Cost per Mt of slack (billion USD/Mt)
-    allow_negative_grassland_slack : bool, optional
-        Kept for backward compatibility; ignored (all buses now get both
-        positive and negative slack).
     """
     # Find all feed buses (named feed:{category}:{country})
     feed_mask = n.buses.static.index.str.startswith("feed:")

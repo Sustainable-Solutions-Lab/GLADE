@@ -122,19 +122,19 @@ class TestCategorizeRuminantFeeds:
         categories, mapping = categorize_ruminant_feeds(df, EMPTY_ASH)
         assert mapping.iloc[0]["category"] == "forage"
 
-    def test_grassland_always_grassland(self):
-        """Feed item 'grassland' is always categorized as grassland."""
+    def test_grassland_always_forage(self):
+        """Feed item 'grassland' is always categorized as forage."""
         df = pd.DataFrame(
             [_make_ruminant_feed("grassland", digestibility=0.95, n=60.0)]
         )
         categories, mapping = categorize_ruminant_feeds(df, EMPTY_ASH)
-        assert mapping.iloc[0]["category"] == "grassland"
+        assert mapping.iloc[0]["category"] == "forage"
 
     def test_grassland_overrides_low_digestibility(self):
-        """Grassland with very low digestibility is still grassland."""
+        """Grassland with very low digestibility is still forage."""
         df = pd.DataFrame([_make_ruminant_feed("grassland", digestibility=0.30)])
         categories, mapping = categorize_ruminant_feeds(df, EMPTY_ASH)
-        assert mapping.iloc[0]["category"] == "grassland"
+        assert mapping.iloc[0]["category"] == "forage"
 
     def test_me_calculation(self):
         """ME is computed as GE * digestibility * 0.82."""
@@ -232,7 +232,7 @@ class TestCategorizeRuminantFeeds:
         )
         categories, mapping = categorize_ruminant_feeds(df, EMPTY_ASH)
         cat_set = set(categories["category"])
-        assert cat_set == {"roughage", "forage", "grain", "protein", "grassland"}
+        assert cat_set == {"roughage", "forage", "grain", "protein"}
 
 
 # ---------------------------------------------------------------------------
@@ -366,12 +366,12 @@ class TestAddMethaneYields:
         """Ruminant categories DataFrame as produced by categorize_ruminant_feeds."""
         return pd.DataFrame(
             {
-                "category": ["roughage", "forage", "grain", "protein", "grassland"],
-                "ME_MJ_per_kg_DM": [7.0, 9.0, 11.0, 13.0, 8.5],
-                "GE_MJ_per_kg_DM": [17.0, 18.0, 18.5, 19.0, 17.5],
-                "N_g_per_kg_DM": [10.0, 15.0, 20.0, 55.0, 12.0],
-                "digestibility": [0.50, 0.62, 0.80, 0.92, 0.60],
-                "n_feeds": [3, 5, 4, 2, 1],
+                "category": ["roughage", "forage", "grain", "protein"],
+                "ME_MJ_per_kg_DM": [7.0, 9.0, 11.0, 13.0],
+                "GE_MJ_per_kg_DM": [17.0, 18.0, 18.5, 19.0],
+                "N_g_per_kg_DM": [10.0, 15.0, 20.0, 55.0],
+                "digestibility": [0.50, 0.62, 0.80, 0.92],
+                "n_feeds": [3, 5, 4, 2],
             }
         )
 
@@ -400,12 +400,6 @@ class TestAddMethaneYields:
         result = add_methane_yields(ruminant_categories_df, methane_yields_df)
         protein = result[result["category"] == "protein"]
         assert protein["MY_g_CH4_per_kg_DMI"].iloc[0] == pytest.approx(15.0)
-
-    def test_grassland_maps_to_forage(self, ruminant_categories_df, methane_yields_df):
-        """Grassland category maps to forage methane yield."""
-        result = add_methane_yields(ruminant_categories_df, methane_yields_df)
-        grassland = result[result["category"] == "grassland"]
-        assert grassland["MY_g_CH4_per_kg_DMI"].iloc[0] == pytest.approx(19.5)
 
     def test_temporary_columns_removed(self, ruminant_categories_df, methane_yields_df):
         """Temporary ch4_category and feed_category columns are not in the result."""
@@ -453,7 +447,8 @@ class TestAddMethaneYields:
         )
         categories, mapping = categorize_ruminant_feeds(df, EMPTY_ASH)
         result = add_methane_yields(categories, methane_yields_df)
-        assert len(result) == 5
+        # grassland now merges into forage, so 4 categories
+        assert len(result) == 4
         assert not result["MY_g_CH4_per_kg_DMI"].isna().any()
 
         # Verify specific mappings in the integrated result
@@ -462,4 +457,3 @@ class TestAddMethaneYields:
         assert result_dict["forage"] == pytest.approx(19.5)
         assert result_dict["grain"] == pytest.approx(15.0)
         assert result_dict["protein"] == pytest.approx(15.0)
-        assert result_dict["grassland"] == pytest.approx(19.5)

@@ -745,7 +745,6 @@ if __name__ == "__main__":
         animals.add_feed_slack_generators(
             n,
             marginal_cost=validation_slack_cost,
-            allow_negative_grassland_slack=True,
         )
 
     # Nutrition constraints

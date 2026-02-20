@@ -509,7 +509,7 @@ trade:
       - ruminant_roughage
       - monogastric_low_quality
   non_tradable_feeds:
-  - ruminant_grassland
+  - ruminant_forage
 
 # --- section: health ---
 health:

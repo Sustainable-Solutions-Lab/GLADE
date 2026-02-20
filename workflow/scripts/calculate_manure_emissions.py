@@ -17,8 +17,7 @@ For N2O, we differentiate between:
 - Managed systems (using storage EFs + application EF)
 
 The key improvement is proper handling of Livestock Production Systems (LPS):
-- Ruminant grassland feed → Grassland LPS (high pasture fraction)
-- Other ruminant feed → Mixed LPS (more confined systems)
+- Ruminant feed → Mixed LPS (mixed confined/pasture systems)
 - Monogastrics → appropriate LPS (Broiler/Layer/Industrial/etc.)
 
 NOTE: Currently averages MCF values across climate zones. This will be refined
@@ -293,7 +292,7 @@ def calculate_n2o_factors_for_feed_category(
     product : str
         Animal product name
     feed_category : str
-        Feed category (e.g., "ruminant_grassland", "ruminant_forage")
+        Feed category (e.g., "ruminant_forage", "ruminant_grain")
     mms_fractions : pd.DataFrame
         GLEAM manure management system fractions
     n2o_efs : pd.DataFrame
@@ -310,8 +309,7 @@ def calculate_n2o_factors_for_feed_category(
     """
     # Determine LPS based on feed category
     if product in ["meat-cattle", "dairy", "dairy-buffalo", "meat-sheep"]:
-        # Ruminants: grassland feed -> Grassland LPS, others -> Mixed LPS
-        lps_types = ["Grassland"] if feed_category.endswith("_grassland") else ["Mixed"]
+        lps_types = ["Mixed"]
     else:
         # Monogastrics: use product-specific LPS mapping
         lps_types = MONOGASTRIC_LPS_MAPPING.get(product, ["Industrial"])

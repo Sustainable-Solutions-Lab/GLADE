@@ -32,7 +32,6 @@ NEGATIVE_CARRIER = "slack_negative_feed"
 
 # Display-friendly labels
 CATEGORY_LABELS = {
-    "ruminant_grassland": "Grassland",
     "ruminant_forage": "Forage",
     "ruminant_roughage": "Roughage",
     "ruminant_grain": "Rum. grain",
@@ -118,7 +117,6 @@ def _plot_feed_slack(
     all_cats = sorted(set(slack_df.index) | set(baseline.index) | set(CATEGORY_LABELS))
     # Order: ruminant categories first, then monogastric
     ruminant_order = [
-        "ruminant_grassland",
         "ruminant_forage",
         "ruminant_roughage",
         "ruminant_grain",

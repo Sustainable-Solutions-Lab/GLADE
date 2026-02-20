@@ -263,7 +263,7 @@ Enteric emissions are calculated in ``workflow/scripts/build_model.py`` within t
 Manure Management (CH₄)
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Livestock in confined systems produce methane emissions from manure storage, handling, and treatment. Unlike enteric fermentation, manure CH₄ affects both ruminants and monogastrics (pigs, poultry), with emissions varying significantly by management system. However, **manure deposited directly on pasture during grazing produces negligible CH₄** because aerobic decomposition dominates (IPCC MCF ~0.5% for "Pasture, Range & Paddock"). The model therefore excludes manure CH₄ for grassland feed categories.
+Livestock in confined systems produce methane emissions from manure storage, handling, and treatment. Unlike enteric fermentation, manure CH₄ affects both ruminants and monogastrics (pigs, poultry), with emissions varying significantly by management system. All feed categories, including forage from grassland, include manure CH₄ based on the Mixed LPS manure management system distributions.
 
 Methodology
 ^^^^^^^^^^^
@@ -395,7 +395,6 @@ Manure emissions are calculated in ``workflow/scripts/calculate_manure_emissions
 
         \text{CH}_4\text{/t feed} = \text{MY}_\text{enteric} + \text{MY}_\text{manure}
 
-   * **Exception**: For grassland feed categories (``ruminant_grassland``), manure CH₄ is set to zero because pasture-deposited manure decomposes aerobically with negligible methane production
    * Attach total CH₄ to ``bus2`` (methane bus) for all animal production links
    * Emissions scale with feed consumption in the optimization
 
@@ -476,15 +475,6 @@ where **f**\ :sub:`recovery` is configured via ``fertilizer.manure_n_to_fertiliz
 
 This manure N is added to the global fertilizer pool (``n_fertilizer`` bus) where it competes with and substitutes for synthetic fertilizer, subject to the global fertilizer limit.
 
-**Special Case: Grazing Systems**
-
-For animals fed from the ``ruminant_grassland`` feed category (pasture grazing), manure is deposited directly on pasture and not collected. For these systems:
-
-* **N**\ :sub:`fertilizer` = 0 (no manure collection)
-* N₂O emissions are still calculated from the full excreted nitrogen (representing pasture deposition emissions)
-
-This distinction reflects the practical reality that grazing manure cannot be redistributed to cropland, while maintaining accurate N₂O accounting for pasture emissions.
-
 N₂O Emissions from Manure Application
 """"""""""""""""""""""""""""""""""""""
 
@@ -557,8 +547,7 @@ Manure N₂O emission factors are preprocessed in ``workflow/scripts/calculate_m
    * Load MMS distributions from GLEAM (``data/curated/gleam_tables/manure_management_systems_fraction.csv``)
    * Map feed categories to Livestock Production Systems (LPS):
 
-     - ``ruminant_grassland`` → Grassland LPS (high pasture fraction)
-     - Other ruminant categories → Mixed LPS (moderate pasture fraction)
+     - All ruminant categories → Mixed LPS (moderate pasture fraction)
      - Monogastrics → Industrial/Intermediate LPS (low pasture fraction)
 
    * Calculate weighted N₂O factors from ``data/curated/ipcc_manure_n2o_emission_factors.csv``:
@@ -632,7 +621,7 @@ Example Calculation
 
 **Result**: Each tonne of feed produces 11.3 kg of manure N (contributing to the fertilizer pool) and 258 g of total N₂O emissions (178 g direct + 37 g volatilization + 43 g leaching).
 
-**Grazing Example**: Beef cattle on pasture (ruminant_grassland)
+**Grazing Example**: Beef cattle on pasture (ruminant_forage)
 
 Using the same parameters as above but with pasture grazing:
 

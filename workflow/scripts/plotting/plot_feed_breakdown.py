@@ -35,8 +35,7 @@ PRODUCT_TO_ANIMAL = {
 }
 
 FEED_CATEGORY_LABELS = {
-    "ruminant_grassland": "Grass & leaves",
-    "ruminant_forage": "Fodder crops",
+    "ruminant_forage": "Grass & fodder",
     "ruminant_roughage": "Crop residues",
     "ruminant_grain": "Grains",
     "ruminant_protein": "Oilseed cakes",
@@ -47,18 +46,16 @@ FEED_CATEGORY_LABELS = {
 
 # Order used for both legend and bar stacking
 FEED_ORDER = [
-    "Grass & leaves",
+    "Grass & fodder",
     "Crop residues",
-    "Fodder crops",
     "Oilseed cakes",
     "By-products",
     "Grains",
 ]
 
 FEED_COLOR_OVERRIDES = {
-    "Grass & leaves": "#4f9d69",
+    "Grass & fodder": "#4f9d69",
     "Crop residues": "#8c6b4f",
-    "Fodder crops": "#a6d96a",
     "Oilseed cakes": "#b8de6f",
     "By-products": "#7b6ba8",
     "Grains": "#d95f02",
