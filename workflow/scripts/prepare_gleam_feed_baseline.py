@@ -58,36 +58,38 @@ PRODUCT_COMPOSITION = {
     "meat-sheep": "beef",
 }
 
-# GLEAM SI Table 2 feed types -> model feed categories for monogastrics.
-MONOGASTRIC_FEED_MAPPING = {
-    "Cereal grains": "monogastric_grain",
-    "2nd grade grain": "monogastric_grain",
-    "Soybean cakes": "monogastric_protein",
-    "Other oil seed cakes": "monogastric_protein",
-    "Other edible": "monogastric_grain",
-    "Brans spent brewer and biofuel grains": "monogastric_low_quality",
-    "Other non-edible": "monogastric_low_quality",
+# SI2 column → representative model feed item for ruminants.
+# Categories resolved at runtime from ruminant_feed_mapping.csv.
+SI2_TO_RUMINANT_FEED_ITEM = {
+    "Cereal grains": "maize",
+    "Brans spent brewer and biofuel grains": "wheat-bran",
+    "Soybean cakes": "sunflower-meal",
+    "Other oil seed cakes": "rapeseed-meal",
+    "Other edible": "sugarbeet",
+    "Other non-edible": "barley",
 }
 
-# GLEAM SI Table 2 feed types -> model feed categories for ruminants.
-# "Roughages" is decomposed further using SI Tables 4-5.
-RUMINANT_FEED_MAPPING = {
-    "Cereal grains": "ruminant_grain",
-    "Brans spent brewer and biofuel grains": "ruminant_grain",
-    "Soybean cakes": "ruminant_protein",
-    "Other oil seed cakes": "ruminant_protein",
-    "Other edible": "ruminant_grain",
-    "Other non-edible": "ruminant_grain",
+# SI2 column → representative model feed item for monogastrics.
+# Categories resolved at runtime from monogastric_feed_mapping.csv.
+SI2_TO_MONOGASTRIC_FEED_ITEM = {
+    "Cereal grains": "maize",
+    "2nd grade grain": "maize",
+    "Soybean cakes": "sunflower-meal",
+    "Other oil seed cakes": "rapeseed-meal",
+    "Other edible": "cassava",
+    "Brans spent brewer and biofuel grains": "wheat-bran",
+    "Other non-edible": "wheat-bran",
 }
 
-# Mapping from SI Table 4/5 composition components to model feed categories.
-ROUGHAGE_COMPONENT_MAPPING = {
-    "Fresh grass": "ruminant_grassland",
-    "Hay": "ruminant_grassland",
-    "Legumes and silage": "ruminant_forage",
-    "Crop residues": "ruminant_roughage",
-    "Sugarcane tops": "ruminant_roughage",
-    "Leaves": "ruminant_roughage",
+# SI Table 4/5 composition components → representative model feed items.
+# None = exogenous (no model production route).
+ROUGHAGE_COMPONENT_TO_FEED_ITEM = {
+    "Fresh grass": "grassland",
+    "Hay": "grassland",
+    "Legumes and silage": "alfalfa",
+    "Crop residues": "wheat-straw",
+    "Sugarcane tops": "sugarcane-tops",
+    "Leaves": None,  # exogenous — no model production route
 }
 
 
@@ -301,16 +303,57 @@ def compute_product_shares(
     return {p: w / total for p, w in weighted.items()}
 
 
+def resolve_roughage_categories(
+    rum_item_to_cat: dict[str, str],
+) -> dict[str, str]:
+    """Build roughage component → prefixed feed category from CSV-derived lookup.
+
+    Resolves each component's representative feed item through *rum_item_to_cat*
+    (loaded from ``ruminant_feed_mapping.csv``).  Leaves (None feed item) fall
+    back to ``ruminant_roughage``.
+    """
+    result = {}
+    for component, feed_item in ROUGHAGE_COMPONENT_TO_FEED_ITEM.items():
+        if feed_item is None:
+            result[component] = "ruminant_roughage"
+        else:
+            cat = rum_item_to_cat.get(feed_item)
+            if cat is None:
+                raise ValueError(
+                    f"Feed item '{feed_item}' from ROUGHAGE_COMPONENT_TO_FEED_ITEM "
+                    f"not found in ruminant feed mapping CSV"
+                )
+            result[component] = f"ruminant_{cat}"
+    return result
+
+
+# Default component → category mapping for decompose_roughage, used in unit
+# tests that don't have access to CSV mapping data.  Matches the categories
+# produced by resolve_roughage_categories with the validation config.
+_DEFAULT_ROUGHAGE_CATEGORIES = {
+    "Fresh grass": "ruminant_grassland",
+    "Hay": "ruminant_grassland",
+    "Legumes and silage": "ruminant_forage",
+    "Crop residues": "ruminant_roughage",
+    "Sugarcane tops": "ruminant_roughage",
+    "Leaves": "ruminant_roughage",
+}
+
+
 def decompose_roughage(
     roughage_mt: float,
     gleam_region: str,
     composition: pd.DataFrame,
+    component_to_category: dict[str, str] | None = None,
 ) -> tuple[dict[str, float], float]:
     """Decompose a roughage total using regional composition percentages.
 
     Uses the specified composition table (dairy or beef cattle). Only applies
     the roughage portion of the composition (Fresh grass, Hay, Legumes and
     silage, Crop residues, Sugarcane tops, Leaves).
+
+    *component_to_category* maps roughage component names to prefixed model
+    feed categories.  When ``None``, uses ``_DEFAULT_ROUGHAGE_CATEGORIES``.
 
     Returns a tuple of (dict mapping model feed category to Mt DM, leaves Mt DM).
     The leaves amount is the portion of ruminant_roughage attributable to tree
@@ -320,10 +363,13 @@ def decompose_roughage(
     if roughage_mt <= 0:
         return {}, 0.0
 
+    if component_to_category is None:
+        component_to_category = _DEFAULT_ROUGHAGE_CATEGORIES
+
     result: dict[str, float] = {}
     leaves_raw = 0.0
 
-    for component, feed_cat in ROUGHAGE_COMPONENT_MAPPING.items():
+    for component, feed_cat in component_to_category.items():
         pct = 0.0
         if component in composition.index and gleam_region in composition.columns:
             pct = composition.loc[component, gleam_region]
@@ -354,6 +400,8 @@ def main() -> None:
     country_wirsenius_region_path = snakemake.input.country_wirsenius_region  # type: ignore[name-defined]
     qcl_csv_path = snakemake.input.qcl_csv  # type: ignore[name-defined]
     m49_codes_path = snakemake.input.m49_codes  # type: ignore[name-defined]
+    ruminant_mapping_path = snakemake.input.ruminant_feed_mapping  # type: ignore[name-defined]
+    monogastric_mapping_path = snakemake.input.monogastric_feed_mapping  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     reference_year = int(snakemake.params.reference_year)  # type: ignore[name-defined]
     calibration_year = int(snakemake.params.calibration_year)  # type: ignore[name-defined]
@@ -395,6 +443,12 @@ def main() -> None:
     )
 
     bulk, item_map = load_faostat_qcl(qcl_csv_path, m49_codes_path)
+
+    logger.info("Loading feed category mappings")
+    rum_mapping = pd.read_csv(ruminant_mapping_path, comment="#")
+    mono_mapping = pd.read_csv(monogastric_mapping_path, comment="#")
+    rum_item_to_cat = dict(zip(rum_mapping["feed_item"], rum_mapping["category"]))
+    mono_item_to_cat = dict(zip(mono_mapping["feed_item"], mono_mapping["category"]))
 
     # -- Step 1: Load FAO production at product level ------------------
     logger.info("Loading FAO 2010 production for disaggregation")
@@ -445,164 +499,256 @@ def main() -> None:
     # Filter out World summary rows
     si2_data = si2[~si2["Region"].str.contains("World", na=False)].copy()
 
-    records: list[dict] = []
-    for _, si2_row in si2_data.iterrows():
-        region = si2_row["Region"]
-        species = si2_row["Species"]
-        system = si2_row["System"]
+    # -- Step A: Melt SI2 to long format --------------------------------
+    si2_long = si2_data.melt(
+        id_vars=["Region", "Species", "System"],
+        value_vars=feed_cols,
+        var_name="feed_type",
+        value_name="global_mt_dm",
+    )
+    si2_long = si2_long[si2_long["global_mt_dm"] > 0]
 
-        products = SYSTEM_PRODUCT_MAP.get((species, system))
-        if products is None:
-            logger.warning("No product mapping for (%s, %s); skipping", species, system)
-            continue
-
-        is_ruminant = species in RUMINANT_SPECIES
-
-        # Get countries in this OECD/Non-OECD group with their shares
-        region_shares = shares[
-            (shares["region"] == region) & (shares["species"] == species)
+    # -- Step B: Expand to products via SYSTEM_PRODUCT_MAP ----------------
+    system_prods = pd.DataFrame(
+        [
+            {"Species": sp, "System": sys, "product": p}
+            for (sp, sys), prods in SYSTEM_PRODUCT_MAP.items()
+            for p in prods
         ]
+    )
+    si2_long = si2_long.merge(system_prods, on=["Species", "System"], how="inner")
+    si2_long["is_ruminant"] = si2_long["Species"].isin(RUMINANT_SPECIES)
 
-        for _, share_row in region_shares.iterrows():
-            country = share_row["country"]
-            share = share_row["share"]
+    # -- Step C: Merge country shares ------------------------------------
+    si2_long = si2_long.merge(
+        shares.rename(
+            columns={"region": "Region", "species": "Species", "share": "country_share"}
+        ),
+        on=["Region", "Species"],
+        how="inner",
+    )
+    si2_long = si2_long[si2_long["country_share"] > 0]
 
-            if share <= 0:
-                continue
-
-            # Compute product shares for multi-product systems
-            product_shares = compute_product_shares(
+    # -- Step D: Pre-compute and merge product shares --------------------
+    unique_countries = si2_long["country"].unique()
+    prod_share_records = []
+    for (species, system), products in SYSTEM_PRODUCT_MAP.items():
+        if len(products) == 1:
+            continue  # single-product systems get share 1.0 via fillna
+        for country in unique_countries:
+            p_shares = compute_product_shares(
                 products,
                 country,
                 fao_2010,
                 fcr_lookup,
                 country_to_wirsenius.get(country),
             )
+            for p, s in p_shares.items():
+                prod_share_records.append(
+                    {
+                        "Species": species,
+                        "System": system,
+                        "country": country,
+                        "product": p,
+                        "product_share": s,
+                    }
+                )
+    if prod_share_records:
+        prod_shares_df = pd.DataFrame(prod_share_records)
+        si2_long = si2_long.merge(
+            prod_shares_df,
+            on=["Species", "System", "country", "product"],
+            how="left",
+        )
+        si2_long["product_share"] = si2_long["product_share"].fillna(1.0)
+    else:
+        si2_long["product_share"] = 1.0
 
-            for product, prod_share in product_shares.items():
-                if prod_share <= 0:
-                    continue
+    # -- Step E: Compute amounts -----------------------------------------
+    si2_long["amount"] = (
+        si2_long["global_mt_dm"] * si2_long["country_share"] * si2_long["product_share"]
+    )
+    si2_long = si2_long[si2_long["amount"] > 0]
 
-                for feed_type in feed_cols:
-                    if feed_type not in si2_row.index:
-                        continue
-                    amount = si2_row[feed_type] * share * prod_share
+    # -- Step F: Branch into four sub-pipelines --------------------------
+    result_parts = []
 
-                    if amount <= 0:
-                        continue
+    # F1: Roughage (ruminant) — decompose via composition tables
+    f1_mask = (si2_long["feed_type"] == "Roughages") & si2_long["is_ruminant"]
+    f1 = si2_long[f1_mask].copy()
 
-                    if feed_type == "Roughages" and is_ruminant:
-                        gleam_region = country_to_gleam.get(country)
-                        if gleam_region is None:
-                            logger.warning(
-                                "No GLEAM region for country %s; "
-                                "assigning roughage to ruminant_roughage",
-                                country,
-                            )
-                            records.append(
-                                {
-                                    "country": country,
-                                    "product": product,
-                                    "feed_category": "ruminant_roughage",
-                                    "feed_use_mt_dm": amount,
-                                    "exogenous_mt_dm": 0.0,
-                                }
-                            )
-                            continue
+    if not f1.empty:
+        f1["gleam_region"] = f1["country"].map(country_to_gleam)
+        f1["comp_type"] = f1["product"].map(PRODUCT_COMPOSITION)
 
-                        comp_type = PRODUCT_COMPOSITION.get(product)
-                        if comp_type is None:
-                            records.append(
-                                {
-                                    "country": country,
-                                    "product": product,
-                                    "feed_category": "ruminant_roughage",
-                                    "feed_use_mt_dm": amount,
-                                    "exogenous_mt_dm": 0.0,
-                                }
-                            )
-                            continue
+        # Rows without GLEAM region or composition type → ruminant_roughage
+        f1_fallback_mask = f1["gleam_region"].isna() | f1["comp_type"].isna()
+        if f1_fallback_mask.any():
+            for _, row in f1[f1_fallback_mask].iterrows():
+                if pd.isna(row["gleam_region"]):
+                    logger.warning(
+                        "No GLEAM region for country %s; "
+                        "assigning roughage to ruminant_roughage",
+                        row["country"],
+                    )
+            f1_fb = f1.loc[f1_fallback_mask, ["country", "product", "amount"]].copy()
+            f1_fb["feed_category"] = "ruminant_roughage"
+            f1_fb = f1_fb.rename(columns={"amount": "feed_use_mt_dm"})
+            f1_fb["exogenous_mt_dm"] = 0.0
+            result_parts.append(f1_fb)
 
-                        composition = dairy_comp if comp_type == "dairy" else beef_comp
-                        decomposed, leaves_amount = decompose_roughage(
-                            amount, gleam_region, composition
-                        )
-                        for feed_cat, cat_amount in decomposed.items():
-                            if cat_amount > 0:
-                                exogenous = (
-                                    leaves_amount
-                                    if feed_cat == "ruminant_roughage"
-                                    else 0.0
-                                )
-                                records.append(
-                                    {
-                                        "country": country,
-                                        "product": product,
-                                        "feed_category": feed_cat,
-                                        "feed_use_mt_dm": cat_amount,
-                                        "exogenous_mt_dm": exogenous,
-                                    }
-                                )
-
-                    elif feed_type == "Swill":
-                        feed_cat = (
-                            "monogastric_low_quality"
-                            if not is_ruminant
-                            else "ruminant_grain"
-                        )
-                        records.append(
+        # Normal rows: vectorized roughage decomposition
+        f1_normal = f1[~f1_fallback_mask].copy()
+        if not f1_normal.empty:
+            # Build composition fraction table (long format)
+            comp_records = []
+            roughage_categories = resolve_roughage_categories(rum_item_to_cat)
+            for comp_type_name, comp_df in [("dairy", dairy_comp), ("beef", beef_comp)]:
+                for component in ROUGHAGE_COMPONENT_TO_FEED_ITEM:
+                    for gleam_region in comp_df.columns:
+                        pct = 0.0
+                        if component in comp_df.index:
+                            pct = comp_df.loc[component, gleam_region]
+                        comp_records.append(
                             {
-                                "country": country,
-                                "product": product,
-                                "feed_category": feed_cat,
-                                "feed_use_mt_dm": amount,
-                                "exogenous_mt_dm": amount,
+                                "comp_type": comp_type_name,
+                                "gleam_region": gleam_region,
+                                "component": component,
+                                "pct": pct,
                             }
                         )
+            comp_fractions = pd.DataFrame(comp_records)
+            # Normalize so roughage components sum to 1.0
+            comp_totals = comp_fractions.groupby(["comp_type", "gleam_region"])[
+                "pct"
+            ].transform("sum")
+            comp_fractions["norm_fraction"] = 0.0
+            nonzero_ct = comp_totals > 0
+            comp_fractions.loc[nonzero_ct, "norm_fraction"] = (
+                comp_fractions.loc[nonzero_ct, "pct"] / comp_totals[nonzero_ct]
+            )
 
-                    elif feed_type == "Roughages" and not is_ruminant:
-                        # Monogastric roughages are rare (pig backyard);
-                        # assign to monogastric_low_quality
-                        records.append(
-                            {
-                                "country": country,
-                                "product": product,
-                                "feed_category": "monogastric_low_quality",
-                                "feed_use_mt_dm": amount,
-                                "exogenous_mt_dm": 0.0,
-                            }
-                        )
+            f1_expanded = f1_normal.merge(
+                comp_fractions, on=["comp_type", "gleam_region"], how="left"
+            )
+            f1_expanded["norm_fraction"] = f1_expanded["norm_fraction"].fillna(0)
+            f1_expanded["feed_use_mt_dm"] = (
+                f1_expanded["amount"] * f1_expanded["norm_fraction"]
+            )
+            f1_expanded["feed_category"] = f1_expanded["component"].map(
+                roughage_categories
+            )
+            # Exogenous: Leaves amount
+            f1_expanded["exogenous_mt_dm"] = 0.0
+            leaves_mask = f1_expanded["component"] == "Leaves"
+            f1_expanded.loc[leaves_mask, "exogenous_mt_dm"] = f1_expanded.loc[
+                leaves_mask, "feed_use_mt_dm"
+            ]
+            f1_expanded = f1_expanded[f1_expanded["feed_use_mt_dm"] > 0]
+            result_parts.append(
+                f1_expanded[
+                    [
+                        "country",
+                        "product",
+                        "feed_category",
+                        "feed_use_mt_dm",
+                        "exogenous_mt_dm",
+                    ]
+                ]
+            )
 
-                    else:
-                        if is_ruminant:
-                            feed_cat = RUMINANT_FEED_MAPPING.get(feed_type)
-                        else:
-                            feed_cat = MONOGASTRIC_FEED_MAPPING.get(feed_type)
+    # F2: Roughage (monogastric) → monogastric_low_quality
+    f2_mask = (si2_long["feed_type"] == "Roughages") & ~si2_long["is_ruminant"]
+    f2 = si2_long[f2_mask].copy()
+    if not f2.empty:
+        f2["feed_category"] = "monogastric_low_quality"
+        f2["feed_use_mt_dm"] = f2["amount"]
+        f2["exogenous_mt_dm"] = 0.0
+        result_parts.append(
+            f2[
+                [
+                    "country",
+                    "product",
+                    "feed_category",
+                    "feed_use_mt_dm",
+                    "exogenous_mt_dm",
+                ]
+            ]
+        )
 
-                        if feed_cat is None:
-                            logger.warning(
-                                "No mapping for feed type '%s' (species: %s)",
-                                feed_type,
-                                species,
-                            )
-                            continue
+    # F3: Swill → exogenous
+    f3_mask = si2_long["feed_type"] == "Swill"
+    f3 = si2_long[f3_mask].copy()
+    if not f3.empty:
+        f3["feed_category"] = f3["is_ruminant"].map(
+            {True: "ruminant_grain", False: "monogastric_low_quality"}
+        )
+        f3["feed_use_mt_dm"] = f3["amount"]
+        f3["exogenous_mt_dm"] = f3["amount"]
+        result_parts.append(
+            f3[
+                [
+                    "country",
+                    "product",
+                    "feed_category",
+                    "feed_use_mt_dm",
+                    "exogenous_mt_dm",
+                ]
+            ]
+        )
 
-                        records.append(
-                            {
-                                "country": country,
-                                "product": product,
-                                "feed_category": feed_cat,
-                                "feed_use_mt_dm": amount,
-                                "exogenous_mt_dm": 0.0,
-                            }
-                        )
+    # F4: Other feed types → category via mapping CSVs
+    f4_mask = ~(
+        (si2_long["feed_type"] == "Roughages") | (si2_long["feed_type"] == "Swill")
+    )
+    f4 = si2_long[f4_mask].copy()
+    if not f4.empty:
+        f4_rum = f4[f4["is_ruminant"]].copy()
+        f4_mono = f4[~f4["is_ruminant"]].copy()
 
-    if not records:
+        if not f4_rum.empty:
+            f4_rum["feed_item"] = f4_rum["feed_type"].map(SI2_TO_RUMINANT_FEED_ITEM)
+            f4_rum["category"] = f4_rum["feed_item"].map(rum_item_to_cat)
+            f4_rum["feed_category"] = "ruminant_" + f4_rum["category"].astype(str)
+            unmapped = f4_rum["feed_item"].isna() | f4_rum["category"].isna()
+            if unmapped.any():
+                for ft in f4_rum.loc[unmapped, "feed_type"].unique():
+                    logger.warning("No ruminant mapping for feed type '%s'", ft)
+            f4_rum = f4_rum[~unmapped]
+
+        if not f4_mono.empty:
+            f4_mono["feed_item"] = f4_mono["feed_type"].map(
+                SI2_TO_MONOGASTRIC_FEED_ITEM
+            )
+            f4_mono["category"] = f4_mono["feed_item"].map(mono_item_to_cat)
+            f4_mono["feed_category"] = "monogastric_" + f4_mono["category"].astype(str)
+            unmapped = f4_mono["feed_item"].isna() | f4_mono["category"].isna()
+            if unmapped.any():
+                for ft in f4_mono.loc[unmapped, "feed_type"].unique():
+                    logger.warning("No monogastric mapping for feed type '%s'", ft)
+            f4_mono = f4_mono[~unmapped]
+
+        f4 = pd.concat([f4_rum, f4_mono])
+        if not f4.empty:
+            f4["feed_use_mt_dm"] = f4["amount"]
+            f4["exogenous_mt_dm"] = 0.0
+            result_parts.append(
+                f4[
+                    [
+                        "country",
+                        "product",
+                        "feed_category",
+                        "feed_use_mt_dm",
+                        "exogenous_mt_dm",
+                    ]
+                ]
+            )
+
+    # -- Combine and aggregate -------------------------------------------
+    if not result_parts:
         raise RuntimeError("No feed baseline records generated")
 
-    result = pd.DataFrame(records)
-
-    # Aggregate duplicate (country, product, feed_category) entries
+    result = pd.concat(result_parts, ignore_index=True)
     result = result.groupby(["country", "product", "feed_category"], as_index=False)[
         ["feed_use_mt_dm", "exogenous_mt_dm"]
     ].sum()
@@ -771,10 +917,10 @@ def main() -> None:
     all_products = [p for prods in SPECIES_PRODUCTS.values() for p in prods]
     monogastric_products = [p for p in all_products if p not in ruminant_products]
 
-    ruminant_feed_cats = sorted(
-        set(ROUGHAGE_COMPONENT_MAPPING.values()) | set(RUMINANT_FEED_MAPPING.values())
+    ruminant_feed_cats = sorted({f"ruminant_{c}" for c in rum_item_to_cat.values()})
+    monogastric_feed_cats = sorted(
+        {f"monogastric_{c}" for c in mono_item_to_cat.values()}
     )
-    monogastric_feed_cats = sorted(set(MONOGASTRIC_FEED_MAPPING.values()))
 
     product_feed_cats = [
         (p, fc) for p in ruminant_products for fc in ruminant_feed_cats

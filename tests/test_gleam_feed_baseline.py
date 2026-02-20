@@ -11,10 +11,10 @@ import pytest
 
 from workflow.scripts.animal_utils import SPECIES_PRODUCTS
 from workflow.scripts.prepare_gleam_feed_baseline import (
-    MONOGASTRIC_FEED_MAPPING,
     PRODUCT_COMPOSITION,
-    ROUGHAGE_COMPONENT_MAPPING,
-    RUMINANT_FEED_MAPPING,
+    ROUGHAGE_COMPONENT_TO_FEED_ITEM,
+    SI2_TO_MONOGASTRIC_FEED_ITEM,
+    SI2_TO_RUMINANT_FEED_ITEM,
     SYSTEM_PRODUCT_MAP,
     compute_country_shares,
     compute_fcr_lookup,
@@ -58,16 +58,40 @@ class TestConstants:
             ), f"Ruminant product '{p}' missing from PRODUCT_COMPOSITION"
 
     def test_all_feed_mappings_produce_valid_categories(self):
-        """Ruminant and monogastric feed mappings produce prefixed categories."""
-        for cat in RUMINANT_FEED_MAPPING.values():
-            assert cat.startswith("ruminant_")
-        for cat in MONOGASTRIC_FEED_MAPPING.values():
-            assert cat.startswith("monogastric_")
+        """All SI2 feed items exist in the respective feed_mapping CSV."""
+        rum_mapping = pd.read_csv(
+            "processing/validation/ruminant_feed_mapping.csv", comment="#"
+        )
+        mono_mapping = pd.read_csv(
+            "processing/validation/monogastric_feed_mapping.csv", comment="#"
+        )
+        rum_items = set(rum_mapping["feed_item"])
+        mono_items = set(mono_mapping["feed_item"])
+
+        for si2_type, feed_item in SI2_TO_RUMINANT_FEED_ITEM.items():
+            assert feed_item in rum_items, (
+                f"Ruminant feed item '{feed_item}' (from SI2 '{si2_type}') "
+                f"not in ruminant_feed_mapping.csv"
+            )
+        for si2_type, feed_item in SI2_TO_MONOGASTRIC_FEED_ITEM.items():
+            assert feed_item in mono_items, (
+                f"Monogastric feed item '{feed_item}' (from SI2 '{si2_type}') "
+                f"not in monogastric_feed_mapping.csv"
+            )
 
     def test_roughage_components_produce_ruminant_categories(self):
-        """Roughage component mappings produce ruminant_* categories."""
-        for cat in ROUGHAGE_COMPONENT_MAPPING.values():
-            assert cat.startswith("ruminant_")
+        """Roughage component feed items are in ruminant_feed_mapping or None."""
+        rum_mapping = pd.read_csv(
+            "processing/validation/ruminant_feed_mapping.csv", comment="#"
+        )
+        rum_items = set(rum_mapping["feed_item"])
+
+        for component, feed_item in ROUGHAGE_COMPONENT_TO_FEED_ITEM.items():
+            if feed_item is not None:
+                assert feed_item in rum_items, (
+                    f"Roughage feed item '{feed_item}' (from '{component}') "
+                    f"not in ruminant_feed_mapping.csv"
+                )
 
 
 # ---------------------------------------------------------------------------

@@ -141,6 +141,8 @@ rule prepare_gleam_feed_baseline:
         country_wirsenius_region="data/curated/country_wirsenius_region.csv",
         qcl_csv="data/downloads/faostat/QCL.csv",
         m49_codes="data/curated/M49-codes.csv",
+        ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
+        monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
     params:
         reference_year=config["validation"]["production_year"],
         calibration_year=config["validation"]["gleam_calibration_year"],

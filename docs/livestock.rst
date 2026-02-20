@@ -405,30 +405,57 @@ has no endogenous production route for these feeds.
 ruminants, with the full amount marked as exogenous since swill is not
 produced endogenously by the model.
 
-Feed types other than "Roughages" and "Swill" (handled above) are
-mapped directly to model categories:
+Feed types other than "Roughages" and "Swill" (handled above) are mapped
+to model feed categories via a two-step chain: each GLEAM SI2 feed type is
+first mapped to a **representative model feed item**, and that item's
+category is then looked up from the authoritative
+``ruminant_feed_mapping.csv`` / ``monogastric_feed_mapping.csv`` produced by
+the ``categorize_feeds`` rule. This avoids a second hardcoded source of
+truth for feed categorisation.
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 28 28
+   :widths: 36 18 18 18 18
 
    * - GLEAM feed type
-     - Ruminant category
-     - Monogastric category
-   * - Cereal grains, Other edible
+     - Rum. item
+     - Rum. category
+     - Mono. item
+     - Mono. category
+   * - Cereal grains
+     - maize
      - ``ruminant_grain``
+     - maize
      - ``monogastric_grain``
    * - 2nd grade grain
      - —
+     - —
+     - maize
      - ``monogastric_grain``
    * - Brans, spent brewer & biofuel grains
+     - wheat-bran
      - ``ruminant_grain``
+     - wheat-bran
      - ``monogastric_low_quality``
-   * - Soybean cakes, Other oil seed cakes
+   * - Soybean cakes
+     - sunflower-meal
      - ``ruminant_protein``
+     - sunflower-meal
      - ``monogastric_protein``
-   * - Other non-edible
+   * - Other oil seed cakes
+     - rapeseed-meal
+     - ``ruminant_protein``
+     - rapeseed-meal
+     - ``monogastric_protein``
+   * - Other edible
+     - sugarbeet
      - ``ruminant_grain``
+     - cassava
+     - ``monogastric_grain``
+   * - Other non-edible
+     - barley
+     - ``ruminant_grain``
+     - wheat-bran
      - ``monogastric_low_quality``
 
 **Step 5 — Scaling to the reference year and normalization**
