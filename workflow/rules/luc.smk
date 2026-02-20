@@ -155,6 +155,7 @@ rule prepare_luc_inputs:
     input:
         classes="<processing>/{name}/resource_classes.nc",
         land_cover=rules.resample_land_cover.output.fractions,
+        luicube=rules.resample_luicube_grassland.output[0],
         regrowth=rules.resample_regrowth.output.regrowth,
         agb="data/downloads/esa_biomass_cci_v6_0.nc",
         soc="data/downloads/soilgrids_ocs_0-30cm_mean.tif",

@@ -278,10 +278,28 @@ def main() -> None:
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
     grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
 
+    # Compute pasture_fraction = LUIcube grassland_fraction * grazing_intensity.
+    # This distinguishes managed pasture from natural grassland (savanna, tundra,
+    # steppe) so that only actively grazed pixels contribute to spared-land
+    # sequestration potential.
+    luicube_path: str = snakemake.input.luicube  # type: ignore[name-defined]
+    luicube_ds = xr.load_dataset(luicube_path)
+    luicube_grass_frac = luicube_ds["grassland_fraction"].astype(np.float32).values
+    luicube_gi = luicube_ds["grazing_intensity"].astype(np.float32).values
+    with np.errstate(invalid="ignore"):
+        pasture_frac = np.where(
+            np.isfinite(luicube_grass_frac) & np.isfinite(luicube_gi),
+            luicube_grass_frac * luicube_gi,
+            0.0,
+        )
+    pasture_frac = np.clip(pasture_frac, 0.0, 1.0).astype(np.float32)
+
     if forest_frac.shape != target_shape:
         raise ValueError(
             "land cover fractions grid does not match resource_classes grid"
         )
+    if pasture_frac.shape != target_shape:
+        raise ValueError("LUIcube grassland grid does not match resource_classes grid")
 
     threshold = float(snakemake.params.get("forest_fraction_threshold", 0.2))  # type: ignore[name-defined]
     forest_mask, cropland_mask, grassland_mask = _prepare_masks(
@@ -302,6 +320,7 @@ def main() -> None:
                 ("y", "x"),
                 grassland_frac.astype(np.float32),
             ),
+            "pasture_fraction": (("y", "x"), pasture_frac),
             "forest_mask": (("y", "x"), forest_mask),
             "cropland_mask": (("y", "x"), cropland_mask),
             "grassland_mask": (("y", "x"), grassland_mask),
@@ -312,6 +331,7 @@ def main() -> None:
         "forest_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "cropland_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "grassland_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
+        "pasture_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "forest_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
         "cropland_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
         "grassland_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},

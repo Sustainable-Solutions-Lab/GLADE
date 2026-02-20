@@ -103,6 +103,7 @@ def main() -> None:
     lc_ds = xr.load_dataset(lc_masks_path)
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
     grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
+    pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
     natural_frac = np.clip(1.0 - cropland_frac - grassland_frac, 0.0, 1.0)
 
     bgb_ratio_nat = params["bgb_ratio_nat"][zone_idx]
@@ -217,7 +218,7 @@ def main() -> None:
         "cropland": (lef_crop.astype(np.float32), natural_frac),
         "pasture": (lef_past.astype(np.float32), natural_frac),
         "spared_cropland": (lef_spared.astype(np.float32), cropland_frac),
-        "spared_grassland": (lef_spared.astype(np.float32), grassland_frac),
+        "spared_grassland": (lef_spared.astype(np.float32), pasture_frac),
     }
     water_options = {
         "cropland": ("r", "i"),

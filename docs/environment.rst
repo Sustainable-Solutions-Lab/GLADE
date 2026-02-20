@@ -709,7 +709,7 @@ Per-pixel LEFs are aggregated to region/resource-class coefficients using ``exac
 
 * **Conversion LEFs** (cropland and pasture) are weighted by the **natural-land fraction** (1 − cropland − grassland) of each pixel. This ensures that only pixels with remaining natural vegetation contribute to the conversion cost, avoiding dilution by pixels already under agriculture.
 * **Spared cropland LEFs** are weighted by the **cropland fraction**, so only pixels currently under crops contribute to the sequestration potential of sparing cropland.
-* **Spared grassland LEFs** are weighted by the **grassland fraction**, so only pixels currently under grassland contribute to the sequestration potential of sparing grassland.
+* **Spared grassland LEFs** are weighted by the **managed pasture fraction** (LUIcube grassland fraction × grazing intensity), so only pixels with active grazing contribute to the sequestration potential. Natural grassland (savanna, tundra, steppe) with near-zero grazing intensity is excluded.
 
 The composite weight for each pixel is the product of the resource-class mask and the relevant land-cover fraction. Regions or classes where the composite weight sums to zero produce NaN (no data), which is dropped from the output.
 

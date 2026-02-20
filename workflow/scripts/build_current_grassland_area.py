@@ -36,6 +36,7 @@ if __name__ == "__main__":
 
     luicube_ds = xr.load_dataset(luicube_path)
     area_km2 = luicube_ds["area_km2"].astype(np.float32).values
+    gi = luicube_ds["grazing_intensity"].astype(np.float32).values
     if area_km2.shape != region_id.shape:
         raise ValueError(
             "LUIcube grassland grid does not match the resource_classes grid"
@@ -43,9 +44,12 @@ if __name__ == "__main__":
 
     np.copyto(area_km2, 0.0, where=~np.isfinite(area_km2))
     np.clip(area_km2, 0.0, None, out=area_km2)
+    np.copyto(gi, 0.0, where=~np.isfinite(gi))
+    np.clip(gi, 0.0, 1.0, out=gi)
 
-    # Convert km² to hectares: 1 km² = 100 ha
-    grass_area = area_km2 * 100.0
+    # Managed pasture area: total grassland scaled by grazing intensity.
+    # Convert km² to hectares: 1 km² = 100 ha.
+    grass_area = area_km2 * gi * 100.0
 
     valid = (
         np.isfinite(grass_area)

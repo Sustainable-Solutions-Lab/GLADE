@@ -8,7 +8,8 @@ Prefers LUIcube yields where available (finite yield > 0); falls back to
 ISIMIP for gaps.  Applies utilization corrections so the output ``yield``
 column is effective feed yield ready for direct use:
 
-- **LUIcube rows**: ``yield = raw_yield * grazing_intensity``
+- **LUIcube rows**: ``yield`` is already effective per managed hectare
+  (hanpp_harv / managed_area / C_FRACTION), used directly.
 - **ISIMIP rows**: ``yield = raw_yield * isimip_utilization_rate``
 
 Output columns: yield, suitable_area
@@ -38,21 +39,15 @@ if __name__ == "__main__":
     merged = isimip[["yield", "suitable_area"]].copy()
     merged["yield"] = merged["yield"] * isimip_utilization_rate
 
-    # Overwrite with LUIcube where valid, applying grazing_intensity
+    # Overwrite with LUIcube where valid (yields are already per managed hectare)
     valid_idx = luicube_valid[luicube_valid].index.intersection(merged.index)
-    merged.loc[valid_idx, "yield"] = (
-        luicube.loc[valid_idx, "yield"] * luicube.loc[valid_idx, "grazing_intensity"]
-    )
+    merged.loc[valid_idx, "yield"] = luicube.loc[valid_idx, "yield"]
     merged.loc[valid_idx, "suitable_area"] = luicube.loc[valid_idx, "suitable_area"]
 
     # Also add LUIcube-only rows not present in ISIMIP
     luicube_only = luicube_valid[luicube_valid].index.difference(merged.index)
     if not luicube_only.empty:
         extra = luicube.loc[luicube_only, ["yield", "suitable_area"]].copy()
-        extra["yield"] = (
-            luicube.loc[luicube_only, "yield"]
-            * luicube.loc[luicube_only, "grazing_intensity"]
-        )
         merged = pd.concat([merged, extra]).sort_index()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

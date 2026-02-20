@@ -5,7 +5,7 @@
 """Resample LUIcube grassland GeoTIFFs onto the model grid.
 
 Combines GL-owl and GL-notrees land-use classes and computes derived
-variables (NPP_act, grassland_fraction).
+variables (NPP_act, grassland_fraction, grazing_intensity).
 
 When source and destination grids are exactly aligned (integer resolution
 ratio, same CRS/extent), uses a fast block-sum aggregator. Otherwise falls
@@ -16,6 +16,7 @@ Output variables:
     hanpp_harv_tc_yr  : harvested HANPP [tC/yr] per grid cell
     npp_act_tc_yr     : actual NPP (HANPP_harv + NPP_eco) [tC/yr] per grid cell
     grassland_fraction: fraction of grid cell covered by grassland [0-1]
+    grazing_intensity : fraction of NPP harvested (HANPP_harv / NPP_act) [0-1]
 """
 
 import os
@@ -203,6 +204,11 @@ def main() -> None:
     # Derived: actual NPP = HANPP_harv + NPP_eco
     npp_act = hanpp_harv + npp_eco
 
+    # Derived: grazing intensity = HANPP_harv / NPP_act, clipped to [0, 1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        grazing_intensity = np.where(npp_act > 0, hanpp_harv / npp_act, 0.0)
+    grazing_intensity = np.clip(grazing_intensity, 0.0, 1.0)
+
     # Compute grassland_fraction = area_km2 * 100 / cell_area_ha
     dummy = _DummyRaster(dst_transform, dst_width, dst_height)
     cell_area_ha = calculate_all_cell_areas(dummy)
@@ -219,6 +225,7 @@ def main() -> None:
             "hanpp_harv_tc_yr": (("y", "x"), hanpp_harv.astype(np.float32)),
             "npp_act_tc_yr": (("y", "x"), npp_act.astype(np.float32)),
             "grassland_fraction": (("y", "x"), grassland_fraction.astype(np.float32)),
+            "grazing_intensity": (("y", "x"), grazing_intensity.astype(np.float32)),
         },
         coords={"y": y_coords, "x": x_coords},
     )

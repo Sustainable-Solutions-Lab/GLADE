@@ -440,10 +440,13 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     # Land-cover masks
     cropland_frac = np.array([[0.6, 0.0], [0.0, 0.4]], dtype=np.float32)
     grassland_frac = np.array([[0.0, 0.8], [0.2, 0.0]], dtype=np.float32)
+    # pasture_fraction ≤ grassland_fraction at each pixel (managed subset)
+    pasture_frac = np.array([[0.0, 0.5], [0.1, 0.0]], dtype=np.float32)
     lc_ds = xr.Dataset(
         {
             "cropland_fraction": (("y", "x"), cropland_frac),
             "grassland_fraction": (("y", "x"), grassland_frac),
+            "pasture_fraction": (("y", "x"), pasture_frac),
         },
         coords={"y": lat, "x": lon},
     )

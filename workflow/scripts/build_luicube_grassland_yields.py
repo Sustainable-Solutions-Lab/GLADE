@@ -10,9 +10,11 @@ region/resource_class using exactextract zonal statistics.
 Output CSV columns:
     region, resource_class, yield, suitable_area, grazing_intensity
 
-yield is in tDM/ha (dry matter), converted from tC via division by 0.45.
+yield is in tDM per managed hectare, computed as
+sum(hanpp_harv) / sum(managed_area) / C_FRACTION, where managed_area =
+area_ha * grazing_intensity.  suitable_area is the sum of managed area.
 grazing_intensity is the NPP-weighted mean of HANPP_harv / NPP_act, clipped
-to [0, 1].
+to [0, 1] (retained for diagnostics).
 """
 
 from pathlib import Path
@@ -63,6 +65,9 @@ if __name__ == "__main__":
         gi_cell = np.where(npp_act > 0, hanpp_harv / npp_act, 0.0)
     gi_cell = np.clip(gi_cell, 0.0, 1.0)
 
+    # Managed pasture area: total grassland scaled by grazing intensity
+    managed_area_ha = area_ha * gi_cell
+
     # Load regions
     regions_gdf = gpd.read_file(regions_path)
     if regions_gdf.crs and regions_gdf.crs.to_epsg() != 4326:
@@ -80,48 +85,41 @@ if __name__ == "__main__":
             continue
 
         # Mask arrays to this resource class
+        hanpp_masked = np.where(mask, hanpp_harv, np.nan)
+        managed_area_masked = np.where(mask, managed_area_ha, np.nan)
+        # NPP_act-weighted grazing intensity (diagnostics): weight = npp_act
         npp_masked = np.where(mask, npp_act, np.nan)
-        area_masked = np.where(mask, area_ha, np.nan)
-        # NPP_act-weighted grazing intensity: weight = npp_act
         gi_weighted = np.where(mask, gi_cell * npp_act, np.nan)
 
-        npp_src = NumPyRasterSource(
-            npp_masked,
-            xmin=xmin,
-            ymin=ymin,
-            xmax=xmax,
-            ymax=ymax,
-            nodata=np.nan,
-            srs_wkt=crs_wkt,
-        )
-        area_src = NumPyRasterSource(
-            area_masked,
-            xmin=xmin,
-            ymin=ymin,
-            xmax=xmax,
-            ymax=ymax,
-            nodata=np.nan,
-            srs_wkt=crs_wkt,
-        )
-        gi_w_src = NumPyRasterSource(
-            gi_weighted,
-            xmin=xmin,
-            ymin=ymin,
-            xmax=xmax,
-            ymax=ymax,
-            nodata=np.nan,
-            srs_wkt=crs_wkt,
-        )
+        raster_kwargs = {
+            "xmin": xmin,
+            "ymin": ymin,
+            "xmax": xmax,
+            "ymax": ymax,
+            "nodata": np.nan,
+            "srs_wkt": crs_wkt,
+        }
+        hanpp_src = NumPyRasterSource(hanpp_masked, **raster_kwargs)
+        managed_area_src = NumPyRasterSource(managed_area_masked, **raster_kwargs)
+        npp_src = NumPyRasterSource(npp_masked, **raster_kwargs)
+        gi_w_src = NumPyRasterSource(gi_weighted, **raster_kwargs)
 
-        npp_stats = exact_extract(
-            npp_src,
+        hanpp_stats = exact_extract(
+            hanpp_src,
             regions_for_extract,
             ["sum"],
             include_cols=["region"],
             output="pandas",
         )
-        area_stats = exact_extract(
-            area_src,
+        managed_area_stats = exact_extract(
+            managed_area_src,
+            regions_for_extract,
+            ["sum"],
+            include_cols=["region"],
+            output="pandas",
+        )
+        npp_stats = exact_extract(
+            npp_src,
             regions_for_extract,
             ["sum"],
             include_cols=["region"],
@@ -135,23 +133,27 @@ if __name__ == "__main__":
             output="pandas",
         )
 
-        if npp_stats.empty or area_stats.empty:
+        if hanpp_stats.empty or managed_area_stats.empty:
             continue
 
         merged = (
-            npp_stats.rename(columns={"sum": "npp_sum"})
-            .merge(area_stats.rename(columns={"sum": "suitable_area"}), on="region")
+            hanpp_stats.rename(columns={"sum": "hanpp_sum"})
+            .merge(
+                managed_area_stats.rename(columns={"sum": "suitable_area"}),
+                on="region",
+            )
+            .merge(npp_stats.rename(columns={"sum": "npp_sum"}), on="region")
             .merge(gi_w_stats.rename(columns={"sum": "gi_weighted_sum"}), on="region")
         )
 
-        # yield = sum(npp_act) / sum(area_ha) / C_FRACTION → tDM/ha
+        # yield = sum(hanpp_harv) / sum(managed_area_ha) / C_FRACTION → tDM/ha managed
         with np.errstate(divide="ignore", invalid="ignore"):
             merged["yield"] = np.where(
                 merged["suitable_area"] > 0,
-                merged["npp_sum"] / merged["suitable_area"] / C_FRACTION,
+                merged["hanpp_sum"] / merged["suitable_area"] / C_FRACTION,
                 0.0,
             )
-        # grazing_intensity = sum(gi * npp) / sum(npp)
+        # grazing_intensity = sum(gi * npp) / sum(npp) (diagnostic)
         with np.errstate(divide="ignore", invalid="ignore"):
             merged["grazing_intensity"] = np.where(
                 merged["npp_sum"] > 0,
