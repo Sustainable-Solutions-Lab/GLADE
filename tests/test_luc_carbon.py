@@ -119,10 +119,13 @@ class TestZoneParameters:
     def test_valid_csv(self, tmp_path):
         """A valid CSV with all three zones returns a dict of numpy arrays."""
         csv_content = textwrap.dedent("""\
-            zone,bgb_ratio_nat,soc_depth_factor
-            tropical,0.24,1.5
-            temperate,0.26,1.4
-            boreal,0.39,1.2
+            zone,parameter,value,reference
+            tropical,bgb_ratio_nat,0.24,ref1
+            temperate,bgb_ratio_nat,0.26,ref1
+            boreal,bgb_ratio_nat,0.39,ref1
+            tropical,soc_depth_factor,1.5,ref2
+            temperate,soc_depth_factor,1.4,ref2
+            boreal,soc_depth_factor,1.2,ref2
         """)
         csv_path = tmp_path / "zone_params.csv"
         csv_path.write_text(csv_content)
@@ -142,10 +145,10 @@ class TestZoneParameters:
     def test_returns_float32_arrays(self, tmp_path):
         """Returned arrays have float32 dtype."""
         csv_content = textwrap.dedent("""\
-            zone,param_a
-            tropical,1.0
-            temperate,2.0
-            boreal,3.0
+            zone,parameter,value,reference
+            tropical,param_a,1.0,ref
+            temperate,param_a,2.0,ref
+            boreal,param_a,3.0,ref
         """)
         csv_path = tmp_path / "zone_params.csv"
         csv_path.write_text(csv_content)
@@ -156,10 +159,10 @@ class TestZoneParameters:
     def test_ordered_by_zone_order(self, tmp_path):
         """Output follows ZONE_ORDER even if CSV rows are in a different order."""
         csv_content = textwrap.dedent("""\
-            zone,val
-            boreal,3.0
-            tropical,1.0
-            temperate,2.0
+            zone,parameter,value,reference
+            boreal,val,3.0,ref
+            tropical,val,1.0,ref
+            temperate,val,2.0,ref
         """)
         csv_path = tmp_path / "zone_params.csv"
         csv_path.write_text(csv_content)
@@ -172,9 +175,9 @@ class TestZoneParameters:
     def test_missing_zone_raises(self, tmp_path):
         """A CSV missing one of the required zones raises ValueError."""
         csv_content = textwrap.dedent("""\
-            zone,bgb_ratio_nat
-            tropical,0.24
-            temperate,0.26
+            zone,parameter,value,reference
+            tropical,bgb_ratio_nat,0.24,ref
+            temperate,bgb_ratio_nat,0.26,ref
         """)
         csv_path = tmp_path / "zone_params.csv"
         csv_path.write_text(csv_content)
@@ -186,10 +189,10 @@ class TestZoneParameters:
         """Lines starting with # are treated as comments and ignored."""
         csv_content = textwrap.dedent("""\
             # This is a comment
-            zone,val
-            tropical,10.0
-            temperate,20.0
-            boreal,30.0
+            zone,parameter,value,reference
+            tropical,val,10.0,ref
+            temperate,val,20.0,ref
+            boreal,val,30.0,ref
         """)
         csv_path = tmp_path / "zone_params.csv"
         csv_path.write_text(csv_content)
@@ -640,10 +643,37 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
 
     # Zone parameters (all cells are tropical at lat < 23.5)
     zone_csv = textwrap.dedent("""\
-        zone,bgb_ratio_nat,soc_depth_factor,agb_crop_tc_per_ha,bgb_ratio_ag_crop,agb_past_tc_per_ha,bgb_ratio_ag_past,soc_factor_crop,soc_factor_past,agb_nonforest_tc_per_ha,bgb_ratio_nonforest
-        tropical,0.25,1.5,5.0,0.2,8.0,0.4,0.7,0.9,20.0,0.40
-        temperate,0.26,1.4,5.0,0.2,8.0,0.4,0.7,0.9,10.0,0.46
-        boreal,0.39,1.2,5.0,0.2,8.0,0.4,0.7,0.9,8.0,0.50
+        zone,parameter,value,reference
+        tropical,bgb_ratio_nat,0.25,ref
+        temperate,bgb_ratio_nat,0.26,ref
+        boreal,bgb_ratio_nat,0.39,ref
+        tropical,soc_depth_factor,1.5,ref
+        temperate,soc_depth_factor,1.4,ref
+        boreal,soc_depth_factor,1.2,ref
+        tropical,agb_crop_tc_per_ha,5.0,ref
+        temperate,agb_crop_tc_per_ha,5.0,ref
+        boreal,agb_crop_tc_per_ha,5.0,ref
+        tropical,bgb_ratio_ag_crop,0.2,ref
+        temperate,bgb_ratio_ag_crop,0.2,ref
+        boreal,bgb_ratio_ag_crop,0.2,ref
+        tropical,agb_past_tc_per_ha,8.0,ref
+        temperate,agb_past_tc_per_ha,8.0,ref
+        boreal,agb_past_tc_per_ha,8.0,ref
+        tropical,bgb_ratio_ag_past,0.4,ref
+        temperate,bgb_ratio_ag_past,0.4,ref
+        boreal,bgb_ratio_ag_past,0.4,ref
+        tropical,soc_factor_crop,0.7,ref
+        temperate,soc_factor_crop,0.7,ref
+        boreal,soc_factor_crop,0.7,ref
+        tropical,soc_factor_past,0.9,ref
+        temperate,soc_factor_past,0.9,ref
+        boreal,soc_factor_past,0.9,ref
+        tropical,agb_nonforest_tc_per_ha,20.0,ref
+        temperate,agb_nonforest_tc_per_ha,10.0,ref
+        boreal,agb_nonforest_tc_per_ha,8.0,ref
+        tropical,bgb_ratio_nonforest,0.40,ref
+        temperate,bgb_ratio_nonforest,0.46,ref
+        boreal,bgb_ratio_nonforest,0.50,ref
     """)
     zone_path = tmp_path / "zone_params.csv"
     zone_path.write_text(zone_csv)

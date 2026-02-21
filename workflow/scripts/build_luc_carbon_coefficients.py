@@ -47,7 +47,8 @@ def _zone_index(latitudes: np.ndarray, width: int) -> np.ndarray:
 
 
 def _zone_parameters(path: str) -> dict[str, np.ndarray]:
-    params = pd.read_csv(path, comment="#").set_index("zone")
+    df = pd.read_csv(path, comment="#")
+    params = df.pivot(index="zone", columns="parameter", values="value")
     missing = [zone for zone in ZONE_ORDER if zone not in params.index]
     if missing:
         raise ValueError(

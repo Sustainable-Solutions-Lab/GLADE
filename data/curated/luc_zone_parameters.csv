@@ -1,7 +1,33 @@
 # SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 # SPDX-License-Identifier: CC-BY-4.0
-# TODO: these are mock values that need to be updated to IPCC guidelines
-zone,bgb_ratio_nat,bgb_ratio_ag_crop,agb_crop_tc_per_ha,bgb_ratio_ag_past,agb_past_tc_per_ha,soc_factor_crop,soc_factor_past,soc_depth_factor,agb_nonforest_tc_per_ha,bgb_ratio_nonforest
-tropical,0.24,0.0,0.0,1.4,5.0,0.58,0.83,2.27,20.0,0.40
-temperate,0.27,0.0,0.0,1.2,4.0,0.66,0.90,1.80,10.0,0.46
-boreal,0.30,0.0,0.0,1.1,3.0,0.76,0.95,1.60,8.0,0.50
+zone,parameter,value,reference
+tropical,bgb_ratio_nat,0.24,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.4"
+temperate,bgb_ratio_nat,0.26,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.4"
+boreal,bgb_ratio_nat,0.39,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.4"
+tropical,bgb_ratio_ag_crop,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+temperate,bgb_ratio_ag_crop,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+boreal,bgb_ratio_ag_crop,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+tropical,agb_crop_tc_per_ha,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+temperate,agb_crop_tc_per_ha,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+boreal,agb_crop_tc_per_ha,0.0,"IPCC 2006 GL, Vol 4, Ch 5, §5.2.1 (Tier 1)"
+tropical,bgb_ratio_ag_past,1.6,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
+temperate,bgb_ratio_ag_past,4.0,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
+boreal,bgb_ratio_ag_past,4.0,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
+tropical,agb_past_tc_per_ha,2.91,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.4 (CF=0.47)"
+temperate,agb_past_tc_per_ha,1.27,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.4 (CF=0.47)"
+boreal,agb_past_tc_per_ha,0.80,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.4 (CF=0.47)"
+tropical,soc_factor_crop,0.83,"IPCC 2019 Refinement, Vol 4, Ch 5, Table 5.5"
+temperate,soc_factor_crop,0.69,"IPCC 2019 Refinement, Vol 4, Ch 5, Table 5.5"
+boreal,soc_factor_crop,0.70,"IPCC 2019 Refinement, Vol 4, Ch 5, Table 5.5"
+tropical,soc_factor_past,0.90,"IPCC 2019 Refinement, Vol 4, Ch 6, Table 6.2"
+temperate,soc_factor_past,0.90,"IPCC 2019 Refinement, Vol 4, Ch 6, Table 6.2"
+boreal,soc_factor_past,0.90,"IPCC 2019 Refinement, Vol 4, Ch 6, Table 6.2"
+tropical,soc_depth_factor,2.27,"Jobbágy & Jackson (2000), Table 3"
+temperate,soc_depth_factor,1.80,"Jobbágy & Jackson (2000), Table 3"
+boreal,soc_depth_factor,1.60,"Jobbágy & Jackson (2000), Table 3"
+tropical,agb_nonforest_tc_per_ha,20.0,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.7"
+temperate,agb_nonforest_tc_per_ha,10.0,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.7"
+boreal,agb_nonforest_tc_per_ha,8.0,"IPCC 2006 GL, Vol 4, Ch 4, Table 4.7"
+tropical,bgb_ratio_nonforest,0.50,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
+temperate,bgb_ratio_nonforest,0.50,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
+boreal,bgb_ratio_nonforest,0.50,"IPCC 2006 GL, Vol 4, Ch 6, Table 6.1"
