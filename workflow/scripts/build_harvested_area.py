@@ -67,6 +67,22 @@ def _shares_for_crop(
     production_df["country"] = production_df["country"].astype(str).str.upper()
     production_df = production_df[production_df["crop"].isin(crops_in_module)]
 
+    # If this crop has no observed production mapping but sibling crops in the
+    # same RES06 module do, avoid assigning synthetic harvested area shares.
+    # This prevents non-food proxies (e.g. silage-maize) from inheriting area
+    # from food crops (e.g. maize) in validation mode.
+    if crop not in set(production_df["crop"].unique()) and len(crops_in_module) > 1:
+        mapped_siblings = sorted(set(production_df["crop"].unique()))
+        if mapped_siblings:
+            logger.warning(
+                "Crop '%s' has no FAOSTAT production mapping in RES06 module %s "
+                "(mapped siblings: %s). Using harvested-area share 0.0.",
+                crop,
+                module_code,
+                ", ".join(mapped_siblings),
+            )
+            return {}, 0.0
+
     if production_df.empty:
         uniform_share = 1.0 / len(crops_in_module)
         return {}, uniform_share
