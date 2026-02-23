@@ -386,10 +386,11 @@ def main() -> None:
     m49_codes_path = snakemake.input.m49_codes  # type: ignore[name-defined]
     ruminant_mapping_path = snakemake.input.ruminant_feed_mapping  # type: ignore[name-defined]
     monogastric_mapping_path = snakemake.input.monogastric_feed_mapping  # type: ignore[name-defined]
+    feed_efficiencies_path = snakemake.input.feed_to_animal_products  # type: ignore[name-defined]
+    faostat_production_path = snakemake.input.faostat_animal_production  # type: ignore[name-defined]
+    calibration_path = getattr(snakemake.input, "calibration", None)  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     reference_year = int(snakemake.params.reference_year)  # type: ignore[name-defined]
-    calibration_year = int(snakemake.params.calibration_year)  # type: ignore[name-defined]
-    calibration_total_gt_dm = float(snakemake.params.calibration_total_gt_dm)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
     net_to_me = snakemake.params.net_to_me_conversion  # type: ignore[name-defined]
     feed_proxy_map = dict(snakemake.params.feed_proxy_map)  # type: ignore[name-defined]
@@ -441,13 +442,6 @@ def main() -> None:
     logger.info("Loading FAO %d production for scaling", reference_year)
     fao_ref = load_fao_production(
         bulk, item_map, reference_year, countries, faostat_items
-    )
-
-    logger.info(
-        "Loading FAO %d production for efficiency calibration", calibration_year
-    )
-    fao_cal = load_fao_production(
-        bulk, item_map, calibration_year, countries, faostat_items
     )
 
     # -- Step 2: Compute species-level country shares ------------------
@@ -828,71 +822,119 @@ def main() -> None:
 
     result = result.drop(columns=["species", "region"])
 
-    # -- Step 7: Efficiency calibration ------------------------------------
-    # The production-based scaling (Step 5) assumes constant feed conversion
-    # efficiency, but efficiencies improved between 2010 and the reference
-    # year.  We calibrate against the known GLEAM 3.0 global feed total at
-    # the calibration year to derive an annual efficiency improvement rate,
-    # then extrapolate to the reference year.
-    logger.info(
-        "Applying efficiency calibration (GLEAM 3.0: %.1f Gt DM in %d)",
-        calibration_total_gt_dm,
-        calibration_year,
-    )
+    # -- Step 7: Production-based scaling ----------------------------------
+    # Scale feed per (country, product) so that implied production
+    # (feed x efficiency) matches FAOSTAT production. This preserves the
+    # GLEAM-derived feed *composition* (category splits) while correcting
+    # the absolute level to observed production data.
+    logger.info("Applying production-based feed scaling")
 
-    # SI2 totals per species (Mt DM, including Swill since it is now modeled)
-    si2_species_totals = si2_data.groupby("Species")[feed_cols].sum().sum(axis=1)
+    feed_eff = pd.read_csv(feed_efficiencies_path)
+    faostat_prod = pd.read_csv(faostat_production_path)
 
-    # Compute naive (constant-efficiency) prediction for calibration year
-    # by applying species-level production growth from 2010 to cal year
-    naive_cal_total = 0.0
-    for species, feed_total in si2_species_totals.items():
-        species_products = SPECIES_PRODUCTS[species]
-        prod_2010_s = fao_2010[fao_2010["product"].isin(species_products)][
-            "production_tonnes"
-        ].sum()
-        prod_cal_s = fao_cal[fao_cal["product"].isin(species_products)][
-            "production_tonnes"
-        ].sum()
-        scale_s = prod_cal_s / prod_2010_s if prod_2010_s > 0 else 1.0
-        naive_cal_total += feed_total * scale_s
-        logger.info(
-            "  %s: SI2=%.0f Mt, production scale 2010->%d = %.3f",
-            species,
-            feed_total,
-            calibration_year,
-            scale_s,
+    # Apply calibration multipliers to feed efficiencies if provided
+    if calibration_path:
+        cal = pd.read_csv(calibration_path)
+        feed_eff = feed_eff.merge(
+            cal[["country", "product", "feed_category", "multiplier"]],
+            on=["country", "product", "feed_category"],
+            how="left",
         )
+        feed_eff["multiplier"] = feed_eff["multiplier"].fillna(1.0)
+        n_cal = int((feed_eff["multiplier"] != 1.0).sum())
+        logger.info(
+            "Applied calibration to %d/%d feed efficiencies (median mult %.3f)",
+            n_cal,
+            len(feed_eff),
+            feed_eff.loc[feed_eff["multiplier"] != 1.0, "multiplier"].median()
+            if n_cal
+            else 1.0,
+        )
+        feed_eff["efficiency"] *= feed_eff["multiplier"]
+        feed_eff = feed_eff.drop(columns=["multiplier"])
 
-    calibration_total_mt = calibration_total_gt_dm * 1000.0
-    logger.info(
-        "  Naive %d total: %.0f Mt DM; known: %.0f Mt DM",
-        calibration_year,
-        naive_cal_total,
-        calibration_total_mt,
+    # Compute implied production per (country, product) from current feed
+    # and efficiency values: sum over categories of feed x efficiency.
+    result_with_eff = result.merge(
+        feed_eff[["country", "product", "feed_category", "efficiency"]],
+        on=["country", "product", "feed_category"],
+        how="left",
+    )
+    result_with_eff["efficiency"] = result_with_eff["efficiency"].fillna(0)
+    result_with_eff["implied_prod"] = (
+        result_with_eff["feed_use_mt_dm"] * result_with_eff["efficiency"]
+    )
+    implied = (
+        result_with_eff.groupby(["country", "product"])["implied_prod"]
+        .sum()
+        .reset_index()
     )
 
-    efficiency_ratio = calibration_total_mt / naive_cal_total
-    years_cal = calibration_year - 2010
-    annual_rate = efficiency_ratio ** (1.0 / years_cal)
-    years_ref = reference_year - 2010
-    correction = annual_rate**years_ref
-
-    logger.info(
-        "  Efficiency ratio at %d: %.4f (annual: %.4f)",
-        calibration_year,
-        efficiency_ratio,
-        annual_rate,
+    # Merge with FAOSTAT production (Mt, retail weight)
+    implied = implied.merge(
+        faostat_prod[["country", "product", "production_mt"]],
+        on=["country", "product"],
+        how="left",
     )
-    logger.info(
-        "  Correction for %d (%.0f years): %.4f",
-        reference_year,
-        years_ref,
-        correction,
-    )
+    implied["production_mt"] = implied["production_mt"].fillna(0)
 
-    result["feed_use_mt_dm"] *= correction
-    result["exogenous_mt_dm"] *= correction
+    # Compute scale factors
+    implied["scale_factor"] = 1.0
+    # Case: FAOSTAT production = 0 → set feed to 0
+    zero_prod = implied["production_mt"] == 0
+    implied.loc[zero_prod, "scale_factor"] = 0.0
+    # Case: implied > 0 and FAOSTAT > 0 → scale
+    has_implied = implied["implied_prod"] > 0
+    scalable = has_implied & ~zero_prod
+    implied.loc[scalable, "scale_factor"] = (
+        implied.loc[scalable, "production_mt"] / implied.loc[scalable, "implied_prod"]
+    )
+    # Case: implied = 0 but FAOSTAT > 0 → can't create feed from nothing
+    no_feed = ~has_implied & ~zero_prod
+    if no_feed.any():
+        for _, row in implied[no_feed].iterrows():
+            logger.warning(
+                "  %s/%s: FAOSTAT production %.3f Mt but no GLEAM feed; skipping",
+                row["country"],
+                row["product"],
+                row["production_mt"],
+            )
+        implied.loc[no_feed, "scale_factor"] = 1.0
+
+    # Log scale factors, flagging extreme values
+    for _, row in implied[scalable].iterrows():
+        sf = row["scale_factor"]
+        flag = ""
+        if sf > 3.0:
+            flag = " [EXTREME HIGH]"
+        elif sf < 0.3:
+            flag = " [EXTREME LOW]"
+        if flag or sf > 2.0 or sf < 0.5:
+            logger.info(
+                "  %s/%s: scale=%.3f (implied=%.3f Mt, FAOSTAT=%.3f Mt)%s",
+                row["country"],
+                row["product"],
+                sf,
+                row["implied_prod"],
+                row["production_mt"],
+                flag,
+            )
+
+    # Apply scale factors
+    scale_map = implied.set_index(["country", "product"])["scale_factor"]
+    result_idx = result.set_index(["country", "product"])
+    result_idx["scale_factor"] = scale_map
+    result_idx["scale_factor"] = result_idx["scale_factor"].fillna(1.0)
+    result_idx["feed_use_mt_dm"] *= result_idx["scale_factor"]
+    result_idx["exogenous_mt_dm"] *= result_idx["scale_factor"]
+    result = result_idx.drop(columns=["scale_factor"]).reset_index()
+
+    new_global_total = result["feed_use_mt_dm"].sum()
+    logger.info(
+        "  New global feed total: %.1f Mt DM (%.2f Gt DM)",
+        new_global_total,
+        new_global_total / 1000.0,
+    )
 
     # Expand to all valid (country, product, feed_category) combinations,
     # filling 0 where GLEAM has no data.  This ensures every model link gets

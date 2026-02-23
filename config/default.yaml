@@ -346,7 +346,7 @@ animal_products:
     enabled: false
     generate: false
     source: "data/curated/feed_efficiency_calibration.csv"
-    max_multiplier: 1.5
+    max_multiplier: 2.0
     scenario: "default" # Which scenario's solved model to generate calibration from
   residue_crops:
   - banana

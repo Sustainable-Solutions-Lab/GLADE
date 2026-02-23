@@ -41,7 +41,6 @@ the 2020 baseline by enabling several flags:
      disable_spared_grassland: true   # No grassland retirement
      slack_marginal_cost: 10          # bn USD per Mt/Mha slack penalty
      grassland_yield_multiplier: 1.2  # Calibration knob for grassland yields
-     feed_efficiency_multiplier: 1.15 # Calibration knob for feed conversion
 
 These settings collectively remove the optimizer's degrees of freedom:
 
@@ -55,9 +54,8 @@ These settings collectively remove the optimizer's degrees of freedom:
   GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
 - **Land use**: Sparing of existing cropland and grassland is disabled so the
   model matches the historical land footprint (see :doc:`land_use`).
-- **Calibration multipliers**: ``grassland_yield_multiplier`` and
-  ``feed_efficiency_multiplier`` apply small adjustments to grassland feed yields
-  and animal feed conversion efficiency to compensate for known data gaps.
+- **Calibration multiplier**: ``grassland_yield_multiplier`` applies a small
+  adjustment to grassland feed yields to compensate for known data gaps.
 
 Additional settings select present-day water availability
 (``water.supply_scenario: current_use``) and disable health impacts, since the

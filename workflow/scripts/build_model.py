@@ -70,7 +70,6 @@ if __name__ == "__main__":
         validation_cfg["slack_marginal_cost"]
     )  # Already in bn USD
     grassland_yield_multiplier = float(validation_cfg["grassland_yield_multiplier"])
-    feed_efficiency_multiplier = float(validation_cfg["feed_efficiency_multiplier"])
 
     # ═══════════════════════════════════════════════════════════════
     # DATA LOADING
@@ -174,14 +173,30 @@ if __name__ == "__main__":
     )
     if feed_to_products["efficiency"].isna().any():
         raise ValueError("feed_to_animal_products.csv contains non-numeric efficiency")
-    if feed_efficiency_multiplier != 1.0:
-        feed_to_products["efficiency"] = (
-            feed_to_products["efficiency"] * feed_efficiency_multiplier
+
+    # Apply feed efficiency calibration if enabled for this scenario
+    cal_cfg = snakemake.params.animal_products["feed_efficiency_calibration"]
+    if cal_cfg["enabled"]:
+        cal = read_csv(snakemake.input.calibration)
+        feed_to_products = feed_to_products.merge(
+            cal[["country", "product", "feed_category", "multiplier"]],
+            on=["country", "product", "feed_category"],
+            how="left",
         )
+        feed_to_products["multiplier"] = feed_to_products["multiplier"].fillna(1.0)
+        n_cal = int((feed_to_products["multiplier"] != 1.0).sum())
+        feed_to_products["efficiency"] *= feed_to_products["multiplier"]
         logger.info(
-            "Applied validation feed efficiency multiplier: %.3f",
-            feed_efficiency_multiplier,
+            "Applied feed efficiency calibration: %d/%d entries (median mult %.3f)",
+            n_cal,
+            len(feed_to_products),
+            feed_to_products.loc[
+                feed_to_products["multiplier"] != 1.0, "multiplier"
+            ].median()
+            if n_cal
+            else 1.0,
         )
+        feed_to_products = feed_to_products.drop(columns=["multiplier"])
 
     # Read manure emission factors (CH4 and N2O)
     manure_emissions = read_csv(snakemake.input.manure_emissions)
@@ -742,9 +757,12 @@ if __name__ == "__main__":
 
     # Add feed slack generators for validation mode feasibility
     if use_actual_production or enforce_baseline_feed:
+        feed_slack_cost = validation_slack_cost * float(
+            validation_cfg["feed_slack_cost_factor"]
+        )
         animals.add_feed_slack_generators(
             n,
-            marginal_cost=validation_slack_cost,
+            marginal_cost=feed_slack_cost,
         )
 
     # Nutrition constraints

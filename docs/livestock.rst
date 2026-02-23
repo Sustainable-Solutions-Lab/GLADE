@@ -300,7 +300,7 @@ model to observed feed mixes; in optimisation runs it serves as a reference
 point for comparison with solved results.
 
 The script ``workflow/scripts/prepare_gleam_feed_baseline.py`` produces
-``processing/{name}/gleam_feed_baseline.csv``.
+``processing/{name}/gleam_feed_baseline_scen-{scenario}.csv``.
 
 Data Sources
 ~~~~~~~~~~~~
@@ -512,7 +512,7 @@ calibration data point.
 Output
 ~~~~~~
 
-``processing/{name}/gleam_feed_baseline.csv`` contains one row per
+``processing/{name}/gleam_feed_baseline_scen-{scenario}.csv`` contains one row per
 (country, product, feed category) combination:
 
 * ``country``: ISO 3166-1 alpha-3 country code

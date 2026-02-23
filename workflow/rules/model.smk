@@ -54,11 +54,26 @@ def harvested_area_model_inputs(wildcards):
     return inputs
 
 
+def build_model_calibration_input(wildcards):
+    """Conditionally include feed efficiency calibration CSV."""
+    cal_cfg = config["animal_products"]["feed_efficiency_calibration"]
+    if cal_cfg["generate"]:
+        # When generating: include CSV for all scenarios except the source
+        if wildcards.scenario != cal_cfg["scenario"]:
+            return {"calibration": cal_cfg["source"]}
+        return {}
+    elif cal_cfg["enabled"]:
+        # Pre-generated CSV, always include
+        return {"calibration": cal_cfg["source"]}
+    return {}
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
+        unpack(build_model_calibration_input),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
@@ -81,7 +96,7 @@ rule build_model:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         costs="<processing>/{name}/crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
-        gleam_feed_baseline="<processing>/{name}/gleam_feed_baseline.csv",
+        gleam_feed_baseline="<processing>/{name}/gleam_feed_baseline_scen-{scenario}.csv",
         grassland_yields="<processing>/{name}/grassland_yields.csv",
         monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",
         growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",
