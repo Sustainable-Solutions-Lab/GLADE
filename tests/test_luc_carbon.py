@@ -9,10 +9,19 @@ import textwrap
 from affine import Affine
 import geopandas as gpd
 import numpy as np
+from osgeo import gdal, osr
+
+gdal.UseExceptions()
+osr.UseExceptions()
+
 import pandas as pd
 import pytest
 from shapely.geometry import box
 import xarray as xr
+
+_srs = osr.SpatialReference()
+_srs.ImportFromEPSG(4326)
+WGS84_WKT = _srs.ExportToWkt()
 
 from workflow.scripts.build_luc_carbon_coefficients import (
     CO2_PER_C,
@@ -587,7 +596,7 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
             "transform": list(transform.to_gdal()),
             "height": height,
             "width": width,
-            "crs_wkt": "EPSG:4326",
+            "crs_wkt": WGS84_WKT,
         },
     )
     classes_path = tmp_path / "classes.nc"

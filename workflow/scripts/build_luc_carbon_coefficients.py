@@ -4,6 +4,11 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+from osgeo import gdal, osr
+
+gdal.UseExceptions()
+osr.UseExceptions()
+
 from pathlib import Path
 
 from affine import Affine
