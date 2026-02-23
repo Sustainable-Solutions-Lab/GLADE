@@ -121,7 +121,7 @@ def _sensitivity_scenario_inputs(wildcards):
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
-    Returns a dict mapping each slice parameter name to a list of 25
+    Returns a dict mapping each slice parameter name to a list of 100
     linearly-spaced values between its min and max.
     """
     import numpy as _np
@@ -135,7 +135,7 @@ def _sensitivity_slice_grid(wildcards):
         spec = generator["parameters"][sp]
         dist = build_chaospy_distribution(spec)
         lo, hi = float(dist.lower[0]), float(dist.upper[0])
-        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 25)]
+        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 100)]
     return grid
 
 
@@ -155,13 +155,13 @@ rule compute_pce_sensitivity:
     input:
         _sensitivity_scenario_inputs,
     params:
-        analysis_dir=lambda w: f"<results>/{w.name}/analysis",
         scenario_names=_sensitivity_scenario_names,
         generator_spec=lambda w: _sensitivity_generator(w),
         slice_grid=_sensitivity_slice_grid,
     output:
         global_indices="<results>/{name}/analysis/pce_global_indices_{prefix}.csv",
         conditional_indices="<results>/{name}/analysis/pce_conditional_indices_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/pce_conditional_joint_indices_{prefix}.csv",
         validation="<results>/{name}/analysis/pce_validation_{prefix}.csv",
     group:
         "analysis_plot"

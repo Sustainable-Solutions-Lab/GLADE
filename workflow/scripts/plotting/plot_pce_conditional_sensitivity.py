@@ -37,6 +37,18 @@ X_LABELS = {
 }
 
 
+def _loo_quality(loo_error: float) -> str:
+    if loo_error < 0.01:
+        return "excellent"
+    if loo_error < 0.05:
+        return "very good"
+    if loo_error < 0.1:
+        return "acceptable"
+    if loo_error < 0.2:
+        return "weak"
+    return "poor"
+
+
 def _slice_columns(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in METADATA_COLUMNS]
 
@@ -53,6 +65,7 @@ def _plot_for_x(
     df: pd.DataFrame,
     x_column: str,
     metric_column: str,
+    loo_by_output: dict[str, float],
     output_pdf: Path,
 ) -> None:
     aggregated = (
@@ -115,7 +128,13 @@ def _plot_for_x(
         )
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
-        ax.set_title(OUTPUT_LABELS.get(output, output))
+        loo_value = loo_by_output.get(output)
+        loo_suffix = (
+            ""
+            if loo_value is None
+            else f"\nLOO={loo_value:.3f} ({_loo_quality(float(loo_value))})"
+        )
+        ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{loo_suffix}")
         ax.set_xlabel(X_LABELS.get(x_column, x_column))
         if i % n_cols == 0:
             ax.set_ylabel("Explained Variability Fraction (S1)")
@@ -138,7 +157,8 @@ def _plot_for_x(
     fig.text(
         0.01,
         0.01,
-        "Areas are conditional first-order Sobol shares.",
+        "Areas are conditional first-order Sobol shares. "
+        "LOO bands: <0.01 excellent, <0.05 very good, <0.1 acceptable, <0.2 weak, >=0.2 poor.",
         fontsize=8,
         alpha=0.8,
     )
@@ -154,20 +174,41 @@ def main() -> None:
 
     logger = setup_script_logging(snakemake.log[0])
     input_csv = Path(snakemake.input.conditional_indices)  # type: ignore[attr-defined]
+    validation_csv = Path(snakemake.input.validation)  # type: ignore[attr-defined]
     output_value_per_yll_pdf = Path(snakemake.output.value_per_yll_pdf)  # type: ignore[attr-defined]
     output_ghg_price_pdf = Path(snakemake.output.ghg_price_pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
 
     if not input_csv.exists():
         raise FileNotFoundError(f"Missing conditional indices file: {input_csv}")
+    if not validation_csv.exists():
+        raise FileNotFoundError(f"Missing validation file: {validation_csv}")
 
     df = pd.read_csv(input_csv)
+    validation_df = pd.read_csv(validation_csv)
     if df.empty:
         raise ValueError(f"Conditional indices file is empty: {input_csv}")
+    if validation_df.empty:
+        raise ValueError(f"Validation file is empty: {validation_csv}")
     if metric_column not in df.columns:
         raise ValueError(
             f"Expected metric column '{metric_column}' in conditional indices"
         )
+    required_validation_columns = {"output", "loo_error"}
+    missing_validation_columns = required_validation_columns - set(
+        validation_df.columns
+    )
+    if missing_validation_columns:
+        raise ValueError(
+            "Validation file is missing required columns: "
+            + ", ".join(sorted(missing_validation_columns))
+        )
+    loo_by_output = (
+        validation_df.dropna(subset=["output", "loo_error"])
+        .set_index("output")["loo_error"]
+        .astype(float)
+        .to_dict()
+    )
 
     slices = _slice_columns(df)
     required_slices = {"value_per_yll", "ghg_price"}
@@ -182,11 +223,17 @@ def main() -> None:
     output_ghg_price_pdf.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("Creating stacked conditional sensitivity plot vs value_per_yll")
-    _plot_for_x(df, "value_per_yll", metric_column, output_value_per_yll_pdf)
+    _plot_for_x(
+        df,
+        "value_per_yll",
+        metric_column,
+        loo_by_output,
+        output_value_per_yll_pdf,
+    )
     logger.info("Wrote %s", output_value_per_yll_pdf)
 
     logger.info("Creating stacked conditional sensitivity plot vs ghg_price")
-    _plot_for_x(df, "ghg_price", metric_column, output_ghg_price_pdf)
+    _plot_for_x(df, "ghg_price", metric_column, loo_by_output, output_ghg_price_pdf)
     logger.info("Wrote %s", output_ghg_price_pdf)
 
 

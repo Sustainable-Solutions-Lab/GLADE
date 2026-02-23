@@ -261,3 +261,83 @@ class TestConditionalSobol:
         )
         assert s1_c[0] == pytest.approx(s1_global[0], abs=0.1)
         assert s1_c[1] == pytest.approx(s1_global[1], abs=0.1)
+
+    def test_conditional_indices_change_with_slice_value(self):
+        """Conditional indices should vary when slice interactions are present."""
+        dist = cp.J(cp.Uniform(0, 1), cp.Uniform(0, 1), cp.Uniform(0, 1))
+        n = 512
+        sampler = Sobol(3, scramble=True, seed=42)
+        x = sampler.random(n)
+        x = dist.inv(x.T).T
+
+        # X2 is slice parameter; interaction makes X0 sensitivity depend on X2.
+        y = x[:, 0] + 0.3 * x[:, 1] + 2.0 * x[:, 0] * x[:, 2]
+
+        result = fit_pce(x, y, dist, max_degree=3)
+
+        s1_low, _, var_low = conditional_sobol(
+            result["coefficients"],
+            result["expansion"],
+            result["multi_indices"],
+            dist,
+            3,
+            [2],
+            [0.2],
+        )
+        s1_high, _, var_high = conditional_sobol(
+            result["coefficients"],
+            result["expansion"],
+            result["multi_indices"],
+            dist,
+            3,
+            [2],
+            [0.8],
+        )
+
+        # Analytic conditional Sobol for Y=(1+2s)X0 + 0.3X1:
+        # S1(X0|s)=(1+2s)^2 / ((1+2s)^2 + 0.09)
+        expected_low = (1.4**2) / (1.4**2 + 0.09)
+        expected_high = (2.6**2) / (2.6**2 + 0.09)
+
+        assert s1_low[0] == pytest.approx(expected_low, abs=0.05)
+        assert s1_high[0] == pytest.approx(expected_high, abs=0.05)
+        assert s1_high[0] > s1_low[0] + 0.01
+        assert var_high > var_low
+
+    def test_joint_conditioning_two_slices(self):
+        """Conditioning on two slice parameters should follow analytic shares."""
+        dist = cp.J(
+            cp.Uniform(0, 1),
+            cp.Uniform(0, 1),
+            cp.Uniform(0, 1),
+            cp.Uniform(0, 1),
+        )
+        n = 1024
+        sampler = Sobol(4, scramble=True, seed=42)
+        x = sampler.random(n)
+        x = dist.inv(x.T).T
+
+        # X2 and X3 are slice parameters.
+        # Conditional model at (s2, s3): Y = (1+2s2)X0 + (0.5+s3)X1
+        y = (1 + 2 * x[:, 2]) * x[:, 0] + (0.5 + x[:, 3]) * x[:, 1]
+
+        result = fit_pce(x, y, dist, max_degree=3)
+
+        s2, s3 = 0.2, 0.8
+        s1_cond, _, _ = conditional_sobol(
+            result["coefficients"],
+            result["expansion"],
+            result["multi_indices"],
+            dist,
+            4,
+            [2, 3],
+            [s2, s3],
+        )
+
+        a = 1 + 2 * s2
+        b = 0.5 + s3
+        expected_x0 = a**2 / (a**2 + b**2)
+        expected_x1 = b**2 / (a**2 + b**2)
+
+        assert s1_cond[0] == pytest.approx(expected_x0, abs=0.06)
+        assert s1_cond[1] == pytest.approx(expected_x1, abs=0.06)

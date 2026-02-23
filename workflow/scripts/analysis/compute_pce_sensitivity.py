@@ -13,6 +13,7 @@ The implementation is parameter-agnostic: parameter names, distributions,
 and slice variable designations are all read from the generator spec.
 """
 
+from itertools import product
 import logging
 from pathlib import Path
 
@@ -242,7 +243,11 @@ def conditional_sobol(
         S1_cond, ST_cond (shape n_params; slice param entries are 0),
         and conditional_variance.
     """
-    non_slice = set(range(n_params)) - set(slice_indices)
+    # `expansion` is part of the public API and kept for compatibility.
+    # The computation below only needs coefficients and multi-indices.
+    _ = expansion
+
+    non_slice = sorted(set(range(n_params)) - set(slice_indices))
 
     # For each multi-index alpha, the conditioning factor is the product
     # of univariate basis evaluations psi_{alpha_j}(x_j*) for each
@@ -266,20 +271,24 @@ def conditional_sobol(
             vals[deg] = float(poly(s_val))
         slice_basis_values[s_idx] = vals
 
-    # Transform coefficients
-    transformed_coefs = np.zeros_like(coefficients)
-    for k, (alpha, c) in enumerate(zip(multi_indices, coefficients)):
+    # Transform and collapse coefficients onto the reduced (non-slice) basis.
+    # After conditioning, multiple original terms with the same non-slice
+    # multi-index must be summed before squaring for variance decomposition.
+    reduced_coefs: dict[tuple[int, ...], float] = {}
+    for alpha, c in zip(multi_indices, coefficients):
         factor = 1.0
         for s_idx in slice_indices:
             deg = alpha[s_idx]
             factor *= slice_basis_values[s_idx].get(deg, 0.0)
-        transformed_coefs[k] = c * factor
+        alpha_non_slice = tuple(alpha[i] for i in non_slice)
+        reduced_coefs[alpha_non_slice] = reduced_coefs.get(
+            alpha_non_slice, 0.0
+        ) + float(c * factor)
 
-    # Conditional variance: sum of c'^2 for terms where at least one
-    # non-slice variable is active
+    # Conditional variance over non-slice dimensions.
     cond_var = 0.0
-    for alpha, c_prime in zip(multi_indices, transformed_coefs):
-        if any(alpha[i] > 0 for i in non_slice):
+    for alpha_non_slice, c_prime in reduced_coefs.items():
+        if any(a > 0 for a in alpha_non_slice):
             cond_var += c_prime**2
 
     # Conditional Sobol indices
@@ -289,10 +298,12 @@ def conditional_sobol(
     if cond_var <= 0:
         return s1_cond, st_cond, cond_var
 
-    for alpha, c_prime in zip(multi_indices, transformed_coefs):
+    for alpha_non_slice, c_prime in reduced_coefs.items():
         c2 = c_prime**2
-        # Active non-slice variables
-        active_non_slice = [i for i in non_slice if alpha[i] > 0]
+        # Active non-slice variables in original index space
+        active_non_slice = [
+            non_slice[j] for j, deg in enumerate(alpha_non_slice) if deg > 0
+        ]
         if not active_non_slice:
             continue
 
@@ -388,11 +399,14 @@ def load_scenario_outputs(
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
 
-    # Get parameters from snakemake
-    analysis_dir = Path(snakemake.params.analysis_dir)
+    # Derive analysis directory from resolved output path.
+    # This avoids unresolved "<results>" placeholders in params.
+    analysis_dir = Path(snakemake.output.global_indices).parent
     scenario_names = list(snakemake.params.scenario_names)
     generator_spec = dict(snakemake.params.generator_spec)
     slice_grid = dict(snakemake.params.slice_grid)
+
+    logger.info("Using analysis directory: %s", analysis_dir)
 
     # Build joint distribution and get parameter names
     joint_dist, param_names = build_joint_distribution(generator_spec)
@@ -438,6 +452,7 @@ def main() -> None:
     global_rows = []
     validation_rows = []
     conditional_rows = []
+    conditional_joint_rows = []
 
     for col in available_columns:
         y = outputs_df[col].values
@@ -526,6 +541,35 @@ def main() -> None:
                             }
                         )
 
+            # Joint conditioning across all slice parameters on a Cartesian
+            # grid. This supports 2D sensitivity surfaces over policy axes.
+            joint_value_lists = [slice_grid[sp_name] for sp_name in slice_param_names]
+            for joint_values in product(*joint_value_lists):
+                s1_c, st_c, cond_var = conditional_sobol(
+                    pce_result["coefficients"],
+                    pce_result["expansion"],
+                    pce_result["multi_indices"],
+                    joint_dist,
+                    n_params,
+                    slice_indices,
+                    list(joint_values),
+                )
+
+                slice_value_map = dict(zip(slice_param_names, joint_values))
+                for i, pname in enumerate(param_names):
+                    if i in slice_indices:
+                        continue
+
+                    row = {
+                        "output": col,
+                        "parameter": pname,
+                        "S1_cond": s1_c[i],
+                        "ST_cond": st_c[i],
+                        "conditional_variance": cond_var,
+                    }
+                    row.update(slice_value_map)
+                    conditional_joint_rows.append(row)
+
     # Write output CSVs
     global_df = pd.DataFrame(global_rows)
     global_path = Path(snakemake.output.global_indices)
@@ -537,6 +581,14 @@ def main() -> None:
     conditional_path = Path(snakemake.output.conditional_indices)
     conditional_df.to_csv(conditional_path, index=False)
     logger.info("Wrote conditional indices to %s", conditional_path)
+
+    conditional_joint_df = pd.DataFrame(conditional_joint_rows)
+    conditional_joint_path = Path(snakemake.output.conditional_joint_indices)
+    conditional_joint_df.to_csv(conditional_joint_path, index=False)
+    logger.info(
+        "Wrote joint conditional indices to %s",
+        conditional_joint_path,
+    )
 
     validation_df = pd.DataFrame(validation_rows)
     validation_path = Path(snakemake.output.validation)
