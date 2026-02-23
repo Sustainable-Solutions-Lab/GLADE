@@ -139,10 +139,8 @@ properties:
       - disable_spared_grassland
       - slack_marginal_cost
       - grassland_yield_multiplier
-      - feed_efficiency_multiplier
+      - feed_slack_cost_factor
       - production_year
-      - gleam_calibration_year
-      - gleam_calibration_total_gt_dm
       - production_stability
     additionalProperties: false
     properties:
@@ -181,24 +179,16 @@ properties:
         type: number
         exclusiveMinimum: 0
         description: "Multiplier applied to effective grassland feed yields before adding grassland production links"
-      feed_efficiency_multiplier:
+      feed_slack_cost_factor:
         type: number
         exclusiveMinimum: 0
-        description: "Multiplier applied to feed-to-animal efficiency values (product per feed)"
+        maximum: 1
+        description: "Feed slack cost as fraction of slack_marginal_cost (lower separates feed from food slack)"
       production_year:
         type: integer
         minimum: 1990
         maximum: 2024
         description: "Reference year for production data"
-      gleam_calibration_year:
-        type: integer
-        minimum: 2010
-        maximum: 2024
-        description: "Year of GLEAM 3.0 baseline for efficiency calibration"
-      gleam_calibration_total_gt_dm:
-        type: number
-        exclusiveMinimum: 0
-        description: "Known global feed total (Gt DM) at calibration year from GLEAM 3.0"
       production_stability:
         type: object
         required: [enabled, penalty_mode, crops, animals]
@@ -617,6 +607,7 @@ properties:
       - carcass_to_retail_meat
       - faostat_items
       - feed_proxy_map
+      - feed_efficiency_calibration
       - residue_crops
     additionalProperties: false
     properties:
@@ -700,6 +691,28 @@ properties:
             pattern: "^[a-z0-9-]+$"
             description: "Source product whose feed requirements are reused"
         description: "Mapping of proxy animal products to source products"
+      feed_efficiency_calibration:
+        type: object
+        required: [enabled, generate, source, max_multiplier, scenario]
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Apply per-(country, product, category) efficiency calibration multipliers"
+          generate:
+            type: boolean
+            description: "Generate calibration CSV from a solved model's feed slack"
+          source:
+            type: string
+            description: "Path to calibration CSV (read when enabled, written when generate)"
+          max_multiplier:
+            type: number
+            exclusiveMinimum: 1
+            description: "Maximum allowed calibration multiplier per feed bus"
+          scenario:
+            type: string
+            pattern: "^[a-zA-Z0-9_]+$"
+            description: "Scenario whose solved model is used to generate calibration"
       residue_crops:
         type: array
         uniqueItems: true
@@ -710,7 +723,7 @@ properties:
 
   grazing:
     type: object
-    required: [enabled, isimip_utilization_rate]
+    required: [enabled, isimip_utilization_rate, forage_overlap_subtraction_alpha, forage_overlap_crops]
     additionalProperties: false
     properties:
       enabled:
@@ -721,6 +734,18 @@ properties:
         minimum: 0
         maximum: 1
         description: "Utilization rate applied to ISIMIP grassland yields in the merge step"
+      forage_overlap_subtraction_alpha:
+        type: number
+        minimum: 0
+        description: "Country-level overlap factor alpha for subtracting modeled forage-crop supply from LUIcube grassland supply"
+      forage_overlap_crops:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        description: "Crops counted as modeled forage-crop supply in overlap correction"
 
   food_groups:
     type: object

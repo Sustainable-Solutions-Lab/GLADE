@@ -4,7 +4,11 @@
 
 name: "validation"
 scenarios:
-  default: {}
+  default:
+    animal_products:
+      feed_efficiency_calibration:
+        enabled: true
+  uncalibrated: {}
 
 planning_horizon: 2020
 
@@ -17,7 +21,6 @@ validation:
   disable_spared_grassland: true
   slack_marginal_cost: 10
   # grassland_yield_multiplier: 1.2
-  # feed_efficiency_multiplier: 1.15
 
 water:
   supply_scenario: current_use
@@ -29,10 +32,14 @@ residues:
 animal_products:
   # Use regionalized feed efficiency values
   feed_efficiency_regions: null
+  feed_efficiency_calibration:
+    generate: true
+    scenario: uncalibrated
 
 grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
   isimip_utilization_rate: 0.60
+  forage_overlap_subtraction_alpha: 1.0
 
 land:
   regional_limit: 1.
