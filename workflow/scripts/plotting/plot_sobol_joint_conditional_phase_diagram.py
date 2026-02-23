@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Plot 2D conditional Sobol surfaces for a single non-slice parameter."""
+"""Plot dominant non-slice sensitivity factor across 2D policy space."""
 
 from math import ceil
 from pathlib import Path
@@ -10,11 +10,14 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("pdf")
+import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.plotting.color_utils import categorical_colors
 
 OUTPUT_ORDER = ["total_cost", "ghg_emissions", "land_use", "yll"]
 OUTPUT_LABELS = {
@@ -27,14 +30,14 @@ X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
 
 
-def _loo_quality(loo_error: float) -> str:
-    if loo_error < 0.01:
+def _validation_quality(error: float) -> str:
+    if error < 0.01:
         return "excellent"
-    if loo_error < 0.05:
+    if error < 0.05:
         return "very good"
-    if loo_error < 0.1:
+    if error < 0.1:
         return "acceptable"
-    if loo_error < 0.2:
+    if error < 0.2:
         return "weak"
     return "poor"
 
@@ -47,35 +50,35 @@ def _ordered_outputs(available: list[str]) -> list[str]:
     return ordered
 
 
-def _surface_grid(
+def _dominant_grid(
     df: pd.DataFrame,
     output: str,
-    parameter: str,
+    parameters: list[str],
     metric_column: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    sub = df[(df["output"] == output) & (df["parameter"] == parameter)]
-    pivot = (
-        sub.pivot_table(
-            index=Y_COLUMN,
-            columns=X_COLUMN,
-            values=metric_column,
-            aggfunc="mean",
-        )
-        .sort_index()
-        .sort_index(axis=1)
+    sub = df[df["output"] == output]
+    table = sub.pivot_table(
+        index=[Y_COLUMN, X_COLUMN],
+        columns="parameter",
+        values=metric_column,
+        aggfunc="mean",
     )
-    if pivot.empty:
-        raise ValueError(
-            f"No conditional data found for output='{output}', parameter='{parameter}'"
-        )
-    if pivot.isna().any().any():
-        raise ValueError(
-            f"Incomplete conditional grid for output='{output}', parameter='{parameter}'"
-        )
+    if table.empty:
+        raise ValueError(f"No conditional data found for output='{output}'")
 
-    x = pivot.columns.to_numpy(dtype=float)
-    y = pivot.index.to_numpy(dtype=float)
-    z = pivot.to_numpy(dtype=float)
+    for parameter in parameters:
+        if parameter not in table.columns:
+            table[parameter] = 0.0
+    table = table[parameters]
+
+    dominant = table.idxmax(axis=1)
+    dom_grid = dominant.unstack(X_COLUMN).sort_index().sort_index(axis=1)
+    if dom_grid.isna().any().any():
+        raise ValueError(f"Incomplete conditional grid for output='{output}'")
+
+    x = dom_grid.columns.to_numpy(dtype=float)
+    y = dom_grid.index.to_numpy(dtype=float)
+    z = dom_grid.to_numpy(dtype=object)
     return x, y, z
 
 
@@ -103,12 +106,7 @@ def main() -> None:
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
-    parameter = str(snakemake.wildcards.parameter)  # type: ignore[attr-defined]
 
-    if parameter not in allowed_parameters:
-        raise ValueError(
-            f"Parameter '{parameter}' is not in non-slice parameter set: {allowed_parameters}"
-        )
     if not input_csv.exists():
         raise FileNotFoundError(f"Missing conditional joint indices file: {input_csv}")
     if not validation_csv.exists():
@@ -120,6 +118,7 @@ def main() -> None:
         raise ValueError(f"Conditional joint indices file is empty: {input_csv}")
     if validation_df.empty:
         raise ValueError(f"Validation file is empty: {validation_csv}")
+
     required_columns = {"output", "parameter", X_COLUMN, Y_COLUMN, metric_column}
     missing = required_columns - set(df.columns)
     if missing:
@@ -129,28 +128,29 @@ def main() -> None:
         )
     if (
         "output" not in validation_df.columns
-        or "loo_error" not in validation_df.columns
+        or "validation_error" not in validation_df.columns
     ):
         raise ValueError(
-            "Validation file must contain 'output' and 'loo_error' columns"
+            "Validation file must contain 'output' and 'validation_error' columns"
         )
 
+    parameters = [p for p in allowed_parameters if p in set(df["parameter"].unique())]
+    if not parameters:
+        raise ValueError("No non-slice parameters available for dominant-factor plot")
+
     outputs = _ordered_outputs(df["output"].unique().tolist())
-    loo_by_output = (
-        validation_df.dropna(subset=["output", "loo_error"])
-        .set_index("output")["loo_error"]
+    error_by_output = (
+        validation_df.dropna(subset=["output", "validation_error"])
+        .set_index("output")["validation_error"]
         .astype(float)
         .to_dict()
     )
 
-    grids = {}
-    vmax = 0.0
-    for output in outputs:
-        x, y, z = _surface_grid(df, output, parameter, metric_column)
-        grids[output] = (x, y, z)
-        vmax = max(vmax, float(np.nanmax(z)))
-    if vmax <= 0:
-        vmax = 1.0
+    colors = categorical_colors(parameters, cmap_name="tab20")
+    cmap = mcolors.ListedColormap([colors[p] for p in parameters])
+    bounds = np.arange(len(parameters) + 1) - 0.5
+    norm = mcolors.BoundaryNorm(bounds, cmap.N)
+    param_to_idx = {param: idx for idx, param in enumerate(parameters)}
 
     n_outputs = len(outputs)
     n_cols = 2 if n_outputs > 1 else 1
@@ -162,53 +162,56 @@ def main() -> None:
         sharex=True,
         sharey=True,
         squeeze=False,
-        constrained_layout=True,
     )
 
     for ax in axes.flat[n_outputs:]:
         ax.axis("off")
 
-    mesh = None
     for i, output in enumerate(outputs):
         ax = axes.flat[i]
-        x, y, z = grids[output]
-        mesh = ax.imshow(
-            z,
+        x, y, dominant_labels = _dominant_grid(df, output, parameters, metric_column)
+        idx_grid = np.vectorize(param_to_idx.get)(dominant_labels)
+
+        ax.imshow(
+            idx_grid,
             origin="lower",
             extent=_imshow_extent(x, y),
             interpolation="nearest",
             aspect="auto",
-            cmap="viridis",
-            vmin=0.0,
-            vmax=vmax,
+            cmap=cmap,
+            norm=norm,
         )
         ax.grid(False)
-        loo_value = loo_by_output.get(output)
-        loo_suffix = (
+        err_value = error_by_output.get(output)
+        err_suffix = (
             ""
-            if loo_value is None
-            else f"\nLOO={loo_value:.3f} ({_loo_quality(float(loo_value))})"
+            if err_value is None
+            else f"\nerr={err_value:.3f} ({_validation_quality(float(err_value))})"
         )
-        ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{loo_suffix}")
+        ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{err_suffix}")
         ax.set_xlabel("GHG Price (USD per tCO2e)")
         if i % n_cols == 0:
             ax.set_ylabel("Value per YLL (USD per YLL)")
 
-    if mesh is not None:
-        cbar = fig.colorbar(mesh, ax=axes.ravel().tolist(), shrink=0.9, pad=0.02)
-        cbar.set_label("Conditional first-order Sobol share (S1)")
-
-    fig.suptitle(
-        f"Conditional sensitivity surface for '{parameter}'",
-        y=1.02,
+    legend_handles = [
+        mpatches.Patch(color=colors[param], label=param) for param in parameters
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="center left",
+        bbox_to_anchor=(1.0, 0.5),
+        frameon=False,
+        title="Dominant factor",
     )
+    fig.suptitle("Dominant non-slice sensitivity factor across policy space", y=1.02)
     fig.text(
         0.01,
         0.01,
-        "Both policy axes are conditioned jointly; colors show S1 for the selected parameter.",
+        "Color indicates the parameter with largest conditional first-order Sobol share (S1).",
         fontsize=8,
         alpha=0.8,
     )
+    fig.tight_layout(rect=(0, 0.02, 0.85, 1))
 
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_pdf, bbox_inches="tight", dpi=300)

@@ -121,33 +121,36 @@ def _sensitivity_scenario_inputs(wildcards):
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
-    Returns a dict mapping each slice parameter name to a list of 100
-    linearly-spaced values between its min and max.
+    Returns a dict mapping each slice parameter name to a list of
+    linearly-spaced values between its min and max.  Resolution
+    defaults to 100 but can be overridden via ``grid_resolution``
+    in the generator spec.
     """
     import numpy as _np
 
     from scenario_generators import build_chaospy_distribution
 
     generator = _sensitivity_generator(wildcards)
+    n_grid = generator.get("grid_resolution", 100)
     slice_params = generator.get("slice_parameters", [])
     grid = {}
     for sp in slice_params:
         spec = generator["parameters"][sp]
         dist = build_chaospy_distribution(spec)
         lo, hi = float(dist.lower[0]), float(dist.upper[0])
-        grid[sp] = [float(v) for v in _np.linspace(lo, hi, 100)]
+        grid[sp] = [float(v) for v in _np.linspace(lo, hi, n_grid)]
     return grid
 
 
-rule compute_pce_sensitivity:
-    """Compute PCE-based global sensitivity indices from ensemble scenario runs.
+rule compute_sobol_sensitivity:
+    """Compute global sensitivity indices from ensemble scenario runs.
 
-    Fits Polynomial Chaos Expansions to model outputs and computes Sobol
-    indices analytically. Supports conditional analysis on slice parameters.
+    Dispatches to either PCE or Random Forest based on the ``method``
+    key in the generator spec (default: ``"pce"``).
 
     To use, ensure your scenarios file has a generator with mode: sensitivity,
     then run:
-        tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/pce_global_indices_{prefix}.csv
+        tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/sobol_global_indices_{prefix}.csv
 
     The {prefix} wildcard matches the scenario name prefix (e.g., "pce_" for
     scenarios pce_0, pce_1, ...).
@@ -159,18 +162,18 @@ rule compute_pce_sensitivity:
         generator_spec=lambda w: _sensitivity_generator(w),
         slice_grid=_sensitivity_slice_grid,
     output:
-        global_indices="<results>/{name}/analysis/pce_global_indices_{prefix}.csv",
-        conditional_indices="<results>/{name}/analysis/pce_conditional_indices_{prefix}.csv",
-        conditional_joint_indices="<results>/{name}/analysis/pce_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/pce_validation_{prefix}.csv",
+        global_indices="<results>/{name}/analysis/sobol_global_indices_{prefix}.csv",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "<logs>/{name}/compute_pce_sensitivity_{prefix}.log",
+        "<logs>/{name}/compute_sobol_sensitivity_{prefix}.log",
     benchmark:
-        "<benchmarks>/{name}/compute_pce_sensitivity_{prefix}.tsv"
+        "<benchmarks>/{name}/compute_sobol_sensitivity_{prefix}.tsv"
     script:
-        "../scripts/analysis/compute_pce_sensitivity.py"
+        "../scripts/analysis/compute_sobol_sensitivity.py"

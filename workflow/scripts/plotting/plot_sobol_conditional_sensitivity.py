@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Plot conditional PCE sensitivity shares as stacked area charts."""
+"""Plot conditional Sobol sensitivity shares as stacked area charts."""
 
 from math import ceil
 from pathlib import Path
@@ -37,14 +37,14 @@ X_LABELS = {
 }
 
 
-def _loo_quality(loo_error: float) -> str:
-    if loo_error < 0.01:
+def _validation_quality(error: float) -> str:
+    if error < 0.01:
         return "excellent"
-    if loo_error < 0.05:
+    if error < 0.05:
         return "very good"
-    if loo_error < 0.1:
+    if error < 0.1:
         return "acceptable"
-    if loo_error < 0.2:
+    if error < 0.2:
         return "weak"
     return "poor"
 
@@ -65,7 +65,7 @@ def _plot_for_x(
     df: pd.DataFrame,
     x_column: str,
     metric_column: str,
-    loo_by_output: dict[str, float],
+    error_by_output: dict[str, float],
     output_pdf: Path,
 ) -> None:
     aggregated = (
@@ -128,13 +128,13 @@ def _plot_for_x(
         )
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
-        loo_value = loo_by_output.get(output)
-        loo_suffix = (
+        err_value = error_by_output.get(output)
+        err_suffix = (
             ""
-            if loo_value is None
-            else f"\nLOO={loo_value:.3f} ({_loo_quality(float(loo_value))})"
+            if err_value is None
+            else f"\nerr={err_value:.3f} ({_validation_quality(float(err_value))})"
         )
-        ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{loo_suffix}")
+        ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{err_suffix}")
         ax.set_xlabel(X_LABELS.get(x_column, x_column))
         if i % n_cols == 0:
             ax.set_ylabel("Explained Variability Fraction (S1)")
@@ -158,7 +158,7 @@ def _plot_for_x(
         0.01,
         0.01,
         "Areas are conditional first-order Sobol shares. "
-        "LOO bands: <0.01 excellent, <0.05 very good, <0.1 acceptable, <0.2 weak, >=0.2 poor.",
+        "Error bands: <0.01 excellent, <0.05 very good, <0.1 acceptable, <0.2 weak, >=0.2 poor.",
         fontsize=8,
         alpha=0.8,
     )
@@ -194,7 +194,7 @@ def main() -> None:
         raise ValueError(
             f"Expected metric column '{metric_column}' in conditional indices"
         )
-    required_validation_columns = {"output", "loo_error"}
+    required_validation_columns = {"output", "validation_error"}
     missing_validation_columns = required_validation_columns - set(
         validation_df.columns
     )
@@ -203,9 +203,9 @@ def main() -> None:
             "Validation file is missing required columns: "
             + ", ".join(sorted(missing_validation_columns))
         )
-    loo_by_output = (
-        validation_df.dropna(subset=["output", "loo_error"])
-        .set_index("output")["loo_error"]
+    error_by_output = (
+        validation_df.dropna(subset=["output", "validation_error"])
+        .set_index("output")["validation_error"]
         .astype(float)
         .to_dict()
     )
@@ -227,13 +227,13 @@ def main() -> None:
         df,
         "value_per_yll",
         metric_column,
-        loo_by_output,
+        error_by_output,
         output_value_per_yll_pdf,
     )
     logger.info("Wrote %s", output_value_per_yll_pdf)
 
     logger.info("Creating stacked conditional sensitivity plot vs ghg_price")
-    _plot_for_x(df, "ghg_price", metric_column, loo_by_output, output_ghg_price_pdf)
+    _plot_for_x(df, "ghg_price", metric_column, error_by_output, output_ghg_price_pdf)
     logger.info("Wrote %s", output_ghg_price_pdf)
 
 

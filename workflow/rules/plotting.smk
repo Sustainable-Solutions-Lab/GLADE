@@ -18,7 +18,7 @@ if comparison_scenarios == "all":
     comparison_scenarios = [f"scen-{name}" for name in scenario_names]
 
 
-def _pce_sensitivity_generator():
+def _sobol_sensitivity_generator():
     """Return the single sensitivity generator, or None if not configured."""
     raw_defs = config["scenarios"]
     if raw_defs is None:
@@ -35,9 +35,9 @@ def _pce_sensitivity_generator():
     return generators[0]
 
 
-def _pce_non_slice_parameters():
+def _sobol_non_slice_parameters():
     """Return sensitivity parameters excluding configured slice parameters."""
-    generator = _pce_sensitivity_generator()
+    generator = _sobol_sensitivity_generator()
     if generator is None:
         return []
     slice_parameters = set(generator["slice_parameters"])
@@ -50,7 +50,7 @@ def _pce_non_slice_parameters():
     ]
 
 
-pce_non_slice_parameters = _pce_non_slice_parameters()
+sobol_non_slice_parameters = _sobol_non_slice_parameters()
 
 
 def _gaez_actual_yield_raster_path(crop_name: str, water_supply: str) -> str:
@@ -707,14 +707,14 @@ rule plot_luc_emissions:
         "../scripts/plotting/plot_luc_emissions.py"
 
 
-rule plot_pce_conditional_sensitivity:
+rule plot_sobol_conditional_sensitivity:
     """Plot stacked conditional Sobol shares vs policy slice parameters."""
     input:
-        conditional_indices="<results>/{name}/analysis/pce_conditional_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/pce_validation_{prefix}.csv",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.csv",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
     output:
-        value_per_yll_pdf="<results>/{name}/plots/pce_conditional_s1_vs_value_per_yll_{prefix}.pdf",
-        ghg_price_pdf="<results>/{name}/plots/pce_conditional_s1_vs_ghg_price_{prefix}.pdf",
+        value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
+        ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
     params:
         metric="S1_cond",
     group:
@@ -723,54 +723,54 @@ rule plot_pce_conditional_sensitivity:
         runtime="2m",
         mem_mb=1000,
     log:
-        "<logs>/{name}/plot_pce_conditional_sensitivity_{prefix}.log",
+        "<logs>/{name}/plot_sobol_conditional_sensitivity_{prefix}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_pce_conditional_sensitivity_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_conditional_sensitivity_{prefix}.tsv"
     script:
-        "../scripts/plotting/plot_pce_conditional_sensitivity.py"
+        "../scripts/plotting/plot_sobol_conditional_sensitivity.py"
 
 
-rule plot_pce_joint_conditional_contour:
+rule plot_sobol_joint_conditional_contour:
     """Plot conditional Sobol surface for one non-slice parameter."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/pce_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/pce_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
     output:
-        pdf="<results>/{name}/plots/pce_conditional_s1_surface_{parameter}_{prefix}.pdf",
+        pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{prefix}.pdf",
     params:
         metric="S1_cond",
-        allowed_parameters=pce_non_slice_parameters,
+        allowed_parameters=sobol_non_slice_parameters,
     group:
         "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1200,
     log:
-        "<logs>/{name}/plot_pce_joint_conditional_contour_{parameter}_{prefix}.log",
+        "<logs>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{prefix}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_pce_joint_conditional_contour_{parameter}_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{prefix}.tsv"
     script:
-        "../scripts/plotting/plot_pce_joint_conditional_contour.py"
+        "../scripts/plotting/plot_sobol_joint_conditional_contour.py"
 
 
-rule plot_pce_joint_conditional_phase_diagram:
+rule plot_sobol_joint_conditional_phase_diagram:
     """Plot dominant non-slice sensitivity parameter across 2D policy space."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/pce_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/pce_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
     output:
-        pdf="<results>/{name}/plots/pce_conditional_dominant_factor_{prefix}.pdf",
+        pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
     params:
         metric="S1_cond",
-        allowed_parameters=pce_non_slice_parameters,
+        allowed_parameters=sobol_non_slice_parameters,
     group:
         "analysis_plot"
     resources:
         runtime="2m",
         mem_mb=1200,
     log:
-        "<logs>/{name}/plot_pce_joint_conditional_phase_diagram_{prefix}.log",
+        "<logs>/{name}/plot_sobol_joint_conditional_phase_diagram_{prefix}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_pce_joint_conditional_phase_diagram_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_joint_conditional_phase_diagram_{prefix}.tsv"
     script:
-        "../scripts/plotting/plot_pce_joint_conditional_phase_diagram.py"
+        "../scripts/plotting/plot_sobol_joint_conditional_phase_diagram.py"

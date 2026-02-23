@@ -45,7 +45,11 @@ scenarios:
   _generators:
     - name: pce_{sample_id}
       mode: sensitivity
-      samples: 2048
+      method: pce        # "pce" or "rf"
+      grid_resolution: 50
+      method_options:
+        n_mc_conditional: 4096
+      samples: 1024
       slice_parameters: [value_per_yll, ghg_price]
       parameters:
         # yield_factor:
