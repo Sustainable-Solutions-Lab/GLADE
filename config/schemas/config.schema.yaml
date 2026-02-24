@@ -723,7 +723,7 @@ properties:
 
   grazing:
     type: object
-    required: [enabled, isimip_utilization_rate, forage_overlap_subtraction_alpha, forage_overlap_crops]
+    required: [enabled, isimip_utilization_rate, forage_overlap_subtraction_alpha, forage_overlap_crops, grassland_forage_calibration]
     additionalProperties: false
     properties:
       enabled:
@@ -746,6 +746,24 @@ properties:
           type: string
           pattern: "^[a-z0-9-]+$"
         description: "Crops counted as modeled forage-crop supply in overlap correction"
+      grassland_forage_calibration:
+        type: object
+        required: [enabled, generate, source, scenario]
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Apply per-country grassland yield corrections and exogenous forage"
+          generate:
+            type: boolean
+            description: "Generate calibration CSV from a solved model's forage slack"
+          source:
+            type: string
+            description: "Path to calibration CSV (read when enabled, written when generate)"
+          scenario:
+            type: string
+            pattern: "^[a-zA-Z0-9_]+$"
+            description: "Scenario whose solved model is used to generate calibration"
 
   food_groups:
     type: object

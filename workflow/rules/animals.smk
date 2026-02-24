@@ -206,6 +206,27 @@ if _cal_cfg["generate"]:
             "../scripts/compute_feed_efficiency_calibration.py"
 
 
+_grassland_cal_cfg = config["grazing"]["grassland_forage_calibration"]
+
+if _grassland_cal_cfg["generate"]:
+    _grassland_cal_scenario = _grassland_cal_cfg["scenario"]
+
+    rule compute_grassland_calibration:
+        input:
+            network=f"<results>/{name}/solved/model_scen-{_grassland_cal_scenario}.nc",
+        output:
+            _grassland_cal_cfg["source"],
+        resources:
+            runtime="2m",
+            mem_mb=4000,
+        log:
+            f"<logs>/{name}/compute_grassland_calibration_scen-{_grassland_cal_scenario}.log",
+        benchmark:
+            f"<benchmarks>/{name}/compute_grassland_calibration_scen-{_grassland_cal_scenario}.tsv"
+        script:
+            "../scripts/compute_grassland_calibration.py"
+
+
 rule calculate_manure_emissions:
     input:
         ruminant_feed_categories="<processing>/{name}/ruminant_feed_categories.csv",

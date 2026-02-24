@@ -8,6 +8,13 @@ scenarios:
     animal_products:
       feed_efficiency_calibration:
         enabled: true
+    grazing:
+      grassland_forage_calibration:
+        enabled: true
+  feed_calibrated:
+    animal_products:
+      feed_efficiency_calibration:
+        enabled: true
   uncalibrated: {}
 
 planning_horizon: 2020
@@ -40,6 +47,9 @@ grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
   isimip_utilization_rate: 0.60
   forage_overlap_subtraction_alpha: 1.0
+  grassland_forage_calibration:
+    generate: true
+    scenario: feed_calibrated
 
 land:
   regional_limit: 1.

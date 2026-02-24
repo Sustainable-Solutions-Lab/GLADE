@@ -66,7 +66,11 @@ def compute_calibration(
         ftp = pd.read_csv(feed_to_products_path, comment="#")
         out = ftp[["country", "product", "feed_category"]].copy()
         out["multiplier"] = 1.0
-        out.to_csv(output_path, index=False)
+        with open(output_path, "w") as f:
+            f.write("# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek\n")
+            f.write("#\n")
+            f.write("# SPDX-License-Identifier: CC-BY-4.0\n")
+            out.to_csv(f, index=False)
         return
 
     dispatch = n.generators_t.p[slack_gens.index].iloc[0]
@@ -133,7 +137,11 @@ def compute_calibration(
     )
     result["multiplier"] = result["multiplier"].fillna(1.0)
 
-    result.to_csv(output_path, index=False)
+    with open(output_path, "w") as f:
+        f.write("# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek\n")
+        f.write("#\n")
+        f.write("# SPDX-License-Identifier: CC-BY-4.0\n")
+        result.to_csv(f, index=False)
     logger.info("Wrote %d calibration entries to %s", len(result), output_path)
 
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
 country,product,feed_category,multiplier
 AFG,dairy,ruminant_forage,1.0
 AFG,dairy,ruminant_grain,1.0

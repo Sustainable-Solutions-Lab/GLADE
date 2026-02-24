@@ -71,6 +71,13 @@ if __name__ == "__main__":
     )  # Already in bn USD
     grassland_yield_multiplier = float(validation_cfg["grassland_yield_multiplier"])
 
+    grassland_cal_cfg = snakemake.params.grazing["grassland_forage_calibration"]
+    grassland_cal_path = (
+        snakemake.input.get("grassland_calibration")
+        if grassland_cal_cfg["enabled"]
+        else None
+    )
+
     # ═══════════════════════════════════════════════════════════════
     # DATA LOADING
     # ═══════════════════════════════════════════════════════════════
@@ -299,6 +306,27 @@ if __name__ == "__main__":
             logger.info(
                 "Applied validation grassland yield multiplier: %.3f",
                 grassland_yield_multiplier,
+            )
+        if grassland_cal_path:
+            grassland_cal = read_csv(grassland_cal_path)
+            gc_region = grassland_df.reset_index()
+            _r2c = regions_df.set_index("region")["country"]
+            gc_region["country"] = gc_region["region"].map(_r2c)
+            gc_merged = gc_region.merge(
+                grassland_cal[["country", "yield_correction"]],
+                on="country",
+                how="left",
+            )
+            gc_merged["yield_correction"] = gc_merged["yield_correction"].fillna(1.0)
+            grassland_df["yield"] = (
+                gc_merged.set_index(["region", "resource_class"])["yield_correction"]
+                * grassland_df["yield"]
+            ).values
+            n_corrected = int((gc_merged["yield_correction"] < 1.0).sum())
+            logger.info(
+                "Applied grassland yield corrections: %d/%d regions adjusted",
+                n_corrected,
+                len(gc_merged),
             )
         current_grassland_area_df = read_csv(snakemake.input.current_grassland_area)
         if not current_grassland_area_df.empty:
@@ -754,6 +782,49 @@ if __name__ == "__main__":
         gleam_feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
     )
+
+    # Add exogenous forage from grassland calibration (deficit countries)
+    if grassland_cal_path:
+        grassland_cal = read_csv(grassland_cal_path)
+        exog = grassland_cal[grassland_cal["exogenous_forage_mt_dm"] > 0].copy()
+        if not exog.empty:
+            exog_buses = "feed:ruminant_forage:" + exog["country"]
+            bus_exists = exog_buses.isin(n.buses.static.index)
+            exog = exog[bus_exists.values]
+            exog_buses = exog_buses[bus_exists.values]
+            if not exog.empty:
+                if "exogenous_forage_cal" not in n.carriers.static.index:
+                    n.carriers.add("exogenous_forage_cal", unit="Mt")
+                gen_names = pd.Index(
+                    "supply:exogenous_forage:" + exog["country"].values,
+                    dtype="object",
+                )
+                if enforce_baseline_feed:
+                    n.generators.add(
+                        gen_names,
+                        bus=exog_buses.values,
+                        carrier="exogenous_forage_cal",
+                        p_nom=exog["exogenous_forage_mt_dm"].values,
+                        p_nom_extendable=False,
+                        p_min_pu=1.0,
+                        p_max_pu=1.0,
+                        country=exog["country"].values,
+                    )
+                else:
+                    n.generators.add(
+                        gen_names,
+                        bus=exog_buses.values,
+                        carrier="exogenous_forage_cal",
+                        p_nom_extendable=True,
+                        p_nom_max=exog["exogenous_forage_mt_dm"].values,
+                        marginal_cost=0.0,
+                        country=exog["country"].values,
+                    )
+                logger.info(
+                    "Added %d exogenous forage generators (%.1f Mt DM total)",
+                    len(gen_names),
+                    exog["exogenous_forage_mt_dm"].sum(),
+                )
 
     # Add feed slack generators for validation mode feasibility
     if use_actual_production or enforce_baseline_feed:

@@ -68,12 +68,29 @@ def build_model_calibration_input(wildcards):
     return {}
 
 
+def build_model_grassland_calibration_input(wildcards):
+    """Conditionally include grassland forage calibration CSV."""
+    cal_cfg = config["grazing"]["grassland_forage_calibration"]
+    if cal_cfg["generate"]:
+        if wildcards.scenario == cal_cfg["scenario"]:
+            return {}  # Source scenario: don't include its own calibration
+        # Check effective config to avoid circular DAG dependencies
+        eff = get_effective_config(wildcards.scenario)
+        if not eff["grazing"]["grassland_forage_calibration"]["enabled"]:
+            return {}
+        return {"grassland_calibration": cal_cfg["source"]}
+    elif cal_cfg["enabled"]:
+        return {"grassland_calibration": cal_cfg["source"]}
+    return {}
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
         unpack(build_model_calibration_input),
+        unpack(build_model_grassland_calibration_input),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",

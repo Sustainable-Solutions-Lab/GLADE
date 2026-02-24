@@ -376,6 +376,11 @@ grazing:
   - alfalfa
   - silage-maize
   - biomass-sorghum
+  grassland_forage_calibration:
+    enabled: false
+    generate: false
+    source: "data/curated/grassland_forage_calibration.csv"
+    scenario: "default"
 
 # --- section: food_groups ---
 food_groups:
