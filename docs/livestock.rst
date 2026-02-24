@@ -202,7 +202,7 @@ Wirsenius (2000) [1]_ provides feed requirements per kg **carcass weight** (dres
 4. **Feed category energy content** from GLEAM 3.0 provides ME (MJ per kg DM) for each feed quality category
 5. **Efficiency calculation**: efficiency = ME_feed / ME_retail (tonnes **retail product** per tonne feed DM)
 
-**Output**: ``processing/{name}/feed_to_animal_products.csv`` with columns:
+**Output**: ``processing/{name}/feed_to_animal_products_uncalibrated.csv`` with columns:
 
 * ``country``: ISO 3166-1 alpha-3 country code
 * ``product``: Product name (e.g., "meat-cattle", "dairy")
@@ -299,8 +299,8 @@ consumed in the reference year. In validation mode this baseline can pin the
 model to observed feed mixes; in optimisation runs it serves as a reference
 point for comparison with solved results.
 
-The script ``workflow/scripts/prepare_gleam_feed_baseline.py`` produces
-``processing/{name}/gleam_feed_baseline_scen-{scenario}.csv``.
+The script ``workflow/scripts/prepare_feed_baseline.py`` produces
+``processing/{name}/feed_baseline_uncalibrated.csv``.
 
 Data Sources
 ~~~~~~~~~~~~
@@ -334,7 +334,7 @@ Disaggregation Pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Global GLEAM totals are converted to a country × product × feed-category
-matrix through six sequential steps.
+matrix through seven sequential steps.
 
 **Step 1 — Country disaggregation**
 
@@ -509,10 +509,38 @@ configuration keys ``validation.gleam_calibration_year`` (default: 2015) and
 ``validation.gleam_calibration_total_gt_dm`` (default: 6.2) control the
 calibration data point.
 
+**Step 7 — Production-based feed scaling**
+
+After scaling to the reference year and applying the efficiency calibration,
+the pipeline rescales feed quantities per (country, product) so that the
+implied animal output matches FAOSTAT production data.  This preserves
+GLEAM's feed composition (the relative split across feed categories) while
+correcting absolute feed levels to observed production:
+
+.. math::
+
+   \text{implied}_{c,p} = \sum_f \text{feed}_{c,p,f}
+       \times \text{efficiency}_{c,p,f}
+
+   \text{scale}_{c,p} = \frac{\text{FAOSTAT}_{c,p}}
+                              {\text{implied}_{c,p}}
+
+   \text{feed\_scaled}_{c,p,f} = \text{feed}_{c,p,f}
+       \times \text{scale}_{c,p}
+
+The efficiencies used here are the *uncalibrated* values from
+``feed_to_animal_products_uncalibrated.csv``.  Scale factors outside the
+range [0.3, 3.0] are logged as potential data inconsistencies in the GLEAM
+disaggregation (e.g., a mismatch between GLEAM's regional feed totals and
+FAOSTAT's country-level production data).  If FAOSTAT reports zero production
+for a (country, product) pair, all feed is set to zero; if the implied
+production is zero but FAOSTAT is positive, the scale factor defaults to 1.0
+and a warning is logged.
+
 Output
 ~~~~~~
 
-``processing/{name}/gleam_feed_baseline_scen-{scenario}.csv`` contains one row per
+``processing/{name}/feed_baseline_uncalibrated.csv`` contains one row per
 (country, product, feed category) combination:
 
 * ``country``: ISO 3166-1 alpha-3 country code
@@ -528,6 +556,11 @@ Output
 All (country, product, feed category) combinations are always present,
 including zeros, so every animal production link in the model has an explicit
 baseline entry.
+
+When feed efficiency calibration is enabled (see :ref:`feed-calibration`),
+the calibrated baseline is written to
+``processing/{name}/feed_baseline.csv`` and the calibrated efficiencies to
+``processing/{name}/feed_to_animal_products.csv``.
 
 Model Integration
 ~~~~~~~~~~~~~~~~~
@@ -564,6 +597,179 @@ In **validation mode**, these generators are fixed at the baseline amount
 (forced dispatch).  In **optimisation mode**, they are extendable up to the
 baseline amount at zero marginal cost, allowing the solver to use them if
 beneficial but not requiring it.
+
+.. _feed-calibration:
+
+Calibration
+-----------
+
+The uncalibrated baseline and feed efficiencies inevitably produce
+supply–demand gaps when tested in the full model: missing feed sources,
+regional mismatches between grassland output and ruminant forage demand, and
+approximate feed conversion efficiencies all contribute.  The calibration
+pipeline uses a *validation solve* to diagnose these gaps via slack variables
+and compute corrections.  Two independent calibration systems address
+different gap sources.
+
+Feed Efficiency Calibration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Feed efficiency calibration adjusts feed conversion efficiencies upward in
+(country, feed-category) combinations where the validation solve reveals
+positive feed slack — i.e. where the model cannot supply enough feed through
+its endogenous routes.
+
+**Algorithm** (implemented in
+``workflow/scripts/compute_feed_efficiency_calibration.py``):
+
+1. Solve the model with uncalibrated inputs and
+   ``validation.enforce_baseline_feed: true``.  The solved model contains
+   ``slack_positive_feed`` generators on each feed bus.
+2. Extract positive feed slack per (country, feed_category) from the solved
+   network.
+3. Compute the calibration multiplier:
+
+   .. math::
+
+      \text{supply}_{c,f} = \text{baseline}_{c,f} - \text{slack}_{c,f}
+
+      \text{multiplier}_{c,f} = \min\!\left(
+          \frac{\text{baseline}_{c,f}}{\text{supply}_{c,f}},\;
+          \text{max\_multiplier}
+      \right)
+
+   where :math:`\text{max\_multiplier}` (default 2.0) caps extreme
+   adjustments.
+
+4. Apply to efficiencies:
+   :math:`\text{efficiency}_\text{cal} = \text{efficiency}_\text{uncal}
+   \times \text{multiplier}`
+5. Adjust baseline feed quantities to preserve implied production:
+
+   .. math::
+
+      \text{adj}_{c,p} = \frac{\sum_f \text{feed}_{c,p,f}
+          \times \text{eff}_\text{uncal}}
+          {\sum_f \text{feed}_{c,p,f} \times \text{eff}_\text{cal}}
+
+   This ensures that the calibrated baseline still implies the same animal
+   output as the uncalibrated version.
+
+The calibration step is carried out by
+``workflow/scripts/apply_feed_calibration.py``, which writes the calibrated
+files ``feed_baseline.csv`` and ``feed_to_animal_products.csv``.
+
+**Configuration**:
+
+.. code-block:: yaml
+
+   animal_products:
+     feed_efficiency_calibration:
+       enabled: true          # Apply pre-computed calibration
+       generate: false        # Set true to trigger generation from a solve
+       source: "data/curated/feed_efficiency_calibration.csv"
+       max_multiplier: 2.0    # Cap on per-(country, category) multiplier
+       scenario: "default"    # Scenario whose solved model is used
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_feed_calibration.png
+   :width: 80%
+   :alt: Box plot of feed efficiency calibration multipliers by feed category
+   :align: center
+
+   Distribution of feed efficiency calibration multipliers across countries,
+   grouped by feed category.  The reference line at 1.0 marks "no adjustment".
+   Categories with multipliers systematically above 1.0 indicate systematic
+   supply gaps in the uncalibrated baseline.
+
+Grassland Forage Calibration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Grassland forage calibration addresses mismatches between grassland output
+and ruminant forage demand that persist after feed efficiency calibration.
+In some countries grassland yields exceed forage demand (surplus), while in
+others demand exceeds what grasslands can supply (deficit).
+
+**Algorithm** (implemented in
+``workflow/scripts/compute_grassland_calibration.py``):
+
+1. Solve the model with calibrated feed efficiencies but uncalibrated
+   grassland parameters.
+2. Per country, extract forage slack from ``feed:ruminant_forage:{country}``
+   buses:
+
+   * **Negative slack** (surplus): grassland output exceeds forage demand.
+     Reduce effective yield:
+
+     .. math::
+
+        \text{yield\_correction}_c = \frac{\max(0,\;
+            \text{output}_c - \text{surplus}_c)}{\text{output}_c}
+
+   * **Positive slack** (deficit): forage demand exceeds grassland output.
+     Supply the gap via an exogenous forage source:
+
+     .. math::
+
+        \text{exogenous\_forage}_c = \text{deficit}_c
+
+3. ``yield_correction`` (in [0, 1]) scales grassland yields downward;
+   ``exogenous_forage_mt_dm`` adds an external forage supply for countries
+   where grassland alone cannot meet ruminant forage requirements.
+
+**Configuration**:
+
+.. code-block:: yaml
+
+   grazing:
+     grassland_forage_calibration:
+       enabled: true          # Apply pre-computed calibration
+       generate: false        # Set true to trigger generation from a solve
+       source: "data/curated/grassland_forage_calibration.csv"
+       scenario: "default"    # Scenario whose solved model is used
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_grassland_calibration.png
+   :width: 100%
+   :alt: Map of grassland forage yield correction by country
+   :align: center
+
+   Grassland forage calibration by country.  Colour indicates the
+   ``yield_correction`` factor applied to grassland yields (green = no change,
+   yellow/red = reduced yields).  Countries receiving exogenous forage
+   (``exogenous_forage_mt_dm > 0``) are marked with hatching.
+
+Calibration Pipeline
+~~~~~~~~~~~~~~~~~~~~
+
+The two calibration systems run sequentially within the Snakemake workflow.
+The pipeline avoids circular dependencies by defining dedicated scenarios
+whose effective configuration disables the calibration being computed:
+
+1. **Phase 1 — Feed efficiency calibration**: The ``uncalibrated`` scenario
+   sets ``feed_efficiency_calibration.enabled: false`` and
+   ``grassland_forage_calibration.enabled: false``.  Building and solving
+   this scenario produces the uncalibrated model from which feed slack is
+   extracted.  ``compute_feed_efficiency_calibration`` writes the multipliers
+   to the configured ``source`` path (by default
+   ``data/curated/feed_efficiency_calibration.csv``).
+
+2. **Phase 2 — Grassland forage calibration**: The ``feed_calibrated``
+   scenario applies feed efficiency calibration but sets
+   ``grassland_forage_calibration.enabled: false``.  Building and solving
+   this scenario produces a model with calibrated efficiencies from which
+   forage slack is extracted.  ``compute_grassland_calibration`` writes
+   yield corrections and exogenous forage amounts to the configured
+   ``source`` path (by default
+   ``data/curated/grassland_forage_calibration.csv``).
+
+3. **Phase 3 — Calibrated model**: All other scenarios (including
+   ``default``) apply both calibrations.  ``apply_feed_calibration`` reads
+   the pre-computed multipliers and writes the calibrated
+   ``feed_baseline.csv`` and ``feed_to_animal_products.csv``.
+
+Pre-computed calibration files are stored under ``data/curated/`` so they
+can be reused across configurations without re-running the validation
+solves.  Set ``generate: true`` in the relevant configuration block to
+re-generate them (requires a full validation solve).
 
 Model Implementation
 --------------------
@@ -768,6 +974,26 @@ Workflow Rules
   * **Input**: ISIMIP grassland yield NetCDF, resource classes, regions
   * **Output**: ``processing/{name}/grassland_yields.csv``
   * **Script**: ``workflow/scripts/build_grassland_yields.py``
+
+**prepare_feed_baseline**
+  * **Input**: GLEAM SI tables, FAOSTAT QCL, feed mappings, uncalibrated efficiencies
+  * **Output**: ``processing/{name}/feed_baseline_uncalibrated.csv``
+  * **Script**: ``workflow/scripts/prepare_feed_baseline.py``
+
+**apply_feed_calibration**
+  * **Input**: Uncalibrated baseline and efficiencies, calibration multipliers
+  * **Output**: ``processing/{name}/feed_baseline.csv``, ``processing/{name}/feed_to_animal_products.csv``
+  * **Script**: ``workflow/scripts/apply_feed_calibration.py``
+
+**compute_feed_efficiency_calibration**
+  * **Input**: Solved network (uncalibrated scenario), uncalibrated baseline and efficiencies
+  * **Output**: ``data/curated/feed_efficiency_calibration.csv``
+  * **Script**: ``workflow/scripts/compute_feed_efficiency_calibration.py``
+
+**compute_grassland_calibration**
+  * **Input**: Solved network (feed-calibrated scenario)
+  * **Output**: ``data/curated/grassland_forage_calibration.csv``
+  * **Script**: ``workflow/scripts/compute_grassland_calibration.py``
 
 Livestock production is then integrated into the ``build_model`` rule using the grassland yields and feed conversion CSVs.
 

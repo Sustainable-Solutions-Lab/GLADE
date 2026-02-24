@@ -12,12 +12,22 @@
 # everything else with the doc_figures config.
 #
 # All arguments are forwarded to tools/smk (e.g., -j4, -e dev-gurobi).
+# Defaults to -e gurobi; override with -e <env>.
 #
 # Usage:
 #   tools/build-docs -j4
 #   tools/build-docs -e dev-gurobi -j4
 
 set -euo pipefail
+
+# Default to gurobi environment unless the user explicitly passes -e/--env.
+has_env=false
+for arg in "$@"; do
+  case "$arg" in -e|--env) has_env=true; break ;; esac
+done
+if [ "$has_env" = false ]; then
+  set -- -e gurobi "$@"
+fi
 
 SMK_ARGS=("$@")
 
@@ -32,7 +42,11 @@ tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_validation.yaml -- \
     docs/_static/figures/validation_slack_overview.svg \
     docs/_static/figures/validation_slack_overview.png \
     docs/_static/figures/validation_feed_breakdown.svg \
-    docs/_static/figures/validation_feed_breakdown.png
+    docs/_static/figures/validation_feed_breakdown.png \
+    docs/_static/figures/validation_feed_calibration.svg \
+    docs/_static/figures/validation_feed_calibration.png \
+    docs/_static/figures/validation_grassland_calibration.svg \
+    docs/_static/figures/validation_grassland_calibration.png
 
 echo "=== Step 2/2: Building doc figures and Sphinx docs ==="
 tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_figures.yaml -- build_docs

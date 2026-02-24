@@ -71,6 +71,8 @@ DOC_VALIDATION_FIGURES = [
     "validation_food_group_slack",
     "validation_slack_overview",
     "validation_feed_breakdown",
+    "validation_feed_calibration",
+    "validation_grassland_calibration",
 ]
 
 
@@ -722,6 +724,49 @@ rule doc_fig_validation_feed_breakdown:
         "<benchmarks>/shared/doc_fig_validation_feed_breakdown.tsv"
     script:
         "../scripts/doc_figures/validation_feed_breakdown.py"
+
+
+rule doc_fig_validation_feed_calibration:
+    """Generate feed efficiency calibration multiplier box plot."""
+    input:
+        calibration=config["animal_products"]["feed_efficiency_calibration"]["source"],
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_feed_calibration.svg",
+        png="docs/_static/figures/validation_feed_calibration.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_feed_calibration.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_feed_calibration.tsv"
+    script:
+        "../scripts/doc_figures/validation_feed_calibration.py"
+
+
+rule doc_fig_validation_grassland_calibration:
+    """Generate grassland forage calibration choropleth map."""
+    input:
+        calibration=config["grazing"]["grassland_forage_calibration"]["source"],
+        regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/validation_grassland_calibration.svg",
+        png="docs/_static/figures/validation_grassland_calibration.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_validation_grassland_calibration.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_validation_grassland_calibration.tsv"
+    script:
+        "../scripts/doc_figures/validation_grassland_calibration.py"
 
 
 # --- Trade friction production pattern GIF ---

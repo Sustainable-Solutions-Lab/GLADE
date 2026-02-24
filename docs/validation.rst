@@ -208,6 +208,9 @@ meals.
    validation configuration. Animals are sorted by total feed intake. See
    :doc:`livestock` for the feed conversion model and category definitions.
 
+Feed slack from the validation solve drives the calibration pipeline
+described in :ref:`feed-calibration`.
+
 
 Running the Validation
 ----------------------
