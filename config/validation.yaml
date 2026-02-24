@@ -4,18 +4,18 @@
 
 name: "validation"
 scenarios:
-  default:
-    animal_products:
-      feed_efficiency_calibration:
-        enabled: true
+  default: {}
+  feed_calibrated:
     grazing:
       grassland_forage_calibration:
-        enabled: true
-  feed_calibrated:
+        enabled: false
+  uncalibrated:
     animal_products:
       feed_efficiency_calibration:
-        enabled: true
-  uncalibrated: {}
+        enabled: false
+    grazing:
+      grassland_forage_calibration:
+        enabled: false
 
 planning_horizon: 2020
 

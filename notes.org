@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+* Meeting with Steve
+- Production stability: only penalise shift between countries.
+
+* Health term
+GEMINI:
+
+The mathematical formulation for the health cost has a fundamental flaw that leads to zero marginal costs (and thus zero health costs in the optimization) under specific conditions, which likely explains your observation.
+
+  The Mathematical Flaw: Dependence on Baseline
+
+  The current implementation calculates the health cost coefficient based on yll_base, which is the Attributable Burden of the Baseline Diet:
+
+  $$ \text{Cost} = V \times \frac{\text{YLL}{\text{base}}}{\text{RR}{\text{ref}}} \times (\text{RR}{\text{opt}} - \text{RR}{\text{ref}}) $$
+
+  Where $\text{YLL}_{\text{base}}$ is derived from the baseline PAF:
+  $$ \text{YLL}{\text{base}} = \text{YLL}{\text{total}} \times \left(1 - \frac{\text{RR}{\text{ref}}}{\text{RR}{\text{base}}}\right) $$
+
+  The problem arises when the Baseline Consumption is "good enough":
+   1. As we observed, the Relative Risk curves for vegetables flatten (plateau) around 300g/day.
+   2. If a country's baseline consumption is on this plateau (e.g., 300g), then $\text{RR}{\text{base}} \approx \text{RR}{\text{ref}}$.
+   3. Consequently, the PAF becomes 0, and $\text{YLL}_{\text{base}}$ becomes 0.
+   4. The cost coefficient $\frac{\text{YLL}{\text{base}}}{\text{RR}{\text{ref}}}$ becomes 0.
+   5. Result: The optimizer sees zero cost associated with this risk factor for this cluster. It can reduce vegetable consumption from 300g to 100g (or lower) to save on food costs without incurring any health penalty in the objective function.
+
+  Even for clusters where yll_base is not exactly zero (like Cluster 0 in my analysis), the reliance on yll_base creates a perverse scaling: the better the current diet, the cheaper it is to degrade it.
+
+  Correction Required
+
+  The sensitivity of the health cost should be proportional to the Total Disease Burden ($\text{YLL}_{\text{total}}$), not just the portion attributed to the baseline diet. The formulation should be:
+
+  $$ \text{Cost} = V \times \text{YLL}{\text{total}} \times \left(\frac{\text{RR}{\text{opt}}}{\text{RR}_{\text{ref}}} - 1\right) $$
+
+  This ensures that even if the baseline diet is optimal ($\text{RR}{\text{base}} = \text{RR}{\text{ref}}$), deviating to a worse diet ($\text{RR}{\text{opt}} > \text{RR}{\text{ref}}$) will incur a positive cost scaled by the total burden of the disease.
+
+  Summary
+  The model currently thinks: "Since the current diet causes no extra disease (relative to optimal), deviating from it causes no disease."
+  It should think: "Deviating from optimal causes disease proportional to the total population risk."
+
+  Recommendation: Update workflow/scripts/solve_model.py to use yll_total instead of yll_base for the coefficient calculation. This data is already available in the loaded tables.
+* Subsidies / taxes
+- Subsidies are very low. This is because the model is able to produce some things very cheaply and consume them all in one place. Need to add constraints to "spread out" consumption.
+- A little unclear why taxes are so high.
+- May want to add consumer preferences to this scenario.
+* Sugar dietary risk
+- Note in documentation that we don't model sugar as a harmful food, since evidence only exists for sugar-sweetened beverages (cause type 2 diabetes) but not total added sugar intake. (ref conversation with claude)

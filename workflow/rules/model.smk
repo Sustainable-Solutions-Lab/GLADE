@@ -54,18 +54,22 @@ def harvested_area_model_inputs(wildcards):
     return inputs
 
 
-def build_model_calibration_input(wildcards):
-    """Conditionally include feed efficiency calibration CSV."""
-    cal_cfg = config["animal_products"]["feed_efficiency_calibration"]
-    if cal_cfg["generate"]:
-        # When generating: include CSV for all scenarios except the source
-        if wildcards.scenario != cal_cfg["scenario"]:
-            return {"calibration": cal_cfg["source"]}
-        return {}
-    elif cal_cfg["enabled"]:
-        # Pre-generated CSV, always include
-        return {"calibration": cal_cfg["source"]}
-    return {}
+def feed_baseline_input(wildcards):
+    """Select calibrated or uncalibrated feed baseline per scenario."""
+    eff = get_effective_config(wildcards.scenario)
+    if eff["animal_products"]["feed_efficiency_calibration"]["enabled"]:
+        return {"feed_baseline": "<processing>/{name}/feed_baseline.csv"}
+    return {"feed_baseline": "<processing>/{name}/feed_baseline_uncalibrated.csv"}
+
+
+def feed_to_products_input(wildcards):
+    """Select calibrated or uncalibrated feed efficiencies per scenario."""
+    eff = get_effective_config(wildcards.scenario)
+    if eff["animal_products"]["feed_efficiency_calibration"]["enabled"]:
+        return {"feed_to_products": "<processing>/{name}/feed_to_animal_products.csv"}
+    return {
+        "feed_to_products": "<processing>/{name}/feed_to_animal_products_uncalibrated.csv"
+    }
 
 
 def build_model_grassland_calibration_input(wildcards):
@@ -89,7 +93,8 @@ rule build_model:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
-        unpack(build_model_calibration_input),
+        unpack(feed_baseline_input),
+        unpack(feed_to_products_input),
         unpack(build_model_grassland_calibration_input),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
@@ -98,7 +103,6 @@ rule build_model:
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_categories="<processing>/{name}/monogastric_feed_categories.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
-        feed_to_products="<processing>/{name}/feed_to_animal_products.csv",
         manure_emissions="<processing>/{name}/manure_emission_factors.csv",
         food_groups="data/curated/food_groups.csv",
         nutrition="data/curated/nutrition.csv",
@@ -113,7 +117,6 @@ rule build_model:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         costs="<processing>/{name}/crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
-        gleam_feed_baseline="<processing>/{name}/gleam_feed_baseline_scen-{scenario}.csv",
         grassland_yields="<processing>/{name}/grassland_yields.csv",
         monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",
         growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",

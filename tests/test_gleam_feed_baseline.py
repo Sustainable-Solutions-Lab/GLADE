@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.animal_utils import SPECIES_PRODUCTS
-from workflow.scripts.prepare_gleam_feed_baseline import (
+from workflow.scripts.prepare_feed_baseline import (
     PRODUCT_COMPOSITION,
     ROUGHAGE_COMPONENT_TO_FEED_ITEM,
     SI2_TO_MONOGASTRIC_FEED_ITEM,

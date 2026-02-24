@@ -343,7 +343,7 @@ animal_products:
     dairy-buffalo: dairy
     meat-sheep: meat-cattle
   feed_efficiency_calibration:
-    enabled: false
+    enabled: true
     generate: false
     source: "data/curated/feed_efficiency_calibration.csv"
     max_multiplier: 2.0
@@ -377,7 +377,7 @@ grazing:
   - silage-maize
   - biomass-sorghum
   grassland_forage_calibration:
-    enabled: false
+    enabled: true
     generate: false
     source: "data/curated/grassland_forage_calibration.csv"
     scenario: "default"

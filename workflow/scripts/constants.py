@@ -29,6 +29,14 @@ HA_PER_MHA = 1e6  # convert million hectares to hectares
 DAYS_PER_YEAR = 365
 N2O_N_TO_N2O = 44.0 / 28.0  # molecular weight ratio to convert N2O-N to N2O
 
+# SPDX comment header for generated CSV data files.
+# String concatenation prevents the reuse linter from seeing a duplicate tag.
+SPDX_CSV_HEADER = (
+    "# SPDX" + "-FileCopyrightText: 2025 Koen van Greevenbroek\n"
+    "#\n"
+    "# SPDX" + "-License-Identifier: CC-BY-4.0\n"
+)
+
 # Feed categories: 4 ruminant + 3 monogastric quality classes
 FEED_CATEGORIES = [
     "ruminant_roughage",

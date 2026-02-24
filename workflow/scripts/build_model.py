@@ -170,8 +170,8 @@ if __name__ == "__main__":
         residue_feed_items = []
         residue_lookup = {}
 
-    # Read GLEAM feed baseline (per-country, per-product, per-feed-category)
-    gleam_feed_baseline = read_csv(snakemake.input.gleam_feed_baseline)
+    # Read feed baseline (per-country, per-product, per-feed-category)
+    feed_baseline = read_csv(snakemake.input.feed_baseline)
 
     # Read feed requirements for animal products (feed pools -> foods)
     feed_to_products = read_csv(snakemake.input.feed_to_products)
@@ -180,30 +180,6 @@ if __name__ == "__main__":
     )
     if feed_to_products["efficiency"].isna().any():
         raise ValueError("feed_to_animal_products.csv contains non-numeric efficiency")
-
-    # Apply feed efficiency calibration if enabled for this scenario
-    cal_cfg = snakemake.params.animal_products["feed_efficiency_calibration"]
-    if cal_cfg["enabled"]:
-        cal = read_csv(snakemake.input.calibration)
-        feed_to_products = feed_to_products.merge(
-            cal[["country", "product", "feed_category", "multiplier"]],
-            on=["country", "product", "feed_category"],
-            how="left",
-        )
-        feed_to_products["multiplier"] = feed_to_products["multiplier"].fillna(1.0)
-        n_cal = int((feed_to_products["multiplier"] != 1.0).sum())
-        feed_to_products["efficiency"] *= feed_to_products["multiplier"]
-        logger.info(
-            "Applied feed efficiency calibration: %d/%d entries (median mult %.3f)",
-            n_cal,
-            len(feed_to_products),
-            feed_to_products.loc[
-                feed_to_products["multiplier"] != 1.0, "multiplier"
-            ].median()
-            if n_cal
-            else 1.0,
-        )
-        feed_to_products = feed_to_products.drop(columns=["multiplier"])
 
     # Read manure emission factors (CH4 and N2O)
     manure_emissions = read_csv(snakemake.input.manure_emissions)
@@ -772,14 +748,14 @@ if __name__ == "__main__":
         food_to_group,
         food_loss_waste,
         animal_costs_per_mt,
-        feed_baseline=gleam_feed_baseline,
+        feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
     )
 
     # Add exogenous feed generators (leaves/browse, swill)
     animals.add_exogenous_feed_generators(
         n,
-        gleam_feed_baseline,
+        feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
     )
 

@@ -388,7 +388,6 @@ def main() -> None:
     monogastric_mapping_path = snakemake.input.monogastric_feed_mapping  # type: ignore[name-defined]
     feed_efficiencies_path = snakemake.input.feed_to_animal_products  # type: ignore[name-defined]
     faostat_production_path = snakemake.input.faostat_animal_production  # type: ignore[name-defined]
-    calibration_path = getattr(snakemake.input, "calibration", None)  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     reference_year = int(snakemake.params.reference_year)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
@@ -831,27 +830,6 @@ def main() -> None:
 
     feed_eff = pd.read_csv(feed_efficiencies_path)
     faostat_prod = pd.read_csv(faostat_production_path)
-
-    # Apply calibration multipliers to feed efficiencies if provided
-    if calibration_path:
-        cal = pd.read_csv(calibration_path, comment="#")
-        feed_eff = feed_eff.merge(
-            cal[["country", "product", "feed_category", "multiplier"]],
-            on=["country", "product", "feed_category"],
-            how="left",
-        )
-        feed_eff["multiplier"] = feed_eff["multiplier"].fillna(1.0)
-        n_cal = int((feed_eff["multiplier"] != 1.0).sum())
-        logger.info(
-            "Applied calibration to %d/%d feed efficiencies (median mult %.3f)",
-            n_cal,
-            len(feed_eff),
-            feed_eff.loc[feed_eff["multiplier"] != 1.0, "multiplier"].median()
-            if n_cal
-            else 1.0,
-        )
-        feed_eff["efficiency"] *= feed_eff["multiplier"]
-        feed_eff = feed_eff.drop(columns=["multiplier"])
 
     # Compute implied production per (country, product) from current feed
     # and efficiency values: sum over categories of feed x efficiency.

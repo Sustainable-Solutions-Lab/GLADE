@@ -12,18 +12,6 @@ and manure emissions calculations.
 _cal_cfg = config["animal_products"]["feed_efficiency_calibration"]
 
 
-def _gleam_baseline_calibration_input(wildcards):
-    """Conditionally include calibration CSV for GLEAM baseline."""
-    cal_cfg = config["animal_products"]["feed_efficiency_calibration"]
-    if cal_cfg["generate"]:
-        if wildcards.scenario != cal_cfg["scenario"]:
-            return {"calibration": cal_cfg["source"]}
-        return {}
-    elif cal_cfg["enabled"]:
-        return {"calibration": cal_cfg["source"]}
-    return {}
-
-
 rule prepare_faostat_animal_production:
     input:
         qcl_csv="data/downloads/faostat/QCL.csv",
@@ -122,7 +110,7 @@ rule build_feed_to_animal_products:
         monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
         country_region_map="data/curated/country_wirsenius_region.csv",
     output:
-        "<processing>/{name}/feed_to_animal_products.csv",
+        "<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
     params:
         feed_efficiency_regions=config["animal_products"]["feed_efficiency_regions"],
         countries=config["countries"],
@@ -144,9 +132,8 @@ rule build_feed_to_animal_products:
         "../scripts/build_feed_to_animal_products.py"
 
 
-rule prepare_gleam_feed_baseline:
+rule prepare_feed_baseline:
     input:
-        unpack(_gleam_baseline_calibration_input),
         si_table_2="data/curated/gleam_tables/mottet_2017/gleam_2_0_si2_global_livestock_feed_intake.csv",
         si_table_4="data/curated/gleam_tables/mottet_2017/gleam_2_0_si4_dairy_cattle_composition.csv",
         si_table_5="data/curated/gleam_tables/mottet_2017/gleam_2_0_si5_beef_cattle_composition.csv",
@@ -158,7 +145,7 @@ rule prepare_gleam_feed_baseline:
         m49_codes="data/curated/M49-codes.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
-        feed_to_animal_products="<processing>/{name}/feed_to_animal_products.csv",
+        feed_to_animal_products="<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
         faostat_animal_production="<processing>/{name}/faostat_animal_production.csv",
     params:
         reference_year=config["validation"]["production_year"],
@@ -169,18 +156,18 @@ rule prepare_gleam_feed_baseline:
         feed_proxy_map=config["animal_products"]["feed_proxy_map"],
         faostat_items=config["animal_products"]["faostat_items"],
     output:
-        "<processing>/{name}/gleam_feed_baseline_scen-{scenario}.csv",
+        "<processing>/{name}/feed_baseline_uncalibrated.csv",
     group:
         "prep"
     resources:
         runtime="2m",
         mem_mb=2800,
     log:
-        "<logs>/{name}/prepare_gleam_feed_baseline_scen-{scenario}.log",
+        "<logs>/{name}/prepare_feed_baseline.log",
     benchmark:
-        "<benchmarks>/{name}/prepare_gleam_feed_baseline_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/prepare_feed_baseline.tsv"
     script:
-        "../scripts/prepare_gleam_feed_baseline.py"
+        "../scripts/prepare_feed_baseline.py"
 
 
 if _cal_cfg["generate"]:
@@ -189,8 +176,8 @@ if _cal_cfg["generate"]:
     rule compute_feed_efficiency_calibration:
         input:
             network=f"<results>/{name}/solved/model_scen-{_cal_scenario}.nc",
-            feed_baseline=f"<processing>/{name}/gleam_feed_baseline_scen-{_cal_scenario}.csv",
-            feed_to_products=f"<processing>/{name}/feed_to_animal_products.csv",
+            feed_baseline=f"<processing>/{name}/feed_baseline_uncalibrated.csv",
+            feed_to_products=f"<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
         params:
             max_multiplier=_cal_cfg["max_multiplier"],
         output:
@@ -204,6 +191,27 @@ if _cal_cfg["generate"]:
             f"<benchmarks>/{name}/compute_feed_efficiency_calibration_scen-{_cal_scenario}.tsv"
         script:
             "../scripts/compute_feed_efficiency_calibration.py"
+
+
+if _cal_cfg["generate"] or _cal_cfg["enabled"]:
+
+    rule apply_feed_calibration:
+        input:
+            feed_baseline="<processing>/{name}/feed_baseline_uncalibrated.csv",
+            feed_to_products="<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
+            calibration=_cal_cfg["source"],
+        output:
+            feed_baseline="<processing>/{name}/feed_baseline.csv",
+            feed_to_products="<processing>/{name}/feed_to_animal_products.csv",
+        resources:
+            runtime="1m",
+            mem_mb=500,
+        log:
+            "<logs>/{name}/apply_feed_calibration.log",
+        benchmark:
+            "<benchmarks>/{name}/apply_feed_calibration.tsv"
+        script:
+            "../scripts/apply_feed_calibration.py"
 
 
 _grassland_cal_cfg = config["grazing"]["grassland_forage_calibration"]

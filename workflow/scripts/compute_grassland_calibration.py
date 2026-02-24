@@ -23,6 +23,7 @@ import logging
 import pandas as pd
 import pypsa
 
+from workflow.scripts.constants import SPDX_CSV_HEADER
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
@@ -149,9 +150,7 @@ def compute_grassland_calibration(
     )
 
     with open(output_path, "w") as f:
-        f.write("# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek\n")
-        f.write("#\n")
-        f.write("# SPDX-License-Identifier: CC-BY-4.0\n")
+        f.write(SPDX_CSV_HEADER)
         result.to_csv(f, index=False)
     logger.info("Wrote %d calibration entries to %s", len(result), output_path)
 
