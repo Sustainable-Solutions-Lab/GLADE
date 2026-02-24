@@ -834,7 +834,7 @@ def main() -> None:
 
     # Apply calibration multipliers to feed efficiencies if provided
     if calibration_path:
-        cal = pd.read_csv(calibration_path)
+        cal = pd.read_csv(calibration_path, comment="#")
         feed_eff = feed_eff.merge(
             cal[["country", "product", "feed_category", "multiplier"]],
             on=["country", "product", "feed_category"],
