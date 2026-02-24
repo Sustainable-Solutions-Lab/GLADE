@@ -921,21 +921,23 @@ def _run_solve() -> None:
     io_api = snakemake.params.io_api
     netcdf_config = snakemake.params.netcdf
 
-    # Configure Gurobi logging: write to log file, suppress console
-    # output. Explicitly creating an Env with OutputFlag=0 silences
-    # the license banner and "Set parameter" messages that are
-    # otherwise printed to stdout before linopy starts solving.
+    # Configure Gurobi logging. Explicitly creating an Env with
+    # OutputFlag=0 silences the license banner and "Set parameter"
+    # messages that are otherwise printed to stdout before linopy
+    # starts solving.
+    #
+    # Do not auto-set Gurobi's native LogFile to snakemake.log[0]:
+    # gurobipy already forwards solver progress to Python logging
+    # (logger name "gurobipy"), so writing both to the same file
+    # duplicates every solver line.
     gurobi_env = None
     if solver_name.lower() == "gurobi":
         import gurobipy as gp
 
         gurobi_env = gp.Env(params={"OutputFlag": 0})
 
-        if snakemake.log:
-            if "LogFile" not in solver_options:
-                solver_options["LogFile"] = snakemake.log[0]
-            if "LogToConsole" not in solver_options:
-                solver_options["LogToConsole"] = 0
+        if snakemake.log and "LogToConsole" not in solver_options:
+            solver_options["LogToConsole"] = 0
 
     # Get population from network metadata
     population_map = get_country_population(n)
