@@ -212,6 +212,7 @@ def build_within_group_shares(
     animal_production_df: pd.DataFrame,
     food_groups_included: list[str],
     byproducts: list[str],
+    carcass_to_retail_meat: dict[str, float],
 ) -> pd.DataFrame:
     """Build within-group food shares per country from FAOSTAT data.
 
@@ -330,6 +331,26 @@ def build_within_group_shares(
     shares_df["fbs_supply_kg"] = shares_df.apply(
         lambda r: fbs_supply.get((r["country"], int(r["fbs_item_code"])), 0.0),
         axis=1,
+    )
+    # Convert FBS meat supply (carcass basis) to retail-equivalent mass so
+    # within-group shares are consistent with model meat units.
+    shares_df["carcass_to_retail_factor"] = shares_df["food"].map(
+        carcass_to_retail_meat
+    )
+    meat_mask = shares_df["food"].astype(str).str.startswith("meat-")
+    missing_factors = shares_df.loc[
+        meat_mask & shares_df["carcass_to_retail_factor"].isna(), "food"
+    ].unique()
+    if len(missing_factors) > 0:
+        logger.warning(
+            "Missing carcass-to-retail factors for meats in baseline share estimation: %s",
+            ", ".join(sorted(missing_factors)),
+        )
+    shares_df["carcass_to_retail_factor"] = shares_df[
+        "carcass_to_retail_factor"
+    ].fillna(1.0)
+    shares_df["fbs_supply_kg"] = (
+        shares_df["fbs_supply_kg"] * shares_df["carcass_to_retail_factor"]
     )
     shares_df["supply_weight"] = shares_df["share"] * shares_df["fbs_supply_kg"]
     shares_df = (
@@ -855,6 +876,10 @@ def main():
     food_groups_included = list(snakemake.params.food_groups_included)
     byproducts = list(snakemake.params.byproducts)
     fbs_override_foods = list(snakemake.params.fbs_override_foods)
+    carcass_to_retail_meat = {
+        str(food): float(factor)
+        for food, factor in snakemake.params.carcass_to_retail_meat.items()
+    }
 
     logger.info("Estimating baseline diet for reference year %d", reference_year)
     logger.info("Baseline age group: %s", baseline_age)
@@ -895,6 +920,7 @@ def main():
         animal_production_df,
         food_groups_included,
         byproducts,
+        carcass_to_retail_meat,
     )
     logger.info(
         "Food shares: %d countries, %d foods",

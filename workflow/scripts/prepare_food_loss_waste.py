@@ -727,53 +727,73 @@ def main():
     result["loss_fraction"] = result["loss_fraction"].fillna(0.0)
     result["waste_fraction"] = result["waste_fraction"].fillna(0.0)
 
-    # Override dairy loss with FBS-derived implicit loss
-    # SDG data groups all "animal products" together, but dairy has lower losses than meat.
-    # Calculate implicit loss from global production vs food supply comparison.
-    if "dairy" in food_groups:
-        # Sum global dairy production (Mt)
-        dairy_prod_total = animal_production[
-            animal_production["product"].isin(["dairy", "dairy-buffalo"])
+    # Override animal-food loss with FBS-derived implicit loss where possible.
+    # Generic SDG loss factors can be inconsistent with the production/supply
+    # definitions used elsewhere in the workflow (notably for dairy and poultry).
+    animal_group_sources = {
+        "dairy": {
+            "products": ["dairy", "dairy-buffalo"],
+            "fbs_item": "dairy",
+        },
+        "poultry": {
+            "products": ["meat-chicken"],
+            "fbs_item": "poultry",
+        },
+    }
+
+    pop_per_country = population.set_index("iso3")["population"]
+
+    for food_group, source in animal_group_sources.items():
+        if food_group not in food_groups:
+            continue
+
+        products = source["products"]
+        fbs_item = source["fbs_item"]
+
+        production_total = animal_production[
+            animal_production["product"].isin(products)
         ]["production_mt"].sum()
 
-        # Get dairy supply per country (g/day per capita)
-        dairy_supply_rows = faostat_supply[faostat_supply["item"] == "dairy"]
-        dairy_supply_per_country = dairy_supply_rows.drop_duplicates(
-            subset=["country"]
-        ).set_index("country")["value"]
+        supply_rows = faostat_supply[faostat_supply["item"] == fbs_item]
+        supply_per_country = supply_rows.drop_duplicates(subset=["country"]).set_index(
+            "country"
+        )["value"]
 
-        # Get population per country
-        pop_per_country = population.set_index("iso3")["population"]
+        # supply_mt = supply_g_day * population * 365 / 1e12
+        supply_total = 0.0
+        for country in supply_per_country.index:
+            if country not in pop_per_country.index:
+                continue
+            supply_g_day = supply_per_country[country]
+            pop = pop_per_country[country]
+            supply_total += supply_g_day * pop * 365 / 1e12
 
-        # Calculate total global dairy supply (Mt)
-        # supply_mt = supply_g_day * population * 365 days / 1e12 (g to Mt)
-        dairy_supply_total = 0.0
-        for country in dairy_supply_per_country.index:
-            if country in pop_per_country.index:
-                supply_g_day = dairy_supply_per_country[country]
-                pop = pop_per_country[country]
-                supply_mt = supply_g_day * pop * 365 / 1e12
-                dairy_supply_total += supply_mt
-
-        # Calculate implicit loss: loss = 1 - (supply / production)
-        if dairy_prod_total > 0:
-            implicit_dairy_loss = max(0.0, 1 - dairy_supply_total / dairy_prod_total)
-        else:
-            implicit_dairy_loss = 0.0
+        implicit_loss = 0.0
+        if production_total > 0:
+            implicit_loss_raw = 1 - supply_total / production_total
+            implicit_loss = max(0.0, implicit_loss_raw)
+            if implicit_loss_raw < 0:
+                logger.info(
+                    "%s FBS supply exceeds production (raw loss %.1f%%); clipping to 0%%",
+                    food_group,
+                    implicit_loss_raw * 100,
+                )
 
         logger.info(
-            "Dairy FBS comparison: production=%.1f Mt, supply=%.1f Mt",
-            dairy_prod_total,
-            dairy_supply_total,
+            "%s FBS comparison: production=%.1f Mt, supply=%.1f Mt",
+            food_group.title(),
+            production_total,
+            supply_total,
         )
 
-        dairy_mask = result["food_group"] == "dairy"
-        old_avg = result.loc[dairy_mask, "loss_fraction"].mean()
-        result.loc[dairy_mask, "loss_fraction"] = implicit_dairy_loss
+        group_mask = result["food_group"] == food_group
+        old_avg = result.loc[group_mask, "loss_fraction"].mean()
+        result.loc[group_mask, "loss_fraction"] = implicit_loss
         logger.info(
-            "Dairy loss fraction: %.1f%% (SDG) -> %.1f%% (FBS-derived)",
+            "%s loss fraction: %.1f%% (SDG) -> %.1f%% (FBS-derived)",
+            food_group.title(),
             old_avg * 100,
-            implicit_dairy_loss * 100,
+            implicit_loss * 100,
         )
 
     # Sort for readability

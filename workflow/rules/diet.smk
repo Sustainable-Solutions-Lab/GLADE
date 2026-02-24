@@ -188,6 +188,7 @@ rule estimate_baseline_diet:
         food_groups_included=config["food_groups"]["included"],
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
+        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
