@@ -34,7 +34,6 @@ def add_regional_crop_production_links(
     rice_methane_factor: float,
     rainfed_wetland_rice_ch4_scaling_factor: float,
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
-    harvested_area_data: Mapping[str, pd.DataFrame] | None = None,
     use_actual_production: bool = False,
     *,
     min_yield_t_per_ha: float,
@@ -46,7 +45,6 @@ def add_regional_crop_production_links(
     crop bus per country; link names encode supply type (i/r) and resource class.
     """
     residue_lookup = residue_lookup or {}
-    harvested_area_data = harvested_area_data or {}
 
     # Add crop production carrier
     if "crop_production" not in n.carriers.static.index:
@@ -82,18 +80,6 @@ def add_regional_crop_production_links(
             key = f"{crop}_yield_{ws}"
             crop_yields = yields_data[key].copy()
 
-            harvest_key = f"{crop}_harvested_{ws}"
-            if harvest_key in harvested_area_data:
-                harvest_table = harvested_area_data[harvest_key]
-                if (
-                    not harvest_table.empty
-                    and "harvested_area" in harvest_table.columns
-                ):
-                    crop_yields = crop_yields.join(
-                        harvest_table["harvested_area"].rename("harvested_area"),
-                        how="left",
-                    )
-
             df = crop_yields.reset_index()
             df["name"] = (
                 "produce:"
@@ -114,7 +100,7 @@ def add_regional_crop_production_links(
 
             if use_actual_production:
                 df["fixed_area_ha"] = pd.to_numeric(
-                    df.get("harvested_area"), errors="coerce"
+                    df["harvested_area"], errors="coerce"
                 )
                 df = df[df["fixed_area_ha"] > 0]
 
@@ -185,10 +171,8 @@ def add_regional_crop_production_links(
             row_df["efficiency"] = pd.to_numeric(df["yield"], errors="coerce").to_numpy(
                 dtype=float
             )
-            ha = (
-                pd.to_numeric(df.get("harvested_area", 0), errors="coerce")
-                .fillna(0)
-                .to_numpy()
+            ha = pd.to_numeric(df["harvested_area"], errors="coerce").to_numpy(
+                dtype=float
             )
             row_df["baseline_production_mt"] = (
                 ha / constants.HA_PER_MHA * row_df["efficiency"].to_numpy()

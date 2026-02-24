@@ -196,9 +196,13 @@ if __name__ == "__main__":
     else:
         expected_irrigated_crops = set(map(str, irrigation_cfg))
 
-    # Read yields data and harvested area for each crop and water supply
+    # Read yields data and harvested area for each crop and water supply.
+    # Harvested area is joined into the yields table at load time so that
+    # downstream code can always assume a ``harvested_area`` column exists.
+    # Crops without GAEZ harvested-area data (e.g. biomass-sorghum,
+    # silage-maize) genuinely have zero recorded harvest; the column is
+    # filled with 0.0 for those crops.
     yields_data: dict[str, pd.DataFrame] = {}
-    harvested_area_data: dict[str, pd.DataFrame] = {}
     for crop in snakemake.params.crops:
         expected_supplies = ["r"]
         if crop in expected_irrigated_crops:
@@ -207,12 +211,17 @@ if __name__ == "__main__":
         for ws in expected_supplies:
             yields_key = f"{crop}_yield_{ws}"
             yields_df, _ = utils._load_crop_yield_table(snakemake.input[yields_key])
-            yields_data[yields_key] = yields_df
 
             harvest_key = f"{crop}_harvested_{ws}"
-            path = snakemake.input[harvest_key]
-            harvest_df, _ = utils._load_crop_yield_table(path)
-            harvested_area_data[harvest_key] = harvest_df
+            harvest_df, _ = utils._load_crop_yield_table(snakemake.input[harvest_key])
+
+            if not harvest_df.empty and "harvested_area" in harvest_df.columns:
+                yields_df = yields_df.join(harvest_df["harvested_area"], how="left")
+                yields_df["harvested_area"] = yields_df["harvested_area"].fillna(0.0)
+            else:
+                yields_df["harvested_area"] = 0.0
+
+            yields_data[yields_key] = yields_df
 
     # Read regions
     regions_df = gpd.read_file(snakemake.input.regions)
@@ -635,7 +644,6 @@ if __name__ == "__main__":
         rice_methane_factor=rice_methane_factor,
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
-        harvested_area_data=harvested_area_data,
         use_actual_production=use_actual_production,
         min_yield_t_per_ha=min_crop_yield,
     )
