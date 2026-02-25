@@ -953,6 +953,7 @@ animal_costs:
       producing_animals: ["2313", "5318", "5313"]
 
 crop_costs:
+  per_tonne_cost_fraction: 0.9  # Fraction of crop costs applied per tonne produced (remainder per hectare)
   averaging_period:
     start_year: 2015
     end_year: 2024

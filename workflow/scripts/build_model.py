@@ -442,6 +442,9 @@ if __name__ == "__main__":
     crop_costs_per_planting = costs_df.set_index("crop")[
         cost_per_planting_column
     ].astype(float)
+    per_tonne_cost_fraction = float(
+        snakemake.config["crop_costs"]["per_tonne_cost_fraction"]
+    )
 
     # Read animal production costs (USD/Mt in base year dollars)
     animal_costs_df = read_csv(snakemake.input.animal_costs)
@@ -645,6 +648,7 @@ if __name__ == "__main__":
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
         use_actual_production=use_actual_production,
+        per_tonne_cost_fraction=per_tonne_cost_fraction,
         min_yield_t_per_ha=min_crop_yield,
     )
     # Multi-cropping is disabled when running with actual production
@@ -663,6 +667,7 @@ if __name__ == "__main__":
             crop_costs_per_planting,
             fertilizer_n_rates,
             residue_lookup,
+            per_tonne_cost_fraction=per_tonne_cost_fraction,
             min_yield_t_per_ha=min_crop_yield,
         )
     elif use_actual_production:

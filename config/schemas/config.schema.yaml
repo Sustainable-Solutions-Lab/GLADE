@@ -1359,9 +1359,14 @@ properties:
 
   crop_costs:
     type: object
-    required: [averaging_period, fadn, usda]
+    required: [per_tonne_cost_fraction, averaging_period, fadn, usda]
     additionalProperties: false
     properties:
+      per_tonne_cost_fraction:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Fraction of crop production costs applied per tonne (0 = all per-ha, 1 = all per-tonne)"
       averaging_period:
         type: object
         required: [start_year, end_year]

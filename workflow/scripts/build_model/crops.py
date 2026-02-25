@@ -36,6 +36,7 @@ def add_regional_crop_production_links(
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     use_actual_production: bool = False,
     *,
+    per_tonne_cost_fraction: float = 0.9,
     min_yield_t_per_ha: float,
 ) -> None:
     """Add crop production links per region/resource class and water supply.
@@ -183,7 +184,8 @@ def add_regional_crop_production_links(
             row_df["efficiency3"] = fert_efficiency
             row_df["bus4"] = ch4_bus
             row_df["efficiency4"] = ch4_eff
-            row_df["marginal_cost"] = base_cost
+            row_df["base_cost"] = base_cost
+            row_df["harvested_area_ha"] = ha
             row_df["p_nom_max"] = (
                 pd.to_numeric(df["suitable_area"], errors="coerce").to_numpy(
                     dtype=float
@@ -210,6 +212,34 @@ def add_regional_crop_production_links(
 
     all_df = pd.concat(all_rows, axis=0)
     all_df.index = all_df.index.astype(str)
+
+    if per_tonne_cost_fraction > 0:
+        weighted_prod = (
+            (
+                all_df["efficiency"].astype(float)
+                * all_df["harvested_area_ha"].astype(float)
+            )
+            .groupby(all_df["crop"])
+            .sum()
+        )
+        weighted_area = (
+            all_df["harvested_area_ha"].astype(float).groupby(all_df["crop"]).sum()
+        )
+        avg_yield = weighted_prod / weighted_area
+        if (avg_yield <= 0).any():
+            bad = avg_yield[avg_yield <= 0].index.tolist()
+            raise ValueError(
+                "Average harvested-area yield must be positive for mixed crop costs; "
+                f"got non-positive values for crops: {bad}"
+            )
+
+        multiplier = (1.0 - per_tonne_cost_fraction) + per_tonne_cost_fraction * (
+            all_df["efficiency"].astype(float)
+            / all_df["crop"].map(avg_yield).astype(float)
+        )
+        all_df["marginal_cost"] = all_df["base_cost"].astype(float) * multiplier
+    else:
+        all_df["marginal_cost"] = all_df["base_cost"].astype(float)
 
     keys = list(
         zip(
@@ -284,6 +314,7 @@ def add_multi_cropping_links(
     fertilizer_n_rates: Mapping[str, float],
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     *,
+    per_tonne_cost_fraction: float = 0.9,
     min_yield_t_per_ha: float,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow."""
@@ -405,6 +436,29 @@ def add_multi_cropping_links(
         * 1e6
         * constants.USD_TO_BNUSD
     )
+    if per_tonne_cost_fraction > 0:
+        combined_yield = (
+            merged.groupby(key_cols)["yield_t_per_ha"].sum().rename("combined_yield")
+        )
+        base = base.join(combined_yield)
+        avg_combined_yield = (
+            base["combined_yield"] * base["eligible_area_ha"]
+        ).groupby(level="combination").sum() / base["eligible_area_ha"].groupby(
+            level="combination"
+        ).sum()
+        if (avg_combined_yield <= 0).any():
+            bad = avg_combined_yield[avg_combined_yield <= 0].index.tolist()
+            raise ValueError(
+                "Average combined yield must be positive for mixed multi-crop costs; "
+                f"got non-positive values for combinations: {bad}"
+            )
+        base["avg_combined_yield"] = base.index.get_level_values("combination").map(
+            avg_combined_yield
+        )
+        multiplier = (1.0 - per_tonne_cost_fraction) + per_tonne_cost_fraction * (
+            base["combined_yield"] / base["avg_combined_yield"]
+        )
+        base["marginal_cost"] = base["marginal_cost"] * multiplier
     base["p_nom_extendable"] = True
     base["p_nom_max"] = base["eligible_area_ha"] / 1e6
 

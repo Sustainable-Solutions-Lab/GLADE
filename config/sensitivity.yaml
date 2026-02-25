@@ -191,6 +191,9 @@ scenarios:
 food_utility_piecewise:
   enabled: true
 
+crop_costs:
+  per_tonne_cost_fraction: 0.9
+
 validation:
   use_actual_yields: true
   production_stability:
