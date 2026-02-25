@@ -72,7 +72,7 @@ def compute_calibration(
             out.to_csv(f, index=False)
         return
 
-    dispatch = n.generators_t.p[slack_gens.index].iloc[0]
+    dispatch = n.generators.dynamic.p[slack_gens.index].iloc[0]
     slack_by_bus = pd.DataFrame(
         {"bus": slack_gens["bus"].values, "slack": dispatch.values}
     )
