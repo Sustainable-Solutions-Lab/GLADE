@@ -304,14 +304,11 @@ animal_products:
   # Carcass-to-retail meat conversion factors
   carcass_to_retail_meat:
     meat-cattle: 0.67  # kg boneless retail beef per kg carcass (OECD-FAO 2023)
-    # meat-cattle: 0.7717 (would close validation gap)
     meat-pig: 0.73     # kg boneless retail pork per kg carcass (OECD-FAO 2023)
-    # meat-pig: 0.6403 (would close validation gap)
     meat-chicken: 0.60 # kg boneless retail chicken per kg carcass (OECD-FAO 2023)
     eggs: 1.00         # No conversion needed (whole egg = retail product)
     dairy: 1.00        # No conversion needed (whole milk = retail product)
     meat-sheep: 0.63   # kg boneless retail lamb per kg carcass (slightly lower than beef)
-    # meat-sheep: 0.8336 (would close validation gap)
     dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
   # FAOSTAT QCL item names to aggregate for each model product.
   # First item is the primary product; additional items are proxied species
