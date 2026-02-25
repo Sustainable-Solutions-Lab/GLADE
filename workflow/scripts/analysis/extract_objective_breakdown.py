@@ -14,13 +14,13 @@ Categories extracted:
 - Land use: Existing land use links
 - Trade: Import/export costs (crops, foods, feed)
 - Fertilizer: Synthetic fertilizer supply and distribution
-- Processing: Food processing/conversion costs (pathways, food conversion)
+- Processing: Food processing/conversion costs (crop→food pathways)
 - Animal production: Livestock production costs
-- Feed conversion: Feed processing costs
+- Feed conversion: Crop/food/residue → feed pool routing costs
 - Consumption: Food consumption links
 - Consumer values: Utility from food group consumption (typically negative)
 - Biomass exports: Revenue from biomass exports (typically negative)
-- Biomass routing: Internal biomass flow costs (residue conversion)
+- Biomass routing: Internal biomass flow costs (crop/byproduct → biomass bus)
 - Health burden: Health costs from YLL stores
 - GHG cost: Emissions costs from GHG stores
 - Emissions aggregation: Links aggregating emissions to GHG bus
@@ -75,92 +75,96 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
     index = static.index
 
     if component == "Generator":
-        carriers = static.get("carrier", pd.Series(dtype=str))
-        categories = []
-        for name in index:
-            name_str = str(name)
-            carrier = str(carriers.get(name, "")) if not carriers.empty else ""
-            if name_str.startswith("biomass:"):
-                categories.append("Biomass exports")
-            elif name_str.startswith("sink:"):
-                # Sink generators (e.g., biomass sinks) - revenue from exports
-                categories.append("Biomass exports")
-            elif name_str.startswith("slack:"):
-                categories.append("Slack penalties")
-            elif carrier == "fertilizer":
-                categories.append("Fertilizer")
-            elif name_str.startswith("supply:"):
-                # Land and resource supply generators (usually zero cost)
-                categories.append("Resource supply")
-            else:
-                raise ValueError(
-                    f"Unrecognized Generator pattern: name='{name_str}', carrier='{carrier}'. "
-                    f"Update _objective_category() to handle this case."
-                )
-        return pd.Series(categories, index=index, name="category")
+        carriers = (
+            static["carrier"].astype(str)
+            if "carrier" in static.columns
+            else pd.Series("", index=index)
+        )
+        names = index.astype(str)
+        categories = pd.Series(index=index, dtype="object")
+        categories[names.str.startswith("sink:")] = "Biomass exports"
+        categories[names.str.startswith("slack:")] = "Slack penalties"
+        categories[carriers == "fertilizer"] = "Fertilizer"
+        categories[names.str.startswith("supply:") & categories.isna()] = (
+            "Resource supply"
+        )
+        unmapped = categories.isna()
+        if unmapped.any():
+            bad = list(zip(names[unmapped], carriers[unmapped]))
+            raise ValueError(
+                f"Unrecognized Generator pattern(s): {bad[:5]}. "
+                f"Update _objective_category() to handle these."
+            )
+        return categories.rename("category")
 
     if component == "Link":
-        prefix_map = {
-            "produce": "Crop production",
-            "trade": "Trade",
+        carrier_map = {
+            "crop_production": "Crop production",
+            "crop_production_multi": "Crop production",
+            "grassland_production": "Crop production",
+            "spare_land": "Crop production",
+            "spare_existing_grassland": "Crop production",
+            "residue_incorporation": "Crop production",
+            "land_use": "Land use",
+            "land_conversion": "Land use",
+            "existing_to_pasture": "Land use",
+            "new_to_pasture": "Land use",
+            "existing_grassland_to_pasture": "Land use",
+            "trade_crop": "Trade",
             "trade_food": "Trade",
             "trade_feed": "Trade",
-            "convert": "Processing",
-            "convert_food": "Processing",
-            "convert_residue": "Biomass routing",
-            "consume": "Consumption",
-            "animal": "Animal production",
-            "pathway": "Processing",
-            "biomass": "Biomass routing",
-            "feed": "Feed conversion",
-            "grassland": "Crop production",
-            "spare": "Crop production",
-            "aggregate": "Emissions aggregation",
-            "distribute": "Fertilizer",
-            "incorporate": "Crop production",
-            "use": "Land use",
+            "feed_conversion": "Feed conversion",
+            "food_processing": "Processing",
+            "food_consumption": "Consumption",
+            "animal_production": "Animal production",
+            "biomass_crop": "Biomass routing",
+            "biomass_byproduct": "Biomass routing",
+            "emission_aggregation": "Emissions aggregation",
+            "fertilizer_distribution": "Fertilizer",
         }
-        categories = []
-        for name in index:
-            name_str = str(name)
-            prefix = name_str.split(":", 1)[0]
-            if prefix in prefix_map:
-                categories.append(prefix_map[prefix])
-            else:
-                raise ValueError(
-                    f"Unrecognized Link prefix: '{prefix}' in '{name_str}'. "
-                    f"Update _objective_category() to handle this case."
-                )
-        return pd.Series(categories, index=index, name="category")
+        carriers = static["carrier"].astype(str)
+        categories = carriers.map(carrier_map)
+        unmapped = categories.isna()
+        if unmapped.any():
+            bad = carriers[unmapped].unique().tolist()
+            raise ValueError(
+                f"Unrecognized Link carrier(s): {bad}. "
+                f"Update _objective_category() to handle these."
+            )
+        return categories.rename("category")
 
     if component == "Store":
         carriers = static["carrier"].astype(str)
         nutrient_carriers = {"cal", "carb", "fat", "protein"}
-        categories = []
-        for name, carrier in zip(index, carriers):
-            if carrier == "ghg":
-                categories.append("GHG cost")
-            elif carrier.startswith("yll_"):
-                categories.append("Health burden")
-            elif carrier.startswith("group_"):
-                categories.append("Consumer values")
-            elif carrier.startswith("nutrient_") or carrier in nutrient_carriers:
-                # Nutrient stores (protein, fat, carb, cal) - usually no cost
-                categories.append("Nutrient tracking")
-            elif carrier == "water":
-                categories.append("Water")
-            elif carrier == "fertilizer":
-                categories.append("Fertilizer")
-            elif carrier in ("spared_land", "spared_grassland"):
-                categories.append("Crop production")
-            elif carrier == "production_stability":
-                categories.append("Production stability")
-            else:
-                raise ValueError(
-                    f"Unrecognized Store carrier: '{carrier}' for store '{name}'. "
-                    f"Update _objective_category() to handle this case."
-                )
-        return pd.Series(categories, index=index, name="category")
+        # Build categories via exact-match map then prefix overrides
+        exact_map = {
+            "ghg": "GHG cost",
+            "water": "Water",
+            "fertilizer": "Fertilizer",
+            "spared_land": "Crop production",
+            "spared_grassland": "Crop production",
+        }
+        exact_map.update(dict.fromkeys(nutrient_carriers, "Nutrient tracking"))
+        categories = carriers.map(exact_map)
+        # Prefix-matched dynamic carriers
+        categories = categories.where(
+            categories.notna(),
+            other=carriers.map(
+                lambda c: "Health burden"
+                if c.startswith("yll_")
+                else "Consumer values"
+                if c.startswith("group_")
+                else None
+            ),
+        )
+        unmapped = categories.isna()
+        if unmapped.any():
+            bad = carriers[unmapped].unique().tolist()
+            raise ValueError(
+                f"Unrecognized Store carrier(s): {bad}. "
+                f"Update _objective_category() to handle these."
+            )
+        return categories.rename("category")
 
     # For other components, fail explicitly
     raise ValueError(

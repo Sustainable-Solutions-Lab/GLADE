@@ -40,6 +40,7 @@ CATEGORY_LABELS = {
     "emissions_aggregation": "Emissions aggregation",
     "land_use": "Land use",
     "water": "Water",
+    "production_stability": "Production stability",
 }
 
 
