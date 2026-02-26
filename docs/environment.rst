@@ -594,9 +594,11 @@ Example Calculation
 
    .. math::
 
+      \begin{aligned}
       N_\text{feed} &= 19.5 \text{ g/kg} = 0.0195 \text{ t N/t feed} \\
       \text{Product output} &= 0.15 \text{ t product/t feed} \\
       N_\text{product} &= 29.7 \text{ g/kg} \times 0.15 \text{ t/t} = 0.00446 \text{ t N/t feed}
+      \end{aligned}
 
 2. N excretion:
 
@@ -614,10 +616,12 @@ Example Calculation
 
    .. math::
 
+      \begin{aligned}
       N_2O_\text{direct} &= 0.0113 \times 0.010 \times \frac{44}{28} = 0.000178 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{vol} &= 0.0113 \times 0.21 \times 0.010 \times \frac{44}{28} = 0.000037 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{leach} &= 0.0113 \times 0.24 \times 0.011 \times \frac{44}{28} = 0.000043 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{total} &= 0.000178 + 0.000037 + 0.000043 = 0.000258 \text{ t N}_2\text{O/t feed}
+      \end{aligned}
 
 **Result**: Each tonne of feed produces 11.3 kg of manure N (contributing to the fertilizer pool) and 258 g of total N₂O emissions (178 g direct + 37 g volatilization + 43 g leaching).
 
@@ -637,11 +641,13 @@ Using the same parameters as above but with pasture grazing:
 
    .. math::
 
+      \begin{aligned}
       N_\text{applied} &= 0.0150 \text{ t N/t feed (all excreted N)} \\
       N_2O_\text{direct} &= 0.0150 \times 0.010 \times \frac{44}{28} = 0.000236 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{vol} &= 0.0150 \times 0.21 \times 0.010 \times \frac{44}{28} = 0.000050 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{leach} &= 0.0150 \times 0.24 \times 0.011 \times \frac{44}{28} = 0.000057 \text{ t N}_2\text{O/t feed} \\
       N_2O_\text{total} &= 0.000236 + 0.000050 + 0.000057 = 0.000343 \text{ t N}_2\text{O/t feed}
+      \end{aligned}
 
 **Result**: No manure N enters the fertilizer pool, but 343 g total N₂O per tonne feed is emitted from pasture deposition (236 g direct + 50 g volatilization + 57 g leaching). Higher than confined systems since all excreted N remains on pasture and is subject to emissions.
 

@@ -345,11 +345,12 @@ to it:
 
 .. math::
 
-   \text{share}_{c,s} = \frac{\text{production}_{c,s,2010}}
-                              {\sum_{c' \in \text{group}(c)} \text{production}_{c',s,2010}}
-
-   \text{intake}_{c,s,f} = \text{intake}_{\text{GLEAM},\,\text{group}(c),s,f}
-                            \times \text{share}_{c,s}
+   \begin{aligned}
+   \text{share}_{c,s} &= \frac{\text{production}_{c,s,2010}}
+                               {\sum_{c' \in \text{group}(c)} \text{production}_{c',s,2010}} \\[6pt]
+   \text{intake}_{c,s,f} &= \text{intake}_{\text{GLEAM},\,\text{group}(c),s,f}
+                             \times \text{share}_{c,s}
+   \end{aligned}
 
 **Step 2 — Product split for multi-product systems**
 
@@ -361,7 +362,7 @@ requirements from Wirsenius (2000):
 
 .. math::
 
-   \text{product\_share}_{p} =
+   \text{product_share}_{p} =
        \frac{\text{production}_{c,p} \times \text{FCR}_{c,p}}
             {\sum_{p'} \text{production}_{c,p'} \times \text{FCR}_{c,p'}}
 
@@ -498,11 +499,12 @@ constant annual rate, the correction for the reference year is:
 
 .. math::
 
-   r = \left(
+   \begin{aligned}
+   r &= \left(
        \frac{T_{\text{known}}}{\hat{T}_{\text{cal}}}
-   \right)^{1/(\text{cal\_year} - 2010)}
-
-   \text{correction} = r^{\,\text{ref\_year} - 2010}
+   \right)^{1/(\text{cal_year} - 2010)} \\[6pt]
+   \text{correction} &= r^{\,\text{ref_year} - 2010}
+   \end{aligned}
 
 All feed values are multiplied by this correction factor.  The two
 configuration keys ``validation.gleam_calibration_year`` (default: 2015) and
@@ -519,14 +521,14 @@ correcting absolute feed levels to observed production:
 
 .. math::
 
-   \text{implied}_{c,p} = \sum_f \text{feed}_{c,p,f}
-       \times \text{efficiency}_{c,p,f}
-
-   \text{scale}_{c,p} = \frac{\text{FAOSTAT}_{c,p}}
-                              {\text{implied}_{c,p}}
-
-   \text{feed\_scaled}_{c,p,f} = \text{feed}_{c,p,f}
+   \begin{aligned}
+   \text{implied}_{c,p} &= \sum_f \text{feed}_{c,p,f}
+       \times \text{efficiency}_{c,p,f} \\[6pt]
+   \text{scale}_{c,p} &= \frac{\text{FAOSTAT}_{c,p}}
+                               {\text{implied}_{c,p}} \\[6pt]
+   \text{feed_scaled}_{c,p,f} &= \text{feed}_{c,p,f}
        \times \text{scale}_{c,p}
+   \end{aligned}
 
 The efficiencies used here are the *uncalibrated* values from
 ``feed_to_animal_products_uncalibrated.csv``.  Scale factors outside the
@@ -631,14 +633,15 @@ its endogenous routes.
 
    .. math::
 
-      \text{supply}_{c,f} = \text{baseline}_{c,f} - \text{slack}_{c,f}
-
-      \text{multiplier}_{c,f} = \min\!\left(
+      \begin{aligned}
+      \text{supply}_{c,f} &= \text{baseline}_{c,f} - \text{slack}_{c,f} \\[6pt]
+      \text{multiplier}_{c,f} &= \min\!\left(
           \frac{\text{baseline}_{c,f}}{\text{supply}_{c,f}},\;
-          \text{max\_multiplier}
+          \text{max_multiplier}
       \right)
+      \end{aligned}
 
-   where :math:`\text{max\_multiplier}` (default 2.0) caps extreme
+   where :math:`\text{max_multiplier}` (default 2.0) caps extreme
    adjustments.
 
 4. Apply to efficiencies:
@@ -702,7 +705,7 @@ others demand exceeds what grasslands can supply (deficit).
 
      .. math::
 
-        \text{yield\_correction}_c = \frac{\max(0,\;
+        \text{yield_correction}_c = \frac{\max(0,\;
             \text{output}_c - \text{surplus}_c)}{\text{output}_c}
 
    * **Positive slack** (deficit): forage demand exceeds grassland output.
@@ -710,7 +713,7 @@ others demand exceeds what grasslands can supply (deficit).
 
      .. math::
 
-        \text{exogenous\_forage}_c = \text{deficit}_c
+        \text{exogenous_forage}_c = \text{deficit}_c
 
 3. ``yield_correction`` (in [0, 1]) scales grassland yields downward;
    ``exogenous_forage_mt_dm`` adds an external forage supply for countries

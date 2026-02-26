@@ -727,9 +727,10 @@ rule doc_fig_validation_feed_breakdown:
 
 
 rule doc_fig_validation_feed_calibration:
-    """Generate feed efficiency calibration multiplier box plot."""
+    """Generate feed efficiency calibration multiplier strip plot."""
     input:
         calibration=config["animal_products"]["feed_efficiency_calibration"]["source"],
+        production=f"<processing>/{DOC_VAL_NAME}/faostat_animal_production.csv",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/validation_feed_calibration.svg",
