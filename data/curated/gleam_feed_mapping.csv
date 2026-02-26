@@ -56,11 +56,11 @@ MLCTTN,,food,both,Cottonseed meal (not in model - skip for now)
 MLOILSDS,sunflower-meal,food,monogastric,Other oilseed meals → sunflower meal
 PKEXP,,food,both,Palm kernel cake (not in model - skip for now)
 GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat bran"
-GRNBYWET,,food,both,Wet grain byproducts (breweries) - not in model
+GRNBYWET,ddgs,food,both,DDGS from grain ethanol production (wet grain byproducts)
 MZGLTM,,food,ruminant,Maize gluten meal (high protein) - not in model
 MZGLTF,,food,ruminant,Maize gluten feed (lower protein) - not in model
 BPULP,,food,ruminant,Sugar beet pulp - not in model
-MOLASSES,,food,monogastric,Sugarcane molasses - not in model
+MOLASSES,molasses,food,both,Sugarcane molasses from ethanol production
 RAPESEED,rapeseed,crop,monogastric,Rapeseed whole seeds
 SOYOIL,soybean-oil,food,monogastric,Soybean oil (processed)
 FISHMEAL,,food,monogastric,Fish industry byproduct - not modeled

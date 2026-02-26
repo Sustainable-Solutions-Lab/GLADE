@@ -329,3 +329,28 @@ def residue_yield_inputs(_wildcards):
             set(config["animal_products"]["residue_crops"]) & set(config["crops"])
         )
     }
+
+
+rule prepare_biofuel_baseline:
+    input:
+        biofuel_crop_map="data/curated/faostat_biofuel_crop_map.csv",
+        fbs_csv="data/downloads/faostat/FBS.csv",
+        moisture_content="data/curated/crop_moisture_content.csv",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["validation"]["production_year"],
+        fbs_element_code=config["data"]["faostat"]["fbs_other_uses_element_code"],
+    output:
+        "<processing>/{name}/biofuel_baseline.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2900,
+    log:
+        "<logs>/{name}/prepare_biofuel_baseline.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_biofuel_baseline.tsv"
+    script:
+        "../scripts/prepare_biofuel_baseline.py"

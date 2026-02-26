@@ -12,11 +12,14 @@ to 0 for free disposal.
 """
 
 from collections.abc import Iterable, Mapping
+import logging
 
 import pandas as pd
 import pypsa
 
 from .. import constants
+
+logger = logging.getLogger(__name__)
 
 
 def add_biomass_infrastructure(
@@ -115,4 +118,86 @@ def add_biomass_crop_links(
         p_nom_extendable=True,
         country=combos["country"],
         crop=combos["crop"],
+    )
+
+
+def add_biofuel_links(
+    n: pypsa.Network,
+    biofuel_baseline: pd.DataFrame,
+) -> None:
+    """Add biofuel/industrial demand links from food buses to biomass.
+
+    All biofuel demand is routed via food buses. For grain/sugar crops,
+    the food processing pathways in foods.csv handle the crop→food
+    conversion and byproduct generation; this function only creates the
+    final food→biomass link. For oil crops the same pattern applies.
+
+    Each link stores its baseline demand in the ``baseline_demand_mt``
+    column for use by solve-time constraints.
+    """
+    carrier = "biofuel"
+    if carrier not in n.carriers.static.index:
+        n.carriers.add(carrier, unit="Mt")
+
+    bus_index = n.buses.static.index
+
+    # Aggregate baseline demand by (source_item, crop, country)
+    grouped = biofuel_baseline.groupby(
+        ["source_item", "crop", "country"], as_index=False
+    )["demand_mt"].sum()
+
+    names = []
+    bus0s = []
+    bus1s = []
+    demands = []
+    countries = []
+    crops = []
+    skipped = 0
+
+    for _, row in grouped.iterrows():
+        source_item = str(row["source_item"])
+        crop = str(row["crop"])
+        country = str(row["country"])
+        demand = float(row["demand_mt"])
+
+        if demand <= 0:
+            continue
+
+        bus0 = f"food:{source_item}:{country}"
+        bus1 = f"biomass:{country}"
+
+        if bus0 not in bus_index or bus1 not in bus_index:
+            skipped += 1
+            continue
+
+        names.append(f"biofuel:{source_item}:{country}")
+        bus0s.append(bus0)
+        bus1s.append(bus1)
+        demands.append(demand)
+        countries.append(country)
+        crops.append(crop)
+
+    if not names:
+        logger.warning("No biofuel links created (all buses missing)")
+        return
+
+    if skipped:
+        logger.info("Skipped %d biofuel links due to missing buses", skipped)
+
+    n.links.add(
+        names,
+        bus0=bus0s,
+        bus1=bus1s,
+        carrier=carrier,
+        efficiency=1.0,
+        p_nom_extendable=True,
+        country=countries,
+        crop=crops,
+        baseline_demand_mt=demands,
+    )
+
+    logger.info(
+        "Added %d biofuel links (%.1f Mt total baseline demand)",
+        len(names),
+        sum(demands),
     )

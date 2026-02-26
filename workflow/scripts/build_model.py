@@ -479,6 +479,7 @@ if __name__ == "__main__":
     biomass_crop_targets = sorted(
         {crop for crop in biomass_crop_targets_cfg if crop in crop_list}
     )
+    enforce_biofuel_baseline = bool(biomass_cfg["enforce_baseline_demand"])
 
     food_crops = set(foods.loc[foods["crop"].isin(crop_list), "crop"])
     crop_to_fresh_factor = utils._fresh_mass_conversion_factors(
@@ -486,7 +487,12 @@ if __name__ == "__main__":
     )
 
     base_food_list = foods.loc[foods["crop"].isin(crop_list), "food"].unique().tolist()
+    biofuel_baseline_df = None
+    if enforce_biofuel_baseline:
+        biofuel_baseline_df = read_csv(snakemake.input.biofuel_baseline)
+        logger.info("Biofuel baseline: %d rows", len(biofuel_baseline_df))
     food_list = sorted(set(base_food_list).union(animal_product_list))
+    byproduct_list = list(snakemake.params.byproducts)
     food_groups_clean = food_groups.dropna(subset=["food", "group"]).copy()
     food_groups_clean["food"] = food_groups_clean["food"].astype(str).str.strip()
     food_groups_clean["group"] = food_groups_clean["group"].astype(str).str.strip()
@@ -528,8 +534,10 @@ if __name__ == "__main__":
     # wheat-germ, rice-bran). Set biomass.marginal_values_usd_per_tonne to 0 to
     # make biomass export free.
     biomass.add_biomass_infrastructure(n, cfg_countries, biomass_cfg)
-    biomass.add_biomass_byproduct_links(n, cfg_countries, snakemake.params.byproducts)
+    biomass.add_biomass_byproduct_links(n, cfg_countries, byproduct_list)
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)
+    if enforce_biofuel_baseline:
+        biomass.add_biofuel_links(n, biofuel_baseline_df)
 
     # Primary resources: water, fertilizer, emissions
     water_slack_cost = validation_slack_cost / 1e3
@@ -697,7 +705,7 @@ if __name__ == "__main__":
         food_to_group,
         food_loss_waste,
         snakemake.params.crops,
-        snakemake.params.byproducts,
+        byproduct_list,
     )
 
     # Feed supply
@@ -850,7 +858,7 @@ if __name__ == "__main__":
         nutrition_data,
         nutrient_units,
         cfg_countries,
-        snakemake.params.byproducts,
+        byproduct_list,
     )
 
     # Trade networks

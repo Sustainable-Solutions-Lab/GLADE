@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Mapping from biofuel/industrial demand to model entities
+#
+# All biofuel demand is routed via food buses. For grain/sugar crops,
+# foods.csv defines ethanol processing pathways that produce a
+# fuel-equivalent item (routed to biomass) plus feed byproducts.
+# For oil crops, the oil is already on food buses via food processing.
+#
+# Columns:
+#   - crop: model crop name
+#   - source_item: model food entity the biofuel link draws from
+#   - fbs_item: FAOSTAT FBS item name
+#   - fbs_item_code: FAOSTAT FBS item code
+#   - pathway_factor: food output per unit crop DM (for converting FBS crop-mass demand to food-bus units)
+#   - fbs_is_processed: true if FBS reports in processed units (skip DM conversion)
+#   - notes: description
+#
+crop,source_item,fbs_item,fbs_item_code,pathway_factor,fbs_is_processed,notes
+sugarcane,sugarcane-ethanol,Sugar cane,2536,0.87,false,Ethanol; byproducts via foods.csv pathway
+maize,maize-ethanol,Maize and products,2514,0.68,false,Ethanol; byproducts via foods.csv pathway
+oil-palm,palm-oil,Palm Oil,2577,1.0,true,Biodiesel; FBS already in oil units
+soybean,soybean-oil,Soyabean Oil,2571,1.0,true,Biodiesel; FBS already in oil units
+rapeseed,rapeseed-oil,Rape and Mustard Oil,2574,1.0,true,Biodiesel; FBS already in oil units

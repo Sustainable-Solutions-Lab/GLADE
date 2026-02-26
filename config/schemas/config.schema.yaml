@@ -836,7 +836,7 @@ properties:
 
   biomass:
     type: object
-    required: [crops, marginal_values_usd_per_tonne]
+    required: [crops, marginal_values_usd_per_tonne, enforce_baseline_demand]
     additionalProperties: false
     properties:
       crops:
@@ -850,6 +850,9 @@ properties:
         type: number
         minimum: 0
         description: "Revenue in USD per tonne dry matter exported to energy sector"
+      enforce_baseline_demand:
+        type: boolean
+        description: "When true, enforce baseline biofuel/industrial demand from FAOSTAT FBS"
 
   trade:
     type: object
@@ -1208,7 +1211,7 @@ properties:
             description: "Version of land cover dataset"
       faostat:
         type: object
-        required: [qcl_production_element_code, fbs_food_supply_element_code]
+        required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_other_uses_element_code]
         additionalProperties: false
         properties:
           qcl_production_element_code:
@@ -1217,6 +1220,9 @@ properties:
           fbs_food_supply_element_code:
             type: integer
             description: "FAOSTAT element code for 'Food supply quantity (kg/capita/yr)' in FBS dataset"
+          fbs_other_uses_element_code:
+            type: integer
+            description: "FAOSTAT element code for 'Other uses (non-food)' in 1000 tonnes (FBS dataset)"
       luicube:
         type: object
         required: [year]

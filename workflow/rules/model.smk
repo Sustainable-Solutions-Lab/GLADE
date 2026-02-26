@@ -72,6 +72,14 @@ def feed_to_products_input(wildcards):
     }
 
 
+def build_model_biofuel_baseline_input(wildcards):
+    """Conditionally include biofuel baseline data when enforce_baseline_demand is true."""
+    eff = get_effective_config(wildcards.scenario)
+    if eff["biomass"]["enforce_baseline_demand"]:
+        return {"biofuel_baseline": "<processing>/{name}/biofuel_baseline.csv"}
+    return {}
+
+
 def build_model_grassland_calibration_input(wildcards):
     """Conditionally include grassland forage calibration CSV."""
     cal_cfg = config["grazing"]["grassland_forage_calibration"]
@@ -96,6 +104,7 @@ rule build_model:
         unpack(feed_baseline_input),
         unpack(feed_to_products_input),
         unpack(build_model_grassland_calibration_input),
+        unpack(build_model_biofuel_baseline_input),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
@@ -322,6 +331,9 @@ rule solve_model:
         fix_within_group_ratios=lambda w: get_effective_config(w.scenario)[
             "food_groups"
         ]["fix_within_group_ratios"],
+        enforce_biofuel_baseline=lambda w: get_effective_config(w.scenario)["biomass"][
+            "enforce_baseline_demand"
+        ],
         sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
         # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),

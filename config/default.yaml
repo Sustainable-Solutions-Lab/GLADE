@@ -270,6 +270,10 @@ byproducts:
 - buckwheat-hulls
 - sunflower-meal
 - rapeseed-meal
+- ddgs
+- molasses
+- maize-ethanol
+- sugarcane-ethanol
 
 # --- section: animal_products ---
 animal_products:
@@ -443,6 +447,7 @@ biomass:
   - sugarcane
   - biomass-sorghum
   marginal_values_usd_per_tonne: 0  # USD_2024 per tonne dry matter exported to the energy sector
+  enforce_baseline_demand: false  # Enforce baseline biofuel/industrial demand from FAOSTAT FBS
 
 # --- section: trade ---
 trade:
@@ -874,6 +879,7 @@ data:
   faostat:
     qcl_production_element_code: 5510  # "Production" in tonnes (QCL dataset, covers crops and livestock)
     fbs_food_supply_element_code: 645  # "Food supply quantity (kg/capita/yr)" in FBS dataset
+    fbs_other_uses_element_code: 5154  # "Other uses (non-food)" in 1000 tonnes (FBS dataset)
   luicube:
     year: "2020"
   soilgrids:
