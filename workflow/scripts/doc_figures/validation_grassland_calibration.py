@@ -5,9 +5,9 @@
 
 """Generate grassland forage calibration map for documentation.
 
-Shows yield_correction by country as a choropleth with a diverging colormap
-centred at 1.0.  Countries with exogenous_forage_mt_dm > 0 are marked with
-hatching.
+Shows yield_correction by country as a choropleth with a one-sided colormap
+because calibration only scales yields downward (0.0 to 1.0). Countries with
+exogenous_forage_mt_dm > 0 are marked with hatching.
 """
 
 import logging
@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 
 import cartopy.crs as ccrs
 import geopandas as gpd
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -61,16 +61,13 @@ def main() -> None:
     ax.set_global()
     ax.set_facecolor("#f7f9fb")
 
-    # Diverging colormap centred at 1.0
-    vmin = 0.0
-    vmax = max(1.2, cal["yield_correction"].max() if not cal.empty else 1.2)
-    norm = TwoSlopeNorm(vcenter=1.0, vmin=vmin, vmax=vmax)
-    cmap = plt.colormaps["RdYlGn"]
+    # Downward-only calibration: 0 = strongest reduction, 1 = no adjustment.
+    norm = Normalize(vmin=0.0, vmax=1.0, clip=True)
+    cmap = plt.colormaps["YlOrRd_r"]
 
-    # Plot countries with calibration data
+    # Plot countries with calibration data (base fill)
     for _, row in countries[has_cal].iterrows():
         fc = cmap(norm(row["yield_correction"]))
-        hatch = "..." if row.get("exogenous_forage_mt_dm", 0) > 0 else None
         ax.add_geometries(
             [row.geometry],
             crs=ccrs.PlateCarree(),
@@ -78,7 +75,19 @@ def main() -> None:
             edgecolor="white",
             linewidth=0.3,
             alpha=0.85,
-            hatch=hatch,
+        )
+
+    # Overlay exogenous-forage countries with visible hatching.
+    exogenous_mask = has_cal & (countries["exogenous_forage_mt_dm"] > 0)
+    for _, row in countries[exogenous_mask].iterrows():
+        ax.add_geometries(
+            [row.geometry],
+            crs=ccrs.PlateCarree(),
+            facecolor="none",
+            edgecolor="#777777",
+            linewidth=0.0,
+            hatch="..",
+            alpha=0.7,
         )
 
     # Countries without calibration: light grey

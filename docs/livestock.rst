@@ -674,15 +674,22 @@ files ``feed_baseline.csv`` and ``feed_to_animal_products.csv``.
        max_multiplier: 2.0    # Cap on per-(country, category) multiplier
        scenario: "default"    # Scenario whose solved model is used
 
+The figure below should be read as a diagnostic view of *where* feed
+efficiency assumptions were too strict in the uncalibrated system.  Each dot
+is a (country, feed-category) pair that needed an upward adjustment
+(``multiplier != 1``), with marker size proportional to that country's animal
+production volume in the category.  The right-side ``x/total`` labels show how
+many countries in each category were adjusted.
+
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_feed_calibration.png
    :width: 80%
-   :alt: Box plot of feed efficiency calibration multipliers by feed category
+   :alt: Strip plot of feed efficiency calibration multipliers by feed category
    :align: center
 
-   Distribution of feed efficiency calibration multipliers across countries,
-   grouped by feed category.  The reference line at 1.0 marks "no adjustment".
-   Categories with multipliers systematically above 1.0 indicate systematic
-   supply gaps in the uncalibrated baseline.
+   Feed efficiency calibration multipliers by category and country.  The
+   reference line at 1.0 marks "no adjustment"; values to the right indicate
+   upward efficiency corrections required to remove positive feed slack in the
+   validation solve.
 
 Grassland Forage Calibration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -730,15 +737,27 @@ others demand exceeds what grasslands can supply (deficit).
        source: "data/curated/grassland_forage_calibration.csv"
        scenario: "default"    # Scenario whose solved model is used
 
+This second figure complements the feed-efficiency plot by separating
+grassland-specific calibration effects.  ``yield_correction`` is one-sided:
+values run from 0 to 1 and only reduce effective grassland yield (never
+increase it).  Countries with forage deficits are additionally flagged via
+hatching, indicating reliance on ``exogenous_forage_mt_dm`` after endogenous
+grassland supply is exhausted.
+
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_grassland_calibration.png
    :width: 100%
    :alt: Map of grassland forage yield correction by country
    :align: center
 
    Grassland forage calibration by country.  Colour indicates the
-   ``yield_correction`` factor applied to grassland yields (green = no change,
-   yellow/red = reduced yields).  Countries receiving exogenous forage
-   (``exogenous_forage_mt_dm > 0``) are marked with hatching.
+   ``yield_correction`` factor applied to grassland yields (1.0 = no
+   adjustment; lower values = stronger downward correction).  Countries
+   receiving exogenous forage (``exogenous_forage_mt_dm > 0``) are marked with
+   hatching.
+
+Taken together, the two figures show that calibration corrects two distinct
+issues: feed conversion mismatches across feed categories (first figure) and
+country-level forage balance mismatches in grassland systems (second figure).
 
 Calibration Pipeline
 ~~~~~~~~~~~~~~~~~~~~
