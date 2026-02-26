@@ -559,6 +559,17 @@ directly as feedstocks. The ``marginal_values_usd_per_tonne`` parameter
 (USD\ :sub:`2024` per tonne dry matter) sets the price received when biomass leaves the
 food system; set to 0 for free disposal.
 
+When ``enforce_baseline_demand`` is true, biofuel/industrial demand from FAOSTAT Food
+Balance Sheets is enforced via solve-time constraints with slack penalties.
+
+When ``enforce_fiber_demand`` is true, baseline fiber demand (cotton lint) is enforced
+via per-country fiber buses and fixed-capacity stores. Each country with positive
+demand gets a ``fiber:{country}`` bus and a ``store:fiber:cotton-lint:{country}`` store
+whose capacity equals the FAOSTAT-derived demand. The store bounds
+(``e_min_pu = e_max_pu = 1.0``) force the store level to equal demand exactly, so
+cotton lint production must match baseline fiber consumption. Cotton lint is excluded
+from biomass byproduct routing when fiber demand is enforced to prevent double-counting.
+
 Animal Products
 ~~~~~~~~~~~~~~~
 

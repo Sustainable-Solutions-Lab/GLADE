@@ -491,6 +491,13 @@ if __name__ == "__main__":
     if enforce_biofuel_baseline:
         biofuel_baseline_df = read_csv(snakemake.input.biofuel_baseline)
         logger.info("Biofuel baseline: %d rows", len(biofuel_baseline_df))
+    enforce_fiber_demand = bool(biomass_cfg["enforce_fiber_demand"])
+    fiber_baseline_df = None
+    fiber_items: set[str] = set()
+    if enforce_fiber_demand:
+        fiber_baseline_df = read_csv(snakemake.input.fiber_baseline)
+        fiber_items = set(fiber_baseline_df["source_item"].unique())
+        logger.info("Fiber baseline: %d rows", len(fiber_baseline_df))
     food_list = sorted(set(base_food_list).union(animal_product_list))
     byproduct_list = list(snakemake.params.byproducts)
     food_groups_clean = food_groups.dropna(subset=["food", "group"]).copy()
@@ -534,10 +541,15 @@ if __name__ == "__main__":
     # wheat-germ, rice-bran). Set biomass.marginal_values_usd_per_tonne to 0 to
     # make biomass export free.
     biomass.add_biomass_infrastructure(n, cfg_countries, biomass_cfg)
-    biomass.add_biomass_byproduct_links(n, cfg_countries, byproduct_list)
+    # Filter fiber-managed items out of biomass byproduct routing: when fiber
+    # demand is enforced, these items must flow to fiber stores instead.
+    biomass_byproducts = [b for b in byproduct_list if b not in fiber_items]
+    biomass.add_biomass_byproduct_links(n, cfg_countries, biomass_byproducts)
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)
     if enforce_biofuel_baseline:
         biomass.add_biofuel_links(n, biofuel_baseline_df)
+    if enforce_fiber_demand:
+        biomass.add_fiber_demand_infrastructure(n, fiber_baseline_df, cfg_countries)
 
     # Primary resources: water, fertilizer, emissions
     water_slack_cost = validation_slack_cost / 1e3

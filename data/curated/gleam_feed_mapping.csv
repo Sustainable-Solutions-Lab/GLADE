@@ -52,7 +52,7 @@ CASSAVA,sweet-potato,crop,monogastric,Sweet potato roots as pig feed (CASSAVA nu
 BNFRUIT,banana,crop,monogastric,Banana fruit
 MLSOY,oilseed-meal,food,both,Soybean meal → oilseed meal (generic oilseed meal pool)
 MLRAPE,rapeseed-meal,food,both,Rapeseed/canola meal
-MLCTTN,,food,both,Cottonseed meal (not in model - skip for now)
+MLCTTN,oilseed-meal,food,both,Cottonseed meal → generic oilcake (oilseed-meal proxy)
 MLOILSDS,oilseed-meal,food,monogastric,Other oilseed meals → oilseed meal
 PKEXP,,food,both,Palm kernel cake (not in model - skip for now)
 GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat bran"

@@ -40,6 +40,9 @@ The default configuration includes over 60 crops spanning major food categories:
 **Sugar Crops**
   * Sugarcane, sugarbeet
 
+**Fiber Crops**
+  * Cotton (ginned to produce cotton lint, cottonseed oil, and oilseed meal)
+
 **Fodder Crops**
   * Alfalfa, biomass sorghum
 

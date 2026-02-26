@@ -1237,6 +1237,21 @@ def _run_solve() -> None:
         if production_slack:
             n.meta["production_stability_slack"] = production_slack
 
+        # Store biofuel slack cost for objective breakdown extraction
+        if "biofuel_slack" in n.model.variables:
+            biofuel_slack_sol = n.model.variables["biofuel_slack"].solution
+            biofuel_slack_total = float(biofuel_slack_sol.sum())
+            biofuel_slack_cost_val = float(
+                snakemake.config["validation"]["slack_marginal_cost"]
+            )
+            n.meta["biofuel_slack_cost"] = biofuel_slack_total * biofuel_slack_cost_val
+            if biofuel_slack_total > 1e-6:
+                logger.info(
+                    "Biofuel slack used: %.4f Mt total (cost: %.2f bnUSD)",
+                    biofuel_slack_total,
+                    n.meta["biofuel_slack_cost"],
+                )
+
         # Store food slack cost for objective breakdown extraction
         if "food_slack_pos" in n.model.variables:
             slack_pos_sol = n.model.variables["food_slack_pos"].solution

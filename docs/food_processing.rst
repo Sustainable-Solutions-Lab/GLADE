@@ -42,6 +42,8 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
 
   **Sugar and oil crops**: Yields for sugarcane, sugarbeet, and oil-palm are first converted back to whole-crop dry matter (see :doc:`crop_production`) and then uplifted to fresh mass using the moisture table. Pathway factors therefore reflect *fresh* extraction efficiencies: 0.24 for palm oil (24 % oil from fresh fruit bunches), 0.14 for cane sugar, and 0.10 for beet sugar.
 
+  **Cotton ginning**: Cotton is processed via the ``cotton_ginning`` pathway, which produces three outputs from seed cotton: cotton lint (0.38), cottonseed oil (0.083), and oilseed meal (0.275). Cotton lint is a non-food byproduct routed to per-country fiber demand stores (see :doc:`configuration`); cottonseed oil enters the food system as an edible oil; oilseed meal enters the generic oilcake pool available as animal feed.
+
   .. note::
 
      When ``validation.use_actual_yields`` is true, the sugarcane, sugarbeet, and oil-palm rasters already deliver whole-crop fresh mass, so the workflow skips the conversion above and relies on the moisture table to convert to dry matter before applying extraction factors.

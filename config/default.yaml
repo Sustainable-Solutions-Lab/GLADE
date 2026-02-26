@@ -202,6 +202,8 @@ crops:
 # Sugar crops
 - sugarcane
 - sugarbeet
+# Fiber crops
+- cotton
 # Fodder / biomass (also listed in non_food_crops below)
 - alfalfa
 - silage-maize
@@ -278,6 +280,7 @@ byproducts:
 - molasses
 - maize-ethanol
 - sugarcane-ethanol
+- cotton-lint
 
 # --- section: animal_products ---
 animal_products:
@@ -462,6 +465,7 @@ biomass:
   - biomass-sorghum
   marginal_values_usd_per_tonne: 0  # USD_2024 per tonne dry matter exported to the energy sector
   enforce_baseline_demand: true  # Enforce baseline biofuel/industrial demand from FAOSTAT FBS
+  enforce_fiber_demand: true  # Enforce baseline fiber demand (cotton lint) from FAOSTAT FBS
 
 # --- section: trade ---
 trade:
@@ -484,6 +488,7 @@ trade:
       - cocoa
       - coffee
       - tea
+      - cotton
     bulky_fresh:
       cost_per_km: 0.014  # USD_2024 per tonne per km (1.4e-2)
       crops:
@@ -1111,6 +1116,7 @@ plotting:
       cocoa: "#5C3317"
       coffee: "#6F4E37"
       tea: "#4B7A2E"
+      cotton: "#F5F5DC"
       sugarcane: "#9B59B6"
       sugarbeet: "#AF7AC5"
       alfalfa: "#1ABC9C"

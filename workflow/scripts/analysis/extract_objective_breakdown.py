@@ -119,6 +119,8 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
             "animal_production": "Animal production",
             "biomass_crop": "Biomass routing",
             "biomass_byproduct": "Biomass routing",
+            "biofuel": "Biomass routing",
+            "fiber_demand": "Biomass routing",
             "emission_aggregation": "Emissions aggregation",
             "fertilizer_distribution": "Fertilizer",
         }
@@ -143,6 +145,7 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
             "fertilizer": "Fertilizer",
             "spared_land": "Crop production",
             "spared_grassland": "Crop production",
+            "fiber_demand": "Biomass routing",
         }
         exact_map.update(dict.fromkeys(nutrient_carriers, "Nutrient tracking"))
         categories = carriers.map(exact_map)
@@ -218,11 +221,17 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     # Filter out negligible categories
     total = total[total.abs() > 1e-9]
 
-    # Food slack penalties are linopy-level variables not visible as PyPSA
-    # components; their total cost is stored in n.meta by solve_model.
+    # Food and biofuel slack penalties are linopy-level variables not visible
+    # as PyPSA components; their total cost is stored in n.meta by solve_model.
     food_slack_cost = n.meta.get("food_slack_cost", 0.0)
     if food_slack_cost:
         total["Slack penalties"] = total.get("Slack penalties", 0.0) + food_slack_cost
+
+    biofuel_slack_cost = n.meta.get("biofuel_slack_cost", 0.0)
+    if biofuel_slack_cost:
+        total["Slack penalties"] = (
+            total.get("Slack penalties", 0.0) + biofuel_slack_cost
+        )
 
     # Production stability penalties (L1/quadratic) are linopy-level terms.
     stability_cost = n.meta.get("production_stability_cost", 0.0)

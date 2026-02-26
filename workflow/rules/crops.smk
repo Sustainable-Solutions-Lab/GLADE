@@ -354,3 +354,26 @@ rule prepare_biofuel_baseline:
         "<benchmarks>/{name}/prepare_biofuel_baseline.tsv"
     script:
         "../scripts/prepare_biofuel_baseline.py"
+
+
+rule prepare_fiber_baseline:
+    input:
+        fiber_demand_map="data/curated/faostat_fiber_demand_map.csv",
+        qcl_csv="data/downloads/faostat/QCL.csv",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["validation"]["production_year"],
+    output:
+        "<processing>/{name}/fiber_baseline.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2900,
+    log:
+        "<logs>/{name}/prepare_fiber_baseline.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_fiber_baseline.tsv"
+    script:
+        "../scripts/prepare_fiber_baseline.py"

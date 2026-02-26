@@ -80,6 +80,14 @@ def build_model_biofuel_baseline_input(wildcards):
     return {}
 
 
+def build_model_fiber_baseline_input(wildcards):
+    """Conditionally include fiber baseline data when enforce_fiber_demand is true."""
+    eff = get_effective_config(wildcards.scenario)
+    if eff["biomass"]["enforce_fiber_demand"]:
+        return {"fiber_baseline": "<processing>/{name}/fiber_baseline.csv"}
+    return {}
+
+
 def build_model_grassland_calibration_input(wildcards):
     """Conditionally include grassland forage calibration CSV."""
     cal_cfg = config["grazing"]["grassland_forage_calibration"]
@@ -105,6 +113,7 @@ rule build_model:
         unpack(feed_to_products_input),
         unpack(build_model_grassland_calibration_input),
         unpack(build_model_biofuel_baseline_input),
+        unpack(build_model_fiber_baseline_input),
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",

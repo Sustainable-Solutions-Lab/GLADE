@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Mapping from fiber demand to model entities
+#
+# Fiber demand is routed via food buses: cotton-lint (a byproduct of
+# cotton ginning) flows to per-country fiber demand stores.
+#
+# Uses FAOSTAT QCL production data (not FBS), since cotton lint is not
+# tracked in FBS as it is not a food commodity.
+#
+# Columns:
+#   - crop: model crop name
+#   - source_item: model food entity the fiber link draws from
+#   - qcl_item: FAOSTAT QCL item name
+#   - qcl_item_code: FAOSTAT QCL item code
+#   - qcl_element_code: FAOSTAT QCL element code (5510 = Production)
+#   - notes: description
+#
+crop,source_item,qcl_item,qcl_item_code,qcl_element_code,notes
+cotton,cotton-lint,Cotton lint ginned,767,5510,Production of ginned cotton lint (tonnes)

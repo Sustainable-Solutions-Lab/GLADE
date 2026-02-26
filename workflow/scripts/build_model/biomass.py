@@ -11,7 +11,7 @@ byproducts that lack feed mappings; set marginal_values_usd_per_tonne
 to 0 for free disposal.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 import logging
 
 import pandas as pd
@@ -200,4 +200,97 @@ def add_biofuel_links(
         "Added %d biofuel links (%.1f Mt total baseline demand)",
         len(names),
         sum(demands),
+    )
+
+
+def add_fiber_demand_infrastructure(
+    n: pypsa.Network,
+    fiber_baseline: pd.DataFrame,
+    countries: Sequence[str],
+) -> None:
+    """Add fiber demand buses, stores, and routing links.
+
+    Creates per-country fiber infrastructure:
+    - Fiber buses: ``fiber:{country}``
+    - Extendable stores: ``store:fiber:{source_item}:{country}``
+      with ``e_nom_min = demand``, ``e_min_pu = 1.0`` (enforces >= demand)
+    - Routing links: ``fiber:{source_item}:{country}``
+      from ``food:{source_item}:{country}`` to ``fiber:{country}``
+
+    Stores are extendable with ``e_nom_min`` set to baseline demand so the
+    optimizer must absorb at least ``demand`` Mt of each fiber item, but can
+    freely absorb excess production (e.g. cotton grown for cottonseed oil).
+    """
+    carrier = "fiber_demand"
+    n.carriers.add(carrier, unit="Mt")
+
+    # Aggregate demand by (source_item, country), drop non-positive
+    grouped = (
+        fiber_baseline.groupby(["source_item", "country"], as_index=False)["demand_mt"]
+        .sum()
+        .query("demand_mt > 0")
+        .copy()
+    )
+
+    # Filter to entries where the food bus exists
+    bus_index = n.buses.static.index
+    grouped["bus0"] = "food:" + grouped["source_item"] + ":" + grouped["country"]
+    grouped = grouped[grouped["bus0"].isin(bus_index)]
+    if grouped.empty:
+        logger.warning("No fiber demand links created (all buses missing)")
+        return
+
+    # Use source_item + country as the natural index for aligned addition
+    idx = pd.Index(
+        "fiber:" + grouped["source_item"] + ":" + grouped["country"],
+        name="name",
+    )
+    grouped = grouped.set_index(idx)
+
+    # 1. Buses — one per country with positive demand
+    fiber_countries = sorted(grouped["country"].unique())
+    fiber_buses = pd.Index([f"fiber:{c}" for c in fiber_countries], name="name")
+    n.buses.add(
+        fiber_buses,
+        carrier=carrier,
+        country=fiber_countries,
+    )
+
+    # 2. Links — route food:{source_item}:{country} -> fiber:{country}
+    fiber_bus1 = "fiber:" + grouped["country"]
+    fiber_bus1.index = grouped.index
+    n.links.add(
+        grouped.index,
+        bus0=grouped["bus0"],
+        bus1=fiber_bus1,
+        carrier=carrier,
+        efficiency=1.0,
+        p_nom_extendable=True,
+        country=grouped["country"],
+    )
+
+    # 3. Stores — extendable with e_nom_min = demand enforces >= demand.
+    #    e_min_pu=1.0 and e_max_pu=1.0 (default) force e == e_nom, and
+    #    e_nom_min ensures e_nom >= demand. Excess is absorbed for free.
+    stores = grouped[["source_item", "country", "demand_mt"]].copy()
+    stores.index = pd.Index(
+        "store:fiber:" + stores["source_item"] + ":" + stores["country"],
+        name="name",
+    )
+    stores["bus"] = "fiber:" + stores["country"]
+    n.stores.add(
+        stores.index,
+        bus=stores["bus"],
+        carrier=carrier,
+        e_nom_extendable=True,
+        e_nom_min=stores["demand_mt"],
+        e_min_pu=1.0,
+        country=stores["country"],
+    )
+
+    logger.info(
+        "Added %d fiber demand stores (%.1f Mt minimum demand, %d countries)",
+        len(grouped),
+        grouped["demand_mt"].sum(),
+        len(fiber_countries),
     )

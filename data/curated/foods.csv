@@ -80,3 +80,6 @@ cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing mode
 coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled)
 tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled)
 sugarbeet_sugar,sugarbeet,sugar,0.10,Sucrose extraction (GAEZ v5 assumption)
+cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning (assumption: ~38% of seed cotton weight; global average gin-out-turn)
+cotton_ginning,cotton,cottonseed-oil,0.083,Cottonseed oil (assumption: 55% seed fraction × 15% oil extraction rate)
+cotton_ginning,cotton,oilseed-meal,0.275,Cottonseed meal as generic oilcake (assumption: 55% seed fraction × 50% meal yield)

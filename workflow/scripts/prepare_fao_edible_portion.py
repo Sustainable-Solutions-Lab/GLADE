@@ -56,9 +56,12 @@ EDIBLE_PORTION_EXCEPTIONS: set[str] = {
     # (cocoa) ratios that are not applicable here.
     "cocoa",
     "coffee",
+    # Fiber crops: GAEZ and FAOSTAT report seed cotton; no edible-portion
+    # conversion applies.
+    "cotton",
 }
 
-FALLBACK_FULL_EDIBLE: set[str] = {"oil-palm", "sugarcane", "sugarbeet", "tea"}
+FALLBACK_FULL_EDIBLE: set[str] = {"oil-palm", "sugarcane", "sugarbeet", "tea", "cotton"}
 
 
 @dataclass

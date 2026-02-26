@@ -185,6 +185,9 @@ coffee,Coffee,
 coffee,Other crops,Fallback
 tea,Tea,
 tea,Other crops,Fallback
+cotton,Cotton,
+cotton,cotton,Case variant
+cotton,Other crops,Fallback
 biomass-sorghum,Sorghum,When not distinguished from grain sorghum
 biomass-sorghum,Grassland,Fallback - biomass sorghum often used as fodder
 biomass-sorghum,Fodder,
