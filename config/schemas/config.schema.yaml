@@ -983,7 +983,6 @@ properties:
       - reference_year
       - intake_grid_points
       - log_rr_points
-      - omega3_per_100g_fish
       - ssb_sugar_g_per_100g
       - value_per_yll
       - intake_cap_g_per_day
@@ -1017,10 +1016,6 @@ properties:
         type: integer
         minimum: 0
         description: "Lower bound (inclusive) of age buckets used for intake weighting"
-      omega3_per_100g_fish:
-        type: number
-        minimum: 0
-        description: "g omega-3 per 100g fish"
       ssb_sugar_g_per_100g:
         type: number
         minimum: 0

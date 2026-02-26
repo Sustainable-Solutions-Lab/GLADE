@@ -61,7 +61,6 @@ rule prepare_relative_risks:
     params:
         risk_factors=config["health"]["risk_factors"],
         causes=config["health"]["causes"],
-        omega3_per_100g=config["health"]["omega3_per_100g_fish"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",

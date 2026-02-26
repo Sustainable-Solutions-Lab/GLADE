@@ -63,7 +63,7 @@ def main():
         "v08": "whole_grains",  # Whole grains
         "v09": "prc_meat",  # Total processed meats
         "v10": "red_meat",  # Unprocessed red meats (cattle, pig)
-        "v11": "fish",  # Total seafoods (fish + shellfish)
+        # v11 (Total seafoods) not mapped — fish/seafood not modelled
         "v12": "eggs",  # Eggs
         # "v57": "dairy",  # Total Milk - Excluded: Sourced from FAOSTAT
         "v15": "sugar",  # Sugar-sweetened beverages → refined sugar equivalent

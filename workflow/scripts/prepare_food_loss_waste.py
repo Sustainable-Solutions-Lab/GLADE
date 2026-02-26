@@ -64,7 +64,7 @@ UN_TO_MODEL_FOOD_GROUPS: dict[str, list[str] | None] = {
     "FRT_VGT": ["fruits", "vegetables"],
     "RT_TBR": ["starchy_vegetable", "oil", "nuts_seeds"],
     "ANMPROD": ["red_meat", "poultry", "dairy", "eggs"],
-    "FSH_FSHPROD": ["fish"],
+    "FSH_FSHPROD": None,  # fish/seafood not modelled
     "ALP": None,
 }
 

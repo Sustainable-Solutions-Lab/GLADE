@@ -26,7 +26,6 @@ FOOD_GROUP_LABELS = {
     "poultry": "Poultry",
     "dairy": "Dairy",
     "eggs": "Eggs",
-    "fish": "Fish",
     "legumes": "Legumes",
     "nuts_seeds": "Nuts & seeds",
     "whole_grains": "Whole grains",
@@ -44,7 +43,6 @@ FOOD_GROUP_COLORS = {
     "poultry": "#dd8452",
     "dairy": "#f5e6ab",
     "eggs": "#f0c75e",
-    "fish": "#4c72b0",
     "legumes": "#8c564b",
     "nuts_seeds": "#9b7653",
     "whole_grains": "#d4a574",
@@ -70,7 +68,6 @@ FOOD_GROUP_ORDER = [
     "poultry",
     "red_meat",
     "prc_meat",
-    "fish",
     "oil",
     "sugar",
 ]

@@ -566,12 +566,6 @@ def _filter_and_prepare_data(
         "lamb": "red_meat",
         "pork": "red_meat",
         "red_meat": "red_meat",
-        "prc_meat": "prc_meat",
-        "shellfish": "fish",
-        "fish_freshw": "fish",
-        "fish_pelag": "fish",
-        "fish_demrs": "fish",
-        "fish": "fish",
         "sugar": "sugar",
     }
     diet["risk_factor"] = diet["item"].map(item_to_risk)

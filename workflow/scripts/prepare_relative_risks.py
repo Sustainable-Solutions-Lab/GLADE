@@ -2,11 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Convert manually downloaded IHME GBD RR tables into tidy dietary risk curves.
-
-The omega-3 risk factor measures EPA+DHA intake in g/day, but the model tracks fish
-consumption. The conversion uses: g_fish = (100 / omega3_per_100g_fish) * g_omega3.
-"""
+"""Convert manually downloaded IHME GBD RR tables into tidy dietary risk curves."""
 
 import logging
 from pathlib import Path
@@ -43,18 +39,8 @@ RISK_CONFIG = {
         "unit": "g/day",
         "conversion": 1.0,
     },
-    "Diet low in seafood omega-3 fatty acids": {
-        "risk_factor": "fish",
-        "unit": "g/day",
-        "conversion": None,
-    },
     "Diet high in red meat": {
         "risk_factor": "red_meat",
-        "unit": "g/day",
-        "conversion": 1.0,
-    },
-    "Diet high in processed meat": {
-        "risk_factor": "prc_meat",
         "unit": "g/day",
         "conversion": 1.0,
     },
@@ -152,7 +138,6 @@ def _extract_risk_blocks(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
 
 def _parse_relative_risks(
     df: pd.DataFrame,
-    omega3_conversion: float,
     ssb_sugar_per_gram: float,
 ) -> pd.DataFrame:
     """Parse the Excel sheet into tidy RR records."""
@@ -166,11 +151,6 @@ def _parse_relative_risks(
         config = RISK_CONFIG[risk_name]
         risk_id = config["risk_factor"]
         conversion = config["conversion"]
-
-        if risk_id == "fish":
-            if omega3_conversion <= 0:
-                raise ValueError("omega3_conversion must be positive")
-            conversion = omega3_conversion
 
         if risk_id == "sugar":
             if ssb_sugar_per_gram <= 0:
@@ -257,13 +237,8 @@ def main() -> None:
 
     input_path = Path(snakemake.input["gbd_rr"])
     output_path = Path(snakemake.output["relative_risks"])
-    omega3_per_100g = float(snakemake.params["omega3_per_100g"])
     ssb_sugar_g_per_100g = float(snakemake.params["ssb_sugar_g_per_100g"])
 
-    # Convert g omega-3 per 100 g fish to conversion factor g_fish per g omega-3
-    if omega3_per_100g <= 0:
-        raise ValueError("omega3_per_100g must be positive")
-    omega3_conversion = 100.0 / omega3_per_100g
     if ssb_sugar_g_per_100g <= 0:
         raise ValueError("ssb_sugar_g_per_100g must be positive")
     ssb_sugar_per_gram = ssb_sugar_g_per_100g / 100.0
@@ -271,7 +246,7 @@ def main() -> None:
     logger.info(f"Reading {input_path}")
     df = pd.read_excel(input_path, header=None)
 
-    relative_risks = _parse_relative_risks(df, omega3_conversion, ssb_sugar_per_gram)
+    relative_risks = _parse_relative_risks(df, ssb_sugar_per_gram)
 
     # Validate that we have all required risk factors and causes
     required_risk_factors = set(snakemake.params["risk_factors"])

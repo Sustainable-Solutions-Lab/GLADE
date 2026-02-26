@@ -556,7 +556,6 @@ health:
   reference_year: 2018
   intake_grid_points: 15  # Number of grid knots over empirical RR range
   log_rr_points: 15
-  omega3_per_100g_fish: 1.5
   ssb_sugar_g_per_100g: 5.7  # ≈50 kcal per 226.8 g sugar-sweetened beverage (SSB) implies ~5.7 g sugar per 100 g
   value_per_yll: 50000  # USD_2024 per year of life lost
   intake_cap_g_per_day: 1000  # Uniform generous cap on intake grids and clipping
@@ -569,9 +568,8 @@ health:
   - legumes
   - red_meat
   - whole_grains
-  # Fish and processed meat are covered by GBD data, but not modelled
-  # - fish
-  # - prc_meat
+  # GBD also covers seafood omega-3 and processed meat risk factors,
+  # but fish/seafood and processed meat are not modelled as food groups.
   # GDB has data on sugar-sweetened beverage intake as a risk factor,
   # from which we can in theory derive added sugar intake risk
   # factors. The epidemiological evidence for this is, however,
@@ -591,8 +589,6 @@ health:
     legumes: [CHD]
     red_meat: [CHD, Stroke, T2DM, CRC]
     whole_grains: [CHD, Stroke, T2DM, CRC]
-    # fish: [CHD]
-    # prc_meat: [CHD, T2DM, CRC]
     # sugar: [CHD, Stroke, T2DM, CRC]
   # Multi-objective clustering settings for grouping countries into health clusters
   clustering:

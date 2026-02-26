@@ -148,6 +148,8 @@ wasn't—the health cost of not eating optimally.
 To get an implementation-friendly formula using relative risk factors directly, we can expand a simplify using :math:`\Delta\mathrm{YLL}_d(x) = \mathrm{PAF}_d(x) \times \mathrm{YLL}_{c,d}` and the above formula for :math:`\mathrm{PAF_d}`:
 
 .. math::
+
+   \begin{aligned}
    \Delta\mathrm{YLL}_d(\bar{x}) - \Delta\mathrm{YLL}_d(x)
    &= \mathrm{YLL}_{c,d} \times \left[ \mathrm{PAF}_d(\bar{x}) - \mathrm{PAF}_d(x) \right] \\
    &= \mathrm{YLL}_{c,d} \times \left[
@@ -156,6 +158,7 @@ To get an implementation-friendly formula using relative risk factors directly, 
    \right] \\
    &= \frac{\mathrm{YLL}_{c,d}}{\mathrm{RR}_d(x^{\mathrm{base}})}
       \times \left( \mathrm{RR}_d(x) - \mathrm{RR}_d^{\mathrm{ref}} \right)
+   \end{aligned}
 
 This gives the final formula:
 
@@ -240,8 +243,9 @@ Appendix 1, p. 171).
 **Notes on current implementation:**
 
 - **Risk factors modelled by default**: fruits, vegetables, whole_grains,
-  nuts_seeds, legumes, fish, red_meat, prc_meat (configured in
-  ``health.risk_factors``)
+  nuts_seeds, legumes, red_meat (configured in ``health.risk_factors``).
+  GBD also provides seafood omega-3 and processed meat risk factors, but
+  fish/seafood and processed meat are not currently modelled as food groups.
 - **Disease causes modelled**: CHD (coronary heart disease), Stroke, T2DM (type
   2 diabetes), CRC (colorectal cancer)
 - **Sugar**: The GBD dataset includes relative risk factors for

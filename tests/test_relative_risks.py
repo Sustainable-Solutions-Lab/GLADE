@@ -196,9 +196,7 @@ class TestParseRelativeRisks:
             },
         ]
         df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=50.0, ssb_sugar_per_gram=0.1
-        )
+        result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
         assert len(result) == 1
         row = result.iloc[0]
@@ -225,9 +223,7 @@ class TestParseRelativeRisks:
             },
         ]
         df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=50.0, ssb_sugar_per_gram=0.1
-        )
+        result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
         assert len(result) == 1
         assert result.iloc[0]["cause"] == "CHD"
@@ -243,9 +239,7 @@ class TestParseRelativeRisks:
             },
         ]
         df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=50.0, ssb_sugar_per_gram=0.1
-        )
+        result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
         expected_cols = {
             "risk_factor",
@@ -256,28 +250,6 @@ class TestParseRelativeRisks:
             "rr_high",
         }
         assert set(result.columns) == expected_cols
-
-    def test_fish_conversion_applied(self):
-        """Omega-3 exposure is multiplied by omega3_conversion."""
-        omega3_conversion = 50.0  # 50 g fish per g omega-3
-        rows = [
-            {0: "Diet low in seafood omega-3 fatty acids"},
-            {
-                0: "Ischemic heart disease",
-                1: "2 g/day",  # 2g omega-3
-                4: "0.85 (0.75, 0.95)",
-            },
-        ]
-        df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=omega3_conversion, ssb_sugar_per_gram=0.1
-        )
-
-        assert len(result) == 1
-        assert result.iloc[0]["risk_factor"] == "fish"
-        assert result.iloc[0]["exposure_g_per_day"] == pytest.approx(
-            2.0 * omega3_conversion
-        )
 
     def test_sugar_conversion_applied(self):
         """SSB exposure is multiplied by ssb_sugar_per_gram."""
@@ -291,9 +263,7 @@ class TestParseRelativeRisks:
             },
         ]
         df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=50.0, ssb_sugar_per_gram=ssb_sugar_per_gram
-        )
+        result = _parse_relative_risks(df, ssb_sugar_per_gram=ssb_sugar_per_gram)
 
         assert len(result) == 1
         assert result.iloc[0]["risk_factor"] == "sugar"
@@ -313,7 +283,7 @@ class TestParseRelativeRisks:
         ]
         df = self._make_mock_df(rows)
         with pytest.raises(ValueError, match="No dietary risk records"):
-            _parse_relative_risks(df, omega3_conversion=50.0, ssb_sugar_per_gram=0.1)
+            _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
     def test_duplicate_records_aggregated(self):
         """Duplicate risk/cause/exposure records are averaged."""
@@ -331,9 +301,7 @@ class TestParseRelativeRisks:
             },
         ]
         df = self._make_mock_df(rows)
-        result = _parse_relative_risks(
-            df, omega3_conversion=50.0, ssb_sugar_per_gram=0.1
-        )
+        result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
         assert len(result) == 1
         assert result.iloc[0]["rr_mean"] == pytest.approx(0.85)
@@ -372,9 +340,7 @@ class TestConstants:
             "whole_grains",
             "legumes",
             "nuts_seeds",
-            "fish",
             "red_meat",
-            "prc_meat",
             "sugar",
         }
         actual_factors = {v["risk_factor"] for v in RISK_CONFIG.values()}
@@ -385,20 +351,15 @@ class TestConstants:
         for key in RISK_CONFIG:
             assert key.startswith("Diet"), f"Key '{key}' does not start with 'Diet'"
 
-    def test_risk_config_omega3_has_none_conversion(self):
-        """Omega-3 risk factor has None conversion (set dynamically)."""
-        omega3_config = RISK_CONFIG["Diet low in seafood omega-3 fatty acids"]
-        assert omega3_config["conversion"] is None
-
     def test_risk_config_ssb_has_none_conversion(self):
         """SSB risk factor has None conversion (set dynamically)."""
         ssb_config = RISK_CONFIG["Diet high in sugar-sweetened beverages"]
         assert ssb_config["conversion"] is None
 
     def test_risk_config_standard_factors_have_unit_conversion(self):
-        """Standard risk factors (not omega-3/SSB) have conversion=1.0."""
+        """Standard risk factors (not SSB) have conversion=1.0."""
         for name, config in RISK_CONFIG.items():
-            if config["risk_factor"] not in ("fish", "sugar"):
+            if config["risk_factor"] != "sugar":
                 assert (
                     config["conversion"] == 1.0
                 ), f"Expected conversion=1.0 for {name}, got {config['conversion']}"

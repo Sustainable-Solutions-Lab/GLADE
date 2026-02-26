@@ -100,21 +100,22 @@ The following food groups are populated from GDD variables:
    * - ``prc_meat``
      - v09
      - Total processed meats
-   * - ``fish``
-     - v11
-     - Total seafoods (fish + shellfish)
    * - ``eggs``
      - v12
      - Eggs
    * - ``sugar``
      - v15, v35
      - Sugar-sweetened beverages and added sugars
+   * - ``stimulants``
+     - v17, v18
+     - Coffee and tea. GDD reports these in cups/day (brewed beverage); the script converts to **dry commodity weight** using configured factors (default: 14.4 g-dry/cup for coffee, 2.4 g-dry/cup for tea). Cocoa is not covered by GDD and enters only via FAOSTAT within-group shares.
 
 **Notes:**
 
 * Multiple GDD variables can map to a single food group (e.g., starchy_vegetable = v03 potatoes + v04 other starchy veg)
 * When aggregating, values are summed within each food group
 * The ``fruits`` food group uses only v01 (whole fruits), excluding v16 (fruit juices), to align with the GBD fruit risk factor definition used in health impact modeling
+* GDD also tracks fish/seafood (v11), but fish is not currently modelled as a food group
 
 Food Groups Sourced from FAOSTAT
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -287,8 +288,9 @@ This averaging applies to six food groups: ``fruits``, ``vegetables``,
 is missing for a particular country, the GDD value is used alone.
 
 For all other food groups (``dairy``, ``poultry``, ``oil``, ``grain``,
-``starchy_vegetable``, ``prc_meat``, ``fish``, ``eggs``, ``sugar``), the
-GDD or FAOSTAT value from ``dietary_intake.csv`` is used as-is.
+``starchy_vegetable``, ``prc_meat``, ``eggs``, ``sugar``,
+``stimulants``), the GDD or FAOSTAT value from ``dietary_intake.csv``
+is used as-is.
 
 The script also logs **cross-validation metrics** between GDD and GBD for the
 overlapping groups, reporting the median and range of the GDD/GBD ratio across
