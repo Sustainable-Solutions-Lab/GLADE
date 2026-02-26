@@ -81,6 +81,7 @@ PRETTY_NAMES = {
     "poultry": "Poultry",
     "red_meat": "Red meat",
     "starchy_vegetable": "Starchy veg.",
+    "stimulants": "Stimulants",
     "sugar": "Sugar",
     "vegetables": "Vegetables",
     "fruits_vegetables": "Fruits & veg.",
@@ -1786,8 +1787,24 @@ def plot_stacked_emissions(
 # -----------------------------------------------------------------------------
 
 
-def aggregate_food_groups(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate food groups: combine fruits+vegetables and eggs+poultry."""
+def aggregate_food_groups(
+    df: pd.DataFrame, min_peak_share: float = 0.0
+) -> pd.DataFrame:
+    """Aggregate and optionally filter food groups for plotting.
+
+    Combines fruits+vegetables and eggs+poultry into aggregate groups. Optionally
+    drops tiny groups whose peak absolute value is below a fraction of the
+    dominant group's peak.
+
+    Args:
+        df: Input DataFrame with food groups as columns.
+        min_peak_share: Minimum share of the largest peak absolute value for a
+            group to be kept (e.g., 0.01 keeps groups >=1% of the max). Must be
+            in [0, 1).
+    """
+    if not 0 <= min_peak_share < 1:
+        raise ValueError(f"min_peak_share must be in [0, 1), got {min_peak_share}")
+
     df_plot = df.copy()
 
     if "fruits" in df_plot.columns and "vegetables" in df_plot.columns:
@@ -1797,6 +1814,15 @@ def aggregate_food_groups(df: pd.DataFrame) -> pd.DataFrame:
     if "eggs" in df_plot.columns and "poultry" in df_plot.columns:
         df_plot["eggs_poultry"] = df_plot["eggs"] + df_plot["poultry"]
         df_plot = df_plot.drop(columns=["eggs", "poultry"])
+
+    if min_peak_share > 0 and not df_plot.empty:
+        peak_by_group = df_plot.abs().max(axis=0)
+        global_peak = peak_by_group.max()
+        if global_peak > 0:
+            keep_groups = peak_by_group[
+                peak_by_group >= global_peak * min_peak_share
+            ].index
+            df_plot = df_plot.loc[:, keep_groups]
 
     return df_plot
 
@@ -2625,8 +2651,8 @@ def plot_heatmap(
         import math
 
         ticks = []
-        decade_start = int(math.floor(math.log10(vmin)))
-        decade_end = int(math.ceil(math.log10(vmax)))
+        decade_start = math.floor(math.log10(vmin))
+        decade_end = math.ceil(math.log10(vmax))
         # Use sparser ticks (1, 5) for x-axis, denser (1, 2, 5) for y-axis
         mults = [1, 5] if sparse else [1, 2, 5]
         for decade in range(decade_start, decade_end + 1):
@@ -2646,8 +2672,8 @@ def plot_heatmap(
         import math
 
         powers = []
-        start = int(math.floor(math.log10(vmin)))
-        end = int(math.ceil(math.log10(vmax)))
+        start = math.floor(math.log10(vmin))
+        end = math.ceil(math.log10(vmax))
         for exp in range(start, end + 1):
             val = 10**exp
             if vmin <= val <= vmax:
@@ -2950,8 +2976,8 @@ def plot_contour(
         import math
 
         ticks = []
-        decade_start = int(math.floor(math.log10(vmin)))
-        decade_end = int(math.ceil(math.log10(vmax)))
+        decade_start = math.floor(math.log10(vmin))
+        decade_end = math.ceil(math.log10(vmax))
         # Use sparser ticks (1, 5) for x-axis, denser (1, 2, 5) for y-axis
         mults = [1, 5] if sparse else [1, 2, 5]
         for decade in range(decade_start, decade_end + 1):
@@ -2971,8 +2997,8 @@ def plot_contour(
         import math
 
         powers = []
-        start = int(math.floor(math.log10(vmin)))
-        end = int(math.ceil(math.log10(vmax)))
+        start = math.floor(math.log10(vmin))
+        end = math.ceil(math.log10(vmax))
         for exp in range(start, end + 1):
             val = 10**exp
             if vmin <= val <= vmax:
