@@ -20,13 +20,14 @@
 
 set -euo pipefail
 
-# Default to gurobi environment unless the user explicitly passes -e/--env.
+# Default to dev-gurobi environment (includes Sphinx) unless the user
+# explicitly passes -e/--env.
 has_env=false
 for arg in "$@"; do
   case "$arg" in -e|--env) has_env=true; break ;; esac
 done
 if [ "$has_env" = false ]; then
-  set -- -e gurobi "$@"
+  set -- -e dev-gurobi "$@"
 fi
 
 SMK_ARGS=("$@")

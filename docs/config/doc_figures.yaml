@@ -14,25 +14,32 @@ scenarios:
   # The 'default' scenario mirrors config/scenarios.yaml so existing doc figure
   # rules (which hardcode scen-default) keep working unchanged.
   #
+  # The 'baseline' scenario fixes consumption to current-day levels and is used
+  # to extract consumer values (dual variables) for piecewise food utility
+  # calibration.
+  #
   # The four trade-friction scenarios sweep trade costs from 0.25x to 100x the
-  # baseline values, with moderate health and GHG pricing enabled.
+  # baseline values. They use piecewise food utility (derived from the baseline
+  # solve) to induce realistic demand, keeping the model as a pure LP for fast
+  # solves.
 
-  default:
-    health:
-      enabled: false
-    emissions:
-      ghg_pricing_enabled: false
+  default: {}
+
+  baseline:
+    # Fixed consumption to extract consumer values (dual variables)
+    validation:
+      enforce_baseline_diet: true
+    food_groups:
+      fix_within_group_ratios:
+        enabled: true
 
   # --- Trade friction scenarios for landing-page GIF ---
   # Each multiplies every cost_per_km and default_trade_cost_per_km by the
-  # stated factor. All enable moderate health + GHG pricing.
+  # stated factor. All use piecewise food utility for demand incentives.
 
   free_trade:
-    health:
+    food_utility_piecewise:
       enabled: true
-      value_per_yll: 5000
-    emissions:
-      ghg_pricing_enabled: false
     food_groups:
       fix_within_group_ratios:
         enabled: true
@@ -65,11 +72,8 @@ scenarios:
           cost_per_km: 0.004
 
   default_trade:
-    health:
+    food_utility_piecewise:
       enabled: true
-      value_per_yll: 5000
-    emissions:
-      ghg_pricing_enabled: false
     food_groups:
       fix_within_group_ratios:
         enabled: true
@@ -79,11 +83,8 @@ scenarios:
         penalty_mode: "l1"
 
   costly_trade:
-    health:
+    food_utility_piecewise:
       enabled: true
-      value_per_yll: 5000
-    emissions:
-      ghg_pricing_enabled: false
     food_groups:
       fix_within_group_ratios:
         enabled: true
@@ -116,11 +117,8 @@ scenarios:
           cost_per_km: 0.064
 
   autarky:
-    health:
+    food_utility_piecewise:
       enabled: true
-      value_per_yll: 5000
-    emissions:
-      ghg_pricing_enabled: false
     food_groups:
       fix_within_group_ratios:
         enabled: true
@@ -152,42 +150,12 @@ scenarios:
         bulky_low_quality:
           cost_per_km: 1.6
 
-# Use coarser spatial aggregation for faster processing
-# aggregation:
-#   regions:
-#     target_count: 250  # Reduced from 400 for faster processing
-#   resource_class_quantiles: [0.33, 0.67]  # Just 3 classes instead of 4
-#   irrigated_area_source: "current"
+# Disable health and GHG pricing globally for all doc figure scenarios
+health:
+  enabled: false
 
-# Fewer trade hubs for simpler network visualization
-# trade:
-#   hubs: 10  # Reduced from 20
-
-# # Override the full crop list with a limited subset for fast execution
-# # This replaces the default crops list entirely
-# crops:
-#   - wheat          # Major cereal
-#   - wetland-rice   # Major cereal (Asia)
-#   - maize          # Major cereal (Americas/Africa)
-#   - soybean        # Major legume/oil crop
-#   - white-potato   # Major tuber
-#   - cassava        # Major tropical staple
-#   - tomato         # Vegetable
-#   - cabbage        # Vegetable
-#   - onion          # Vegetable
-#   - banana         # Fruit
-#   - citrus         # Fruit
-
-# Add minimum consumption constraints to showcase animal products in figures
-# Values in g/person/day (modest minima to ensure some production)
-# food_groups:
-#   constraints:
-#     red_meat:
-#       min: 20       # ~140g/week
-#     dairy:
-#       min: 100      # ~1 small serving/day
-#     eggs:
-#       min: 15       # ~1 egg every 4 days
+emissions:
+  ghg_pricing_enabled: false
 
 solving:
   solver: "gurobi"
