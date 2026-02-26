@@ -146,7 +146,7 @@ These properties are extracted from the GLEAM 3.0 supplement using ``data/curate
 
 * **Ruminant feeds**:
 
-  * **Protein**: High nitrogen content (>50 g N/kg DM) - protein meals such as rapeseed-meal, sunflower-meal, soybean meal (assigned by N content; takes precedence over digestibility)
+  * **Protein**: High nitrogen content (>50 g N/kg DM) - protein meals such as rapeseed-meal, oilseed-meal, soybean meal (assigned by N content; takes precedence over digestibility)
   * **Roughage**: Low digestibility (<0.55), high-fiber forages (crop residues, straw)
   * **Forage**: Medium digestibility (0.55-0.70), improved forages and grassland (silage maize, alfalfa, pasture)
   * **Grain**: High digestibility (0.70-0.90), energy concentrates (maize, wheat, barley)
@@ -437,9 +437,9 @@ truth for feed categorisation.
      - wheat-bran
      - ``monogastric_low_quality``
    * - Soybean cakes
-     - sunflower-meal
+     - oilseed-meal
      - ``ruminant_protein``
-     - sunflower-meal
+     - oilseed-meal
      - ``monogastric_protein``
    * - Other oil seed cakes
      - rapeseed-meal

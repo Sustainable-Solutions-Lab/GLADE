@@ -63,7 +63,7 @@ PRODUCT_COMPOSITION = {
 SI2_TO_RUMINANT_FEED_ITEM = {
     "Cereal grains": "maize",
     "Brans spent brewer and biofuel grains": "wheat-bran",
-    "Soybean cakes": "sunflower-meal",
+    "Soybean cakes": "oilseed-meal",
     "Other oil seed cakes": "rapeseed-meal",
     "Other edible": "sugarbeet",
     "Other non-edible": "barley",
@@ -74,7 +74,7 @@ SI2_TO_RUMINANT_FEED_ITEM = {
 SI2_TO_MONOGASTRIC_FEED_ITEM = {
     "Cereal grains": "maize",
     "2nd grade grain": "maize",
-    "Soybean cakes": "sunflower-meal",
+    "Soybean cakes": "oilseed-meal",
     "Other oil seed cakes": "rapeseed-meal",
     "Other edible": "cassava",
     "Brans spent brewer and biofuel grains": "wheat-bran",

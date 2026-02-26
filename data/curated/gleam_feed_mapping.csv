@@ -50,10 +50,10 @@ CASSAVA,cassava,crop,monogastric,Cassava roots/pellets
 CASSAVA,white-potato,crop,monogastric,Potato tubers as pig feed (CASSAVA nutritional proxy)
 CASSAVA,sweet-potato,crop,monogastric,Sweet potato roots as pig feed (CASSAVA nutritional proxy)
 BNFRUIT,banana,crop,monogastric,Banana fruit
-MLSOY,sunflower-meal,food,both,Soybean meal → sunflower meal (model has this)
+MLSOY,oilseed-meal,food,both,Soybean meal → oilseed meal (generic oilseed meal pool)
 MLRAPE,rapeseed-meal,food,both,Rapeseed/canola meal
 MLCTTN,,food,both,Cottonseed meal (not in model - skip for now)
-MLOILSDS,sunflower-meal,food,monogastric,Other oilseed meals → sunflower meal
+MLOILSDS,oilseed-meal,food,monogastric,Other oilseed meals → oilseed meal
 PKEXP,,food,both,Palm kernel cake (not in model - skip for now)
 GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat bran"
 GRNBYWET,ddgs,food,both,DDGS from grain ethanol production (wet grain byproducts)
