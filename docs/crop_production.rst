@@ -198,7 +198,7 @@ When crops are converted into foods, the model first rescales the dry-matter cro
 **Crop-specific exceptions**: For certain crops, FAO's edible portion coefficients do not match the model's yield units, requiring special handling in ``workflow/scripts/prepare_fao_edible_portion.py``:
 
 * **Grains** (rice, barley, oat, buckwheat): FAO coefficients reflect milled/hulled conversion, but we track whole grain. Coefficient forced to 1.0; milling handled separately.
-* **Sugar crops** (sugarcane, sugarbeet) and **oil-palm**: GAEZ reports processed outputs (sugar or palm oil). Yields are converted back to whole-crop dry matter via ``data/curated/yield_unit_conversions.csv``, and edible portion coefficients are forced to 1.0 so that extraction losses are handled in ``data/curated/foods.csv``.
+* **Sugar crops** (sugarcane, sugarbeet), **oil-palm**, and **rapeseed**: sugar and palm yields are converted back to whole-crop dry matter via ``data/curated/yield_unit_conversions.csv``; rapeseed uses FAO edible-portion type-2 coefficients that already encode processing extraction. In all three cases, edible portion coefficients are forced to 1.0 so that extraction losses are handled exactly once in ``data/curated/foods.csv``.
 
 .. note::
 

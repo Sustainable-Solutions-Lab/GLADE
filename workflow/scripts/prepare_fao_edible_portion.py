@@ -13,9 +13,9 @@ Special handling is applied to certain crops where FAO's coefficient reflects
 processed products rather than whole-crop dry matter:
 - Grains (rice, barley, oat, buckwheat): FAO gives milled/hulled conversion;
   we force to 1.0 for whole grain, handling milling separately.
-- Sugar crops (sugarcane, sugarbeet) and oil-palm: we operate on whole-crop dry
-  matter, so the edible portion is forced to 1.0 and downstream processing is
-  handled in ``data/curated/foods.csv``.
+- Sugar crops (sugarcane, sugarbeet), oil-palm, and rapeseed: we operate on
+  whole-crop dry matter, so the edible portion is forced to 1.0 and downstream
+  processing is handled in ``data/curated/foods.csv``.
 """
 
 import csv
@@ -40,8 +40,11 @@ ALTERNATE_ITEM_NAMES: dict[str, str] = {
 # FAO listing a lower value. Reasons vary by crop type:
 # - Grains (rice, barley, oat, buckwheat): FAO coefficient represents milled/
 #   hulled grain; we track whole grain and handle milling separately.
-# - Sugar crops (sugarcane, sugarbeet) and oil-palm: the model converts
+# - Sugar crops (sugarcane, sugarbeet), oil-palm, and rapeseed: the model converts
 #   reported yields back to whole-crop dry matter prior to processing.
+#   For rapeseed specifically, FAO's edible portion coefficient (0.38, type 2)
+#   reflects processing extraction and would double-count losses because the
+#   rapeseed_oil pathway already applies extraction factors in foods.csv.
 EDIBLE_PORTION_EXCEPTIONS: set[str] = {
     "dryland-rice",
     "wetland-rice",
@@ -49,6 +52,7 @@ EDIBLE_PORTION_EXCEPTIONS: set[str] = {
     "oat",
     "buckwheat",
     "oil-palm",
+    "rapeseed",
     "sugarcane",
     "sugarbeet",
     # Stimulant crops: GAEZ models bean/leaf yield directly, so edible portion
