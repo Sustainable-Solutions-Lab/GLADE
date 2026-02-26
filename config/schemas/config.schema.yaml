@@ -233,7 +233,7 @@ properties:
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
               min_baseline_mt:
                 type: number
-                minimum: 0
+                exclusiveMinimum: 0
                 description: "Hard mode: minimum crop baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
           animals:
             type: object
@@ -253,7 +253,7 @@ properties:
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
               min_baseline_mt:
                 type: number
-                minimum: 0
+                exclusiveMinimum: 0
                 description: "Hard mode: minimum animal baseline (Mt) to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
 
   food_incentives:
