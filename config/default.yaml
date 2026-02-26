@@ -461,7 +461,7 @@ biomass:
   - sugarcane
   - biomass-sorghum
   marginal_values_usd_per_tonne: 0  # USD_2024 per tonne dry matter exported to the energy sector
-  enforce_baseline_demand: false  # Enforce baseline biofuel/industrial demand from FAOSTAT FBS
+  enforce_baseline_demand: true  # Enforce baseline biofuel/industrial demand from FAOSTAT FBS
 
 # --- section: trade ---
 trade:

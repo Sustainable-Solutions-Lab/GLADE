@@ -32,7 +32,6 @@ import logging
 import pandas as pd
 
 from workflow.scripts.faostat_bulk import (
-    FBS_COUNTRY_FALLBACKS,
     add_iso3_column,
     filter_bulk,
     load_bulk_csv,
@@ -74,12 +73,6 @@ def main():
     m49_to_iso3 = load_m49_to_iso3(m49_codes)
     bulk = add_iso3_column(bulk, m49_to_iso3)
 
-    # Include proxy countries in the filter
-    all_proxies = set()
-    for proxies in FBS_COUNTRY_FALLBACKS.values():
-        all_proxies.update(proxies)
-    filter_countries = list(set(countries) | all_proxies)
-
     logger.info(
         "Filtering FBS data for %d items, %d countries, year %d",
         len(item_codes),
@@ -91,7 +84,7 @@ def main():
         element_codes=[fbs_element_code],
         item_codes=[str(c) for c in item_codes],
         years=[reference_year],
-        iso3_codes=filter_countries,
+        iso3_codes=countries,
     )
 
     if df.empty:
@@ -148,42 +141,21 @@ def main():
     if results_df.empty:
         raise ValueError("No biofuel baseline data produced after filtering")
 
-    # Filter to target countries, then handle missing via proxies
+    # Filter to target countries. Unlike per-capita food supply data,
+    # biofuel demand is in absolute units (Mt). Countries without FBS
+    # "Other uses" data have no significant biofuel/industrial demand,
+    # so we assign them zero rather than copying a proxy country's
+    # absolute demand.
     target_results = results_df[results_df["country"].isin(countries)]
     present_countries = set(target_results["country"].unique())
     missing = set(countries) - present_countries
 
     if missing:
         logger.info(
-            "Attempting to fill %d missing countries via proxies...", len(missing)
+            "%d countries have no FBS biofuel data (zero demand): %s",
+            len(missing),
+            ", ".join(sorted(missing)[:10]) + ("..." if len(missing) > 10 else ""),
         )
-        proxy_rows = []
-        unfilled = []
-        for iso in missing:
-            proxies = FBS_COUNTRY_FALLBACKS.get(iso, [])
-            filled = False
-            for proxy in proxies:
-                proxy_data = results_df[results_df["country"] == proxy]
-                if not proxy_data.empty:
-                    logger.info("Filling %s using proxy %s", iso, proxy)
-                    proxy_copy = proxy_data.copy()
-                    proxy_copy["country"] = iso
-                    proxy_rows.append(proxy_copy)
-                    filled = True
-                    break
-            if not filled:
-                # Countries without biofuel demand data get zero demand
-                unfilled.append(iso)
-
-        if unfilled:
-            logger.info(
-                "%d countries have no biofuel baseline data (no proxies found): %s",
-                len(unfilled),
-                ", ".join(sorted(unfilled)[:10]),
-            )
-
-        if proxy_rows:
-            target_results = pd.concat([target_results, *proxy_rows], ignore_index=True)
 
     target_results.to_csv(output_file, index=False)
     logger.info(
