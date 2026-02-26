@@ -199,7 +199,9 @@ validation:
   production_stability:
     enabled: true
     penalty_mode: "l1"
-    l1_cost: 0.5
+    deviation_type: "relative"
+    l1_cost: 0.05
+    # Relative deviation with l1_cost=0.01-0.1 also quite viable performance-wise
 
 animal_products:
   # Use regionalized feed efficiency values
