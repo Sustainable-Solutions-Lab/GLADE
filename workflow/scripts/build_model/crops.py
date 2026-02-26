@@ -226,16 +226,25 @@ def add_regional_crop_production_links(
             all_df["harvested_area_ha"].astype(float).groupby(all_df["crop"]).sum()
         )
         avg_yield = weighted_prod / weighted_area
-        if (avg_yield <= 0).any():
-            bad = avg_yield[avg_yield <= 0].index.tolist()
-            raise ValueError(
-                "Average harvested-area yield must be positive for mixed crop costs; "
-                f"got non-positive values for crops: {bad}"
-            )
 
+        invalid_avg = (~np.isfinite(avg_yield)) | (avg_yield <= 0)
+        if invalid_avg.any():
+            bad = avg_yield[invalid_avg].index.tolist()
+            preview = ", ".join(bad[:8])
+            logger.warning(
+                "Missing/non-positive harvested-area weighted yield for %d crops "
+                "(examples: %s); using neutral per-tonne multiplier for those crops",
+                len(bad),
+                preview,
+            )
+            avg_yield.loc[invalid_avg] = np.nan
+
+        yield_ratio = all_df["efficiency"].astype(float) / all_df["crop"].map(
+            avg_yield
+        ).astype(float)
+        yield_ratio = yield_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)
         multiplier = (1.0 - per_tonne_cost_fraction) + per_tonne_cost_fraction * (
-            all_df["efficiency"].astype(float)
-            / all_df["crop"].map(avg_yield).astype(float)
+            yield_ratio
         )
         all_df["marginal_cost"] = all_df["base_cost"].astype(float) * multiplier
     else:
