@@ -19,3 +19,12 @@ repos:
     rev: v4.0.3
     hooks:
       - id: reuse
+  - repo: local
+    hooks:
+      - id: worktree-symlinks
+        name: symlink shared directories in worktrees
+        entry: tools/hooks/worktree-symlinks
+        language: script
+        stages: [post-checkout]
+        always_run: true
+        pass_filenames: false

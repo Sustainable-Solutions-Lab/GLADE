@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Symlink shared data directories from the main worktree into git worktrees,
+# so that expensive-to-recreate data is reused without re-downloading or
+# recomputing. Runs as a post-checkout hook via prek/pre-commit.
+
+set -euo pipefail
+
+# Only act on branch checkouts (flag=1), not file checkouts.
+[[ "${3:-1}" == "1" ]] || exit 0
+
+GIT_DIR=$(git rev-parse --git-dir)
+COMMON_DIR=$(git rev-parse --git-common-dir)
+
+# Only run inside worktrees, not in the main working tree.
+[[ "$(realpath "$GIT_DIR")" != "$(realpath "$COMMON_DIR")" ]] || exit 0
+
+MAIN_WORKTREE=$(cd "$COMMON_DIR/.." && pwd)
+WORKTREE_ROOT=$(git rev-parse --show-toplevel)
+
+# Directories to replace with symlinks to the main worktree.
+# data/ is checked out by git (it has tracked files), so we remove the
+# checkout and replace it with a symlink to share gitignored downloads,
+# manually_downloaded data, and restricted datasets.
+REPLACE_DIRS=(
+    data
+)
+
+# Gitignored directories to symlink (not checked out, so just create).
+SHARED_DIRS=(
+    processing
+)
+
+# Gitignored files to symlink.
+SHARED_FILES=(
+    config/secrets.yaml
+)
+
+for dir in "${REPLACE_DIRS[@]}"; do
+    target="$MAIN_WORKTREE/$dir"
+    link="$WORKTREE_ROOT/$dir"
+    if [[ -d "$target" ]] && [[ -d "$link" ]] && [[ ! -L "$link" ]]; then
+        rm -rf "$link"
+        ln -s "$target" "$link"
+        echo "Worktree: symlinked $dir"
+    fi
+done
+
+for dir in "${SHARED_DIRS[@]}"; do
+    target="$MAIN_WORKTREE/$dir"
+    link="$WORKTREE_ROOT/$dir"
+    if [[ -d "$target" ]] && [[ ! -e "$link" ]]; then
+        mkdir -p "$(dirname "$link")"
+        ln -s "$target" "$link"
+        echo "Worktree: symlinked $dir"
+    fi
+done
+
+for file in "${SHARED_FILES[@]}"; do
+    target="$MAIN_WORKTREE/$file"
+    link="$WORKTREE_ROOT/$file"
+    if [[ -f "$target" ]] && [[ ! -e "$link" ]]; then
+        mkdir -p "$(dirname "$link")"
+        ln -s "$target" "$link"
+        echo "Worktree: symlinked $file"
+    fi
+done
