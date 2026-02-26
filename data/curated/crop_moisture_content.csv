@@ -43,6 +43,9 @@ oil-palm,0.60,Assumption (MPOB fresh fruit bunch composition),Matches 24% oil sh
 olive,0.50,Assumption (typical olive fruit analysis),Approximate moisture for fresh olives
 sugarcane,0.73,Assumption (aligned with 14% sugar extraction),Chooses 27% dry matter share
 sugarbeet,0.76,Assumption (aligned with 10% sugar extraction),Chooses 24% dry matter share
+cocoa,0.065,GAEZ v5 Module VII table (COC),Dried cocoa beans
+coffee,0.10,GAEZ v5 Module VII table (COF),Green coffee beans
+tea,0.75,GAEZ v5 Module VII table (TEA),Fresh tea leaves; dried tea ≈ DM
 alfalfa,0.70,GAEZ v5 Module VII table (FDD),
 silage-maize,0.70,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
 biomass-sorghum,0.70,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops

@@ -178,6 +178,13 @@ alfalfa,Fodder/Leguminous,
 alfalfa,Leguminous Fodder,
 alfalfa,Leguminous fodder,
 alfalfa,Grassland,Fallback to aggregated
+cocoa,Cocoa,
+cocoa,Cacao,Case variant
+cocoa,Other crops,Fallback
+coffee,Coffee,
+coffee,Other crops,Fallback
+tea,Tea,
+tea,Other crops,Fallback
 biomass-sorghum,Sorghum,When not distinguished from grain sorghum
 biomass-sorghum,Grassland,Fallback - biomass sorghum often used as fodder
 biomass-sorghum,Fodder,

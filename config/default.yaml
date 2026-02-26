@@ -188,6 +188,10 @@ crops:
 - banana
 - citrus
 - coconut
+# Stimulant crops
+- cocoa
+- coffee
+- tea
 # Oil crops
 - sunflower
 - rapeseed
@@ -399,6 +403,7 @@ food_groups:
   - dairy
   - eggs
   - sugar
+  - stimulants
   # Optional per-group constraints with "min", "max" or "equal" in g/person/day
   constraints: {}
   equal_by_country_source: null
@@ -421,6 +426,7 @@ food_groups:
     dairy: 2865
     eggs: 213
     sugar: 133
+    stimulants: 50
   # Fix relative food contributions within each food group based on baseline
   # consumption data. When enabled, the model maintains baseline ratios between
   # foods in each group (e.g., if wheat is 60% and rice 40% of grains, that
@@ -436,6 +442,14 @@ diet:
   # FAOSTAT Food Balance Sheet supply data. This addresses cases where GDD
   # survey intake substantially underestimates actual consumption (e.g. yam
   # in West Africa).
+  # Conversion factors from GDD beverage intake (cups/day) to dry commodity
+  # weight (g/day). GDD reports coffee (v17) and tea (v18) in cups/day.
+  # Factor = serving_size_g × dry_fraction_per_g_brewed
+  # Coffee: 240 g/cup × 0.06 g-dry/g-brewed = 14.4 g-dry/cup
+  # Tea: 240 g/cup × 0.01 g-dry/g-brewed = 2.4 g-dry/cup
+  stimulant_brewed_to_dry:
+    coffee: 14.4
+    tea: 2.4
   fbs_override_foods:
   - yam
 
@@ -467,6 +481,9 @@ trade:
       - rye
       - dry-pea
       - chickpea
+      - cocoa
+      - coffee
+      - tea
     bulky_fresh:
       cost_per_km: 0.014  # USD_2024 per tonne per km (1.4e-2)
       crops:
@@ -1091,6 +1108,9 @@ plotting:
       sesame: "#C97A2B"
       'oil-palm': "#A04000"
       olive: "#6E7D57"
+      cocoa: "#5C3317"
+      coffee: "#6F4E37"
+      tea: "#4B7A2E"
       sugarcane: "#9B59B6"
       sugarbeet: "#AF7AC5"
       alfalfa: "#1ABC9C"
@@ -1109,6 +1129,7 @@ plotting:
       poultry: "#FF9896"
       dairy: "#9EDAE5"
       eggs: "#FFE377"
+      stimulants: "#8B4513"
 
   fallback_cmaps:
     crops: "Set3"

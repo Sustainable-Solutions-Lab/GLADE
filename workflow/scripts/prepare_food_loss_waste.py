@@ -60,7 +60,7 @@ FALLBACK_FOOD_SUPPLY: dict[str, list[str]] = {
 }
 
 UN_TO_MODEL_FOOD_GROUPS: dict[str, list[str] | None] = {
-    "CRL_PUL": ["grain", "whole_grains", "legumes"],
+    "CRL_PUL": ["grain", "whole_grains", "legumes", "stimulants"],
     "FRT_VGT": ["fruits", "vegetables"],
     "RT_TBR": ["starchy_vegetable", "oil", "nuts_seeds"],
     "ANMPROD": ["red_meat", "poultry", "dairy", "eggs"],

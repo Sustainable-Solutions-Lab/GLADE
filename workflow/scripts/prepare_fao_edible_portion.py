@@ -51,9 +51,14 @@ EDIBLE_PORTION_EXCEPTIONS: set[str] = {
     "oil-palm",
     "sugarcane",
     "sugarbeet",
+    # Stimulant crops: GAEZ models bean/leaf yield directly, so edible portion
+    # is 1.0. FAO coefficients reflect cherry-to-bean (coffee) or pod-to-bean
+    # (cocoa) ratios that are not applicable here.
+    "cocoa",
+    "coffee",
 }
 
-FALLBACK_FULL_EDIBLE: set[str] = {"oil-palm", "sugarcane", "sugarbeet"}
+FALLBACK_FULL_EDIBLE: set[str] = {"oil-palm", "sugarcane", "sugarbeet", "tea"}
 
 
 @dataclass

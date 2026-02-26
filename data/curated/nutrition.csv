@@ -31,6 +31,10 @@ citrus,cal,kcal/100g,47.08
 citrus,carb,g/100g,11.75
 citrus,fat,g/100g,0.12
 citrus,protein,g/100g,0.94
+cocoa-powder,cal,kcal/100g,227.53
+cocoa-powder,carb,g/100g,57.9
+cocoa-powder,fat,g/100g,13.7
+cocoa-powder,protein,g/100g,19.6
 coconut,cal,kcal/100g,353.97
 coconut,carb,g/100g,15.23
 coconut,fat,g/100g,33.49
@@ -39,6 +43,10 @@ coconut-oil,cal,kcal/100g,891.49
 coconut-oil,carb,g/100g,0.0
 coconut-oil,fat,g/100g,99.06
 coconut-oil,protein,g/100g,0.0
+coffee-green,cal,kcal/100g,0.48
+coffee-green,carb,g/100g,0.0
+coffee-green,fat,g/100g,0.02
+coffee-green,protein,g/100g,0.12
 cowpea,cal,kcal/100g,336.04
 cowpea,carb,g/100g,60.03
 cowpea,fat,g/100g,1.26
@@ -187,6 +195,10 @@ sweet-potato,cal,kcal/100g,85.8
 sweet-potato,carb,g/100g,20.12
 sweet-potato,fat,g/100g,0.05
 sweet-potato,protein,g/100g,1.57
+tea-dried,cal,kcal/100g,0.96
+tea-dried,carb,g/100g,0.0
+tea-dried,fat,g/100g,0.0
+tea-dried,protein,g/100g,0.22
 tomato,cal,kcal/100g,17.69
 tomato,carb,g/100g,3.89
 tomato,fat,g/100g,0.2

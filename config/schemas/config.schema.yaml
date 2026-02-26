@@ -825,6 +825,20 @@ properties:
         minimum: 1990
         maximum: 2019
         description: "Reference year for baseline diet"
+      stimulant_brewed_to_dry:
+        type: object
+        required: [coffee, tea]
+        additionalProperties: false
+        properties:
+          coffee:
+            type: number
+            minimum: 0
+            description: "GDD cups-to-dry-grams conversion factor for coffee"
+          tea:
+            type: number
+            minimum: 0
+            description: "GDD cups-to-dry-grams conversion factor for tea"
+        description: "Conversion factors from GDD beverage intake (cups/day) to dry commodity weight (g/day)"
       fbs_override_foods:
         type: array
         uniqueItems: true

@@ -76,4 +76,7 @@ sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction (
 sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3)
 maize_ethanol,maize,maize-ethanol,0.68,Fuel-equivalent DM fraction (assumption: 1 minus DDGS fraction)
 maize_ethanol,maize,ddgs,0.32,DDGS byproduct from corn ethanol (assumption: ~32% DM yield is industry standard)
+cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing modeled)
+coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled)
+tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled)
 sugarbeet_sugar,sugarbeet,sugar,0.10,Sucrose extraction (GAEZ v5 assumption)

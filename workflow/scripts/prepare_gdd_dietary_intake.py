@@ -38,6 +38,10 @@ def main():
     reference_year = snakemake.params["reference_year"]
     food_groups = snakemake.params["food_groups"]
     output_file = snakemake.output["diet"]
+    stimulant_brewed_to_dry = {
+        "v17": snakemake.params["stimulant_brewed_to_dry"]["coffee"],
+        "v18": snakemake.params["stimulant_brewed_to_dry"]["tea"],
+    }
     ssb_sugar_g_per_100g = float(snakemake.params["ssb_sugar_g_per_100g"])
     if ssb_sugar_g_per_100g <= 0:
         logger.error(
@@ -65,8 +69,8 @@ def main():
         "v15": "sugar",  # Sugar-sweetened beverages → refined sugar equivalent
         "v35": "sugar",  # Added sugars (g/day already reported)
         "v16": None,  # Fruit juices (excluded - not part of GBD fruit risk factor)
-        "v17": None,  # Coffee (not tracked as food group)
-        "v18": None,  # Tea (not tracked as food group)
+        "v17": "stimulants",  # Coffee (brewed → dry weight conversion applied)
+        "v18": "stimulants",  # Tea (brewed → dry weight conversion applied)
         # Note: We use v57 "Total Milk" for dairy, which aligns with the GBD dairy
         # risk factor definition and includes milk equivalents from all dairy products.
         # Individual components (v13 cheese, v14 yogurt) are not used separately
@@ -150,6 +154,13 @@ def main():
                     df_year["median"] = pd.to_numeric(
                         df_year["median"], errors="coerce"
                     ).fillna(0.0)
+            elif model_item == "stimulants":
+                brewed_to_dry = stimulant_brewed_to_dry.get(varcode)
+                if brewed_to_dry is not None:
+                    brewed_grams = pd.to_numeric(
+                        df_year["median"], errors="coerce"
+                    ).fillna(0.0)
+                    df_year["median"] = brewed_grams * brewed_to_dry
 
             # Aggregate to country-age level (weighted mean across sex/urban/education strata)
             # GDD stratifies by age, sex, urban, education

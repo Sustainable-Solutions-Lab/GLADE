@@ -18,6 +18,7 @@ rule prepare_gdd_dietary_intake:
         food_groups=config["food_groups"]["included"],
         reference_year=config["health"]["reference_year"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
+        stimulant_brewed_to_dry=config["diet"]["stimulant_brewed_to_dry"],
     output:
         diet="<processing>/{name}/gdd_dietary_intake.csv",
     group:
