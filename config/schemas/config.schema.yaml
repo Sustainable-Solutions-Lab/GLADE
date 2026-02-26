@@ -43,6 +43,7 @@ required:
   - animal_costs
   - crop_costs
   - solving
+  - remote_solve
   - plotting
   - credentials
 additionalProperties: false
@@ -1513,6 +1514,72 @@ properties:
         type: integer
         minimum: 100
         description: "Maximum solver memory in MB (SLURM resource)"
+
+  remote_solve:
+    type: object
+    required:
+      [
+        enabled,
+        local_scenarios,
+        host,
+        workdir,
+        pixi_env,
+        use_slurm,
+        slurm_profile,
+        sync_workflow,
+        sync_pixi_files,
+        ssh_options,
+        rsync_options,
+        preflight_check,
+      ]
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        description: "Whether to run solve_model remotely over SSH"
+      local_scenarios:
+        type: array
+        items:
+          type: string
+          pattern: "^[a-zA-Z0-9_]+$"
+        description: "Scenario names that must use local solve_model instead of remote solve (currently only 'baseline' is supported)"
+      host:
+        type: string
+        minLength: 1
+        description: "SSH host or alias"
+      workdir:
+        type: string
+        minLength: 1
+        description: "Remote project root containing this repository"
+      pixi_env:
+        type: string
+        minLength: 1
+        description: "Remote pixi environment passed to tools/smk -e"
+      use_slurm:
+        type: boolean
+        description: "Whether to add --slurm for remote tools/smk execution"
+      slurm_profile:
+        type: string
+        description: "Optional remote SMK_SLURM_PROFILE path; empty uses remote default"
+      sync_workflow:
+        type: boolean
+        description: "Sync workflow/ and config/ before remote solve"
+      sync_pixi_files:
+        type: boolean
+        description: "Sync pixi.toml and pixi.lock before remote solve"
+      ssh_options:
+        type: array
+        items:
+          type: string
+        description: "Additional SSH CLI arguments"
+      rsync_options:
+        type: array
+        items:
+          type: string
+        description: "Additional rsync CLI arguments"
+      preflight_check:
+        type: boolean
+        description: "Create the remote workdir before syncing"
 
   plotting:
     type: object

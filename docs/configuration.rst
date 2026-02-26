@@ -639,6 +639,14 @@ Solver Configuration
   * **HiGHS**: Open-source, fast, good for most problems
   * **Gurobi**: Commercial, often faster for very large problems, requires license (free for academic users)
 
+The ``remote_solve`` subsection allows delegating only ``solve_model`` to a
+remote SSH host (for example an HPC login node) while keeping model building
+and analysis local. When enabled, the workflow syncs required solve inputs and
+workflow/config code, runs remote Snakemake constrained to ``solve_model``, and
+syncs solved outputs back.
+Set ``remote_solve.local_scenarios`` (default: ``["baseline"]``) for scenarios
+that must always use the local ``solve_model`` rule.
+
 Plotting Configuration
 ~~~~~~~~~~~~~~~~~~~~~~
 

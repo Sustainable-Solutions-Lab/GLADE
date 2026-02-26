@@ -1068,6 +1068,21 @@ solving:
   runtime: 5  # Maximum solver runtime in minutes (used by SLURM)
   mem_mb: 6000  # Maximum solve_model memory in MB (used by SLURM)
 
+# --- section: remote_solve ---
+remote_solve:
+  enabled: false  # If true, solve_model is executed remotely over SSH
+  local_scenarios: ["baseline"]  # Scenarios that must always solve locally (currently only "baseline" is supported)
+  host: "user@login.cluster"  # Placeholder SSH host or alias; customize for your setup
+  workdir: "~/path/to/food-opt"  # Placeholder remote project root containing this repository
+  pixi_env: "default"  # Placeholder remote pixi environment passed to tools/smk -e
+  use_slurm: false  # Set true when remote solves should be submitted via --slurm
+  slurm_profile: ""  # Optional remote SMK_SLURM_PROFILE; empty uses remote default
+  sync_workflow: true  # Sync workflow/ and config/ code before remote solve
+  sync_pixi_files: false  # Sync pixi.toml and pixi.lock to remote workdir
+  ssh_options: []  # Extra ssh CLI args, e.g. ["-o", "ControlMaster=auto"]
+  rsync_options: []  # Extra rsync CLI args
+  preflight_check: true  # If true, create remote workdir before syncing
+
 # --- section: plotting ---
 plotting:
   comparison_scenarios:

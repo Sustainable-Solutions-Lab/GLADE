@@ -360,3 +360,56 @@ rule solve_model:
         "<benchmarks>/{name}/solve_model_scen-{scenario}.tsv"
     script:
         "../scripts/solve_model.py"
+
+
+def remote_solver_log_path(w):
+    """Return canonical remote solve_model log path."""
+    return f"logs/{w.name}/solve_model_scen-{w.scenario}.log"
+
+
+def remote_solver_benchmark_path(w):
+    """Return canonical remote solve_model benchmark path."""
+    return f"benchmarks/{w.name}/solve_model_scen-{w.scenario}.tsv"
+
+
+if config["remote_solve"]["enabled"]:
+    local_scenarios = list(config["remote_solve"]["local_scenarios"])
+    unsupported_local_scenarios = [s for s in local_scenarios if s != "baseline"]
+    if unsupported_local_scenarios:
+        unsupported = ", ".join(sorted(unsupported_local_scenarios))
+        raise ValueError(
+            "remote_solve.local_scenarios currently supports only "
+            f"['baseline']; unsupported entries: {unsupported}"
+        )
+
+    if "baseline" in local_scenarios:
+
+        use rule solve_model as solve_model_local_baseline with:
+            output:
+                network="<results>/{name}/solved/model_scen-{scenario,baseline}.nc",
+
+        ruleorder: solve_model_local_baseline > solve_model_remote > solve_model
+
+    else:
+
+        ruleorder: solve_model_remote > solve_model
+
+    rule solve_model_remote:
+        input:
+            unpack(solve_model_inputs),
+        params:
+            remote_solver_log=remote_solver_log_path,
+            remote_solver_benchmark=remote_solver_benchmark_path,
+            # Only used to force correct reruns when scenario definitions change.
+            scenario_hash=lambda w: scenario_override_hash(w.scenario),
+        output:
+            network="<results>/{name}/solved/model_scen-{scenario}.nc",
+        resources:
+            runtime="2m",
+            mem_mb=1200,
+        log:
+            "<logs>/{name}/solve_model_remote_scen-{scenario}.log",
+        benchmark:
+            "<benchmarks>/{name}/solve_model_remote_scen-{scenario}.tsv"
+        script:
+            "../scripts/solve_model_remote.py"
