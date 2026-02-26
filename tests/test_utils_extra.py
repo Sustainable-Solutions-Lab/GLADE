@@ -477,6 +477,7 @@ class TestBuildLucLefLookup:
             "water_supply",
             "use",
             "lef",
+            "conversion_share",
         ]
 
     def test_resource_class_is_integer(self):

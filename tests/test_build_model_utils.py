@@ -4,7 +4,6 @@
 
 """Unit tests for emission-related utility functions in build_model/utils.py."""
 
-import pandas as pd
 import pytest
 
 from workflow.scripts.build_model.utils import (
@@ -18,108 +17,55 @@ from workflow.scripts.build_model.utils import (
 
 
 @pytest.fixture
-def ruminant_categories():
-    """Ruminant feed categories with nitrogen content."""
-    return pd.DataFrame(
-        {
-            "category": ["roughage", "forage", "grain", "protein"],
-            "N_g_per_kg_DM": [18.0, 25.0, 22.0, 50.0],
-        }
-    )
+def ruminant_n_lookup():
+    """Ruminant feed N content lookup (g N/kg DM) keyed by category."""
+    return {"roughage": 18.0, "forage": 25.0, "grain": 22.0, "protein": 50.0}
 
 
 @pytest.fixture
-def monogastric_categories():
-    """Monogastric feed categories with nitrogen content."""
-    return pd.DataFrame(
-        {
-            "category": ["low_quality", "grain", "energy", "protein"],
-            "N_g_per_kg_DM": [15.0, 18.0, 12.0, 55.0],
-        }
-    )
+def monogastric_n_lookup():
+    """Monogastric feed N content lookup (g N/kg DM) keyed by category."""
+    return {"low_quality": 15.0, "grain": 18.0, "protein": 55.0}
 
 
 @pytest.fixture
-def nutrition():
-    """Nutrition data indexed by (food, nutrient) with a 'value' column."""
-    data = {
-        "value": [20.0, 3.5, 12.0, 18.0],
+def product_protein_lookup():
+    """Product protein lookup (g protein/100g product) keyed by product."""
+    return {
+        "meat-cattle": 20.0,
+        "dairy": 3.5,
+        "meat-pig": 12.0,
+        "meat-chicken": 18.0,
     }
-    index = pd.MultiIndex.from_tuples(
-        [
-            ("meat-cattle", "protein"),
-            ("dairy", "protein"),
-            ("meat-pig", "protein"),
-            ("meat-chicken", "protein"),
-        ],
-        names=["food", "nutrient"],
-    )
-    return pd.DataFrame(data, index=index)
 
 
 @pytest.fixture
-def manure_emissions():
-    """MMS-weighted manure emission factors."""
-    return pd.DataFrame(
-        {
-            "country": [
-                "USA",
-                "USA",
-                "USA",
-                "USA",
-                "USA",
-                "IND",
-            ],
-            "product": [
-                "meat-cattle",
-                "meat-cattle",
-                "dairy",
-                "meat-pig",
-                "meat-chicken",
-                "meat-cattle",
-            ],
-            "feed_category": [
-                "ruminant_forage",
-                "ruminant_forage",
-                "ruminant_roughage",
-                "monogastric_grain",
-                "monogastric_grain",
-                "ruminant_forage",
-            ],
-            "manure_ch4_kg_per_kg_DMI": [
-                0.005,
-                0.001,
-                0.004,
-                0.008,
-                0.003,
-                0.006,
-            ],
-            "pasture_fraction": [
-                0.3,
-                0.9,
-                0.2,
-                0.0,
-                0.0,
-                0.4,
-            ],
-            "pasture_n2o_ef": [
-                0.02,
-                0.02,
-                0.02,
-                0.01,
-                0.01,
-                0.02,
-            ],
-            "managed_n2o_ef": [
-                0.0095,
-                0.0095,
-                0.0095,
-                0.012,
-                0.010,
-                0.0095,
-            ],
-        }
-    )
+def manure_n2o_lookup():
+    """MMS N2O factors keyed by (product, feed_category)."""
+    return {
+        ("meat-cattle", "ruminant_forage"): (0.3, 0.02, 0.0095),
+        ("dairy", "ruminant_roughage"): (0.2, 0.02, 0.0095),
+        ("meat-pig", "monogastric_grain"): (0.0, 0.01, 0.012),
+        ("meat-chicken", "monogastric_grain"): (0.0, 0.01, 0.010),
+    }
+
+
+@pytest.fixture
+def manure_n2o_by_product_lookup():
+    """Fallback MMS N2O factors keyed by product only."""
+    return {}
+
+
+@pytest.fixture
+def manure_ch4_lookup():
+    """Manure CH4 emission factors keyed by (country, product, feed_category)."""
+    return {
+        ("USA", "meat-cattle", "ruminant_forage"): 0.005,
+        ("USA", "dairy", "ruminant_roughage"): 0.004,
+        ("USA", "meat-pig", "monogastric_grain"): 0.008,
+        ("USA", "meat-chicken", "monogastric_grain"): 0.003,
+        ("IND", "meat-cattle", "ruminant_forage"): 0.006,
+    }
 
 
 @pytest.fixture
@@ -144,10 +90,11 @@ class TestCalculateManureNOutputs:
 
     def test_ruminant_n_balance(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        nutrition,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """Ruminant product: verify N balance and N2O components."""
@@ -156,10 +103,11 @@ class TestCalculateManureNOutputs:
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -212,10 +160,11 @@ class TestCalculateManureNOutputs:
 
     def test_monogastric_feed_category_parsing(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        nutrition,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """Monogastric product: feed_category prefix is parsed correctly."""
@@ -224,10 +173,11 @@ class TestCalculateManureNOutputs:
             product="meat-pig",
             feed_category="monogastric_grain",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -250,10 +200,11 @@ class TestCalculateManureNOutputs:
 
     def test_zero_efficiency_all_feed_n_excreted(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        nutrition,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """Zero efficiency: no product N retained, all feed N is excreted."""
@@ -262,10 +213,11 @@ class TestCalculateManureNOutputs:
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -284,10 +236,11 @@ class TestCalculateManureNOutputs:
 
     def test_44_28_conversion_factor(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        nutrition,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """Verify the 44/28 N2O-N to N2O conversion is applied."""
@@ -296,10 +249,11 @@ class TestCalculateManureNOutputs:
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -336,10 +290,11 @@ class TestCalculateManureNOutputs:
 
     def test_forage_pasture_present(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        nutrition,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """Forage feed: pasture fraction from MMS data contributes to N2O."""
@@ -348,10 +303,11 @@ class TestCalculateManureNOutputs:
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -361,28 +317,23 @@ class TestCalculateManureNOutputs:
 
     def test_missing_protein_data_defaults_to_zero(
         self,
-        ruminant_categories,
-        monogastric_categories,
-        manure_emissions,
+        ruminant_n_lookup,
+        monogastric_n_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
         """When product has no protein data, product N is assumed to be zero."""
-        nutrition_no_product = pd.DataFrame(
-            {"value": [20.0]},
-            index=pd.MultiIndex.from_tuples(
-                [("other-product", "protein")],
-                names=["food", "nutrient"],
-            ),
-        )
         efficiency = 0.05
         n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
             product="unknown-product",
             feed_category="ruminant_forage",
             efficiency=efficiency,
-            ruminant_categories=ruminant_categories,
-            monogastric_categories=monogastric_categories,
-            nutrition=nutrition_no_product,
-            manure_emissions=manure_emissions,
+            ruminant_n_lookup=ruminant_n_lookup,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup={},
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
             **default_indirect_params,
         )
 
@@ -412,7 +363,7 @@ class TestCalculateCh4PerFeedIntake:
     def test_ruminant_forage_enteric_and_manure(
         self,
         enteric_my_lookup,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Ruminant forage feed: both enteric and manure CH4."""
         total, manure = _calculate_ch4_per_feed_intake(
@@ -420,7 +371,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="ruminant_forage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # Enteric: 18 g/kg DM = 0.018 t/t
@@ -433,7 +384,7 @@ class TestCalculateCh4PerFeedIntake:
     def test_ruminant_non_grassland_both_enteric_and_manure(
         self,
         enteric_my_lookup,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Ruminant with non-grassland feed: both enteric and manure CH4."""
         total, manure = _calculate_ch4_per_feed_intake(
@@ -441,7 +392,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="ruminant_forage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # Enteric: 18 g/kg DM = 0.018 t/t
@@ -454,7 +405,7 @@ class TestCalculateCh4PerFeedIntake:
     def test_monogastric_manure_only(
         self,
         enteric_my_lookup,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Monogastric with manure data: manure CH4 only, no enteric."""
         total, manure = _calculate_ch4_per_feed_intake(
@@ -462,7 +413,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="monogastric_grain",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # No enteric for monogastrics
@@ -476,20 +427,12 @@ class TestCalculateCh4PerFeedIntake:
         enteric_my_lookup,
     ):
         """When no manure data matches, manure CH4 is zero."""
-        empty_manure = pd.DataFrame(
-            columns=[
-                "country",
-                "product",
-                "feed_category",
-                "manure_ch4_kg_per_kg_DMI",
-            ]
-        )
         total, manure = _calculate_ch4_per_feed_intake(
             product="meat-cattle",
             feed_category="ruminant_forage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=empty_manure,
+            manure_ch4_lookup={},
         )
 
         # Only enteric: 18 g/kg DM = 0.018 t/t
@@ -502,20 +445,12 @@ class TestCalculateCh4PerFeedIntake:
         enteric_my_lookup,
     ):
         """Monogastric with no manure data: zero total CH4."""
-        empty_manure = pd.DataFrame(
-            columns=[
-                "country",
-                "product",
-                "feed_category",
-                "manure_ch4_kg_per_kg_DMI",
-            ]
-        )
         total, manure = _calculate_ch4_per_feed_intake(
             product="meat-pig",
             feed_category="monogastric_grain",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=empty_manure,
+            manure_ch4_lookup={},
         )
 
         assert total == pytest.approx(0.0)
@@ -524,7 +459,7 @@ class TestCalculateCh4PerFeedIntake:
     def test_enteric_unit_conversion(
         self,
         enteric_my_lookup,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Enteric CH4 conversion: g CH4/kg DM -> t CH4/t DM (divide by 1000)."""
         total, manure = _calculate_ch4_per_feed_intake(
@@ -532,7 +467,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="ruminant_roughage",
             country="USA",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # 20 g/kg DM = 20/1000 t/t DM = 0.020, no manure data for roughage/USA
@@ -541,7 +476,7 @@ class TestCalculateCh4PerFeedIntake:
     def test_different_country_uses_correct_manure_data(
         self,
         enteric_my_lookup,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Manure CH4 is looked up by country, product, and feed_category."""
         total, manure = _calculate_ch4_per_feed_intake(
@@ -549,7 +484,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="ruminant_forage",
             country="IND",
             enteric_my_lookup=enteric_my_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # IND meat-cattle ruminant_forage: manure_ch4 = 0.006
@@ -560,7 +495,7 @@ class TestCalculateCh4PerFeedIntake:
 
     def test_missing_enteric_category_no_enteric(
         self,
-        manure_emissions,
+        manure_ch4_lookup,
     ):
         """Ruminant with feed category not in enteric lookup: no enteric CH4."""
         partial_lookup = {"grain": 12.0}  # only grain, no "forage"
@@ -569,7 +504,7 @@ class TestCalculateCh4PerFeedIntake:
             feed_category="ruminant_forage",
             country="USA",
             enteric_my_lookup=partial_lookup,
-            manure_emissions=manure_emissions,
+            manure_ch4_lookup=manure_ch4_lookup,
         )
 
         # No enteric (forage not in lookup), only manure

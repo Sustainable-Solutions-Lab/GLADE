@@ -262,10 +262,10 @@ class TestCategorizeMonogastricFeeds:
         assert mapping.iloc[0]["category"] == "grain"
 
     def test_energy_at_155(self):
-        """ME >= 15.5 is categorized as energy."""
+        """ME >= 15.5 is still categorized as grain (energy merged into grain)."""
         df = pd.DataFrame([_make_monogastric_feed("fat_feed", me=15.5)])
         categories, mapping = categorize_monogastric_feeds(df, EMPTY_ASH)
-        assert mapping.iloc[0]["category"] == "energy"
+        assert mapping.iloc[0]["category"] == "grain"
 
     def test_high_nitrogen_overrides_me(self):
         """N > 35 g/kg DM forces protein category regardless of ME."""
@@ -304,8 +304,7 @@ class TestCategorizeMonogastricFeeds:
         categories, mapping = categorize_monogastric_feeds(df, EMPTY_ASH)
         cat_dict = categories.set_index("category")["n_feeds"].to_dict()
         assert cat_dict["low_quality"] == 2
-        assert cat_dict["grain"] == 1
-        assert cat_dict["energy"] == 1
+        assert cat_dict["grain"] == 2
 
     def test_category_averages(self):
         """Category averages are computed correctly for monogastric feeds."""
@@ -340,7 +339,7 @@ class TestCategorizeMonogastricFeeds:
         )
         categories, mapping = categorize_monogastric_feeds(df, EMPTY_ASH)
         cat_set = set(categories["category"])
-        assert cat_set == {"low_quality", "grain", "energy", "protein"}
+        assert cat_set == {"low_quality", "grain", "protein"}
 
 
 # ---------------------------------------------------------------------------

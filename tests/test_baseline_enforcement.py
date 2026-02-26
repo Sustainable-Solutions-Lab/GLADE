@@ -62,7 +62,7 @@ def baseline_df_multi_country():
     return pd.DataFrame(
         {
             "food": ["wheat", "rice", "wheat", "rice"],
-            "country": ["usa", "usa", "ind", "ind"],
+            "country": ["USA", "USA", "IND", "IND"],
             "food_group": ["grain", "grain", "grain", "grain"],
             "consumption_g_per_day": [150.0, 50.0, 30.0, 170.0],
         }
@@ -342,9 +342,9 @@ class TestAddFoodConsumptionConstraints:
             "food_equal_consume:rice:USA",
             "food_equal_consume:wheat:IND",
         }
-        assert expected.issubset(set(food_network.global_constraints.index))
+        assert expected.issubset(set(food_network.global_constraints.static.index))
 
-        gc = food_network.global_constraints.loc[sorted(expected)]
+        gc = food_network.global_constraints.static.loc[sorted(expected)]
         assert (gc["type"] == "food_consumption").all()
         assert (gc["sense"] == "==").all()
 
