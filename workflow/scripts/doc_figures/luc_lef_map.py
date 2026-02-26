@@ -9,6 +9,8 @@ import cartopy.crs as ccrs
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+from rasterio.features import rasterize
+from rasterio.transform import from_bounds
 import xarray as xr
 
 from workflow.scripts.doc_figures_config import (
@@ -50,6 +52,62 @@ def _symmetric_limits(arrays: list[np.ndarray], percentile: float = 99.0) -> flo
     return max(limit, 0.1)
 
 
+def _combine_use_group(
+    use_data: dict[str, np.ndarray],
+    exact: str,
+    prefix: str,
+    reducer: str,
+) -> np.ndarray | None:
+    """Return a grouped use raster from either exact or split use names."""
+    if exact in use_data:
+        return use_data[exact]
+
+    parts = [arr for name, arr in use_data.items() if name.startswith(prefix)]
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+
+    stack = np.stack(parts, axis=0)
+    all_nan = np.isnan(stack).all(axis=0)
+    if reducer == "max":
+        reduced = np.max(np.where(np.isnan(stack), -np.inf, stack), axis=0)
+        reduced[all_nan] = np.nan
+        return reduced
+    if reducer == "min":
+        reduced = np.min(np.where(np.isnan(stack), np.inf, stack), axis=0)
+        reduced[all_nan] = np.nan
+        return reduced
+    raise ValueError(f"Unknown reducer: {reducer}")
+
+
+def _build_land_mask(
+    regions: gpd.GeoDataFrame, lat: np.ndarray, lon: np.ndarray
+) -> np.ndarray:
+    """Rasterize region polygons to a boolean land mask on the LEF grid."""
+    transform = from_bounds(
+        float(lon.min()),
+        float(lat.min()),
+        float(lon.max()),
+        float(lat.max()),
+        len(lon),
+        len(lat),
+    )
+    shapes = (
+        (geom, 1) for geom in regions.geometry if geom is not None and not geom.is_empty
+    )
+    # rasterize uses image row order from north -> south; LEF arrays here are south -> north.
+    mask_north_up = rasterize(
+        shapes,
+        out_shape=(len(lat), len(lon)),
+        transform=transform,
+        fill=0,
+        all_touched=False,
+        dtype="uint8",
+    )
+    return np.flipud(mask_north_up.astype(bool))
+
+
 def main(
     annualized_path: str,
     regions_path: str,
@@ -65,16 +123,29 @@ def main(
         regions = regions.set_crs(4326, allow_override=True)
     else:
         regions = regions.to_crs(4326)
+    land_mask = _build_land_mask(regions, lat, lon)
+
+    use_data = dict(zip(uses, lef_cube, strict=True))
+    cropland = _combine_use_group(
+        use_data, exact="cropland", prefix="cropland_", reducer="max"
+    )
+    spared = _combine_use_group(
+        use_data, exact="spared", prefix="spared", reducer="min"
+    )
+    panels = []
+    if cropland is not None:
+        panels.append(("cropland", cropland))
+    if spared is not None:
+        panels.append(("spared", spared))
+    if not panels:
+        raise ValueError(
+            "No cropland/spared LEF layers found in annualized land-use dataset"
+        )
 
     use_to_label = {
         "cropland": "Cropland expansion emission factor",
         "spared": "Spared land sequestration factor",
     }
-
-    panels = []
-    for use, data in zip(uses, lef_cube):
-        if use in use_to_label:
-            panels.append((use, data))
 
     vmax = _symmetric_limits([arr for _, arr in panels])
 
@@ -92,9 +163,10 @@ def main(
 
     for ax, (use, data) in zip(axes, panels):
         ax.set_global()
-        ax.set_facecolor("white")
+        ax.set_facecolor("#f7f9fb")
+        data_plot = np.where(land_mask, data, np.nan)
         im = ax.imshow(
-            data,
+            data_plot,
             extent=extent,
             transform=ccrs.PlateCarree(),
             origin="lower",
