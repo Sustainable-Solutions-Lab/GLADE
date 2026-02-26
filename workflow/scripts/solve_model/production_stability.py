@@ -20,8 +20,10 @@ is individually constrained to stay near its GLEAM feed-use baseline (stored as
 ``baseline_feed_use_mt_dm`` during model building). Feed use is constrained
 directly (no efficiency multiplication needed).
 
-Only links with positive baselines are constrained. Links without baseline data
-(zero baseline) are left unconstrained, avoiding the zero-forcing bug.
+Hard constraints only apply to links with sufficiently positive baselines to
+avoid forcing zero-baseline links to stay exactly at zero production/feed use.
+Penalty modes (L1/quadratic) apply to all links so zero-baseline links also
+incur a stability cost when activated.
 """
 
 import logging
@@ -49,7 +51,8 @@ def add_production_stability_constraints(
     - l1: linear penalty via linopy abs-deviation variables
     - quadratic: quadratic penalty via linopy deviation variables
 
-    Only links with positive baselines are constrained.
+    Hard mode constrains only links with positive baselines. Penalty modes apply
+    to all links and use a denominator floor for relative deviations.
 
     Parameters
     ----------
@@ -127,12 +130,17 @@ def add_production_stability_constraints(
 
 
 def _crop_production_and_baselines(
-    link_p, links_df: pd.DataFrame, min_baseline_mt: float
+    link_p,
+    links_df: pd.DataFrame,
+    min_baseline_mt: float,
+    *,
+    include_all_links: bool = False,
 ) -> tuple | None:
     """Extract production expressions and baselines for constrained crop links.
 
-    Returns ``(link_names, production, baselines)`` for crop production links
-    with positive ``baseline_production_mt``, or ``None`` if there are none.
+    Returns ``(link_names, production, baselines)`` for crop production links.
+    In hard mode, only links above ``min_baseline_mt`` are returned. In penalty
+    modes, all links are returned (including zero-baseline links).
     """
     crop_links = links_df[links_df["carrier"] == "crop_production"]
     if crop_links.empty or "baseline_production_mt" not in crop_links.columns:
@@ -141,45 +149,68 @@ def _crop_production_and_baselines(
 
     baseline_floor = float(min_baseline_mt)
 
-    # Only constrain links with sufficiently large positive baselines.
-    eligible = crop_links[crop_links["baseline_production_mt"] > baseline_floor]
-    if eligible.empty:
-        logger.info(
-            "No crop baselines exceed %.6g Mt; skipping crop stability constraints",
-            baseline_floor,
+    if include_all_links:
+        eligible = crop_links.copy()
+        baselines_series = (
+            pd.to_numeric(eligible["baseline_production_mt"], errors="coerce")
+            .fillna(0.0)
+            .clip(lower=0.0)
         )
-        return None
-
-    if baseline_floor > 0:
-        removed = len(crop_links) - len(eligible)
-        if removed > 0:
+        if baseline_floor > 0:
+            low_count = int((baselines_series <= baseline_floor).sum())
+            if low_count > 0:
+                logger.info(
+                    "Crop stability penalties include %d/%d links at or below %.6g Mt baseline",
+                    low_count,
+                    len(eligible),
+                    baseline_floor,
+                )
+    else:
+        # Only constrain links with sufficiently large positive baselines.
+        eligible = crop_links[crop_links["baseline_production_mt"] > baseline_floor]
+        if eligible.empty:
             logger.info(
-                "Crop stability baseline filter removed %d/%d links below %.6g Mt",
-                removed,
-                len(crop_links),
+                "No crop baselines exceed %.6g Mt; skipping crop stability constraints",
                 baseline_floor,
             )
+            return None
+
+        if baseline_floor > 0:
+            removed = len(crop_links) - len(eligible)
+            if removed > 0:
+                logger.info(
+                    "Crop stability baseline filter removed %d/%d links below %.6g Mt",
+                    removed,
+                    len(crop_links),
+                    baseline_floor,
+                )
+        baselines_series = pd.to_numeric(
+            eligible["baseline_production_mt"], errors="coerce"
+        ).fillna(0.0)
 
     link_names = eligible.index
     efficiencies = xr.DataArray(
         eligible["efficiency"].values, coords={"name": link_names}, dims="name"
     )
     baselines = xr.DataArray(
-        eligible["baseline_production_mt"].values,
-        coords={"name": link_names},
-        dims="name",
+        baselines_series.values, coords={"name": link_names}, dims="name"
     )
     production = link_p.sel(name=link_names) * efficiencies
     return link_names, production, baselines
 
 
 def _animal_feed_and_baselines(
-    link_p, links_df: pd.DataFrame, min_baseline_mt: float
+    link_p,
+    links_df: pd.DataFrame,
+    min_baseline_mt: float,
+    *,
+    include_all_links: bool = False,
 ) -> tuple | None:
     """Extract feed use expressions and baselines for animal links.
 
-    Returns ``(link_names, feed_use, baselines)`` for animal production links
-    with positive ``baseline_feed_use_mt_dm``, or ``None`` if there are none.
+    Returns ``(link_names, feed_use, baselines)`` for animal production links.
+    In hard mode, only links above ``min_baseline_mt`` are returned. In penalty
+    modes, all links are returned (including zero-baseline links).
 
     Feed use is ``link_p`` directly (p0 = feed input in Mt DM), so no
     efficiency multiplication is needed.
@@ -193,33 +224,69 @@ def _animal_feed_and_baselines(
 
     baseline_floor = float(min_baseline_mt)
 
-    eligible = animal_links[animal_links["baseline_feed_use_mt_dm"] > baseline_floor]
-    if eligible.empty:
-        logger.info(
-            "No animal feed baselines exceed %.6g Mt; "
-            "skipping animal stability constraints",
-            baseline_floor,
+    if include_all_links:
+        eligible = animal_links.copy()
+        baselines_series = (
+            pd.to_numeric(eligible["baseline_feed_use_mt_dm"], errors="coerce")
+            .fillna(0.0)
+            .clip(lower=0.0)
         )
-        return None
-
-    if baseline_floor > 0:
-        removed = len(animal_links) - len(eligible)
-        if removed > 0:
+        if baseline_floor > 0:
+            low_count = int((baselines_series <= baseline_floor).sum())
+            if low_count > 0:
+                logger.info(
+                    "Animal stability penalties include %d/%d links at or below %.6g Mt baseline",
+                    low_count,
+                    len(eligible),
+                    baseline_floor,
+                )
+    else:
+        eligible = animal_links[
+            animal_links["baseline_feed_use_mt_dm"] > baseline_floor
+        ]
+        if eligible.empty:
             logger.info(
-                "Animal stability baseline filter removed %d/%d links below %.6g Mt",
-                removed,
-                len(animal_links),
+                "No animal feed baselines exceed %.6g Mt; "
+                "skipping animal stability constraints",
                 baseline_floor,
             )
+            return None
+
+        if baseline_floor > 0:
+            removed = len(animal_links) - len(eligible)
+            if removed > 0:
+                logger.info(
+                    "Animal stability baseline filter removed %d/%d links below %.6g Mt",
+                    removed,
+                    len(animal_links),
+                    baseline_floor,
+                )
+        baselines_series = pd.to_numeric(
+            eligible["baseline_feed_use_mt_dm"], errors="coerce"
+        ).fillna(0.0)
 
     link_names = eligible.index
     feed_use = link_p.sel(name=link_names)
     baselines = xr.DataArray(
-        eligible["baseline_feed_use_mt_dm"].values,
-        coords={"name": link_names},
-        dims="name",
+        baselines_series.values, coords={"name": link_names}, dims="name"
     )
     return link_names, feed_use, baselines
+
+
+def _compute_stability_deviation(
+    actual: xr.DataArray,
+    baselines: xr.DataArray,
+    deviation_type: str,
+    min_baseline_mt: float,
+) -> xr.DataArray:
+    """Compute stability deviation with safe handling for near-zero baselines."""
+    if deviation_type == "relative":
+        denominator_floor = max(float(min_baseline_mt), 1e-9)
+        denominator = xr.where(
+            baselines > denominator_floor, baselines, denominator_floor
+        )
+        return (actual - baselines) / denominator
+    return actual - baselines
 
 
 # ─── Crop: hard constraints ──────────────────────────────────────────────────
@@ -320,17 +387,24 @@ def _add_crop_l1_penalty(
       abs_dev >= -(production - baseline)
       objective += l1_cost * sum(abs_dev)
     """
-    result = _crop_production_and_baselines(link_p, links_df, min_baseline_mt)
+    result = _crop_production_and_baselines(
+        link_p,
+        links_df,
+        min_baseline_mt,
+        include_all_links=True,
+    )
     if result is None:
         return
 
     m = n.model
     link_names, production, baselines = result
 
-    if deviation_type == "relative":
-        deviation = (production - baselines) / baselines
-    else:
-        deviation = production - baselines
+    deviation = _compute_stability_deviation(
+        production,
+        baselines,
+        deviation_type,
+        min_baseline_mt,
+    )
 
     abs_dev = m.add_variables(
         lower=0,
@@ -374,17 +448,24 @@ def _add_crop_quadratic_penalty(
       dev == production - baseline
       objective += 0.5 * quadratic_cost * sum(dev²)
     """
-    result = _crop_production_and_baselines(link_p, links_df, min_baseline_mt)
+    result = _crop_production_and_baselines(
+        link_p,
+        links_df,
+        min_baseline_mt,
+        include_all_links=True,
+    )
     if result is None:
         return
 
     m = n.model
     link_names, production, baselines = result
 
-    if deviation_type == "relative":
-        deviation = (production - baselines) / baselines
-    else:
-        deviation = production - baselines
+    deviation = _compute_stability_deviation(
+        production,
+        baselines,
+        deviation_type,
+        min_baseline_mt,
+    )
 
     dev = m.add_variables(
         coords=[link_names],
@@ -499,17 +580,24 @@ def _add_animal_l1_penalty(
     min_baseline_mt: float,
 ) -> None:
     """Add L1 penalty on animal feed use deviations."""
-    result = _animal_feed_and_baselines(link_p, links_df, min_baseline_mt)
+    result = _animal_feed_and_baselines(
+        link_p,
+        links_df,
+        min_baseline_mt,
+        include_all_links=True,
+    )
     if result is None:
         return
 
     m = n.model
     link_names, feed_use, baselines = result
 
-    if deviation_type == "relative":
-        deviation = (feed_use - baselines) / baselines
-    else:
-        deviation = feed_use - baselines
+    deviation = _compute_stability_deviation(
+        feed_use,
+        baselines,
+        deviation_type,
+        min_baseline_mt,
+    )
 
     abs_dev = m.add_variables(
         lower=0,
@@ -548,17 +636,24 @@ def _add_animal_quadratic_penalty(
     min_baseline_mt: float,
 ) -> None:
     """Add quadratic penalty on animal feed use deviations."""
-    result = _animal_feed_and_baselines(link_p, links_df, min_baseline_mt)
+    result = _animal_feed_and_baselines(
+        link_p,
+        links_df,
+        min_baseline_mt,
+        include_all_links=True,
+    )
     if result is None:
         return
 
     m = n.model
     link_names, feed_use, baselines = result
 
-    if deviation_type == "relative":
-        deviation = (feed_use - baselines) / baselines
-    else:
-        deviation = feed_use - baselines
+    deviation = _compute_stability_deviation(
+        feed_use,
+        baselines,
+        deviation_type,
+        min_baseline_mt,
+    )
 
     dev = m.add_variables(
         coords=[link_names],

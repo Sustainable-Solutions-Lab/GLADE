@@ -64,12 +64,12 @@ validation:
       enabled: true
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline_mt: 0.000001  # Ignore near-zero crop baselines below this threshold when building stability constraints
+      min_baseline_mt: 0.000001  # Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
     animals:
       enabled: true
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline_mt: 0.00001  # Ignore near-zero animal baselines below this threshold when building stability constraints
+      min_baseline_mt: 0.00001  # Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
 
 # --- section: food_incentives ---
 food_incentives:

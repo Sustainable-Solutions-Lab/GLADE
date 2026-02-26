@@ -234,7 +234,7 @@ properties:
               min_baseline_mt:
                 type: number
                 minimum: 0
-                description: "Minimum crop baseline production (Mt) required to include a link in stability constraints"
+                description: "Hard mode: minimum crop baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
           animals:
             type: object
             required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
@@ -254,7 +254,7 @@ properties:
               min_baseline_mt:
                 type: number
                 minimum: 0
-                description: "Minimum animal baseline production (Mt) required to include a target in stability constraints"
+                description: "Hard mode: minimum animal baseline (Mt) to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
 
   food_incentives:
     type: object
