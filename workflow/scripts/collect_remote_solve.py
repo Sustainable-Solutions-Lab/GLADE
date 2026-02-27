@@ -24,6 +24,7 @@ import time
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.remote_solve_utils import (
     build_remote_smk_command,
+    check_ssh_master,
     config_snapshot_rel_path,
     daemon_paths,
     generate_sbatch_script,
@@ -262,6 +263,9 @@ def _collect_remote_solve() -> None:
 
     try:
         if not slurm_job_done:
+            # Verify SSH master is healthy before starting long-lived polling.
+            check_ssh_master(host, ssh_options, logger)
+
             # Start the batch polling daemon (no-op if already running).
             start_daemon_if_needed(cfg, jobid_dir, logger)
 

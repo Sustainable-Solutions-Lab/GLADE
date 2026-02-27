@@ -14,6 +14,7 @@ from pathlib import Path
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.remote_solve_utils import (
+    check_ssh_master,
     read_remote_config,
     remote_path_shell_expr,
     rsync_ssh_args,
@@ -35,6 +36,9 @@ def _sync_remote_workspace() -> None:
     rsync_options = cfg["rsync_options"]
 
     config_name = snakemake.wildcards.name
+
+    # Verify SSH master is healthy before starting any transfers.
+    check_ssh_master(host, ssh_options, logger)
 
     # Preflight: ensure remote workdir exists.
     if cfg["preflight_check"]:

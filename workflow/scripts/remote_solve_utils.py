@@ -178,19 +178,54 @@ def build_remote_smk_command(
     )
 
 
-# Default SSH options for remote solve connections:
-# - ControlPath=none: bypass ControlMaster so each connection is independent.
-#   Without this, ServerAliveInterval only probes the local master process
-#   (which is always alive), never detecting a broken TCP connection.
-# - ServerAliveInterval/CountMax: detect dead connections within ~45s.
-_DEFAULT_SSH_OPTIONS = [
-    "-o",
-    "ControlPath=none",
+# Default SSH keepalive options: detect dead connections within ~45s
+# (3 probes x 15s interval) instead of hanging indefinitely.
+# NOTE: These only take full effect when ControlMaster is not used, or when
+# the master itself has ServerAliveInterval set in ~/.ssh/config. With a
+# ControlMaster, slave keepalives only probe the local master process.
+# To compensate, check_ssh_master() validates the master before operations.
+_DEFAULT_SSH_KEEPALIVE = [
     "-o",
     "ServerAliveInterval=15",
     "-o",
     "ServerAliveCountMax=3",
 ]
+
+
+def check_ssh_master(host: str, ssh_options: list[str], logger) -> None:
+    """Verify the SSH ControlMaster connection is usable; fail fast if stale.
+
+    When ``ControlMaster auto`` is configured in ``~/.ssh/config``, a dead
+    master socket causes all multiplexed connections to hang silently.
+    This sends a quick ``ssh -O check`` + probe and raises an error if the
+    master exists but the connection is broken, so the user can
+    re-authenticate (which may require 2FA) before retrying.
+    """
+    check = subprocess.run(
+        ["ssh", *ssh_options, "-O", "check", host],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if check.returncode != 0:
+        # No master running — nothing to validate; SSH will create one
+        # on the next connection (which may prompt for 2FA interactively).
+        return
+
+    # Master socket exists; verify it can actually reach the remote.
+    probe = subprocess.run(
+        ["ssh", *ssh_options, host, "true"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if probe.returncode == 0:
+        return
+
+    raise RuntimeError(
+        f"SSH ControlMaster for {host} exists but the connection is dead. "
+        f"Run 'ssh -O exit {host}' and then 'ssh {host}' to re-authenticate."
+    )
 
 
 def read_remote_config(snakemake_config: dict) -> dict:
@@ -201,10 +236,10 @@ def read_remote_config(snakemake_config: dict) -> dict:
             "remote_solve.enabled is false; remote solve rules should not be selected."
         )
     user_ssh_options = [str(option) for option in cfg["ssh_options"]]
-    # Inject connection-resilience defaults unless the user already configured them.
+    # Inject keepalive defaults unless the user already set ServerAliveInterval.
     has_keepalive = any("ServerAliveInterval" in opt for opt in user_ssh_options)
     ssh_options = (
-        user_ssh_options if has_keepalive else user_ssh_options + _DEFAULT_SSH_OPTIONS
+        user_ssh_options if has_keepalive else user_ssh_options + _DEFAULT_SSH_KEEPALIVE
     )
     return {
         "host": str(cfg["host"]),
