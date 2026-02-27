@@ -199,9 +199,9 @@ validation:
   production_stability:
     enabled: true
     penalty_mode: "l1"
-    deviation_type: "relative"
-    l1_cost: 0.05
-    # Relative deviation with l1_cost=0.01-0.1 also quite viable performance-wise
+    deviation_type: "absolute"
+    l1_cost: 0.5
+    # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
 
 animal_products:
   # Use regionalized feed efficiency values
@@ -214,11 +214,21 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 2
-  mem_mb: 6000
-  export_for_tuning: true
-  options_gurobi:
-    Method: 2
-    MIPGap: 0.001
-    MIPFocus: 2
-    # VarBranch: 0
+  threads: 8
+  mem_mb: 9000
+  runtime: 20
+
+remote_solve:
+  enabled: true
+  local_scenarios: ["baseline"]
+  host: "shr"
+  workdir: "~/food-opt-scratch"
+  pixi_env: "gurobi"
+  use_slurm: true
+  slurm_account: "sjdavis"
+  slurm_partition: "serc"
+  sync_workflow: true
+  sync_pixi_files: false
+  ssh_options: []
+  rsync_options: []
+  preflight_check: true

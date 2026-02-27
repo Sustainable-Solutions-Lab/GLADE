@@ -2,16 +2,16 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# GHG/YLL Grid Sensitivity Analysis
-# -----------------------------------
-# Explores all combinations of GHG price and YLL value over a 2D grid.
+# GHG/YLL Grid Sensitivity Analysis Configuration
+# -----------------------------------------------
+# Mirrors the combined GHG+YLL setup from sensitivity.yaml, but explores
+# the full Cartesian grid of GHG price and YLL value combinations.
 
 name: "ghg_yll_grid"
 scenarios:
   # GHG/YLL Grid Sensitivity Scenarios
-  # ------------------------------------
-  # Cartesian product of GHG prices and YLL values, producing a full 2D grid
-  # of scenarios exploring all combinations.
+  # ----------------------------------
+  # Full 2D grid over GHG prices and YLL values.
 
   # Baseline scenario for calibrating piecewise food utility blocks (dual variables)
   baseline:
@@ -26,12 +26,29 @@ scenarios:
     health:
       value_per_yll: 0
 
+  ghg_yll_0:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+    # food_groups:
+    #   fix_within_group_ratios:
+    #     enabled: true
+    # macronutrients:
+    #   protein:
+    #     min: 68.49
+    #   fat:
+    #     min: 56.13
+
   # =============================================================================
   # Generated Scenarios (full grid)
   # =============================================================================
 
   _generators:
-    - name: ghg{ghg}_yll{yll}
+    - name: ghg_yll_{ghg}_{yll}
       mode: grid
       parameters:
         ghg:
@@ -51,24 +68,33 @@ scenarios:
           ghg_price: "{ghg}"
         health:
           value_per_yll: "{yll}"
-        food_utility_piecewise:
-          enabled: true
-        food_groups:
-          fix_within_group_ratios:
-            enabled: true
         macronutrients:
           cal:
-            equal: 2400
+            equal_to_baseline: true
+        # food_groups:
+        #   fix_within_group_ratios:
+        #     enabled: true
+        # macronutrients:
+        #   protein:
+        #     min: 68.49
+        #   fat:
+        #     min: 56.13
 
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true
+
+crop_costs:
+  per_tonne_cost_fraction: 0.9
 
 validation:
   use_actual_yields: true
   production_stability:
     enabled: true
     penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.1
+    # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
 
 animal_products:
   # Use regionalized feed efficiency values
@@ -82,8 +108,25 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 2
+  mem_mb: 6000
+  export_for_tuning: true
   options_gurobi:
     Method: 2
     MIPGap: 0.001
     MIPFocus: 2
-    VarBranch: 0
+    # VarBranch: 0
+
+remote_solve:
+  enabled: true
+  local_scenarios: ["baseline"]
+  host: "shr"
+  workdir: "~/food-opt-scratch"
+  pixi_env: "gurobi"
+  use_slurm: true
+  slurm_account: "sjdavis"
+  slurm_partition: "serc"
+  sync_workflow: true
+  sync_pixi_files: false
+  ssh_options: []
+  rsync_options: []
+  preflight_check: true
