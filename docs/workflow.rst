@@ -274,3 +274,139 @@ Incremental Development
 **Mark all existing outputs as up to date** (preventing rules from being run due to modification times, etc.)::
 
     tools/smk --configfile config/my_scenario.yaml --touch
+
+
+Remote Solving (Experimental)
+-----------------------------
+
+.. warning::
+
+   Remote solving is **experimental**. It works for the common case but has
+   rough edges around SSH reliability, error reporting, and edge-case
+   recovery. Expect to troubleshoot SSH/rsync issues yourself when first
+   setting things up.
+
+When models are too large to solve on a laptop, the ``remote_solve`` feature
+delegates only the ``solve_model`` step to a remote machine (typically an HPC
+login node with SLURM) while keeping model building, analysis, and plotting
+local. The workflow transparently syncs inputs, submits the solve, polls for
+completion, and pulls results back.
+
+Remote Setup
+~~~~~~~~~~~~
+
+On the remote host:
+
+1. Clone this repository (or create the workdir directory).
+2. Install ``pixi`` and run ``pixi install`` (or ``pixi install -e gurobi``
+   if you want Gurobi).
+3. Ensure the ``tools/smk`` wrapper is executable.
+4. Verify you can run ``tools/smk --help`` from the remote workdir.
+
+On the local machine:
+
+1. Ensure passwordless SSH to the remote host works (key-based auth, or an
+   active ``ControlMaster`` session). The workflow makes many SSH/rsync calls
+   and cannot handle interactive password prompts.
+2. An SSH ``ControlMaster`` (configured in ``~/.ssh/config``) is strongly
+   recommended to avoid repeated connection setup. Example::
+
+       Host mycluster
+           HostName login.cluster.example.com
+           User myuser
+           ControlMaster auto
+           ControlPath ~/.ssh/sockets/%r@%h-%p
+           ControlPersist 4h
+           ServerAliveInterval 60
+
+   Create the sockets directory: ``mkdir -p ~/.ssh/sockets``.
+3. If the remote host requires two-factor authentication, open an SSH
+   connection manually before starting the workflow so the ``ControlMaster``
+   session is active.
+
+Configuration
+~~~~~~~~~~~~~
+
+Enable remote solving in your config file:
+
+.. code-block:: yaml
+
+   remote_solve:
+     enabled: true
+     host: "mycluster"           # SSH host or alias from ~/.ssh/config
+     workdir: "~/food-opt"       # Remote project root
+     pixi_env: "gurobi"          # Remote pixi environment (passed to tools/smk -e)
+     use_slurm: true             # Submit via sbatch (false = direct SSH execution)
+     slurm_account: "myaccount"  # SLURM --account
+     slurm_partition: "normal"   # SLURM --partition
+     local_scenarios: ["baseline"]  # Scenarios to always solve locally
+
+See :doc:`configuration` for the full list of ``remote_solve`` options
+(``sync_workflow``, ``sync_pixi_files``, ``ssh_options``, ``rsync_options``,
+``preflight_check``).
+
+How It Works
+~~~~~~~~~~~~
+
+The workflow uses three rules, executed in order:
+
+1. **sync_remote_workspace** (once per config): creates the remote workdir,
+   syncs ``workflow/``, ``config/``, and ``tools/smk`` via rsync, and writes a
+   config snapshot with ``remote_solve.enabled: false`` (to prevent recursive
+   remote dispatch on the remote end).
+
+2. **submit_remote_solve** (per scenario): syncs the built model and solve
+   inputs, then either submits an ``sbatch`` job (if ``use_slurm: true``) or
+   runs Snakemake directly over SSH (blocking).
+
+3. **collect_remote_solve** (per scenario): polls the SLURM job for
+   completion via a shared background daemon, re-submits with scaled resources
+   on SLURM failure (OOM, timeout), and pulls the solved network and logs back
+   via rsync.
+
+When ``use_slurm: true``, a single background **poll daemon** batch-queries all
+active SLURM jobs in one ``squeue``/``sacct`` call per cycle, rather than each
+scenario opening its own SSH session. The daemon starts automatically and
+exits when all jobs finish.
+
+Concurrency is controlled by the ``remote_solves`` Snakemake resource
+(default: 1). Override on the command line::
+
+    tools/smk -j4 --resources remote_solves=4 --configfile config/my_scenario.yaml
+
+Interruption
+~~~~~~~~~~~~
+
+When you press Ctrl-C:
+
+- Snakemake sends SIGTERM to all ``collect_remote_solve`` scripts.
+- The first collect script to handle the signal sends SIGTERM to the poll
+  daemon.
+- The daemon cancels **all** tracked SLURM jobs in a single ``scancel`` call
+  and exits.
+- Each collect script removes its ``.jobid`` file so the next workflow run
+  submits fresh.
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+
+**SSH connection issues**: The workflow detects stale SSH ``ControlMaster``
+sockets and attempts automatic recovery. If recovery fails, you will see an
+error asking you to run ``ssh <host>`` manually to re-authenticate.
+
+**Checking daemon logs**: The poll daemon writes to
+``.snakemake/remote/<config>/jobids/.poll_daemon.log``. Check this file if
+jobs appear stuck.
+
+**Orphaned SLURM jobs**: If the daemon could not be signalled (e.g. it had
+already exited), remote jobs may still be running. Check with
+``ssh <host> squeue -u $USER`` and cancel manually if needed.
+
+**"No .jobid files" in daemon log**: Normal — the daemon self-terminates
+after two consecutive empty cycles. It will be restarted on the next workflow
+run.
+
+**Direct SSH mode** (``use_slurm: false``): Runs the solve in a single
+blocking SSH call. Simpler, but ties up your terminal and does not support
+SLURM resource scaling on failure. Useful for small models or non-SLURM
+remote machines.
