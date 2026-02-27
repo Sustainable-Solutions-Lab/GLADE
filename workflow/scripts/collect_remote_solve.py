@@ -5,21 +5,25 @@
 """Collect a remote solve_model result: poll SLURM, retry on failure, pull artifacts.
 
 This lightweight rule reads the job ID written by ``submit_remote_solve``,
-polls the SLURM job until completion, and pulls the solved network back.
+waits for job completion via the batch polling daemon's cache, and pulls
+the solved network back.
 
 On SLURM failure (OOM, timeout), it re-submits with attempt-scaled resources
 (provided by Snakemake's ``retries`` mechanism via ``slurm_runtime`` and
 ``slurm_mem_mb`` resources) and polls the new job.
 
-On local interrupt (Ctrl-C / SIGTERM), the remote SLURM job is cancelled
-and the .jobid file is removed so the next run starts fresh.
+On local interrupt (Ctrl-C / SIGTERM), the poll daemon is signalled to
+cancel all tracked SLURM jobs, and the .jobid file is removed so the
+next run starts fresh.
 """
 
+import contextlib
 from pathlib import Path
 import shlex
 import signal
 import subprocess
 import time
+import traceback
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.remote_solve_utils import (
@@ -28,76 +32,20 @@ from workflow.scripts.remote_solve_utils import (
     config_snapshot_rel_path,
     daemon_paths,
     generate_sbatch_script,
+    is_daemon_running,
     pull_artifact,
     read_job_status_from_cache,
     read_remote_config,
     remote_path_shell_expr,
     rsync_ssh_args,
-    run_local_command,
+    run_rsync_push,
     run_ssh_command_capture,
+    signal_daemon_shutdown,
     start_daemon_if_needed,
     to_relative_path,
 )
 
-# Terminal SLURM states that indicate the job will not recover.
-_SLURM_FAILED_STATES = frozenset(
-    {
-        "BOOT_FAIL",
-        "CANCELLED",
-        "DEADLINE",
-        "FAILED",
-        "NODE_FAIL",
-        "OUT_OF_MEMORY",
-        "PREEMPTED",
-        "TIMEOUT",
-    }
-)
-
 _POLL_INTERVAL_SECONDS = 10
-
-# Timeout for the scancel SSH call during cleanup (seconds).
-_CANCEL_TIMEOUT_SECONDS = 30
-
-
-def _check_job_status(host, ssh_options, job_id, logger):
-    """Check SLURM job status. Returns (state_str, is_terminal, succeeded).
-
-    Uses squeue first (for running jobs), falls back to sacct (for completed).
-    Returns (None, False, False) on transient SSH failure.
-    """
-    # Try squeue first.
-    squeue_cmd = f"squeue -j {shlex.quote(job_id)} -h -o '%T'"
-    result = run_ssh_command_capture(host, ssh_options, squeue_cmd, logger, check=False)
-    if result.returncode == 0:
-        state = result.stdout.strip()
-        if state:
-            return state, False, False  # Job still active.
-        # Empty output means job left the queue; check sacct.
-    else:
-        # squeue failure could be transient or job already gone; try sacct.
-        logger.debug("squeue failed (rc=%d), trying sacct", result.returncode)
-
-    # Check sacct for final state.
-    sacct_cmd = (
-        f"sacct -j {shlex.quote(job_id)} --format=State --noheader --parsable2"
-        " | head -1"
-    )
-    result = run_ssh_command_capture(host, ssh_options, sacct_cmd, logger, check=False)
-    if result.returncode != 0:
-        logger.warning("sacct failed (rc=%d); treating as transient", result.returncode)
-        return None, False, False
-
-    state = result.stdout.strip().split("\n")[0].strip()
-    if not state:
-        logger.warning("Empty sacct output for job %s; treating as transient", job_id)
-        return None, False, False
-
-    if state == "COMPLETED":
-        return state, True, True
-    if state in _SLURM_FAILED_STATES:
-        return state, True, False
-    # Other states (RUNNING shown by sacct, etc.)
-    return state, False, False
 
 
 def _resubmit_with_scaled_resources(cfg, snakemake, project_root, logger):
@@ -156,7 +104,7 @@ def _resubmit_with_scaled_resources(cfg, snakemake, project_root, logger):
         sbatch_script_rel,
         f"{host}:{remote_workdir.rstrip('/')}/",
     ]
-    run_local_command(sbatch_sync_command, logger, cwd=project_root)
+    run_rsync_push(sbatch_sync_command, logger, cwd=project_root)
 
     # Submit without --wait.
     remote_command = (
@@ -194,32 +142,22 @@ def _pull_sbatch_log_for_diagnostics(cfg, config_name, scenario, project_root, l
         )
 
 
-def _cancel_remote_job(host, ssh_options, job_id, jobid_path, logger):
-    """Best-effort cancel of a remote SLURM job and cleanup of the jobid file."""
-    # Cancel the remote job.
-    try:
-        cmd = ["ssh", *ssh_options, host, f"scancel {shlex.quote(job_id)}"]
-        logger.info("Cancelling remote SLURM job %s", job_id)
-        subprocess.run(
-            cmd,
-            timeout=_CANCEL_TIMEOUT_SECONDS,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except Exception:
-        logger.warning("Could not cancel remote job %s", job_id, exc_info=True)
-
-    # Remove the jobid file so the next run submits fresh.
-    try:
-        if jobid_path.exists():
-            jobid_path.unlink()
-            logger.info("Removed jobid file %s", jobid_path)
-    except Exception:
-        logger.warning("Could not remove jobid file %s", jobid_path, exc_info=True)
-
-
 def _collect_remote_solve() -> None:
+    """Top-level entry point with crash-safe logging wrapper."""
+    log_path = snakemake.log[0]
+    try:
+        _collect_remote_solve_inner()
+    except BaseException:
+        # Ensure any crash traceback reaches the log file for diagnostics.
+        # (Without this, unhandled exceptions only go to stderr, which
+        # Snakemake doesn't capture to the per-rule log file.)
+        with contextlib.suppress(OSError), open(log_path, "a") as f:
+            f.write(f"\n--- CRASH ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+            traceback.print_exc(file=f)
+        raise
+
+
+def _collect_remote_solve_inner() -> None:
     # Make SIGTERM (sent by Snakemake on interrupt) raise SystemExit so our
     # except clause can catch it and run cleanup.
     signal.signal(
@@ -269,61 +207,56 @@ def _collect_remote_solve() -> None:
             # Start the batch polling daemon (no-op if already running).
             start_daemon_if_needed(cfg, jobid_dir, logger)
 
-            # Check if the job from the submit phase has already failed
-            # (indicating this is a retry attempt).
-            state, is_terminal, succeeded = _check_job_status(
-                host, ssh_options, job_id, logger
-            )
-            if is_terminal and not succeeded:
-                logger.warning(
-                    "Job %s already in terminal failed state (%s); "
-                    "re-submitting with scaled resources",
-                    job_id,
-                    state,
-                )
-                _pull_sbatch_log_for_diagnostics(
-                    cfg, config_name, scenario, project_root, logger
-                )
-                job_id = _resubmit_with_scaled_resources(
-                    cfg, snakemake, project_root, logger
-                )
+            # Track whether we've already re-submitted once in this
+            # collect attempt (to avoid infinite resubmit loops).
+            resubmitted = False
 
-            # Poll until completion.
+            # Poll exclusively via daemon cache.
+            logger.info("Entering daemon-cache poll loop for job %s", job_id)
             while True:
-                # Try daemon cache first (cheap local JSON read).
                 cached = read_job_status_from_cache(job_id, cache_file)
-                if cached is not None:
-                    state, is_terminal, succeeded = cached
-                else:
-                    # Cache miss/stale: fall back to direct SSH.
-                    state, is_terminal, succeeded = _check_job_status(
-                        host, ssh_options, job_id, logger
-                    )
-
-                if state is None:
-                    # Transient failure; wait and retry.
-                    logger.info(
-                        "Transient check failure; retrying in %ds",
-                        _POLL_INTERVAL_SECONDS,
-                    )
+                if cached is None:
+                    # Cache miss or stale — ensure daemon is alive.
+                    if not is_daemon_running(jobid_dir):
+                        logger.warning("Poll daemon not running; restarting")
+                        start_daemon_if_needed(cfg, jobid_dir, logger)
                     time.sleep(_POLL_INTERVAL_SECONDS)
                     continue
+
+                state, is_terminal, succeeded = cached
 
                 if is_terminal:
                     if succeeded:
                         logger.info("Job %s completed successfully", job_id)
                         slurm_job_done = True
                         break
-                    else:
-                        logger.error("Job %s failed with state: %s", job_id, state)
+
+                    if not resubmitted:
+                        logger.warning(
+                            "Job %s failed with state %s; "
+                            "re-submitting with scaled resources",
+                            job_id,
+                            state,
+                        )
                         _pull_sbatch_log_for_diagnostics(
                             cfg, config_name, scenario, project_root, logger
                         )
-                        raise subprocess.CalledProcessError(
-                            1,
-                            f"SLURM job {job_id}",
-                            stderr=f"Job ended in state: {state}",
+                        job_id = _resubmit_with_scaled_resources(
+                            cfg, snakemake, project_root, logger
                         )
+                        resubmitted = True
+                        time.sleep(_POLL_INTERVAL_SECONDS)
+                        continue
+
+                    logger.error("Job %s failed with state: %s", job_id, state)
+                    _pull_sbatch_log_for_diagnostics(
+                        cfg, config_name, scenario, project_root, logger
+                    )
+                    raise subprocess.CalledProcessError(
+                        1,
+                        f"SLURM job {job_id}",
+                        stderr=f"Job ended in state: {state}",
+                    )
 
                 logger.info(
                     "Job %s state: %s; polling in %ds",
@@ -334,6 +267,7 @@ def _collect_remote_solve() -> None:
                 time.sleep(_POLL_INTERVAL_SECONDS)
 
         # Pull artifacts.
+        logger.info("Pulling solved network artifact")
         pull_artifact(
             host=host,
             remote_workdir=remote_workdir,
@@ -366,7 +300,16 @@ def _collect_remote_solve() -> None:
         )
     except (KeyboardInterrupt, SystemExit):
         if not slurm_job_done:
-            _cancel_remote_job(host, ssh_options, job_id, jobid_path, logger)
+            signal_daemon_shutdown(jobid_dir, logger)
+            # Remove jobid file so the next run submits fresh.
+            try:
+                if jobid_path.exists():
+                    jobid_path.unlink()
+                    logger.info("Removed jobid file %s", jobid_path)
+            except OSError:
+                logger.warning(
+                    "Could not remove jobid file %s", jobid_path, exc_info=True
+                )
         raise
 
 

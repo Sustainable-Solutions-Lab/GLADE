@@ -27,7 +27,9 @@ from pathlib import Path
 import shlex
 import signal
 import subprocess
+import sys
 import time
+import traceback
 
 # Terminal SLURM states (matches collect_remote_solve.py).
 _SLURM_FAILED_STATES = frozenset(
@@ -171,38 +173,30 @@ def _write_cache(cache_file: Path, jobs: dict[str, dict], logger: logging.Logger
         logger.warning("Failed to write cache: %s", exc)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Poll SLURM jobs and write status cache"
-    )
-    parser.add_argument("--host", required=True, help="SSH host")
-    parser.add_argument(
-        "--ssh-options", action="append", default=[], help="SSH options"
-    )
-    parser.add_argument(
-        "--jobid-dir", required=True, help="Directory containing .jobid files"
-    )
-    parser.add_argument("--cache-file", required=True, help="Output JSON cache path")
-    parser.add_argument(
-        "--interval", type=int, default=30, help="Poll interval in seconds"
-    )
-    args = parser.parse_args()
+def _cancel_all_jobs(
+    host: str,
+    ssh_options: list[str],
+    job_ids: list[str],
+    logger: logging.Logger,
+):
+    """Cancel all tracked SLURM jobs in a single scancel call."""
+    if not job_ids:
+        return
+    id_list = ",".join(job_ids)
+    cmd = ["ssh", *ssh_options, host, f"scancel {id_list}"]
+    logger.info("Cancelling %d remote jobs: %s", len(job_ids), id_list)
+    try:
+        subprocess.run(cmd, timeout=30, check=False, capture_output=True, text=True)
+        logger.info("Cancel command sent")
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("Could not cancel jobs: %s", exc)
 
-    jobid_dir = Path(args.jobid_dir)
-    cache_file = Path(args.cache_file)
 
-    # Set up logging.
-    log_file = jobid_dir / ".poll_daemon.log"
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[logging.FileHandler(str(log_file)), logging.StreamHandler()],
-    )
-    logger = logging.getLogger("poll_daemon")
-
-    # Write PID file.
+def _main_inner(args, jobid_dir: Path, cache_file: Path, logger: logging.Logger):
+    """Core poll loop. Exceptions propagate to the crash-safe wrapper."""
+    # PID file is written by the parent process (start_daemon_if_needed);
+    # we only clean it up on exit.
     pid_file = jobid_dir / ".poll_daemon.pid"
-    pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
     # Register signal handlers for clean shutdown.
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -218,10 +212,13 @@ def main():
     empty_cycles = 0
     # Jobs already known to be in a terminal state; no need to re-query.
     terminal_cache: dict[str, dict] = {}
+    # Track latest job map so we can cancel on shutdown.
+    last_job_map: dict[str, str] = {}
 
     try:
         while not _shutdown_requested:
             job_map = _discover_job_ids(jobid_dir)
+            last_job_map = job_map
 
             if not job_map:
                 empty_cycles += 1
@@ -273,10 +270,69 @@ def main():
                     break
                 time.sleep(1)
     finally:
-        # Clean up PID file.
-        with contextlib.suppress(OSError):
-            pid_file.unlink(missing_ok=True)
+        if _shutdown_requested and last_job_map:
+            _cancel_all_jobs(
+                args.host, args.ssh_options, list(last_job_map.keys()), logger
+            )
+        # Only clean up PID file if it still contains our PID; a newer
+        # daemon may have been started and written its PID already.
+        try:
+            if pid_file.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                pid_file.unlink(missing_ok=True)
+        except OSError:
+            pass
         logger.info("Poll daemon exiting")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Poll SLURM jobs and write status cache"
+    )
+    parser.add_argument("--host", required=True, help="SSH host")
+    parser.add_argument(
+        "--ssh-options-json",
+        default="[]",
+        help="SSH options as a JSON-encoded list",
+    )
+    parser.add_argument(
+        "--jobid-dir", required=True, help="Directory containing .jobid files"
+    )
+    parser.add_argument("--cache-file", required=True, help="Output JSON cache path")
+    parser.add_argument(
+        "--interval", type=int, default=30, help="Poll interval in seconds"
+    )
+    args = parser.parse_args()
+    args.ssh_options = json.loads(args.ssh_options_json)
+
+    # Resolve all paths to absolute immediately, so the daemon is robust
+    # even if the working directory changes unexpectedly.
+    jobid_dir = Path(args.jobid_dir).resolve()
+    cache_file = Path(args.cache_file).resolve()
+    log_file = jobid_dir / ".poll_daemon.log"
+
+    # Redirect stderr to an error log as early as possible, so any crash
+    # output (import errors, segfaults, etc.) is captured even if the
+    # crash-safe wrapper below fails.
+    err_file = jobid_dir / ".poll_daemon.err"
+    with contextlib.suppress(OSError):
+        sys.stderr = open(err_file, "a")  # noqa: SIM115
+
+    # Crash-safe wrapper: capture any exception (including SystemExit,
+    # KeyboardInterrupt, and errors before logging is configured) to
+    # the log file via plain open().
+    try:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+            handlers=[logging.FileHandler(str(log_file))],
+        )
+        logger = logging.getLogger("poll_daemon")
+        _main_inner(args, jobid_dir, cache_file, logger)
+    except BaseException:
+        with contextlib.suppress(OSError), open(log_file, "a") as f:
+            f.write(f"\n--- DAEMON CRASH ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+            traceback.print_exc(file=f)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

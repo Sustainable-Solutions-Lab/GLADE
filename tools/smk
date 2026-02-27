@@ -106,8 +106,9 @@ if [ "$has_jobs_arg" = false ]; then
   set -- -j1 "$@"
 fi
 
-# Use compact logger by default
-set -- --logger compact --show-failed-logs "$@"
+# Use compact logger by default, but keep failed rule output concise unless the
+# caller explicitly passes --show-failed-logs.
+set -- --logger compact "$@"
 
 # When using SLURM, pass the profile and skip the local memory cap.
 if [ "$USE_SLURM" = true ]; then
@@ -130,7 +131,7 @@ if [[ -n "$SMK_MEM_MB_LIMIT" && "$has_mem_mb_resource_arg" = false ]]; then
   resource_defaults+=("mem_mb=${SMK_MEM_MB_LIMIT}")
 fi
 if [[ "$has_remote_solves_resource_arg" = false ]]; then
-  resource_defaults+=("remote_solves=4")
+  resource_defaults+=("remote_solves=1")
 fi
 if [[ ${#resource_defaults[@]} -gt 0 ]]; then
   set -- --resources "${resource_defaults[@]}" "$@"

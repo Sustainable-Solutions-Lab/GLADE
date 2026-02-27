@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -27,6 +28,7 @@ def run_local_command(
     cwd: Path | None = None,
     check: bool = True,
     capture_output: bool = False,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess:
     """Run a local subprocess command and log it."""
     logger.info("$ %s", shlex.join(command))
@@ -36,7 +38,46 @@ def run_local_command(
         cwd=str(cwd) if cwd is not None else None,
         text=True,
         capture_output=capture_output,
+        timeout=timeout,
     )
+
+
+def _retry_command(
+    command_fn,
+    *,
+    retries: int,
+    delay: float,
+    logger,
+    description: str,
+):
+    """Generic retry wrapper for SSH/rsync operations.
+
+    Retries on ``TimeoutExpired`` or ``CalledProcessError`` with rc=255
+    (SSH connection failure). Other errors propagate immediately.
+    """
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            return command_fn()
+        except subprocess.TimeoutExpired as exc:
+            last_exc = exc
+            logger.warning(
+                "%s timed out (attempt %d/%d)", description, attempt, retries
+            )
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode == 255:
+                last_exc = exc
+                logger.warning(
+                    "%s SSH connection failed (attempt %d/%d)",
+                    description,
+                    attempt,
+                    retries,
+                )
+            else:
+                raise
+        if attempt < retries:
+            time.sleep(delay)
+    raise last_exc  # type: ignore[misc]
 
 
 def run_ssh_command(
@@ -44,10 +85,23 @@ def run_ssh_command(
     ssh_options: list[str],
     remote_command: str,
     logger,
+    *,
+    timeout: float | None = 60,
+    retries: int = 3,
 ) -> None:
-    """Run a remote shell command over SSH (fire-and-forget)."""
+    """Run a remote shell command over SSH (fire-and-forget), with retries."""
     command = ["ssh", *ssh_options, host, remote_command]
-    run_local_command(command, logger)
+
+    def _run():
+        run_local_command(command, logger, timeout=timeout)
+
+    _retry_command(
+        _run,
+        retries=retries,
+        delay=5,
+        logger=logger,
+        description=f"SSH command to {host}",
+    )
 
 
 def run_ssh_command_capture(
@@ -57,10 +111,50 @@ def run_ssh_command_capture(
     logger,
     *,
     check: bool = True,
+    timeout: float | None = 60,
+    retries: int = 3,
 ) -> subprocess.CompletedProcess:
-    """Run a remote shell command over SSH and capture stdout."""
+    """Run a remote shell command over SSH and capture stdout, with retries.
+
+    When ``check=False`` (e.g. squeue/sacct calls), only ``TimeoutExpired``
+    triggers retry since no ``CalledProcessError`` is raised.
+    """
     command = ["ssh", *ssh_options, host, remote_command]
-    return run_local_command(command, logger, capture_output=True, check=check)
+
+    def _run():
+        return run_local_command(
+            command, logger, capture_output=True, check=check, timeout=timeout
+        )
+
+    return _retry_command(
+        _run,
+        retries=retries,
+        delay=5,
+        logger=logger,
+        description=f"SSH capture to {host}",
+    )
+
+
+def run_rsync_push(
+    command: list[str],
+    logger,
+    *,
+    cwd: Path | None = None,
+    timeout: float = 120,
+    retries: int = 3,
+) -> None:
+    """Run an rsync push command with timeout and retries."""
+
+    def _run():
+        run_local_command(command, logger, cwd=cwd, timeout=timeout)
+
+    _retry_command(
+        _run,
+        retries=retries,
+        delay=5,
+        logger=logger,
+        description="rsync push",
+    )
 
 
 def remote_path_shell_expr(path: str) -> str:
@@ -107,22 +201,32 @@ def pull_artifact(
     logger,
     required: bool,
 ) -> None:
-    """Pull one artifact from remote to local."""
+    """Pull one artifact from remote to local, with timeout and retries."""
     local_path = local_root / rel_path
     local_path.parent.mkdir(parents=True, exist_ok=True)
     remote_path = f"{host}:{remote_workdir.rstrip('/')}/{rel_path}"
     command = [
         "rsync",
         "-az",
+        "--timeout=60",
         *rsync_ssh_args(ssh_options),
         *rsync_options,
         remote_path,
         str(local_path),
     ]
 
+    def _run():
+        run_local_command(command, logger, timeout=120)
+
     try:
-        run_local_command(command, logger)
-    except subprocess.CalledProcessError:
+        _retry_command(
+            _run,
+            retries=3,
+            delay=5,
+            logger=logger,
+            description=f"pull {rel_path}",
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         if required:
             raise
         logger.warning("Remote artifact missing (optional): %s", rel_path)
@@ -186,6 +290,8 @@ def build_remote_smk_command(
 # To compensate, check_ssh_master() validates the master before operations.
 _DEFAULT_SSH_KEEPALIVE = [
     "-o",
+    "ConnectTimeout=30",
+    "-o",
     "ServerAliveInterval=15",
     "-o",
     "ServerAliveCountMax=3",
@@ -201,30 +307,64 @@ def check_ssh_master(host: str, ssh_options: list[str], logger) -> None:
     master exists but the connection is broken, so the user can
     re-authenticate (which may require 2FA) before retrying.
     """
-    check = subprocess.run(
-        ["ssh", *ssh_options, "-O", "check", host],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    if check.returncode != 0:
-        # No master running — nothing to validate; SSH will create one
-        # on the next connection (which may prompt for 2FA interactively).
-        return
+    # Step 1: Check if a ControlMaster socket exists.
+    try:
+        check = subprocess.run(
+            ["ssh", *ssh_options, "-O", "check", host],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("SSH master check timed out for %s; probing anyway", host)
+    else:
+        if check.returncode != 0:
+            # No master running — SSH will create one on demand.
+            return
 
-    # Master socket exists; verify it can actually reach the remote.
-    probe = subprocess.run(
-        ["ssh", *ssh_options, host, "true"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    if probe.returncode == 0:
-        return
+    # Step 2: Master exists (or check hung) — probe actual connectivity.
+    try:
+        probe = subprocess.run(
+            ["ssh", *ssh_options, host, "true"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if probe.returncode == 0:
+            return
+        logger.warning("SSH probe failed (rc=%d) for %s", probe.returncode, host)
+    except subprocess.TimeoutExpired:
+        logger.warning("SSH probe timed out for %s", host)
+
+    # Step 3: Stale master — attempt automatic recovery.
+    logger.warning("Attempting automatic SSH ControlMaster recovery for %s", host)
+    try:
+        subprocess.run(
+            ["ssh", *ssh_options, "-O", "exit", host],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        logger.debug("Could not cleanly exit stale master for %s", host)
+
+    # Step 4: Test a fresh connection (ControlMaster auto will create a new one).
+    try:
+        fresh = subprocess.run(
+            ["ssh", *ssh_options, host, "true"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if fresh.returncode == 0:
+            logger.info("SSH ControlMaster for %s recovered automatically", host)
+            return
+    except subprocess.TimeoutExpired:
+        pass
 
     raise RuntimeError(
-        f"SSH ControlMaster for {host} exists but the connection is dead. "
-        f"Run 'ssh -O exit {host}' and then 'ssh {host}' to re-authenticate."
+        f"SSH ControlMaster for {host} is dead and automatic recovery failed. "
+        f"Run 'ssh {host}' manually to re-authenticate (may require 2FA)."
     )
 
 
@@ -308,7 +448,12 @@ def daemon_paths(jobid_dir: Path) -> dict:
 
 
 def is_daemon_running(jobid_dir: Path) -> bool:
-    """Check if the polling daemon is alive (via PID file + os.kill(pid, 0))."""
+    """Check if the polling daemon is alive.
+
+    Uses ``os.kill(pid, 0)`` to check process existence, then reads
+    ``/proc/{pid}/status`` to exclude zombie processes (which still pass
+    the kill check but are not actually running).
+    """
     paths = daemon_paths(jobid_dir)
     pid_file = paths["pid_file"]
     if not pid_file.exists():
@@ -316,8 +461,33 @@ def is_daemon_running(jobid_dir: Path) -> bool:
     try:
         pid = int(pid_file.read_text(encoding="utf-8").strip())
         os.kill(pid, 0)  # Signal 0: check if process exists.
+    except (ValueError, OSError):
+        return False
+    # Check for zombie state — os.kill succeeds for zombies but they're not
+    # doing any work.
+    try:
+        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+        for line in status.splitlines():
+            if line.startswith("State:"):
+                if "Z" in line.split(":")[1]:
+                    return False
+                break
+    except OSError:
+        pass
+    return True
+
+
+def signal_daemon_shutdown(jobid_dir: Path, logger) -> bool:
+    """Send SIGTERM to the poll daemon. Returns True if signal was sent."""
+    paths = daemon_paths(jobid_dir)
+    pid_file = paths["pid_file"]
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+        os.kill(pid, signal.SIGTERM)
+        logger.info("Sent SIGTERM to poll daemon (PID %d)", pid)
         return True
     except (ValueError, OSError):
+        logger.warning("Could not signal poll daemon for shutdown")
         return False
 
 
@@ -358,16 +528,24 @@ def start_daemon_if_needed(cfg: dict, jobid_dir: Path, logger) -> None:
                 "--interval",
                 "30",
             ]
-            for opt in cfg["ssh_options"]:
-                cmd.extend(["--ssh-options", opt])
+            # Pass SSH options as a single JSON-encoded list to avoid
+            # argparse misinterpreting flag-like values (e.g. "-o") as
+            # unknown flags rather than arguments to --ssh-options.
+            import json as _json
+
+            cmd.extend(["--ssh-options-json", _json.dumps(cfg["ssh_options"])])
 
             logger.info("Starting poll daemon: %s", shlex.join(cmd))
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            # Write PID from parent while still holding the lock, to avoid
+            # the race where the child hasn't written it yet.
+            paths["pid_file"].write_text(str(proc.pid), encoding="utf-8")
+            logger.info("Poll daemon started with PID %d", proc.pid)
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
 

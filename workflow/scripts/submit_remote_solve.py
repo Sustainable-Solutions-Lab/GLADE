@@ -10,8 +10,11 @@ an sbatch script, and submits it. The SLURM job ID (or "direct") is written
 to the output .jobid file for the collect phase.
 """
 
+import contextlib
 from pathlib import Path
 import shlex
+import time
+import traceback
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.remote_solve_utils import (
@@ -22,7 +25,7 @@ from workflow.scripts.remote_solve_utils import (
     read_remote_config,
     remote_path_shell_expr,
     rsync_ssh_args,
-    run_local_command,
+    run_rsync_push,
     run_ssh_command,
     run_ssh_command_capture,
     to_relative_path,
@@ -30,6 +33,18 @@ from workflow.scripts.remote_solve_utils import (
 
 
 def _submit_remote_solve() -> None:
+    """Top-level entry point with crash-safe logging wrapper."""
+    log_path = snakemake.log[0]
+    try:
+        _submit_remote_solve_inner()
+    except BaseException:
+        with contextlib.suppress(OSError), open(log_path, "a") as f:
+            f.write(f"\n--- CRASH ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+            traceback.print_exc(file=f)
+        raise
+
+
+def _submit_remote_solve_inner() -> None:
     logger = setup_script_logging(snakemake.log[0])
 
     cfg = read_remote_config(snakemake.config)
@@ -70,7 +85,7 @@ def _submit_remote_solve() -> None:
         *sync_rel_paths,
         f"{host}:{remote_workdir.rstrip('/')}/",
     ]
-    run_local_command(input_sync_command, logger, cwd=project_root)
+    run_rsync_push(input_sync_command, logger, cwd=project_root)
 
     # Build the remote Snakemake command.
     remote_smk_cmd = build_remote_smk_command(
@@ -108,7 +123,7 @@ def _submit_remote_solve() -> None:
             sbatch_script_rel,
             f"{host}:{remote_workdir.rstrip('/')}/",
         ]
-        run_local_command(sbatch_sync_command, logger, cwd=project_root)
+        run_rsync_push(sbatch_sync_command, logger, cwd=project_root)
 
         # Submit without --wait; capture job ID from stdout.
         remote_command = (
@@ -122,7 +137,9 @@ def _submit_remote_solve() -> None:
     else:
         # Direct SSH execution (blocking).
         remote_command = f"cd {remote_workdir_expr} && {remote_smk_cmd}"
-        run_ssh_command(host, ssh_options, remote_command, logger)
+        run_ssh_command(
+            host, ssh_options, remote_command, logger, timeout=None, retries=1
+        )
         jobid_path.write_text("direct", encoding="utf-8")
 
 

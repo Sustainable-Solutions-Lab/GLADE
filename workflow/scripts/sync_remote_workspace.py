@@ -18,7 +18,7 @@ from workflow.scripts.remote_solve_utils import (
     read_remote_config,
     remote_path_shell_expr,
     rsync_ssh_args,
-    run_local_command,
+    run_rsync_push,
     run_ssh_command,
     write_config_snapshot,
 )
@@ -58,7 +58,7 @@ def _sync_remote_workspace() -> None:
             *sync_items,
             f"{host}:{remote_workdir.rstrip('/')}/",
         ]
-        run_local_command(workflow_sync_command, logger, cwd=project_root)
+        run_rsync_push(workflow_sync_command, logger, cwd=project_root)
 
     # Write config snapshot with remote_solve disabled and sync it.
     config_snapshot_rel = write_config_snapshot(
@@ -73,7 +73,7 @@ def _sync_remote_workspace() -> None:
         config_snapshot_rel,
         f"{host}:{remote_workdir.rstrip('/')}/",
     ]
-    run_local_command(snapshot_sync_command, logger, cwd=project_root)
+    run_rsync_push(snapshot_sync_command, logger, cwd=project_root)
 
     # Touch sentinel output.
     sentinel = Path(snakemake.output.sentinel)
