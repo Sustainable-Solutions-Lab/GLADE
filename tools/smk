@@ -63,6 +63,7 @@ PIXI_ENV=""
 USE_SLURM=false
 has_jobs_arg=false
 has_mem_mb_resource_arg=false
+has_remote_solves_resource_arg=false
 new_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -82,6 +83,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     mem_mb=*)
       has_mem_mb_resource_arg=true
+      new_args+=("$1")
+      shift
+      ;;
+    remote_solves=*)
+      has_remote_solves_resource_arg=true
       new_args+=("$1")
       shift
       ;;
@@ -118,9 +124,16 @@ if [ "$USE_SLURM" = true ]; then
   fi
 fi
 
-# Forward explicit SMK_MEM_MAX to Snakemake scheduler when no mem_mb resource is set.
+# Build default resource limits (must be a single --resources flag; multiple flags overwrite).
+resource_defaults=()
 if [[ -n "$SMK_MEM_MB_LIMIT" && "$has_mem_mb_resource_arg" = false ]]; then
-  set -- --resources "mem_mb=${SMK_MEM_MB_LIMIT}" "$@"
+  resource_defaults+=("mem_mb=${SMK_MEM_MB_LIMIT}")
+fi
+if [[ "$has_remote_solves_resource_arg" = false ]]; then
+  resource_defaults+=("remote_solves=4")
+fi
+if [[ ${#resource_defaults[@]} -gt 0 ]]; then
+  set -- --resources "${resource_defaults[@]}" "$@"
 fi
 
 if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet true >/dev/null 2>&1; then

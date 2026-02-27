@@ -178,9 +178,14 @@ def build_remote_smk_command(
     )
 
 
-# Default SSH keepalive options: detect dead connections within ~45s
-# (3 probes x 15s interval) instead of hanging indefinitely.
-_DEFAULT_SSH_KEEPALIVE = [
+# Default SSH options for remote solve connections:
+# - ControlPath=none: bypass ControlMaster so each connection is independent.
+#   Without this, ServerAliveInterval only probes the local master process
+#   (which is always alive), never detecting a broken TCP connection.
+# - ServerAliveInterval/CountMax: detect dead connections within ~45s.
+_DEFAULT_SSH_OPTIONS = [
+    "-o",
+    "ControlPath=none",
     "-o",
     "ServerAliveInterval=15",
     "-o",
@@ -196,10 +201,10 @@ def read_remote_config(snakemake_config: dict) -> dict:
             "remote_solve.enabled is false; remote solve rules should not be selected."
         )
     user_ssh_options = [str(option) for option in cfg["ssh_options"]]
-    # Inject keepalive defaults unless the user already set ServerAliveInterval.
+    # Inject connection-resilience defaults unless the user already configured them.
     has_keepalive = any("ServerAliveInterval" in opt for opt in user_ssh_options)
     ssh_options = (
-        user_ssh_options if has_keepalive else user_ssh_options + _DEFAULT_SSH_KEEPALIVE
+        user_ssh_options if has_keepalive else user_ssh_options + _DEFAULT_SSH_OPTIONS
     )
     return {
         "host": str(cfg["host"]),

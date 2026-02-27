@@ -1076,7 +1076,8 @@ remote_solve:
   workdir: "~/path/to/food-opt"  # Placeholder remote project root containing this repository
   pixi_env: "default"  # Placeholder remote pixi environment passed to tools/smk -e
   use_slurm: false  # Set true when remote solves should be submitted via --slurm
-  slurm_profile: ""  # Optional remote SMK_SLURM_PROFILE; empty uses remote default
+  slurm_account: ""  # SLURM account for remote job submission
+  slurm_partition: ""  # SLURM partition for remote compute jobs
   sync_workflow: true  # Sync workflow/ and config/ code before remote solve
   sync_pixi_files: false  # Sync pixi.toml and pixi.lock to remote workdir
   ssh_options: []  # Extra ssh CLI args, e.g. ["-o", "ControlMaster=auto"]
