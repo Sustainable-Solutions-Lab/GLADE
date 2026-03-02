@@ -175,9 +175,7 @@ def add_regional_crop_production_links(
             ha = pd.to_numeric(df["harvested_area"], errors="coerce").to_numpy(
                 dtype=float
             )
-            row_df["baseline_production_mt"] = (
-                ha / constants.HA_PER_MHA * row_df["efficiency"].to_numpy()
-            )
+            row_df["baseline_area_mha"] = ha / constants.HA_PER_MHA
             row_df["bus2"] = water_bus
             row_df["efficiency2"] = water_eff
             row_df["bus3"] = ("fertilizer:" + df["country"].astype(str)).to_numpy()
@@ -301,7 +299,7 @@ def add_regional_crop_production_links(
         "region": all_df["region"],
         "resource_class": all_df["resource_class"],
         "water_supply": all_df["water_supply"],
-        "baseline_production_mt": all_df["baseline_production_mt"],
+        "baseline_area_mha": all_df["baseline_area_mha"],
     }
 
     if use_actual_production:

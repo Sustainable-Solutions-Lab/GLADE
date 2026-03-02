@@ -217,7 +217,7 @@ properties:
             description: "For quadratic: absolute = (P - B)², relative = ((P - B) / B)². For L1: absolute = |P - B|, relative = |(P - B) / B|"
           crops:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline]
             additionalProperties: false
             properties:
               enabled:
@@ -231,13 +231,13 @@ properties:
               enable_slack:
                 type: boolean
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
-              min_baseline_mt:
+              min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Hard mode: minimum crop baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mha floor. Hard mode: minimum crop baseline to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
           grassland:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline]
             additionalProperties: false
             properties:
               enabled:
@@ -251,13 +251,13 @@ properties:
               enable_slack:
                 type: boolean
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
-              min_baseline_mt:
+              min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Hard mode: minimum grassland baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mha floor. Hard mode: minimum grassland baseline to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
           animals:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline]
             additionalProperties: false
             properties:
               enabled:
@@ -271,10 +271,10 @@ properties:
               enable_slack:
                 type: boolean
                 description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
-              min_baseline_mt:
+              min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Hard mode: minimum animal baseline (Mt) to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mt DM floor (scaled to Mha-eq internally). Hard mode: minimum animal baseline to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
 
   food_incentives:
     type: object

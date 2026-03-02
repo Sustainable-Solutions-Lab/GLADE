@@ -14,16 +14,18 @@ from workflow.scripts.solve_model.production_stability import (
 )
 
 
-def _make_links(baselines, carrier="crop_production", index=None):
+def _make_links(baselines, carrier="crop_production", index=None, efficiency=None):
     """Build a minimal production links DataFrame for testing."""
     n = len(baselines)
     if index is None:
         index = [chr(ord("a") + i) for i in range(n)]
+    if efficiency is None:
+        efficiency = [1.0] * n
     return pd.DataFrame(
         {
             "carrier": [carrier] * n,
-            "baseline_production_mt": baselines,
-            "efficiency": [1.0] * n,
+            "baseline_area_mha": baselines,
+            "efficiency": efficiency,
         },
         index=index,
     )
@@ -40,7 +42,7 @@ def test_crop_baseline_filter_excludes_zero_in_hard_mode():
         link_p,
         links_df,
         "crop_production",
-        min_baseline_mt=0.1,
+        min_baseline=0.1,
         include_all_links=False,
     )
 
@@ -61,7 +63,7 @@ def test_crop_penalty_mode_includes_zero_baselines():
         link_p,
         links_df,
         "crop_production",
-        min_baseline_mt=0.1,
+        min_baseline=0.1,
         include_all_links=True,
     )
 
@@ -80,7 +82,7 @@ def test_relative_deviation_uses_floor_for_zero_baselines():
         actual=actual,
         baselines=baselines,
         deviation_type="relative",
-        min_baseline_mt=0.1,
+        min_baseline=0.1,
     )
 
     assert np.all(np.isfinite(deviation.values))
@@ -101,7 +103,7 @@ def test_grassland_baseline_filter_excludes_zero_in_hard_mode():
         link_p,
         links_df,
         "grassland_production",
-        min_baseline_mt=0.1,
+        min_baseline=0.1,
         include_all_links=False,
     )
 
@@ -122,7 +124,7 @@ def test_grassland_penalty_mode_includes_zero_baselines():
         link_p,
         links_df,
         "grassland_production",
-        min_baseline_mt=0.1,
+        min_baseline=0.1,
         include_all_links=True,
     )
 
@@ -130,3 +132,28 @@ def test_grassland_penalty_mode_includes_zero_baselines():
     link_names, _, baselines = result
     assert list(link_names) == ["gz", "gp"]
     np.testing.assert_allclose(baselines.values, [0.0, 5.0])
+
+
+def test_production_and_baselines_returns_area_not_production():
+    """Verify _production_and_baselines returns link_p (area) not link_p * efficiency."""
+    links_df = _make_links(
+        [1.0, 2.0],
+        index=["x", "y"],
+        efficiency=[3.0, 5.0],
+    )
+    link_p = xr.DataArray([0.5, 0.8], coords={"name": ["x", "y"]}, dims="name")
+
+    result = _production_and_baselines(
+        link_p,
+        links_df,
+        "crop_production",
+        min_baseline=0.001,
+        include_all_links=True,
+    )
+
+    assert result is not None
+    _, area, baselines = result
+    # area should be link_p values directly (Mha), NOT multiplied by efficiency
+    np.testing.assert_allclose(area.values, [0.5, 0.8])
+    # baselines should be baseline_area_mha, not baseline * efficiency
+    np.testing.assert_allclose(baselines.values, [1.0, 2.0])

@@ -34,7 +34,7 @@ def harvested_area_model_inputs(wildcards):
     """Return harvested area files for all crops.
 
     Harvested area comes from the same GAEZ source as yields and is always
-    loaded so that ``baseline_production_mt`` can be computed on every crop
+    loaded so that ``baseline_area_mha`` can be computed on every crop
     production link.
     """
     irr_cfg = config["irrigation"]["irrigated_crops"]

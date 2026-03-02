@@ -242,7 +242,7 @@ def add_grassland_feed_links(
         )
     else:
         observed_area_mha = np.zeros(len(work))
-    baseline_production_mt = observed_area_mha * efficiencies
+    baseline_area_mha = observed_area_mha
 
     # Index by name for proper alignment with PyPSA component names
     work_indexed = work.set_index("name")
@@ -261,7 +261,7 @@ def add_grassland_feed_links(
         "water_supply": "rainfed",
         "grazing_intensity": grazing_intensity,
         "yield_per_managed_ha": yield_per_managed_ha,
-        "baseline_production_mt": baseline_production_mt,
+        "baseline_area_mha": baseline_area_mha,
     }
     if use_actual_production:
         params["p_nom"] = available_mha

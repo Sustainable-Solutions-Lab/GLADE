@@ -58,23 +58,23 @@ validation:
     enabled: false
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
-    l1_cost: 1.0  # bn USD per deviation unit (only used when penalty_mode is "l1")
+    l1_cost: 1.0  # bn USD per Mha deviation (crops/grassland) or Mha-equivalent (animals)
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
       enabled: true
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline_mt: 0.000001  # Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
+      min_baseline: 0.000001  # Mha floor. Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
     grassland:
       enabled: true
       max_relative_deviation: 0.2
       enable_slack: false
-      min_baseline_mt: 0.000001
+      min_baseline: 0.000001  # Mha floor
     animals:
       enabled: true
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline_mt: 0.00001  # Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
+      min_baseline: 0.00001  # Mt DM floor (scaled to Mha-eq internally). Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
 
 # --- section: food_incentives ---
 food_incentives:

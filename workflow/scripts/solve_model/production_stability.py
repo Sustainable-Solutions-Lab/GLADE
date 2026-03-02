@@ -12,8 +12,10 @@ baseline levels. Three penalty modes are supported:
 - **quadratic**: Quadratic penalty via linopy variables added to the objective
 
 Crop and grassland stability operate at the **per-link** level: each production
-link is individually constrained to stay near its own baseline (observed area x
-yield, computed during model building and stored as ``baseline_production_mt``).
+link is individually constrained to stay near its own baseline area (observed
+harvested area, computed during model building and stored as ``baseline_area_mha``).
+Deviations are measured in Mha so that each hectare is penalized equally
+regardless of yield.
 
 Animal stability operates at the **per-link** level: each animal production link
 is individually constrained to stay near its GLEAM feed-use baseline (stored as
@@ -29,6 +31,7 @@ incur a stability cost when activated.
 import logging
 
 import numpy as np
+import pandas as pd
 import pypsa
 import xarray as xr
 
@@ -42,7 +45,7 @@ def add_production_stability_constraints(
 ) -> None:
     """Add constraints limiting production deviation from baseline levels.
 
-    For crops/grassland: per-link bounds using ``baseline_production_mt``.
+    For crops/grassland: per-link bounds using ``baseline_area_mha``.
     For animals: per-link bounds using ``baseline_feed_use_mt_dm``.
 
     Three penalty modes are supported:
@@ -94,7 +97,7 @@ def add_production_stability_constraints(
                 "crop",
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
-                crops_cfg["min_baseline_mt"],
+                crops_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
             _add_production_quadratic_penalty(
@@ -105,7 +108,7 @@ def add_production_stability_constraints(
                 "crop",
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
-                crops_cfg["min_baseline_mt"],
+                crops_cfg["min_baseline"],
             )
 
     # --- GRASSLAND PRODUCTION ---
@@ -130,7 +133,7 @@ def add_production_stability_constraints(
                 "grassland",
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
-                grassland_cfg["min_baseline_mt"],
+                grassland_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
             _add_production_quadratic_penalty(
@@ -141,12 +144,37 @@ def add_production_stability_constraints(
                 "grassland",
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
-                grassland_cfg["min_baseline_mt"],
+                grassland_cfg["min_baseline"],
             )
 
     # --- ANIMAL FEED USE ---
     animals_cfg = stability_cfg["animals"]
     if animals_cfg["enabled"]:
+        # Compute dynamic scaling coefficient for absolute mode so that
+        # animal feed deviations (in Mt DM) are converted to Mha-equivalent
+        # units, making the shared l1_cost/quadratic_cost comparable across
+        # crop/grassland (Mha) and animal (Mt DM) components.
+        animal_scale = 1.0
+        if stability_cfg["deviation_type"] == "absolute":
+            crop_links = links_df[links_df["carrier"] == "crop_production"]
+            grass_links = links_df[links_df["carrier"] == "grassland_production"]
+            total_area = (
+                crop_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
+                + grass_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
+            )
+            animal_links = links_df[links_df["carrier"] == "animal_production"]
+            total_feed = animal_links.get(
+                "baseline_feed_use_mt_dm", pd.Series(dtype=float)
+            ).sum()
+            if total_feed > 0:
+                animal_scale = total_area / total_feed
+            logger.info(
+                "Animal scaling: %.4f Mha/Mt (area=%.1f, feed=%.1f)",
+                animal_scale,
+                total_area,
+                total_feed,
+            )
+
         if penalty_mode == "hard":
             _add_animal_hard_constraints(
                 n, link_p, links_df, animals_cfg, slack_marginal_cost
@@ -158,7 +186,8 @@ def add_production_stability_constraints(
                 links_df,
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
-                animals_cfg["min_baseline_mt"],
+                animals_cfg["min_baseline"],
+                animal_scale,
             )
         elif penalty_mode == "quadratic":
             _add_animal_quadratic_penalty(
@@ -167,7 +196,8 @@ def add_production_stability_constraints(
                 links_df,
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
-                animals_cfg["min_baseline_mt"],
+                animals_cfg["min_baseline"],
+                animal_scale,
             )
 
 
@@ -178,51 +208,47 @@ def _production_and_baselines(
     link_p,
     links_df,
     carrier: str,
-    min_baseline_mt: float,
+    min_baseline: float,
     *,
     include_all_links: bool = False,
 ) -> tuple | None:
-    """Extract production expressions and baselines for production links.
+    """Extract area expressions and baselines for production links.
 
-    Returns ``(link_names, production, baselines)`` for links matching the
-    given ``carrier``, or ``None`` if there are no eligible links. In hard mode,
-    only links above ``min_baseline_mt`` are included; in penalty modes all
+    Returns ``(link_names, area, baselines)`` where ``area`` is the link
+    dispatch variable (Mha) and ``baselines`` is the observed baseline area
+    (Mha).  Returns ``None`` if there are no eligible links. In hard mode,
+    only links above ``min_baseline`` are included; in penalty modes all
     links are included.
     """
     prod_links = links_df[links_df["carrier"] == carrier]
-    if prod_links.empty or "baseline_production_mt" not in prod_links.columns:
+    if prod_links.empty or "baseline_area_mha" not in prod_links.columns:
         logger.info("No %s links with baselines; skipping stability", carrier)
         return None
 
     if not include_all_links:
-        prod_links = prod_links[prod_links["baseline_production_mt"] > min_baseline_mt]
+        prod_links = prod_links[prod_links["baseline_area_mha"] > min_baseline]
         if prod_links.empty:
             logger.info(
-                "No %s baselines exceed %.6g Mt; skipping stability constraints",
+                "No %s baselines exceed %.6g Mha; skipping stability constraints",
                 carrier,
-                min_baseline_mt,
+                min_baseline,
             )
             return None
 
     link_names = prod_links.index
     baselines = xr.DataArray(
-        prod_links["baseline_production_mt"].to_numpy(dtype=float),
+        prod_links["baseline_area_mha"].to_numpy(dtype=float),
         coords={"name": link_names},
         dims="name",
     )
-    efficiencies = xr.DataArray(
-        prod_links["efficiency"].to_numpy(dtype=float),
-        coords={"name": link_names},
-        dims="name",
-    )
-    production = link_p.sel(name=link_names) * efficiencies
-    return link_names, production, baselines
+    area = link_p.sel(name=link_names)
+    return link_names, area, baselines
 
 
 def _animal_feed_and_baselines(
     link_p,
     links_df,
-    min_baseline_mt: float,
+    min_baseline: float,
     *,
     include_all_links: bool = False,
 ) -> tuple | None:
@@ -230,7 +256,7 @@ def _animal_feed_and_baselines(
 
     Returns ``(link_names, feed_use, baselines)`` for animal production links,
     or ``None`` if there are no eligible links. In hard mode, only links above
-    ``min_baseline_mt`` are included; in penalty modes all links are included.
+    ``min_baseline`` are included; in penalty modes all links are included.
 
     Feed use is ``link_p`` directly (p0 = feed input in Mt DM), so no
     efficiency multiplication is needed.
@@ -244,13 +270,13 @@ def _animal_feed_and_baselines(
 
     if not include_all_links:
         animal_links = animal_links[
-            animal_links["baseline_feed_use_mt_dm"] > min_baseline_mt
+            animal_links["baseline_feed_use_mt_dm"] > min_baseline
         ]
         if animal_links.empty:
             logger.info(
                 "No animal feed baselines exceed %.6g Mt; "
                 "skipping animal stability constraints",
-                min_baseline_mt,
+                min_baseline,
             )
             return None
 
@@ -268,15 +294,15 @@ def _compute_stability_deviation(
     actual: xr.DataArray,
     baselines: xr.DataArray,
     deviation_type: str,
-    min_baseline_mt: float,
+    min_baseline: float,
 ) -> xr.DataArray:
     """Compute stability deviation, flooring the denominator for relative mode.
 
-    For relative deviations, ``min_baseline_mt`` is used as the denominator
+    For relative deviations, ``min_baseline`` is used as the denominator
     floor so that near-zero/zero baselines produce finite, bounded deviations.
     """
     if deviation_type == "relative":
-        denominator = xr.where(baselines > min_baseline_mt, baselines, min_baseline_mt)
+        denominator = xr.where(baselines > min_baseline, baselines, min_baseline)
         return (actual - baselines) / denominator
     return actual - baselines
 
@@ -295,16 +321,14 @@ def _add_production_hard_constraints(
 ) -> None:
     """Add per-link production stability bounds (hard mode).
 
-    ``(1 - delta) * baseline <= p * efficiency <= (1 + delta) * baseline``
+    ``(1 - delta) * baseline <= area <= (1 + delta) * baseline``
     """
-    result = _production_and_baselines(
-        link_p, links_df, carrier, cfg["min_baseline_mt"]
-    )
+    result = _production_and_baselines(link_p, links_df, carrier, cfg["min_baseline"])
     if result is None:
         return
 
     m = n.model
-    link_names, production, baselines = result
+    link_names, area, baselines = result
     delta = cfg["max_relative_deviation"]
 
     lower_bounds = np.maximum(0.0, (1.0 - delta) * baselines)
@@ -323,24 +347,24 @@ def _add_production_hard_constraints(
             name=f"{label}_production_slack",
         )
         m.add_constraints(
-            production + prod_slack >= lower_bounds,
+            area + prod_slack >= lower_bounds,
             name=f"GlobalConstraint-{label}_production_min",
         )
         m.objective += slack_marginal_cost * prod_slack.sum()
         logger.info(
-            "Added %s production slack variables for %d links (cost=%.1f bn USD/Mt)",
+            "Added %s production slack variables for %d links (cost=%.1f bn USD/Mha)",
             label,
             len(link_names),
             slack_marginal_cost,
         )
     else:
         m.add_constraints(
-            production >= lower_bounds,
+            area >= lower_bounds,
             name=f"GlobalConstraint-{label}_production_min",
         )
 
     m.add_constraints(
-        production <= upper_bounds,
+        area <= upper_bounds,
         name=f"GlobalConstraint-{label}_production_max",
     )
 
@@ -376,26 +400,26 @@ def _add_production_l1_penalty(
     label: str,
     deviation_type: str,
     l1_cost: float,
-    min_baseline_mt: float,
+    min_baseline: float,
 ) -> None:
-    """Add L1 (absolute-value) penalty on production deviations.
+    """Add L1 (absolute-value) penalty on area deviations.
 
     Creates a linopy variable ``abs_dev >= 0`` per constrained link and adds:
-      abs_dev >= +(production - baseline)
-      abs_dev >= -(production - baseline)
+      abs_dev >= +(area - baseline)
+      abs_dev >= -(area - baseline)
       objective += l1_cost * sum(abs_dev)
     """
     result = _production_and_baselines(
-        link_p, links_df, carrier, min_baseline_mt, include_all_links=True
+        link_p, links_df, carrier, min_baseline, include_all_links=True
     )
     if result is None:
         return
 
     m = n.model
-    link_names, production, baselines = result
+    link_names, area, baselines = result
 
     deviation = _compute_stability_deviation(
-        production, baselines, deviation_type, min_baseline_mt
+        area, baselines, deviation_type, min_baseline
     )
 
     abs_dev = m.add_variables(
@@ -435,25 +459,25 @@ def _add_production_quadratic_penalty(
     label: str,
     deviation_type: str,
     quadratic_cost: float,
-    min_baseline_mt: float,
+    min_baseline: float,
 ) -> None:
-    """Add quadratic penalty on production deviations.
+    """Add quadratic penalty on area deviations.
 
     Creates a linopy variable ``dev`` per constrained link and adds:
-      dev == production - baseline
+      dev == area - baseline
       objective += 0.5 * quadratic_cost * sum(dev^2)
     """
     result = _production_and_baselines(
-        link_p, links_df, carrier, min_baseline_mt, include_all_links=True
+        link_p, links_df, carrier, min_baseline, include_all_links=True
     )
     if result is None:
         return
 
     m = n.model
-    link_names, production, baselines = result
+    link_names, area, baselines = result
 
     deviation = _compute_stability_deviation(
-        production, baselines, deviation_type, min_baseline_mt
+        area, baselines, deviation_type, min_baseline
     )
 
     dev = m.add_variables(
@@ -491,9 +515,7 @@ def _add_animal_hard_constraints(
 
     ``(1 - delta) * baseline <= feed_use <= (1 + delta) * baseline``
     """
-    result = _animal_feed_and_baselines(
-        link_p, links_df, animals_cfg["min_baseline_mt"]
-    )
+    result = _animal_feed_and_baselines(link_p, links_df, animals_cfg["min_baseline"])
     if result is None:
         return
 
@@ -567,11 +589,12 @@ def _add_animal_l1_penalty(
     links_df,
     deviation_type: str,
     l1_cost: float,
-    min_baseline_mt: float,
+    min_baseline: float,
+    animal_scale: float = 1.0,
 ) -> None:
     """Add L1 penalty on animal feed use deviations."""
     result = _animal_feed_and_baselines(
-        link_p, links_df, min_baseline_mt, include_all_links=True
+        link_p, links_df, min_baseline, include_all_links=True
     )
     if result is None:
         return
@@ -580,8 +603,10 @@ def _add_animal_l1_penalty(
     link_names, feed_use, baselines = result
 
     deviation = _compute_stability_deviation(
-        feed_use, baselines, deviation_type, min_baseline_mt
+        feed_use, baselines, deviation_type, min_baseline
     )
+    if animal_scale != 1.0:
+        deviation = deviation * animal_scale
 
     abs_dev = m.add_variables(
         lower=0,
@@ -617,11 +642,12 @@ def _add_animal_quadratic_penalty(
     links_df,
     deviation_type: str,
     quadratic_cost: float,
-    min_baseline_mt: float,
+    min_baseline: float,
+    animal_scale: float = 1.0,
 ) -> None:
     """Add quadratic penalty on animal feed use deviations."""
     result = _animal_feed_and_baselines(
-        link_p, links_df, min_baseline_mt, include_all_links=True
+        link_p, links_df, min_baseline, include_all_links=True
     )
     if result is None:
         return
@@ -630,8 +656,10 @@ def _add_animal_quadratic_penalty(
     link_names, feed_use, baselines = result
 
     deviation = _compute_stability_deviation(
-        feed_use, baselines, deviation_type, min_baseline_mt
+        feed_use, baselines, deviation_type, min_baseline
     )
+    if animal_scale != 1.0:
+        deviation = deviation * animal_scale
 
     dev = m.add_variables(
         coords=[link_names],
