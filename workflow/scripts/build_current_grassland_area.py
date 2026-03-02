@@ -47,9 +47,11 @@ if __name__ == "__main__":
     np.copyto(gi, 0.0, where=~np.isfinite(gi))
     np.clip(gi, 0.0, 1.0, out=gi)
 
-    # Managed pasture area: total grassland scaled by grazing intensity.
-    # Convert km² to hectares: 1 km² = 100 ha.
-    grass_area = area_km2 * gi * 100.0
+    # Physical pasture area in hectares (1 km² = 100 ha).
+    grass_area = area_km2 * 100.0
+
+    # Weighted GI contribution for computing area-weighted mean GI per aggregate.
+    weighted_gi_area = area_km2 * gi * 100.0
 
     valid = (
         np.isfinite(grass_area)
@@ -60,11 +62,14 @@ if __name__ == "__main__":
         & (resource_class >= 0)
     )
     if not np.any(valid):
-        df = pd.DataFrame(columns=["region", "resource_class", "area_ha"])
+        df = pd.DataFrame(
+            columns=["region", "resource_class", "area_ha", "grazing_intensity"]
+        )
     else:
         region_vals = region_id[valid].astype(np.int32, copy=False)
         class_vals = resource_class[valid].astype(np.int32, copy=False)
         area_vals = grass_area[valid].astype(np.float64, copy=False)
+        weighted_gi_vals = weighted_gi_area[valid].astype(np.float64, copy=False)
 
         regions_gdf = gpd.read_file(regions_path)
         if "region" not in regions_gdf.columns:
@@ -79,10 +84,18 @@ if __name__ == "__main__":
                     "region_id": region_vals,
                     "resource_class": class_vals,
                     "area_ha": area_vals,
+                    "weighted_gi_area": weighted_gi_vals,
                 }
             )
-            .groupby(["region_id", "resource_class"], as_index=False)["area_ha"]
+            .groupby(["region_id", "resource_class"], as_index=False)[
+                ["area_ha", "weighted_gi_area"]
+            ]
             .sum()
+        )
+        df["grazing_intensity"] = np.where(
+            df["area_ha"] > 0,
+            df["weighted_gi_area"] / df["area_ha"],
+            0.0,
         )
         df["region"] = df["region_id"].map(region_lookup)
         missing = df["region"].isna()
@@ -92,7 +105,7 @@ if __name__ == "__main__":
                 "Region IDs in resource_classes.nc missing from regions.geojson: "
                 + ", ".join(str(mid) for mid in missing_ids)
             )
-        df = df[["region", "resource_class", "area_ha"]]
+        df = df[["region", "resource_class", "area_ha", "grazing_intensity"]]
         df = df.sort_values(["region", "resource_class"]).reset_index(drop=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

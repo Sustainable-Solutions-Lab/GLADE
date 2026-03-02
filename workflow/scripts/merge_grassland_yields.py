@@ -12,7 +12,7 @@ column is effective feed yield ready for direct use:
   (hanpp_harv / managed_area / C_FRACTION), used directly.
 - **ISIMIP rows**: ``yield = raw_yield * isimip_utilization_rate``
 
-Output columns: yield, suitable_area
+Output columns: yield, suitable_area, grazing_intensity
 """
 
 from pathlib import Path
@@ -118,10 +118,14 @@ if __name__ == "__main__":
         regions = gpd.read_file(regions_path)[["region", "country"]]
         region_to_country = regions.set_index("region")["country"].astype(str)
 
-        grass = luicube.loc[luicube_valid, ["yield", "suitable_area"]].reset_index()
+        grass = luicube.loc[
+            luicube_valid, ["yield", "suitable_area", "grazing_intensity"]
+        ].reset_index()
         grass["country"] = grass["region"].map(region_to_country)
         grass = grass[grass["country"].notna()].copy()
-        grass["grass_mt_dm"] = grass["yield"] * grass["suitable_area"] * 1e-6
+        grass["grass_mt_dm"] = (
+            grass["yield"] * grass["grazing_intensity"] * grass["suitable_area"] * 1e-6
+        )
         grass_by_country = grass.groupby("country", as_index=True)["grass_mt_dm"].sum()
 
         forage_by_country = _compute_forage_supply_by_country(
@@ -170,18 +174,25 @@ if __name__ == "__main__":
 
     # Start from ISIMIP as the base (covers all region/class combinations).
     # Apply isimip_utilization_rate to convert raw ISIMIP yield to effective feed yield.
+    # ISIMIP regions use isimip_utilization_rate as their GI proxy.
     merged = isimip[["yield", "suitable_area"]].copy()
     merged["yield"] = merged["yield"] * isimip_utilization_rate
+    merged["grazing_intensity"] = isimip_utilization_rate
 
     # Overwrite with LUIcube where valid (yields are already per managed hectare)
     valid_idx = luicube_valid[luicube_valid].index.intersection(merged.index)
     merged.loc[valid_idx, "yield"] = luicube.loc[valid_idx, "yield"]
     merged.loc[valid_idx, "suitable_area"] = luicube.loc[valid_idx, "suitable_area"]
+    merged.loc[valid_idx, "grazing_intensity"] = luicube.loc[
+        valid_idx, "grazing_intensity"
+    ]
 
     # Also add LUIcube-only rows not present in ISIMIP
     luicube_only = luicube_valid[luicube_valid].index.difference(merged.index)
     if not luicube_only.empty:
-        extra = luicube.loc[luicube_only, ["yield", "suitable_area"]].copy()
+        extra = luicube.loc[
+            luicube_only, ["yield", "suitable_area", "grazing_intensity"]
+        ].copy()
         merged = pd.concat([merged, extra]).sort_index()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

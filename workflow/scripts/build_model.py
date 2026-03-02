@@ -360,6 +360,10 @@ if __name__ == "__main__":
             convertible = convertible[convertible > 0.0].sort_index()
             if not convertible.empty:
                 convertible_grassland_area_series = convertible
+                logger.info(
+                    "Total convertible grassland area: %.1f Mha",
+                    convertible.sum() / 1e6,
+                )
         elif marginal_grassland_area_series is not None:
             raise ValueError(
                 "Grazing-only land data is available but current grassland area is empty"

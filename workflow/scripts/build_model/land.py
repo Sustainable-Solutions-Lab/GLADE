@@ -4,12 +4,16 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pypsa
 
 from . import primary_resources
 from .utils import merge_lef, merge_lef_with_share
+
+logger = logging.getLogger(__name__)
 
 HA_PER_MHA = 1e6
 
@@ -202,6 +206,15 @@ def add_land_components(
         land_index_df["area_ha"] - land_index_df["convertible_grassland_ha"]
     ).clip(lower=0.0)
     land_index_df["adjusted_area_ha"] = adjusted_area
+
+    squeezed = adjusted_area < land_index_df["baseline_area_ha"]
+    if squeezed.any():
+        n_squeezed = int(squeezed.sum())
+        logger.warning(
+            "%d (region, class, water) entries where adjusted land area "
+            "(after grassland subtraction) is less than baseline cropland area",
+            n_squeezed,
+        )
     land_index_df["expansion_area_ha"] = (
         land_index_df["adjusted_area_ha"] - land_index_df["baseline_area_ha"]
     ).clip(lower=0.0)
