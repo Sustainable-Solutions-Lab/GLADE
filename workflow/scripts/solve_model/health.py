@@ -311,7 +311,8 @@ def _add_stage1_constraints(
     store_level_var: xr.DataArray,
     solver_name: str,
     value_per_yll: float,
-) -> dict[tuple[int, str], linopy.LinearExpression]:
+    baseline_intakes: dict[tuple[int, str], float],
+) -> tuple[dict[tuple[int, str], linopy.LinearExpression], dict[int, float]]:
     """Add Stage 1 constraints: store level → log(RR_{r,d}).
 
     Stage 1 transforms food group store levels into log relative risk values
@@ -342,13 +343,18 @@ def _add_stage1_constraints(
         Solver name for formulation selection.
     value_per_yll
         Value per YLL; if zero, skip degeneracy perturbation.
+    baseline_intakes
+        {(cluster, risk_factor): baseline_intake_g_per_day} for MIP starts.
 
     Returns
     -------
-    dict
-        {(cluster, cause): Σ_r log(RR_{r,d})} expressions for Stage 2.
+    tuple
+        (log_rr_totals, start_entries) where log_rr_totals maps
+        (cluster, cause) to Σ_r log(RR_{r,d}) expressions, and
+        start_entries maps column indices to MIP start values.
     """
     log_rr_totals: dict[tuple[int, str], linopy.LinearExpression] = {}
+    start_entries: dict[int, float] = {}
 
     # Process (cluster, risk) pairs in groups that share the same intake breakpoints.
     # This batches constraint creation for efficiency - pairs with identical
@@ -447,6 +453,9 @@ def _add_stage1_constraints(
             risk_label=str(risk),
             value_per_yll=value_per_yll,
             solver_name=solver_name,
+            cluster_risk_pairs=cluster_risk_pairs,
+            baseline_intakes=baseline_intakes,
+            start_entries=start_entries,
         )
 
         # -----------------------------------------------------------------------
@@ -481,7 +490,7 @@ def _add_stage1_constraints(
                 else:
                     log_rr_totals[key] = expr
 
-    return log_rr_totals
+    return log_rr_totals, start_entries
 
 
 def _add_stage1_delta(
@@ -493,6 +502,9 @@ def _add_stage1_delta(
     risk_label: str,
     value_per_yll: float,
     solver_name: str,
+    cluster_risk_pairs: list[tuple[int, str]],
+    baseline_intakes: dict[tuple[int, str], float],
+    start_entries: dict[int, float],
 ) -> linopy.LinearExpression:
     """Stage 1 delta formulation with segment indicators.
 
@@ -694,6 +706,36 @@ def _add_stage1_delta(
     # how to handle LinearExpressions.
     delta_contrib = (delta_var * delta_log_rr).sum(segment_dim)
     log_rr_contrib = delta_contrib + f_0
+
+    # -----------------------------------------------------------------------
+    # MIP start values from baseline intake
+    # -----------------------------------------------------------------------
+    breakpoints = intake_values.values
+    for label, (cluster, risk) in zip(cluster_risk_index, cluster_risk_pairs):
+        intake = baseline_intakes.get((cluster, risk))
+        if intake is None:
+            continue
+        # Find active segment via searchsorted
+        seg = int(np.searchsorted(breakpoints[1:], intake, side="right"))
+        seg = min(seg, n_segments - 1)
+
+        # y_var: indicator = 1 for active segment, 0 otherwise
+        for j in range(n_segments):
+            col = int(y_var.labels.sel(cluster_risk=label, intake_step_seg=j))
+            start_entries[col] = 1.0 if j == seg else 0.0
+
+        # delta_var: fill-up pattern
+        for j in range(n_segments):
+            col = int(delta_var.labels.sel(cluster_risk=label, intake_step_seg=j))
+            if j < seg:
+                start_entries[col] = 1.0
+            elif j == seg:
+                bp_lo = float(breakpoints[j])
+                bp_hi = float(breakpoints[j + 1])
+                frac = (intake - bp_lo) / (bp_hi - bp_lo) if bp_hi > bp_lo else 0.5
+                start_entries[col] = max(0.0, min(1.0, frac))
+            else:
+                start_entries[col] = 0.0
 
     return log_rr_contrib
 
@@ -1136,6 +1178,7 @@ def add_health_objective(
     risk_cause_map: dict[str, list[str]],
     solver_name: str,
     value_per_yll: float,
+    cluster_risk_baseline_path: str,
     rr_quantiles: dict[str, float] | None = None,
     tmrel_path: str | None = None,
 ) -> None:
@@ -1182,6 +1225,9 @@ def add_health_objective(
         Solver name ('gurobi', 'highs', etc.).
     value_per_yll
         Monetary value per year of life lost (USD).
+    cluster_risk_baseline_path
+        Path to CSV with (health_cluster, risk_factor, baseline_intake_g_per_day)
+        for computing MIP start values for Stage 1 binary variables.
     rr_quantiles
         Optional per-risk-factor quantile values in [0, 1] for interpolating
         between GBD rr_low (q=0) and rr_high (q=1). When provided, log_rr
@@ -1267,11 +1313,18 @@ def add_health_objective(
         store_map["cluster"].nunique(),
     )
 
+    # --- Load Baseline Intakes for MIP Start ---
+    crb = pd.read_csv(cluster_risk_baseline_path)
+    baseline_intakes = {
+        (int(r.health_cluster), r.risk_factor): r.baseline_intake_g_per_day
+        for r in crb.itertuples()
+    }
+
     # --- Stage 1: Store Level → log(RR) ---
     intake_data = _build_intake_breakpoints(risk_breakpoints)
     intake_groups = _group_cluster_risk_pairs(store_map, intake_data)
 
-    log_rr_totals = _add_stage1_constraints(
+    log_rr_totals, start_entries = _add_stage1_constraints(
         m,
         store_map,
         intake_groups,
@@ -1279,7 +1332,15 @@ def add_health_objective(
         store_level_var,
         solver_name,
         value_per_yll,
+        baseline_intakes,
     )
+
+    # --- Set MIP Start ---
+    if start_entries:
+        indices = np.array(sorted(start_entries), dtype=np.int32)
+        values = np.array([start_entries[i] for i in indices], dtype=np.float64)
+        m._mip_start = (len(indices), indices, values)
+        logger.info("Set MIP start for %d Stage 1 variables", len(indices))
 
     # --- Stage 2: log(RR) → YLL Store ---
     cause_breakpoints = _build_cause_breakpoints(cause_log_breakpoints)

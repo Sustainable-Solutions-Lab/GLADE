@@ -227,6 +227,7 @@ def solve_model_inputs(w):
         "health_cluster_summary": f"<processing>/{w.name}/health/scen-{w.scenario}/cluster_summary.csv",
         "health_clusters": f"<processing>/{w.name}/health/scen-{w.scenario}/country_clusters.csv",
         "health_derived_tmrel": f"<processing>/{w.name}/health/scen-{w.scenario}/derived_tmrel.csv",
+        "health_cluster_risk_baseline": f"<processing>/{w.name}/health/scen-{w.scenario}/cluster_risk_baseline.csv",
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": f"<processing>/{w.name}/baseline_diet.csv",
     }
