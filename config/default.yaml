@@ -65,6 +65,11 @@ validation:
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline_mt: 0.000001  # Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
+    grassland:
+      enabled: true
+      max_relative_deviation: 0.2
+      enable_slack: false
+      min_baseline_mt: 0.000001
     animals:
       enabled: true
       max_relative_deviation: 0.2

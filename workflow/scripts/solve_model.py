@@ -1275,6 +1275,7 @@ def _run_solve() -> None:
         stability_cost = 0.0
         for var_name, cost_key in [
             ("crop_stability_abs_dev", "l1_cost"),
+            ("grassland_stability_abs_dev", "l1_cost"),
             ("animal_stability_abs_dev", "l1_cost"),
         ]:
             if var_name in n.model.variables:
@@ -1283,6 +1284,7 @@ def _run_solve() -> None:
                 stability_cost += cost * float(sol.sum())
         for var_name, cost_key in [
             ("crop_stability_dev", "quadratic_cost"),
+            ("grassland_stability_dev", "quadratic_cost"),
             ("animal_stability_dev", "quadratic_cost"),
         ]:
             if var_name in n.model.variables:

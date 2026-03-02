@@ -220,6 +220,28 @@ def add_grassland_feed_links(
         marginal_cost * efficiencies * MEGATONNE_TO_TONNE * USD_TO_BNUSD
     )
 
+    # Compute baseline production from observed grazing area * yield.
+    # This is used by production stability constraints regardless of
+    # whether use_actual_production caps dispatch.
+    if current_grassland_area is not None:
+        observed_area = current_grassland_area.set_index(["region", "resource_class"])[
+            "area_ha"
+        ].astype(float)
+        observed_area_mha = (
+            observed_area.reindex(
+                pd.MultiIndex.from_arrays(
+                    [work["region"], work["resource_class"]],
+                    names=["region", "resource_class"],
+                ),
+            )
+            .fillna(0.0)
+            .to_numpy()
+            / HA_PER_MHA
+        )
+    else:
+        observed_area_mha = np.zeros(len(work))
+    baseline_production_mt = observed_area_mha * efficiencies
+
     # Index by name for proper alignment with PyPSA component names
     work_indexed = work.set_index("name")
     params = {
@@ -235,6 +257,7 @@ def add_grassland_feed_links(
         "country": work_indexed["country"],
         "crop": "grassland",
         "water_supply": "rainfed",
+        "baseline_production_mt": baseline_production_mt,
     }
     if use_actual_production:
         params["p_nom"] = available_mha

@@ -192,7 +192,7 @@ properties:
         description: "Reference year for production data"
       production_stability:
         type: object
-        required: [enabled, penalty_mode, crops, animals]
+        required: [enabled, penalty_mode, crops, grassland, animals]
         additionalProperties: false
         description: "Limit production deviation from baseline levels"
         properties:
@@ -235,6 +235,26 @@ properties:
                 type: number
                 exclusiveMinimum: 0
                 description: "Hard mode: minimum crop baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+          grassland:
+            type: object
+            required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]
+            additionalProperties: false
+            properties:
+              enabled:
+                type: boolean
+                description: "Whether to apply grassland production bounds"
+              max_relative_deviation:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: "Maximum relative deviation from baseline (e.g., 0.2 = ±20%)"
+              enable_slack:
+                type: boolean
+                description: "Allow violating minimum production bounds at penalty cost (slack_marginal_cost)"
+              min_baseline_mt:
+                type: number
+                exclusiveMinimum: 0
+                description: "Hard mode: minimum grassland baseline (Mt) to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
           animals:
             type: object
             required: [enabled, max_relative_deviation, enable_slack, min_baseline_mt]

@@ -11,8 +11,8 @@ baseline levels. Three penalty modes are supported:
 - **l1**: Linear absolute-value penalty via linopy variables added to the objective
 - **quadratic**: Quadratic penalty via linopy variables added to the objective
 
-Crop stability operates at the **per-link** level: each crop production link is
-individually constrained to stay near its own baseline (GAEZ harvested area x
+Crop and grassland stability operate at the **per-link** level: each production
+link is individually constrained to stay near its own baseline (observed area x
 yield, computed during model building and stored as ``baseline_production_mt``).
 
 Animal stability operates at the **per-link** level: each animal production link
@@ -42,8 +42,8 @@ def add_production_stability_constraints(
 ) -> None:
     """Add constraints limiting production deviation from baseline levels.
 
-    For crops: per-link bounds using ``baseline_production_mt`` set during build.
-    For animals: per-link bounds using ``baseline_feed_use_mt_dm`` set during build.
+    For crops/grassland: per-link bounds using ``baseline_production_mt``.
+    For animals: per-link bounds using ``baseline_feed_use_mt_dm``.
 
     Three penalty modes are supported:
     - hard: inequality bounds ``(1 ± delta) * baseline``
@@ -76,26 +76,72 @@ def add_production_stability_constraints(
     crops_cfg = stability_cfg["crops"]
     if crops_cfg["enabled"]:
         if penalty_mode == "hard":
-            _add_crop_hard_constraints(
-                n, link_p, links_df, crops_cfg, slack_marginal_cost
-            )
-        elif penalty_mode == "l1":
-            _add_crop_l1_penalty(
+            _add_production_hard_constraints(
                 n,
                 link_p,
                 links_df,
+                "crop_production",
+                "crop",
+                crops_cfg,
+                slack_marginal_cost,
+            )
+        elif penalty_mode == "l1":
+            _add_production_l1_penalty(
+                n,
+                link_p,
+                links_df,
+                "crop_production",
+                "crop",
                 stability_cfg["deviation_type"],
                 stability_cfg["l1_cost"],
                 crops_cfg["min_baseline_mt"],
             )
         elif penalty_mode == "quadratic":
-            _add_crop_quadratic_penalty(
+            _add_production_quadratic_penalty(
                 n,
                 link_p,
                 links_df,
+                "crop_production",
+                "crop",
                 stability_cfg["deviation_type"],
                 stability_cfg["quadratic_cost"],
                 crops_cfg["min_baseline_mt"],
+            )
+
+    # --- GRASSLAND PRODUCTION ---
+    grassland_cfg = stability_cfg["grassland"]
+    if grassland_cfg["enabled"]:
+        if penalty_mode == "hard":
+            _add_production_hard_constraints(
+                n,
+                link_p,
+                links_df,
+                "grassland_production",
+                "grassland",
+                grassland_cfg,
+                slack_marginal_cost,
+            )
+        elif penalty_mode == "l1":
+            _add_production_l1_penalty(
+                n,
+                link_p,
+                links_df,
+                "grassland_production",
+                "grassland",
+                stability_cfg["deviation_type"],
+                stability_cfg["l1_cost"],
+                grassland_cfg["min_baseline_mt"],
+            )
+        elif penalty_mode == "quadratic":
+            _add_production_quadratic_penalty(
+                n,
+                link_p,
+                links_df,
+                "grassland_production",
+                "grassland",
+                stability_cfg["deviation_type"],
+                stability_cfg["quadratic_cost"],
+                grassland_cfg["min_baseline_mt"],
             )
 
     # --- ANIMAL FEED USE ---
@@ -128,41 +174,44 @@ def add_production_stability_constraints(
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _crop_production_and_baselines(
+def _production_and_baselines(
     link_p,
     links_df,
+    carrier: str,
     min_baseline_mt: float,
     *,
     include_all_links: bool = False,
 ) -> tuple | None:
-    """Extract production expressions and baselines for crop links.
+    """Extract production expressions and baselines for production links.
 
-    Returns ``(link_names, production, baselines)`` for crop production links,
-    or ``None`` if there are no eligible links. In hard mode, only links above
-    ``min_baseline_mt`` are included; in penalty modes all links are included.
+    Returns ``(link_names, production, baselines)`` for links matching the
+    given ``carrier``, or ``None`` if there are no eligible links. In hard mode,
+    only links above ``min_baseline_mt`` are included; in penalty modes all
+    links are included.
     """
-    crop_links = links_df[links_df["carrier"] == "crop_production"]
-    if crop_links.empty or "baseline_production_mt" not in crop_links.columns:
-        logger.info("No crop production links with baselines; skipping crop stability")
+    prod_links = links_df[links_df["carrier"] == carrier]
+    if prod_links.empty or "baseline_production_mt" not in prod_links.columns:
+        logger.info("No %s links with baselines; skipping stability", carrier)
         return None
 
     if not include_all_links:
-        crop_links = crop_links[crop_links["baseline_production_mt"] > min_baseline_mt]
-        if crop_links.empty:
+        prod_links = prod_links[prod_links["baseline_production_mt"] > min_baseline_mt]
+        if prod_links.empty:
             logger.info(
-                "No crop baselines exceed %.6g Mt; skipping crop stability constraints",
+                "No %s baselines exceed %.6g Mt; skipping stability constraints",
+                carrier,
                 min_baseline_mt,
             )
             return None
 
-    link_names = crop_links.index
+    link_names = prod_links.index
     baselines = xr.DataArray(
-        crop_links["baseline_production_mt"].to_numpy(dtype=float),
+        prod_links["baseline_production_mt"].to_numpy(dtype=float),
         coords={"name": link_names},
         dims="name",
     )
     efficiencies = xr.DataArray(
-        crop_links["efficiency"].to_numpy(dtype=float),
+        prod_links["efficiency"].to_numpy(dtype=float),
         coords={"name": link_names},
         dims="name",
     )
@@ -232,106 +281,112 @@ def _compute_stability_deviation(
     return actual - baselines
 
 
-# ─── Crop: hard constraints ──────────────────────────────────────────────────
+# ─── Production: hard constraints ─────────────────────────────────────────────
 
 
-def _add_crop_hard_constraints(
+def _add_production_hard_constraints(
     n: pypsa.Network,
     link_p,
     links_df,
-    crops_cfg: dict,
+    carrier: str,
+    label: str,
+    cfg: dict,
     slack_marginal_cost: float,
 ) -> None:
-    """Add per-link crop production stability bounds (hard mode).
+    """Add per-link production stability bounds (hard mode).
 
     ``(1 - delta) * baseline <= p * efficiency <= (1 + delta) * baseline``
     """
-    result = _crop_production_and_baselines(
-        link_p, links_df, crops_cfg["min_baseline_mt"]
+    result = _production_and_baselines(
+        link_p, links_df, carrier, cfg["min_baseline_mt"]
     )
     if result is None:
         return
 
     m = n.model
     link_names, production, baselines = result
-    delta = crops_cfg["max_relative_deviation"]
+    delta = cfg["max_relative_deviation"]
 
     lower_bounds = np.maximum(0.0, (1.0 - delta) * baselines)
     upper_bounds = (1.0 + delta) * baselines
 
-    enable_slack = crops_cfg["enable_slack"]
+    enable_slack = cfg["enable_slack"]
     if enable_slack:
         slack_coords = xr.DataArray(
             np.zeros(len(link_names)),
             coords={"name": link_names},
             dims="name",
         ).coords
-        crop_slack = m.add_variables(
+        prod_slack = m.add_variables(
             lower=0,
             coords=slack_coords,
-            name="crop_production_slack",
+            name=f"{label}_production_slack",
         )
         m.add_constraints(
-            production + crop_slack >= lower_bounds,
-            name="GlobalConstraint-crop_production_min",
+            production + prod_slack >= lower_bounds,
+            name=f"GlobalConstraint-{label}_production_min",
         )
-        m.objective += slack_marginal_cost * crop_slack.sum()
+        m.objective += slack_marginal_cost * prod_slack.sum()
         logger.info(
-            "Added crop production slack variables for %d links (cost=%.1f bn USD/Mt)",
+            "Added %s production slack variables for %d links (cost=%.1f bn USD/Mt)",
+            label,
             len(link_names),
             slack_marginal_cost,
         )
     else:
         m.add_constraints(
             production >= lower_bounds,
-            name="GlobalConstraint-crop_production_min",
+            name=f"GlobalConstraint-{label}_production_min",
         )
 
     m.add_constraints(
         production <= upper_bounds,
-        name="GlobalConstraint-crop_production_max",
+        name=f"GlobalConstraint-{label}_production_max",
     )
 
     n.global_constraints.add(
-        [f"crop_production_min_{name}" for name in link_names],
+        [f"{label}_production_min_{name}" for name in link_names],
         sense=">=",
         constant=lower_bounds.values,
         type="production_stability",
     )
     n.global_constraints.add(
-        [f"crop_production_max_{name}" for name in link_names],
+        [f"{label}_production_max_{name}" for name in link_names],
         sense="<=",
         constant=upper_bounds.values,
         type="production_stability",
     )
 
     logger.info(
-        "Added %d per-link crop production stability constraints (delta=%.0f%%)",
+        "Added %d per-link %s production stability constraints (delta=%.0f%%)",
         2 * len(link_names),
+        label,
         delta * 100,
     )
 
 
-# ─── Crop: L1 penalty ────────────────────────────────────────────────────────
+# ─── Production: L1 penalty ──────────────────────────────────────────────────
 
 
-def _add_crop_l1_penalty(
+def _add_production_l1_penalty(
     n: pypsa.Network,
     link_p,
     links_df,
+    carrier: str,
+    label: str,
     deviation_type: str,
     l1_cost: float,
     min_baseline_mt: float,
 ) -> None:
-    """Add L1 (absolute-value) penalty on crop production deviations.
+    """Add L1 (absolute-value) penalty on production deviations.
 
     Creates a linopy variable ``abs_dev >= 0`` per constrained link and adds:
       abs_dev >= +(production - baseline)
       abs_dev >= -(production - baseline)
       objective += l1_cost * sum(abs_dev)
     """
-    result = _crop_production_and_baselines(
-        link_p, links_df, min_baseline_mt, include_all_links=True
+    result = _production_and_baselines(
+        link_p, links_df, carrier, min_baseline_mt, include_all_links=True
     )
     if result is None:
         return
@@ -347,46 +402,49 @@ def _add_crop_l1_penalty(
         lower=0,
         coords=[link_names],
         dims=["name"],
-        name="crop_stability_abs_dev",
+        name=f"{label}_stability_abs_dev",
     )
 
     m.add_constraints(
         abs_dev >= deviation,
-        name="GlobalConstraint-crop_stability_pos",
+        name=f"GlobalConstraint-{label}_stability_pos",
     )
     m.add_constraints(
         abs_dev >= -deviation,
-        name="GlobalConstraint-crop_stability_neg",
+        name=f"GlobalConstraint-{label}_stability_neg",
     )
     m.objective += l1_cost * abs_dev.sum()
 
     logger.info(
-        "Added %d per-link crop L1 stability penalties (cost=%.4f, mode=%s)",
+        "Added %d per-link %s L1 stability penalties (cost=%.4f, mode=%s)",
         len(link_names),
+        label,
         l1_cost,
         deviation_type,
     )
 
 
-# ─── Crop: quadratic penalty ─────────────────────────────────────────────────
+# ─── Production: quadratic penalty ───────────────────────────────────────────
 
 
-def _add_crop_quadratic_penalty(
+def _add_production_quadratic_penalty(
     n: pypsa.Network,
     link_p,
     links_df,
+    carrier: str,
+    label: str,
     deviation_type: str,
     quadratic_cost: float,
     min_baseline_mt: float,
 ) -> None:
-    """Add quadratic penalty on crop production deviations.
+    """Add quadratic penalty on production deviations.
 
     Creates a linopy variable ``dev`` per constrained link and adds:
       dev == production - baseline
       objective += 0.5 * quadratic_cost * sum(dev^2)
     """
-    result = _crop_production_and_baselines(
-        link_p, links_df, min_baseline_mt, include_all_links=True
+    result = _production_and_baselines(
+        link_p, links_df, carrier, min_baseline_mt, include_all_links=True
     )
     if result is None:
         return
@@ -401,18 +459,19 @@ def _add_crop_quadratic_penalty(
     dev = m.add_variables(
         coords=[link_names],
         dims=["name"],
-        name="crop_stability_dev",
+        name=f"{label}_stability_dev",
     )
 
     m.add_constraints(
         dev == deviation,
-        name="GlobalConstraint-crop_stability_dev",
+        name=f"GlobalConstraint-{label}_stability_dev",
     )
     m.objective += 0.5 * quadratic_cost * (dev * dev).sum()
 
     logger.info(
-        "Added %d per-link crop quadratic stability penalties (cost=%.4f, mode=%s)",
+        "Added %d per-link %s quadratic stability penalties (cost=%.4f, mode=%s)",
         len(link_names),
+        label,
         quadratic_cost,
         deviation_type,
     )
