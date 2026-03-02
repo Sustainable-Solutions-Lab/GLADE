@@ -444,6 +444,7 @@ def daemon_paths(jobid_dir: Path) -> dict:
         "cache_file": jobid_dir / ".job_status_cache.json",
         "log_file": jobid_dir / ".poll_daemon.log",
         "lock_file": jobid_dir / ".poll_daemon.lock",
+        "shutdown_marker": jobid_dir / ".poll_daemon_shutdown",
     }
 
 
@@ -489,6 +490,12 @@ def signal_daemon_shutdown(jobid_dir: Path, logger) -> bool:
     except (ValueError, OSError):
         logger.warning("Could not signal poll daemon for shutdown")
         return False
+
+
+def write_daemon_shutdown_marker(jobid_dir: Path) -> None:
+    """Touch a shutdown marker file visible to all daemon instances."""
+    paths = daemon_paths(jobid_dir)
+    paths["shutdown_marker"].touch()
 
 
 def start_daemon_if_needed(cfg: dict, jobid_dir: Path, logger) -> None:

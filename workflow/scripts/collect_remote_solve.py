@@ -13,8 +13,10 @@ On SLURM failure (OOM, timeout), it re-submits with attempt-scaled resources
 ``slurm_mem_mb`` resources) and polls the new job.
 
 On local interrupt (Ctrl-C / SIGTERM), the poll daemon is signalled to
-cancel all tracked SLURM jobs, and the .jobid file is removed so the
-next run starts fresh.
+cancel all tracked SLURM jobs via both a shutdown marker file (visible to
+all daemon instances) and SIGTERM. The .jobid files are preserved (they
+are ``temp()`` in Snakemake); on re-run the collect script picks up the
+existing file and handles the CANCELLED state.
 """
 
 import contextlib
@@ -43,6 +45,7 @@ from workflow.scripts.remote_solve_utils import (
     signal_daemon_shutdown,
     start_daemon_if_needed,
     to_relative_path,
+    write_daemon_shutdown_marker,
 )
 
 _POLL_INTERVAL_SECONDS = 10
@@ -300,16 +303,8 @@ def _collect_remote_solve_inner() -> None:
         )
     except (KeyboardInterrupt, SystemExit):
         if not slurm_job_done:
+            write_daemon_shutdown_marker(jobid_dir)
             signal_daemon_shutdown(jobid_dir, logger)
-            # Remove jobid file so the next run submits fresh.
-            try:
-                if jobid_path.exists():
-                    jobid_path.unlink()
-                    logger.info("Removed jobid file %s", jobid_path)
-            except OSError:
-                logger.warning(
-                    "Could not remove jobid file %s", jobid_path, exc_info=True
-                )
         raise
 
 

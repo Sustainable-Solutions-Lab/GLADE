@@ -15,7 +15,8 @@ Lifecycle:
 - PID file: ``<jobid_dir>/.poll_daemon.pid``
 - Log file: ``<jobid_dir>/.poll_daemon.log``
 - Self-terminates after 2 consecutive cycles with no ``.jobid`` files
-- Handles SIGTERM for clean shutdown
+- Handles SIGTERM and a ``.poll_daemon_shutdown`` marker file for clean shutdown
+  (the marker is visible to all daemon instances, not just the PID-file owner)
 """
 
 import argparse
@@ -212,13 +213,19 @@ def _main_inner(args, jobid_dir: Path, cache_file: Path, logger: logging.Logger)
     empty_cycles = 0
     # Jobs already known to be in a terminal state; no need to re-query.
     terminal_cache: dict[str, dict] = {}
-    # Track latest job map so we can cancel on shutdown.
-    last_job_map: dict[str, str] = {}
+    # Most recent job map from _discover_job_ids; used as fallback in finally.
+    job_map: dict[str, str] = {}
+    shutdown_marker = jobid_dir / ".poll_daemon_shutdown"
 
     try:
         while not _shutdown_requested:
+            # Check for file-based shutdown marker (visible to all instances).
+            if shutdown_marker.exists():
+                logger.info("Shutdown marker found")
+                _shutdown_requested = True
+                break
+
             job_map = _discover_job_ids(jobid_dir)
-            last_job_map = job_map
 
             if not job_map:
                 empty_cycles += 1
@@ -264,16 +271,22 @@ def _main_inner(args, jobid_dir: Path, cache_file: Path, logger: logging.Logger)
                 len(merged),
             )
 
-            # Sleep in short increments so we can respond to signals promptly.
+            # Sleep in short increments so we can respond to signals and
+            # the shutdown marker promptly.
             for _ in range(args.interval):
-                if _shutdown_requested:
+                if _shutdown_requested or shutdown_marker.exists():
+                    _shutdown_requested = True
                     break
                 time.sleep(1)
     finally:
-        if _shutdown_requested and last_job_map:
-            _cancel_all_jobs(
-                args.host, args.ssh_options, list(last_job_map.keys()), logger
-            )
+        if _shutdown_requested:
+            # Re-discover from .jobid files (most reliable source of current
+            # job IDs); fall back to the last poll's job_map.
+            current_jobs = _discover_job_ids(jobid_dir)
+            jobs_to_cancel = list(current_jobs.keys()) or list(job_map.keys())
+            if jobs_to_cancel:
+                _cancel_all_jobs(args.host, args.ssh_options, jobs_to_cancel, logger)
+        shutdown_marker.unlink(missing_ok=True)
         # Only clean up PID file if it still contains our PID; a newer
         # daemon may have been started and written its PID already.
         try:
