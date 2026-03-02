@@ -2558,6 +2558,7 @@ def plot_heatmap(
     panel_label: str | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
+    vcenter: float | None = None,
     log_scale_cbar: bool = False,
     baseline_value: float | None = None,
     baseline_label: str = "Baseline",
@@ -2574,12 +2575,13 @@ def plot_heatmap(
         panel_label: Panel label (e.g., 'a', 'b')
         vmin: Minimum value for colorbar
         vmax: Maximum value for colorbar
+        vcenter: Center value for diverging colormap normalization
         log_scale_cbar: Whether to use log scale for colorbar
         baseline_value: Value to mark on colorbar (e.g., from (0,0) scenario)
         baseline_label: Label for the baseline marker
         cbar_orientation: Colorbar orientation ('vertical' or 'horizontal')
     """
-    from matplotlib.colors import LogNorm
+    from matplotlib.colors import LogNorm, TwoSlopeNorm
 
     ghg_values = data.index.values.astype(float)
     yll_values = data.columns.values.astype(float)
@@ -2608,6 +2610,23 @@ def plot_heatmap(
 
     if log_scale_cbar and vmin is not None and vmin > 0:
         norm = LogNorm(vmin=vmin, vmax=vmax)
+        im = ax.pcolormesh(
+            yll_edges,
+            ghg_edges,
+            data.values,
+            cmap=cmap,
+            norm=norm,
+        )
+    elif (
+        vcenter is not None
+        and (vmin if vmin is not None else np.nanmin(data.values)) < vcenter
+        and (vmax if vmax is not None else np.nanmax(data.values)) > vcenter
+    ):
+        norm = TwoSlopeNorm(
+            vmin=vmin if vmin is not None else np.nanmin(data.values),
+            vcenter=vcenter,
+            vmax=vmax if vmax is not None else np.nanmax(data.values),
+        )
         im = ax.pcolormesh(
             yll_edges,
             ghg_edges,
@@ -2830,6 +2849,7 @@ def plot_contour(
     label_fmt: str = "%.0f",
     vmin: float | None = None,
     vmax: float | None = None,
+    vcenter: float | None = None,
     contour_levels: np.ndarray | None = None,
     cbar_orientation: str = "vertical",
     sigma: float = 0,
@@ -2849,10 +2869,12 @@ def plot_contour(
         label_fmt: Format string for contour labels
         vmin: Minimum value for color scale
         vmax: Maximum value for color scale
+        vcenter: Center value for diverging colormap normalization
         contour_levels: Explicit contour levels (overrides n_levels)
         cbar_orientation: Colorbar orientation ('vertical' or 'horizontal')
         sigma: Gaussian smoothing sigma (0 = no smoothing, applied on interpolated grid)
     """
+    from matplotlib.colors import TwoSlopeNorm
     from scipy.interpolate import RegularGridInterpolator
     from scipy.ndimage import gaussian_filter
 
@@ -2892,15 +2914,26 @@ def plot_contour(
     color_vmax = vmax if vmax is not None else data.values.max()
 
     # Plot continuous colors using pcolormesh
-    im = ax.pcolormesh(
-        yll_fine,
-        ghg_fine,
-        z_fine,
-        cmap=cmap,
-        vmin=color_vmin,
-        vmax=color_vmax,
-        shading="gouraud",
-    )
+    if vcenter is not None and color_vmin < vcenter and color_vmax > vcenter:
+        norm = TwoSlopeNorm(vmin=color_vmin, vcenter=vcenter, vmax=color_vmax)
+        im = ax.pcolormesh(
+            yll_fine,
+            ghg_fine,
+            z_fine,
+            cmap=cmap,
+            norm=norm,
+            shading="gouraud",
+        )
+    else:
+        im = ax.pcolormesh(
+            yll_fine,
+            ghg_fine,
+            z_fine,
+            cmap=cmap,
+            vmin=color_vmin,
+            vmax=color_vmax,
+            shading="gouraud",
+        )
 
     # Compute nice contour levels
     if contour_levels is None:
@@ -3050,6 +3083,15 @@ def plot_contour(
     cbar = plt.colorbar(im, ax=ax, orientation=cbar_orientation, pad=0.25)
     cbar.set_label(cbar_label, fontsize=FONTSIZE_CBAR_LABEL)
     cbar.ax.tick_params(labelsize=FONTSIZE_TICK_LABEL)
+    cbar_ticks = np.unique(contour_levels.astype(float))
+    cbar_ticks = cbar_ticks[
+        np.isfinite(cbar_ticks)
+        & (cbar_ticks >= color_vmin)
+        & (cbar_ticks <= color_vmax)
+    ]
+    if cbar_ticks.size > 0:
+        cbar.set_ticks(cbar_ticks)
+        cbar.set_ticklabels([label_fmt % t for t in cbar_ticks])
 
     # Add baseline marker on colorbar
     if baseline_value is not None:
