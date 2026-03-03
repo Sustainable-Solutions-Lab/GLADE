@@ -1616,6 +1616,108 @@ def load_feed_breakdown(
     return df
 
 
+def load_crop_yield_and_production(
+    scenarios: list[tuple[float, str, Path]],
+    project_root: Path,
+    config_name: str,
+    param_name: str,
+    cache_path: Path | None = None,
+    include_grassland: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load crop-level average yield and production across scenarios.
+
+    For each scenario, this computes:
+    - production by crop (Mt)
+    - average yield by crop (Mt/Mha), using total production / total land use
+
+    Args:
+        scenarios: List of (param_value, scenario_name, network_path) tuples
+        project_root: Path to project root directory
+        config_name: Name of the config
+        param_name: Name for the parameter (used as index name)
+        cache_path: Optional directory for caching results
+        include_grassland: Include grassland pseudo-crop when True
+
+    Returns:
+        Tuple of DataFrames (yield_df, production_df), each with param_value
+        as index and crop names as columns. Units: Mt/Mha and Mt.
+    """
+    from workflow.scripts.analysis.extract_statistics import (
+        extract_crop_production,
+        extract_land_use,
+    )
+
+    yield_cache = None
+    production_cache = None
+    if cache_path is not None:
+        cache_path.mkdir(parents=True, exist_ok=True)
+        yield_cache = cache_path / "crop_yield_mt_per_mha.csv"
+        production_cache = cache_path / "crop_production_mt.csv"
+        network_paths = [f for _, _, f in scenarios if f.exists()]
+        if is_cache_valid(yield_cache, network_paths) and is_cache_valid(
+            production_cache, network_paths
+        ):
+            print(f"Loading crop yield/production from cache: {cache_path}")
+            yield_df = pd.read_csv(yield_cache, index_col=param_name)
+            production_df = pd.read_csv(production_cache, index_col=param_name)
+            return yield_df, production_df
+
+    print(f"Extracting crop yield/production from {len(scenarios)} scenarios...")
+    yield_data: dict[float, dict[str, float]] = {}
+    production_data: dict[float, dict[str, float]] = {}
+
+    for param_value, scenario_name, network_path in scenarios:
+        if not network_path.exists():
+            continue
+        print(f"  Loading {scenario_name}...")
+        n = pypsa.Network(network_path)
+
+        production_df = extract_crop_production(n)
+        land_df = extract_land_use(n)
+
+        production = production_df.groupby("crop")["production_mt"].sum()
+        land = land_df.groupby("crop")["area_mha"].sum()
+
+        if not include_grassland:
+            production = production.drop(index="grassland", errors="ignore")
+            land = land.drop(index="grassland", errors="ignore")
+
+        crops = production.index.union(land.index)
+        production = production.reindex(crops, fill_value=0.0)
+        land = land.reindex(crops, fill_value=0.0)
+
+        avg_yield = production.div(land.where(land > 0)).replace(
+            [np.inf, -np.inf], np.nan
+        )
+        avg_yield = avg_yield.fillna(0.0)
+
+        production_data[param_value] = production.to_dict()
+        yield_data[param_value] = avg_yield.to_dict()
+
+    if not production_data:
+        return pd.DataFrame(), pd.DataFrame()
+
+    production_out = pd.DataFrame(production_data).T.fillna(0.0)
+    yield_out = pd.DataFrame(yield_data).T.fillna(0.0)
+
+    production_out.index.name = param_name
+    yield_out.index.name = param_name
+
+    production_out = production_out.sort_index()
+    yield_out = yield_out.sort_index()
+
+    crop_order = production_out.mean().sort_values(ascending=False).index
+    production_out = production_out[crop_order]
+    yield_out = yield_out.reindex(columns=crop_order, fill_value=0.0)
+
+    if yield_cache is not None and production_cache is not None:
+        yield_out.to_csv(yield_cache)
+        production_out.to_csv(production_cache)
+        print(f"Saved crop yield/production cache to: {cache_path}")
+
+    return yield_out, production_out
+
+
 def plot_stacked_emissions(
     df: pd.DataFrame,
     colors: dict,
