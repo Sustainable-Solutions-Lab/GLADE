@@ -25,6 +25,7 @@ from workflow.scripts.solve_model.food_utility import (
 from workflow.scripts.solve_model.health import (
     HEALTH_AUX_MAP,
     add_health_objective,
+    evaluate_health_posthoc,
 )
 from workflow.scripts.solve_model.production_stability import (
     add_production_stability_constraints,
@@ -1138,7 +1139,8 @@ def _run_solve() -> None:
 
     # Add health impacts if enabled
     health_enabled = bool(snakemake.params.health_enabled)
-    if health_enabled:
+    value_per_yll = float(snakemake.params.health_value_per_yll)
+    if health_enabled and value_per_yll > 0:
         # Extract per-risk-factor RR quantiles from sensitivity config
         sensitivity_cfg = snakemake.params.sensitivity or {}
         rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
@@ -1152,7 +1154,7 @@ def _run_solve() -> None:
             snakemake.input.health_clusters,
             snakemake.params.health_risk_factors,
             snakemake.params.health_risk_cause_map,
-            float(snakemake.params.health_value_per_yll),
+            value_per_yll,
             snakemake.input.health_cluster_risk_baseline,
             rr_quantiles=rr_quantiles,
             tmrel_path=snakemake.input.health_derived_tmrel,
@@ -1298,6 +1300,22 @@ def _run_solve() -> None:
                 stability_cost += 0.5 * cost * float((sol * sol).sum())
         if abs(stability_cost) > 1e-12:
             n.meta["production_stability_cost"] = stability_cost
+
+        # Post-hoc health evaluation when value_per_yll == 0
+        if health_enabled and value_per_yll == 0:
+            sensitivity_cfg = snakemake.params.sensitivity or {}
+            rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
+            evaluate_health_posthoc(
+                n,
+                risk_breakpoints_path=snakemake.input.health_risk_breakpoints,
+                cluster_cause_path=snakemake.input.health_cluster_cause,
+                cause_log_path=snakemake.input.health_cause_log,
+                clusters_path=snakemake.input.health_clusters,
+                risk_factors=snakemake.params.health_risk_factors,
+                risk_cause_map=snakemake.params.health_risk_cause_map,
+                rr_quantiles=rr_quantiles,
+                tmrel_path=snakemake.input.health_derived_tmrel,
+            )
 
         # Free the linopy model before export; all values have been assigned.
         n._model = None

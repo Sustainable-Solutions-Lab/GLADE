@@ -309,7 +309,6 @@ def _add_stage1_constraints(
     intake_groups: dict[tuple[float, ...], list[tuple[int, str]]],
     intake_data: dict,
     store_level_var: xr.DataArray,
-    value_per_yll: float,
     baseline_intakes: dict[tuple[int, str], float],
 ) -> tuple[dict[tuple[int, str], linopy.LinearExpression], dict[int, float]]:
     """Add Stage 1 constraints: store level → log(RR_{r,d}).
@@ -336,8 +335,6 @@ def _add_stage1_constraints(
         Breakpoint data from _build_intake_breakpoints.
     store_level_var
         Store level variables (food group stores).
-    value_per_yll
-        Value per YLL; if zero, skip degeneracy perturbation.
     baseline_intakes
         {(cluster, risk_factor): baseline_intake_g_per_day} for MIP starts.
 
@@ -446,7 +443,6 @@ def _add_stage1_constraints(
             log_rr_by_intake=log_rr_by_intake,
             cluster_risk_index=cluster_risk_index,
             risk_label=str(risk),
-            value_per_yll=value_per_yll,
             cluster_risk_pairs=cluster_risk_pairs,
             baseline_intakes=baseline_intakes,
             start_entries=start_entries,
@@ -494,7 +490,6 @@ def _add_stage1_delta(
     log_rr_by_intake: xr.DataArray,
     cluster_risk_index: pd.Index,
     risk_label: str,
-    value_per_yll: float,
     cluster_risk_pairs: list[tuple[int, str]],
     baseline_intakes: dict[tuple[int, str], float],
     start_entries: dict[int, float],
@@ -803,7 +798,6 @@ def _add_stage2_constraints(
     cluster_cause_data: dict[tuple[int, str], dict],
     health_stores: pd.DataFrame,
     store_level_var: xr.DataArray,
-    value_per_yll: float,
 ) -> int:
     """Add Stage 2 constraints: Σ_r log(RR_{r,d}) → YLL store level.
 
@@ -836,8 +830,6 @@ def _add_stage2_constraints(
         DataFrame of YLL stores indexed by (health_cluster, cause).
     store_level_var
         Store energy level variables.
-    value_per_yll
-        Value per YLL; determines constraint type (equality vs inequality).
 
     Returns
     -------
@@ -887,7 +879,6 @@ def _add_stage2_constraints(
             coeff_log_total=coeff_log_total,
             coeff_rr=coeff_rr,
             cause_label=cause_label,
-            value_per_yll=value_per_yll,
         )
 
     return constraints_added
@@ -905,9 +896,8 @@ def _add_stage2_delta(
     coeff_log_total: xr.DataArray,
     coeff_rr: xr.DataArray,
     cause_label: str,
-    value_per_yll: float,
 ) -> int:
-    """Stage 2 delta formulation for HiGHS (no binary variables).
+    """Stage 2 delta formulation (no binary variables).
 
     Creates δ variables with fill-up constraints for piecewise-linear interpolation
     of the exponential function (log(RR) → RR).
@@ -1027,18 +1017,10 @@ def _add_stage2_delta(
         yll_expr = yll_expr_all.sel(cluster_cause=label)
         store_var = store_level_var.sel(name=store_name)
 
-        if value_per_yll == 0:
-            m.add_constraints(
-                store_var == yll_expr,
-                name=f"health_store_level_c{cluster}_cause{cause}",
-            )
-        elif value_per_yll > 0:
-            m.add_constraints(
-                store_var >= yll_expr,
-                name=f"health_store_level_c{cluster}_cause{cause}",
-            )
-        else:
-            raise ValueError(f"value_per_yll must be non-negative, got {value_per_yll}")
+        m.add_constraints(
+            store_var >= yll_expr,
+            name=f"health_store_level_c{cluster}_cause{cause}",
+        )
 
     return len(cluster_cause_pairs)
 
@@ -1310,7 +1292,6 @@ def add_health_objective(
         intake_groups,
         intake_data,
         store_level_var,
-        value_per_yll,
         baseline_intakes,
     )
 
@@ -1350,7 +1331,189 @@ def add_health_objective(
         cluster_cause_data,
         health_stores,
         store_level_var,
-        value_per_yll,
     )
 
     logger.info("Added %d health store level constraints", constraints_added)
+
+
+# =============================================================================
+# Post-hoc Health Evaluation (when value_per_yll == 0)
+# =============================================================================
+
+
+def evaluate_health_posthoc(
+    n: pypsa.Network,
+    risk_breakpoints_path: str,
+    cluster_cause_path: str,
+    cause_log_path: str,
+    clusters_path: str,
+    risk_factors: list[str],
+    risk_cause_map: dict[str, list[str]],
+    rr_quantiles: dict[str, float] | None = None,
+    tmrel_path: str | None = None,
+) -> None:
+    """Evaluate health impacts numerically from the solved network.
+
+    When ``value_per_yll == 0`` the health piecewise-linear constraints are
+    skipped to keep the model as a pure LP. This function replicates the
+    same dose-response chain as numpy arithmetic and writes the resulting
+    YLL values into the network's store energy levels.
+
+    Parameters
+    ----------
+    n
+        Solved PyPSA network with food group and YLL stores.
+    risk_breakpoints_path
+        CSV with (risk_factor, intake_g_per_day, cause, log_rr).
+    cluster_cause_path
+        CSV with (health_cluster, cause, yll_rate_per_100k,
+        yll_attrib_rate_per_100k, log_rr_total_ref, log_rr_total_baseline).
+    cause_log_path
+        CSV with (cause, log_rr_total, rr_total) breakpoints.
+    clusters_path
+        CSV mapping countries to health clusters.
+    risk_factors
+        List of GBD risk factors.
+    risk_cause_map
+        Mapping from risk factor to list of affected causes.
+    rr_quantiles
+        Optional per-risk-factor quantile values for RR interpolation.
+    tmrel_path
+        Path to derived TMREL CSV; required when rr_quantiles is provided.
+    """
+    risk_breakpoints = pd.read_csv(risk_breakpoints_path)
+    cluster_cause_df = pd.read_csv(cluster_cause_path)
+    cause_log_breakpoints = pd.read_csv(cause_log_path)
+    cluster_map = pd.read_csv(clusters_path)
+
+    # Sort breakpoint tables
+    risk_breakpoints = risk_breakpoints.sort_values(
+        ["risk_factor", "intake_g_per_day", "cause"]
+    )
+    cause_log_breakpoints = cause_log_breakpoints.sort_values(["cause", "log_rr_total"])
+
+    cluster_lookup = cluster_map.set_index("country_iso3")["health_cluster"].to_dict()
+    cluster_population = get_health_cluster_population(n)
+
+    cluster_cause_metadata = cluster_cause_df.set_index(["health_cluster", "cause"])
+
+    # Filter risk_cause_map to available risk factors
+    available_risks = set(risk_breakpoints["risk_factor"].unique())
+    risk_cause_map = {
+        r: causes for r, causes in risk_cause_map.items() if r in available_risks
+    }
+
+    # Apply RR quantile interpolation if requested
+    if rr_quantiles:
+        if tmrel_path is None:
+            raise ValueError("tmrel_path is required when rr_quantiles is provided")
+        risk_breakpoints = _apply_rr_quantiles(risk_breakpoints, rr_quantiles)
+        tmrel_df = pd.read_csv(tmrel_path)
+        tmrel = dict(
+            zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"].astype(float))
+        )
+        cluster_cause_metadata = _recompute_rr_ref(
+            risk_breakpoints, tmrel, risk_cause_map, cluster_cause_metadata
+        )
+
+    # --- Step 1: Get per-capita intake by (cluster, risk_factor) ---
+    fg_stores = n.stores.static[n.stores.static["food_group"].isin(risk_factors)]
+    snapshot = "now" if "now" in n.snapshots else n.snapshots[-1]
+    store_levels = n.stores.dynamic.e.loc[snapshot]
+
+    # Aggregate store levels to cluster-level intake (g/person/day)
+    cluster_intake: dict[tuple[int, str], float] = {}
+    for risk in risk_factors:
+        risk_stores = fg_stores[fg_stores["food_group"] == risk]
+        for cluster in sorted(cluster_population):
+            # Sum store levels across countries in this cluster
+            countries_in_cluster = [
+                c for c, cl in cluster_lookup.items() if cl == cluster
+            ]
+            mask = risk_stores["country"].isin(countries_in_cluster)
+            total_mt = float(store_levels[risk_stores.index[mask]].sum())
+            pop = cluster_population[cluster]
+            intake_g = total_mt * constants.GRAMS_PER_MEGATONNE / (365.0 * pop)
+            cluster_intake[(cluster, risk)] = intake_g
+
+    # --- Step 2: Evaluate log(RR) per (cluster, risk, cause) ---
+    # Build breakpoint lookup: {(risk, cause): (intake_array, log_rr_array)}
+    rr_bp: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
+    for (risk, cause), grp in risk_breakpoints.groupby(["risk_factor", "cause"]):
+        sorted_grp = grp.sort_values("intake_g_per_day")
+        rr_bp[(risk, cause)] = (
+            sorted_grp["intake_g_per_day"].values,
+            sorted_grp["log_rr"].values,
+        )
+
+    # --- Step 3: Sum log(RR) across risk factors per (cluster, cause) ---
+    log_rr_total: dict[tuple[int, str], float] = {}
+    for (cluster, cause), _row in cluster_cause_metadata.iterrows():
+        cluster = int(cluster)
+        cause = str(cause)
+        total = 0.0
+        for risk, causes in risk_cause_map.items():
+            if cause not in causes:
+                continue
+            intake = cluster_intake.get((cluster, risk), 0.0)
+            bp = rr_bp.get((risk, cause))
+            if bp is None:
+                continue
+            total += float(np.interp(intake, bp[0], bp[1]))
+        log_rr_total[(cluster, cause)] = total
+
+    # --- Step 4: Interpolate RR from total log(RR) using cause breakpoints ---
+    cause_bp: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for cause, grp in cause_log_breakpoints.groupby("cause"):
+        sorted_grp = grp.sort_values("log_rr_total")
+        cause_bp[str(cause)] = (
+            sorted_grp["log_rr_total"].values,
+            sorted_grp["rr_total"].values,
+        )
+
+    # --- Step 5: Compute YLL and write to stores ---
+    yll_stores = n.stores.static[
+        n.stores.static["carrier"].notna()
+        & n.stores.static["carrier"].str.startswith("yll_")
+    ]
+
+    n_filled = 0
+    for store_name, store_row in yll_stores.iterrows():
+        cluster = int(store_row["health_cluster"])
+        cause = str(store_row["cause"])
+
+        if (cluster, cause) not in cluster_cause_metadata.index:
+            continue
+
+        meta = cluster_cause_metadata.loc[(cluster, cause)]
+        log_rr = log_rr_total.get((cluster, cause), 0.0)
+
+        bp = cause_bp.get(cause)
+        if bp is None:
+            continue
+        rr = float(np.interp(log_rr, bp[0], bp[1]))
+
+        # Reference RR at TMREL
+        rr_ref = math.exp(float(meta["log_rr_total_ref"]))
+
+        # Baseline RR for normalisation
+        rr_baseline = math.exp(float(meta["log_rr_total_baseline"]))
+
+        # Absolute YLL from rate
+        yll_rate_per_100k = float(meta["yll_rate_per_100k"])
+        pop = cluster_population[cluster]
+        yll_total = (yll_rate_per_100k / constants.PER_100K) * pop
+
+        # YLL in million YLL
+        yll_myll = (
+            (rr - rr_ref) * (yll_total / rr_baseline) * constants.YLL_TO_MILLION_YLL
+        )
+
+        n.stores.dynamic.e.loc[snapshot, store_name] = yll_myll
+        n_filled += 1
+
+    logger.info(
+        "Post-hoc health evaluation: filled %d YLL stores across %d clusters",
+        n_filled,
+        len(cluster_population),
+    )
