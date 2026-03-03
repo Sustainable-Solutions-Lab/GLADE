@@ -64,7 +64,7 @@ snakemake-logger-plugin-compact = { path = "tools/snakemake-logger-plugin-compac
 
 # Optimization and modeling; own branches of pypsa and linopy with custom features needed by food-opt
 pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.0.7.3+food.opt" }
-linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.6.2+food.opt" }
+linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.6.4+food.opt" }
 
 # Geospatial processing
 exactextract = ">=0.2.2, <0.3"       # Fast zonal statistics from rasters
