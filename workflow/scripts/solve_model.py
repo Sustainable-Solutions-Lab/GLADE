@@ -1152,7 +1152,6 @@ def _run_solve() -> None:
             snakemake.input.health_clusters,
             snakemake.params.health_risk_factors,
             snakemake.params.health_risk_cause_map,
-            solver_name,
             float(snakemake.params.health_value_per_yll),
             snakemake.input.health_cluster_risk_baseline,
             rr_quantiles=rr_quantiles,
@@ -1178,6 +1177,7 @@ def _run_solve() -> None:
         io_api=io_api,
         env=gurobi_env,
         calculate_fixed_duals=snakemake.params.calculate_fixed_duals,
+        reformulate_sos="auto",
         **solver_options,
     )
     result = (status, condition)

@@ -43,9 +43,9 @@ Both stages use delta (incremental) variables for piecewise-linear interpolation
     f(x) = f_0 + Σ_j δ_j Δf_j
 
 **Stage 1** requires segment indicator variables to guarantee correct interpolation
-(dose-response curves may be non-convex):
-    - HiGHS: binary segment indicators y_j ∈ {0,1}
-    - Gurobi: continuous y_j with SOS1 constraint
+(dose-response curves may be non-convex). Continuous y_j ∈ [0,1] variables with
+SOS1 constraints are used; linopy's ``reformulate_sos='auto'`` converts these to
+binary+Big-M constraints for solvers that don't support SOS natively (e.g. HiGHS).
 
 **Stage 2** needs no segment indicators because exp() is convex and we minimize
 RR. Convexity guarantees the optimizer naturally selects the correct delta pattern.
@@ -309,7 +309,6 @@ def _add_stage1_constraints(
     intake_groups: dict[tuple[float, ...], list[tuple[int, str]]],
     intake_data: dict,
     store_level_var: xr.DataArray,
-    solver_name: str,
     value_per_yll: float,
     baseline_intakes: dict[tuple[int, str], float],
 ) -> tuple[dict[tuple[int, str], linopy.LinearExpression], dict[int, float]]:
@@ -318,14 +317,12 @@ def _add_stage1_constraints(
     Stage 1 transforms food group store levels into log relative risk values
     using piecewise-linear interpolation with delta (incremental) variables.
 
-    Both solvers use the delta formulation:
+    Uses the delta formulation:
         - δ_j ∈ [0,1], δ_j ≤ δ_{j-1} (fill-up ordering)
         - x = x_0 + Σ_j δ_j Δx_j, log(RR) = f_0 + Σ_j δ_j Δf_j
 
     To guarantee correct interpolation (only one fractional δ), segment
-    indicator variables y_j are added with solver-dependent constraints:
-        - HiGHS: binary y_j ∈ {0,1}
-        - Gurobi: continuous y_j with SOS1 constraint
+    indicator variables y_j ∈ [0,1] are added with SOS1 constraints.
 
     Parameters
     ----------
@@ -339,8 +336,6 @@ def _add_stage1_constraints(
         Breakpoint data from _build_intake_breakpoints.
     store_level_var
         Store level variables (food group stores).
-    solver_name
-        Solver name for formulation selection.
     value_per_yll
         Value per YLL; if zero, skip degeneracy perturbation.
     baseline_intakes
@@ -452,7 +447,6 @@ def _add_stage1_constraints(
             cluster_risk_index=cluster_risk_index,
             risk_label=str(risk),
             value_per_yll=value_per_yll,
-            solver_name=solver_name,
             cluster_risk_pairs=cluster_risk_pairs,
             baseline_intakes=baseline_intakes,
             start_entries=start_entries,
@@ -501,7 +495,6 @@ def _add_stage1_delta(
     cluster_risk_index: pd.Index,
     risk_label: str,
     value_per_yll: float,
-    solver_name: str,
     cluster_risk_pairs: list[tuple[int, str]],
     baseline_intakes: dict[tuple[int, str], float],
     start_entries: dict[int, float],
@@ -511,9 +504,9 @@ def _add_stage1_delta(
     Creates δ variables with fill-up constraints for piecewise-linear interpolation:
         x = x_0 + Σ_j δ_j Δx_j,  f(x) = f_0 + Σ_j δ_j Δf_j
 
-    Segment indicator variables y_j guarantee correct interpolation:
-        - HiGHS: binary y_j ∈ {0,1} with Σy = 1
-        - Gurobi: continuous y_j with SOS1 constraint
+    Segment indicator variables y_j ∈ [0,1] with SOS1 constraints guarantee
+    correct interpolation. Linopy's ``reformulate_sos='auto'`` converts these
+    to binary+Big-M constraints for solvers that don't support SOS natively.
 
     Linking constraints tie δ and y:
         - δ_i ≥ Σ_{k>i} y_k  (δ_i = 1 if active segment is later)
@@ -566,26 +559,16 @@ def _add_stage1_delta(
     # -----------------------------------------------------------------------
     # y_j indicates segment j is "active" (contains the fractional δ)
     # Exactly one segment is active: Σ y_j = 1
-    #
-    # For HiGHS: binary variables
-    # For Gurobi: continuous variables with SOS1 constraint
-    use_binary = solver_name.lower() == "highs"
-
-    if use_binary:
-        y_var = m.add_variables(
-            binary=True,
-            coords=[cluster_risk_index, segment_coords],
-            name=f"health_segment_ind_{group_id}_{risk_label}",
-        )
-    else:
-        y_var = m.add_variables(
-            lower=0,
-            upper=1,
-            coords=[cluster_risk_index, segment_coords],
-            name=f"health_segment_ind_{group_id}_{risk_label}",
-        )
-        # Add SOS1 constraint: at most one y_j non-zero per cluster_risk
-        m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
+    # SOS1 constraint ensures at most one y_j is non-zero per cluster_risk.
+    # linopy's reformulate_sos='auto' converts to binary+Big-M for solvers
+    # that don't support SOS natively (e.g. HiGHS).
+    y_var = m.add_variables(
+        lower=0,
+        upper=1,
+        coords=[cluster_risk_index, segment_coords],
+        name=f"health_segment_ind_{group_id}_{risk_label}",
+    )
+    m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
 
     _register_auxiliary_variable(m, y_var.name)
 
@@ -1176,7 +1159,6 @@ def add_health_objective(
     clusters_path: str,
     risk_factors: list[str],
     risk_cause_map: dict[str, list[str]],
-    solver_name: str,
     value_per_yll: float,
     cluster_risk_baseline_path: str,
     rr_quantiles: dict[str, float] | None = None,
@@ -1221,8 +1203,6 @@ def add_health_objective(
         List of risk factors to include (e.g., ['fruits', 'vegetables', ...]).
     risk_cause_map
         Mapping from risk factor to list of affected causes.
-    solver_name
-        Solver name ('gurobi', 'highs', etc.).
     value_per_yll
         Monetary value per year of life lost (USD).
     cluster_risk_baseline_path
@@ -1330,7 +1310,6 @@ def add_health_objective(
         intake_groups,
         intake_data,
         store_level_var,
-        solver_name,
         value_per_yll,
         baseline_intakes,
     )
