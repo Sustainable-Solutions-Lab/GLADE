@@ -1690,15 +1690,23 @@ properties:
           ch4:
             type: number
             minimum: 0
-            description: "Factor for CH4 emissions from animal production"
+            description: "Factor for all CH4 emissions (animal production + rice cultivation)"
           n2o:
             type: number
             minimum: 0
-            description: "Factor for N2O emissions from animal production"
+            description: "Factor for all N2O emissions (animal production + synthetic fertilizer)"
           luc:
             type: number
             minimum: 0
             description: "Factor for CO2 from land-use change"
+      food_loss_waste:
+        type: number
+        minimum: 0
+        description: "Multiplicative factor for food loss and waste fractions on food processing links"
+      feed_conversion:
+        type: number
+        minimum: 0
+        description: "Multiplicative factor for feed conversion efficiencies on animal production links"
       costs:
         type: object
         additionalProperties: false

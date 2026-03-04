@@ -32,12 +32,10 @@ main effects.
 
 ** Current PCE sensitivity parameters
 
-The =pce_sensitivity_scenarios.yaml= config currently includes the following
-parameters. We haven't done dedicated sweeps for most of these; they were chosen
-based on prior expectations about what drives model uncertainty.
+The =pce_sensitivity.yaml= config currently includes the following parameters.
+See =docs/sensitivity_analysis.rst= for full justification with references.
 
-*Emission factors* (currently active; see =docs/sensitivity_analysis.rst= for
-full justification with references):
+*Emission factors* (currently active):
 - =ch4_factor= [0.5, 1.5]: ±50%, representing combined EF + GWP100
   uncertainty. EF uncertainty ±40% (midpoint of IPCC Tier 1 ±30–50%)
   and GWP100 uncertainty ±40% (IPCC AR6, 90% CI) combine in quadrature
@@ -51,6 +49,11 @@ full justification with references):
   CO2-LULUCF emissions. Supported by Global Carbon Budget CV ≈ 58% (1σ),
   AGB uncertainty ~50%, and SOC factor uncertainty ~20–25%.
 
+*Crop yields* (currently active):
+- =yield_factor= [0.8, 1.2]: ±20% global crop yield uncertainty. Well-
+  supported by grid-cell NRMSE (18–28%) and inter-annual CV (13–22% for
+  major cereals). Directly drives land_use and ghg_emissions (through LUC).
+
 *Health relative risk quantiles* (currently active):
 - =rr_whole_grains= [0, 1]: Interpolates between GBD low/high RR estimates.
 - =rr_legumes= [0, 1]: Same.
@@ -61,16 +64,139 @@ full justification with references):
 - =ghg_price= [0, 300]: Carbon price (policy choice).
 
 *Not currently included*:
-- =yield_factor= [0.8, 1.2]: Global crop yield uncertainty (±20%). Well-
-  supported by grid-cell NRMSE (18–28%) and inter-annual CV (13–22% for major
-  cereals). Excluded to reduce dimensionality.
 - =rr_fruits=, =rr_vegetables=, =rr_nuts_seeds=: Additional health risk
   factors. Left out to keep dimensionality manageable; these food groups may
   be less decision-relevant than grains/legumes/red meat.
+
+** Emission factor coverage
+
+The =ch4_factor= and =n2o_factor= sensitivity parameters must scale ALL
+emission sources of each gas, not just animal production. In the baseline
+(validation) scenario, the emission breakdown is:
+
+| Source            | MtCO₂eq | % of total | Notes                         |
+|-------------------+---------+------------+-------------------------------|
+| Animal CH₄       |    3795 |        68% | Enteric + manure              |
+| Rice CH₄         |     232 |         4% | Wetland rice cultivation      |
+| Animal N₂O       |     958 |        17% | Manure (pasture + managed)    |
+| Fertilizer N₂O   |     561 |        10% | Synthetic N application       |
+
+The =ch4_factor= should scale both =animal_production= and =crop_production=
+(rice) CH₄ links. The =n2o_factor= should scale both =animal_production= and
+=fertilizer_distribution= N₂O links. The GWP100 uncertainty component applies
+identically to all sources of the same gas; the EF uncertainty is similar
+enough across sources (IPCC Tier 1/2 ranges) to justify a single factor.
+
+** Food loss and waste factor — to be included
+
+*** Rationale
+
+Food loss and waste (FLW) fractions scale how much crop production is needed
+per unit of food consumed. The model currently uses SDG 12.3.1 data (food loss
+index + food waste index) from FAO/UNEP. These estimates have substantial
+uncertainty from measurement methodology, country-level data gaps, and scope
+differences.
+
+*** Proposed range: =flw_factor= [0.7, 1.3]
+
+A ±30% range around the current SDG-based estimates is justified by:
+
+- *Inter-estimate disagreement*: Global FLW estimates range from ~24% of food
+  supply (Kummu et al. 2012, caloric basis) to ~33% (FAO 2011, mass basis) to
+  ~40% (WWF 2021, including on-farm losses). This ×0.73–1.21 range of the
+  central estimate reflects scope and metric differences.
+- *Measurement bias*: Self-reported consumer waste (which feeds UNEP
+  estimates) systematically underestimates actual waste by 20–40% compared to
+  direct waste compositional analysis (Quested et al. 2020). This biases the
+  SDG data low.
+- *Country-level data uncertainty*: The SDG 12.3.1 Food Loss Index has a
+  stated random error of ~25% at the country level (FAO 2019). Only ~12% of
+  the global population lives in countries that directly track FLW (WRI).
+- *Historical data staleness*: Much post-harvest loss data for developing
+  countries was collected over 30 years ago (Parfitt et al. 2010), though the
+  bias direction is unclear.
+
+A symmetric ±30% range is a conservative choice; the dominant bias direction in
+the literature is underestimation, which would support an asymmetric range
+skewed higher. We use the symmetric range for simplicity.
+
+*** Key references
+
+- Gustavsson et al. (2011): /Global food losses and food waste/. FAO.
+- Kummu et al. (2012). doi:10.1016/j.scitotenv.2012.08.092
+- Alexander et al. (2017). doi:10.1016/j.agsy.2017.01.014
+- Xue et al. (2017). doi:10.1021/acs.est.7b00401
+- FAO (2019): /The State of Food and Agriculture 2019/. FAO.
+- Quested et al. (2020). doi:10.1016/j.jclepro.2020.123635
+- UNEP (2024): /Food Waste Index Report 2024/. UNEP.
+- WWF-UK (2021): /Driven to Waste/. WWF.
+
+*** Implementation
+
+Apply =flw_factor= as a multiplicative scaling of all FLW fractions in
+=sensitivity.py=. Since FLW enters the model as part of the efficiency on food
+processing links (=food_processing= carrier), the factor should scale the loss
+component: =adjusted_efficiency = base_efficiency × (1 + flw_factor × (1 -
+base_efficiency) / base_efficiency)= — or equivalently, just scale the
+=1 - loss_fraction= term by the factor. Needs design thought on the cleanest
+implementation approach.
+
+** Feed conversion ratio factor — to be included
+
+*** Rationale
+
+Feed conversion ratios (FCRs) determine how much feed is needed per unit of
+animal product. The model uses Wirsenius (2000) regional feed energy
+requirements, converted via NRC NE-to-ME factors. FCR uncertainty propagates to
+land use (through feed crop demand), GHG emissions (through animal production
+links), and total cost.
+
+*** Proposed range: =fcr_factor= [0.8, 1.2]
+
+A ±20% range is justified by:
+
+- *Inter-source disagreement*: The model applies calibration multipliers (up to
+  2.0×) to reconcile Wirsenius-based efficiencies with GLEAM feed baselines.
+  After calibration, residual disagreement between Wirsenius and GLEAM/Herrero
+  et al. (2013) is typically 10–30% for a given region-product pair.
+- *NE-to-ME conversion uncertainty*: The model uses k_m=0.60, k_g=0.40,
+  k_l=0.60 (NRC 2000 "typical" values). Published ranges are k_m: 0.55–0.65,
+  k_g: 0.35–0.45, introducing ~10–15% uncertainty.
+- *Temporal lag*: Wirsenius data reflects ~1994–1998 conditions. Monogastric
+  FCRs have improved ~10–20% since then (genetic progress ~0.5–1%/year for
+  poultry/pork); ruminant FCR improvement is minimal.
+- *Carcass-to-retail factor variation*: 5–10% across sources and countries.
+- *Precedent*: Alexander et al. (2016) and Springmann et al. (2018) both used
+  ±20% for FCR in Monte Carlo sensitivity analyses. IPCC 2019 Refinement
+  reports ±20% uncertainty for Tier 2 feed intake estimates.
+
+The ±20% range captures data source disagreement, conversion factor
+uncertainty, and temporal lag without bleeding into inter-system variation
+(which is already captured by the model's regionalized FCR assignment).
+
+*** Key references
+
+- Wirsenius (2000). PhD thesis, Chalmers University.
+- Herrero et al. (2013). doi:10.1073/pnas.1308149110
+- Mottet et al. (2017). doi:10.1016/j.gfs.2017.01.001
+- Alexander et al. (2016). doi:10.1016/j.gloenvcha.2016.09.005
+- Springmann et al. (2018). doi:10.1038/s41586-018-0594-0
+- IPCC (2019): /2019 Refinement/, Vol 4, Ch 10.
+- NRC (2000): /Nutrient Requirements of Beef Cattle/, 7th ed.
+
+*** Implementation
+
+Apply =fcr_factor= as a multiplicative scaling of =efficiency= on
+=animal_production= links in =sensitivity.py=. Higher factor means better feed
+conversion (more product per unit feed), lower factor means worse.
 
 ** Open questions
 
 - Should =l1_cost= be added as a parameter? It's not a physical uncertainty but
   a modelling choice; including it would test robustness to this assumption.
+  Preliminary sweeps suggest it interacts with pricing parameters.
 - The =total_width_multiplier= for food utility was not tested (held at 2.0).
   Given the insensitivity to the other utility parameters, this is likely fine.
+- Additional RR factors (fruits, vegetables, nuts_seeds) could be added if
+  dimensionality allows. Currently excluded to keep the parameter count
+  manageable.

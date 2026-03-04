@@ -10,7 +10,11 @@ analysis by varying parameters within their uncertainty bounds.
 
 Supported adjustments:
 - Crop yields (efficiency on crop_production links)
-- Emission factors (CH4, N2O on animal_production; CO2 on land_conversion)
+- Emission factors: CH4 (animal_production + rice crop_production),
+  N2O (animal_production + fertilizer_distribution + residue_incorporation),
+  CO2 (land_conversion)
+- Food loss and waste (efficiency on food_processing links)
+- Feed conversion ratios (efficiency on animal_production links)
 - Production costs (marginal_cost on crop_production, animal_production)
 
 Health relative risk sensitivity is handled at solve time in
@@ -36,6 +40,8 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
         Sensitivity configuration with optional keys:
         - crop_yields: {all: float, by_crop: {crop: float}}
         - emission_factors: {ch4: float, n2o: float, luc: float}
+        - food_loss_waste: float
+        - feed_conversion: float
         - costs: {crop: float, animal: float}
     """
     if not sensitivity_cfg:
@@ -48,6 +54,14 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
     emission_cfg = sensitivity_cfg.get("emission_factors", {})
     if emission_cfg:
         _apply_emission_factors(n, emission_cfg)
+
+    flw_factor = sensitivity_cfg.get("food_loss_waste", 1.0)
+    if flw_factor != 1.0:
+        _apply_flw_factor(n, flw_factor)
+
+    fcr_factor = sensitivity_cfg.get("feed_conversion", 1.0)
+    if fcr_factor != 1.0:
+        _apply_fcr_factor(n, fcr_factor)
 
     costs_cfg = sensitivity_cfg.get("costs", {})
     if costs_cfg:
@@ -114,40 +128,79 @@ def _apply_crop_yield_factors(n: pypsa.Network, cfg: dict) -> None:
 def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
     """Apply multiplicative factors to emission efficiencies.
 
+    Scales ALL emission sources for each gas:
+    - CH4: animal_production (efficiency2) + rice crop_production (efficiency4)
+    - N2O: animal_production (efficiency4) + fertilizer_distribution (efficiency2)
+           + residue_incorporation (efficiency, via bus1)
+    - LUC: land_conversion + new_to_pasture (efficiency2)
+
     Parameters
     ----------
     n : pypsa.Network
         Network to modify.
     cfg : dict
         Configuration with optional keys:
-        - ch4: factor for CH4 emissions (animal_production efficiency2)
-        - n2o: factor for N2O emissions (animal_production efficiency4)
-        - luc: factor for land-use change CO2 (land_conversion efficiency2)
+        - ch4: factor for all CH4 emissions
+        - n2o: factor for all N2O emissions
+        - luc: factor for land-use change CO2
     """
     ch4_factor = cfg.get("ch4", 1.0)
     n2o_factor = cfg.get("n2o", 1.0)
     luc_factor = cfg.get("luc", 1.0)
 
-    # CH4 and N2O from animal production
-    if ch4_factor != 1.0 or n2o_factor != 1.0:
+    if ch4_factor != 1.0:
+        # CH4 from animal production (enteric + manure, via efficiency2)
         animal_mask = n.links.static["carrier"] == "animal_production"
         if animal_mask.any():
-            if ch4_factor != 1.0:
-                n.links.static.loc[animal_mask, "efficiency2"] *= ch4_factor
-                logger.info(
-                    "Applied CH4 emission factor %.3f to %d animal_production links",
-                    ch4_factor,
-                    animal_mask.sum(),
-                )
-            if n2o_factor != 1.0:
-                n.links.static.loc[animal_mask, "efficiency4"] *= n2o_factor
-                logger.info(
-                    "Applied N2O emission factor %.3f to %d animal_production links",
-                    n2o_factor,
-                    animal_mask.sum(),
-                )
-        else:
-            logger.debug("No animal_production links found for emission adjustment")
+            n.links.static.loc[animal_mask, "efficiency2"] *= ch4_factor
+            logger.info(
+                "Applied CH4 factor %.3f to %d animal_production links",
+                ch4_factor,
+                animal_mask.sum(),
+            )
+
+        # CH4 from rice cultivation (via efficiency4 on crop_production links)
+        rice_ch4_mask = (n.links.static["carrier"] == "crop_production") & (
+            n.links.static.get("bus4", "") == "emission:ch4"
+        )
+        if rice_ch4_mask.any():
+            n.links.static.loc[rice_ch4_mask, "efficiency4"] *= ch4_factor
+            logger.info(
+                "Applied CH4 factor %.3f to %d rice crop_production links",
+                ch4_factor,
+                rice_ch4_mask.sum(),
+            )
+
+    if n2o_factor != 1.0:
+        # N2O from animal production (manure, via efficiency4)
+        animal_mask = n.links.static["carrier"] == "animal_production"
+        if animal_mask.any():
+            n.links.static.loc[animal_mask, "efficiency4"] *= n2o_factor
+            logger.info(
+                "Applied N2O factor %.3f to %d animal_production links",
+                n2o_factor,
+                animal_mask.sum(),
+            )
+
+        # N2O from synthetic fertiliser (via efficiency2)
+        fert_mask = n.links.static["carrier"] == "fertilizer_distribution"
+        if fert_mask.any():
+            n.links.static.loc[fert_mask, "efficiency2"] *= n2o_factor
+            logger.info(
+                "Applied N2O factor %.3f to %d fertilizer_distribution links",
+                n2o_factor,
+                fert_mask.sum(),
+            )
+
+        # N2O from residue incorporation (via efficiency, bus1 = emission:n2o)
+        residue_mask = n.links.static["carrier"] == "residue_incorporation"
+        if residue_mask.any():
+            n.links.static.loc[residue_mask, "efficiency"] *= n2o_factor
+            logger.info(
+                "Applied N2O factor %.3f to %d residue_incorporation links",
+                n2o_factor,
+                residue_mask.sum(),
+            )
 
     # LUC CO2 from land conversion (both cropland and pasture expansion)
     if luc_factor != 1.0:
@@ -161,6 +214,57 @@ def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
             )
         else:
             logger.debug("No land conversion links found for LUC emission adjustment")
+
+
+def _apply_flw_factor(n: pypsa.Network, factor: float) -> None:
+    """Scale food processing efficiencies to represent FLW uncertainty.
+
+    The efficiency on food_processing links incorporates food loss and waste
+    fractions. Scaling by `factor` adjusts the effective survival rate:
+    factor < 1.0 means more loss (FLW underestimated in baseline),
+    factor > 1.0 means less loss (FLW overestimated).
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to modify.
+    factor : float
+        Multiplicative factor for food_processing link efficiencies.
+    """
+    mask = n.links.static["carrier"] == "food_processing"
+    if not mask.any():
+        logger.debug("No food_processing links found for FLW adjustment")
+        return
+    n.links.static.loc[mask, "efficiency"] *= factor
+    logger.info(
+        "Applied FLW factor %.3f to %d food_processing links",
+        factor,
+        mask.sum(),
+    )
+
+
+def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
+    """Scale feed conversion efficiencies on animal production links.
+
+    Higher factor means better conversion (more product per unit feed).
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to modify.
+    factor : float
+        Multiplicative factor for animal_production link efficiencies.
+    """
+    mask = n.links.static["carrier"] == "animal_production"
+    if not mask.any():
+        logger.debug("No animal_production links found for FCR adjustment")
+        return
+    n.links.static.loc[mask, "efficiency"] *= factor
+    logger.info(
+        "Applied FCR factor %.3f to %d animal_production links",
+        factor,
+        mask.sum(),
+    )
 
 
 def _apply_cost_factors(n: pypsa.Network, cfg: dict) -> None:

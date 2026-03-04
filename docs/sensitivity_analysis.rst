@@ -243,6 +243,12 @@ distributions rather than fixed value lists.
          luc_factor:
            lower: 0.3
            upper: 1.7
+         flw_factor:
+           lower: 0.7
+           upper: 1.3
+         fcr_factor:
+           lower: 0.8
+           upper: 1.2
          rr_fruits:
            lower: 0
            upper: 1
@@ -262,8 +268,8 @@ distributions rather than fixed value lists.
            lower: 0
            upper: 1
          value_per_yll:
-           lower: 5000
-           upper: 500000
+           lower: 0
+           upper: 20000
          ghg_price:
            lower: 0
            upper: 300
@@ -275,6 +281,8 @@ distributions rather than fixed value lists.
              ch4: "{ch4_factor}"
              n2o: "{n2o_factor}"
              luc: "{luc_factor}"
+           food_loss_waste: "{flw_factor}"
+           feed_conversion: "{fcr_factor}"
            health_relative_risk:
              fruits: "{rr_fruits}"
              vegetables: "{rr_vegetables}"
@@ -343,8 +351,9 @@ question), they combine approximately in quadrature.
 CH\ :sub:`4` factor (``ch4_factor``: 0.5–1.5)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This factor scales all CH\ :sub:`4` emissions from livestock, covering both
-enteric fermentation and manure management.
+This factor scales all CH\ :sub:`4` emissions in the model: enteric
+fermentation, manure management (from animal production links), and rice paddy
+emissions (from wetland rice crop production links).
 
 **Emission factor uncertainty.** The IPCC 2019 Refinement reports a Tier 1
 uncertainty of ±30–50% (95% CI) for livestock CH\ :sub:`4` emission factors
@@ -366,9 +375,11 @@ this combined estimate.
 N\ :sub:`2`\ O factor (``n2o_factor``: 0.3–1.7)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This factor scales N\ :sub:`2`\ O emissions from manure management and manure
-applied to soils. N\ :sub:`2`\ O emission factors are among the most uncertain
-parameters in agricultural GHG inventories.
+This factor scales all N\ :sub:`2`\ O emissions in the model: manure management
+and manure applied to soils (from animal production links), and direct and
+indirect emissions from synthetic fertiliser application (from fertiliser
+distribution links). N\ :sub:`2`\ O emission factors are among the most
+uncertain parameters in agricultural GHG inventories.
 
 **Emission factor uncertainty.** The IPCC 2019 Refinement [#ipcc_ch11]_ reports
 the aggregated Tier 1 direct emission factor EF\ :sub:`1` = 0.01 with a 95% CI
@@ -432,6 +443,88 @@ with:
   reaching ±50% in poorly sampled regions [#ipcc_ch5]_.
 - **Amortisation period** choices: switching from the conventional 20-year to a
   30-year period changes annualised emissions by ~33% [#maciel]_.
+
+Crop yield factor (``yield_factor``: 0.8–1.2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales all crop production yields (efficiency on ``crop_production``
+links), representing uncertainty in attainable yield estimates. The model uses
+GAEZ v5 attainable yield data, which are subject to climate model uncertainty,
+agronomic model limitations, and spatial aggregation error.
+
+The ±20% range is supported by:
+
+- **Grid-cell prediction error**: Normalised root-mean-square error (NRMSE)
+  between GAEZ attainable yields and observed yields is 18–28% across major
+  crop groups [#mueller]_.
+- **Inter-annual variability**: Coefficients of variation in national crop
+  yields are 13–22% for major cereals, reflecting weather-driven fluctuations
+  that the model's single-year snapshot does not capture [#ray]_.
+- **Climate model spread**: GAEZ v5 provides yield projections under five
+  GCMs (GFDL-ESM4, IPSL-CM6A-LR, MPI-ESM1-2-HR, MRI-ESM2-0, UKESM1-0-LL);
+  inter-model yield spread is typically 10–25% for a given crop and region.
+
+Yield uncertainty propagates strongly to land use (more yield means less land
+required) and GHG emissions (through reduced land-use change pressure).
+
+Food loss and waste factor (``flw_factor``: 0.7–1.3)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales the efficiency of ``food_processing`` links, which
+incorporate food loss and waste fractions from SDG 12.3.1 data (food loss index
+from FAO + food waste index from UNEP). A factor below 1.0 means more food is
+lost than the baseline estimates suggest (higher FLW); above 1.0 means less food
+is lost (lower FLW).
+
+The ±30% range is supported by:
+
+- **Inter-estimate disagreement**: Global FLW estimates range from ~24% of food
+  supply on a caloric basis [#kummu]_ to ~33% on a mass basis [#gustavsson]_ to
+  ~40% when on-farm harvest losses are included [#wwf]_, giving multiplicative
+  factors of ×0.73–1.21 relative to the FAO central estimate.
+- **Measurement bias**: Self-reported consumer waste data (which feed into the
+  UNEP Food Waste Index) systematically underestimate actual waste by 20–40%
+  compared to direct waste compositional analysis [#quested]_.
+- **Country-level data gaps**: The SDG 12.3.1 Food Loss Index has a stated
+  random error of ~25% at the country level [#fao_sofa]_. Only ~12% of the
+  global population lives in countries that directly track FLW. Much
+  post-harvest loss data for developing countries was collected over 30 years
+  ago [#parfitt]_.
+
+The dominant bias direction in the literature is underestimation, which would
+support an asymmetric range skewed higher. The symmetric ±30% range is a
+conservative simplification.
+
+Feed conversion ratio factor (``fcr_factor``: 0.8–1.2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales feed conversion efficiencies (efficiency on
+``animal_production`` links), representing uncertainty in how much feed is
+required per unit of animal product. Higher values mean better conversion (more
+product per unit feed). The model uses Wirsenius (2000) regional feed energy
+requirements [#wirsenius]_ converted via NRC net-energy-to-metabolisable-energy
+factors [#nrc]_.
+
+The ±20% range is supported by:
+
+- **Inter-source disagreement**: The model applies calibration multipliers (up
+  to 2.0×) to reconcile Wirsenius-based efficiencies with GLEAM feed baselines.
+  After calibration, residual disagreement between Wirsenius and GLEAM / Herrero
+  et al. [#herrero]_ is typically 10–30% for a given region–product pair.
+- **Energy conversion uncertainty**: The NE-to-ME conversion factors (k_m=0.60,
+  k_g=0.40, k_l=0.60) are NRC "typical" values. Published ranges span
+  k_m: 0.55–0.65 and k_g: 0.35–0.45, introducing ~10–15% uncertainty [#nrc]_.
+- **Temporal lag**: The Wirsenius data reflects ~1994–1998 conditions.
+  Monogastric FCRs have improved ~10–20% since then through genetic progress
+  (~0.5–1%/year for poultry and pork); ruminant improvement is minimal.
+- **Precedent**: Alexander et al. [#alexander]_ and Springmann et al.
+  [#springmann]_ both used ±20% for FCR uncertainty in Monte Carlo global food
+  system analyses. The IPCC 2019 Refinement reports ±20% uncertainty for Tier 2
+  feed intake estimates [#ipcc_ch10]_.
+
+The ±20% range captures data source disagreement, conversion factor
+uncertainty, and temporal lag without bleeding into inter-system variation
+(which is already represented by the model's regionalized FCR assignment).
 
 Health relative risk parameters (``rr_*``: 0–1)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -535,6 +628,68 @@ probability distribution.
 .. [#gbd] GBD 2017 Diet Collaborators, 2019: Health effects of dietary risks
    in 195 countries, 1990–2017. *Lancet*, 393, 1958–1972.
    https://doi.org/10.1016/S0140-6736(19)30041-8
+
+.. [#mueller] Mueller, N. D. et al., 2012: Closing yield gaps through nutrient
+   and water management. *Nature*, 490, 254–257.
+   https://doi.org/10.1038/nature11420
+
+.. [#ray] Ray, D. K. et al., 2015: Climate variation explains a third of
+   global crop yield variability. *Nat. Commun.*, 6, 5989.
+   https://doi.org/10.1038/ncomms6989
+
+.. [#kummu] Kummu, M. et al., 2012: Lost food, wasted resources: Global food
+   supply chain losses and their impacts on freshwater, cropland, and fertiliser
+   use. *Sci. Total Environ.*, 438, 477–489.
+   https://doi.org/10.1016/j.scitotenv.2012.08.092
+
+.. [#gustavsson] Gustavsson, J. et al., 2011: *Global food losses and food
+   waste: extent, causes and prevention*. FAO, Rome.
+   https://www.fao.org/4/mb060e/mb060e00.htm
+
+.. [#wwf] WWF-UK, 2021: *Driven to Waste: The Global Impact of Food Loss and
+   Waste on Farms*. WWF-UK, Woking. Estimates total FLW at ~40% of production
+   when on-farm losses are included.
+   https://wwfint.awsassets.panda.org/downloads/driven_to_waste___the_global_impact_of_food_loss_and_waste_on_farms.pdf
+
+.. [#quested] Quested, T. E. et al., 2020: Comparing diaries and waste
+   compositional analysis for measuring food waste in the home. *J. Clean.
+   Prod.*, 279, 123635. Self-reported estimates 7–40% lower than compositional
+   analysis.
+   https://doi.org/10.1016/j.jclepro.2020.123635
+
+.. [#fao_sofa] FAO, 2019: *The State of Food and Agriculture 2019: Moving
+   forward on food loss and waste reduction*. FAO, Rome. SDG 12.3.1 Food Loss
+   Index country-level random error: ~25%.
+   https://www.fao.org/3/ca6030en/ca6030en.pdf
+
+.. [#parfitt] Parfitt, J. et al., 2010: Food waste within food supply chains:
+   quantification and potential for change to 2050. *Phil. Trans. R. Soc. B*,
+   365, 3065–3081.
+   https://doi.org/10.1098/rstb.2010.0126
+
+.. [#wirsenius] Wirsenius, S., 2000: *Human Use of Land and Organic Materials:
+   Modeling the Turnover of Biomass in the Global Food System*. PhD thesis,
+   Chalmers University of Technology.
+
+.. [#nrc] NRC, 2000: *Nutrient Requirements of Beef Cattle*, 7th revised ed.,
+   update 2000. National Academies Press. NE-to-ME conversion factors:
+   k_m = 0.60 (range 0.55–0.65), k_g = 0.40 (range 0.35–0.45).
+   https://doi.org/10.17226/9791
+
+.. [#herrero] Herrero, M. et al., 2013: Biomass use, production, feed
+   efficiencies, and greenhouse gas emissions from global livestock systems.
+   *PNAS*, 110, 20888–20893.
+   https://doi.org/10.1073/pnas.1308149110
+
+.. [#alexander] Alexander, P. et al., 2016: Human appropriation of land for
+   food: The role of diet. *Global Environ. Change*, 41, 88–98. Used ±20% FCR
+   uncertainty in Monte Carlo sensitivity analysis.
+   https://doi.org/10.1016/j.gloenvcha.2016.09.005
+
+.. [#springmann] Springmann, M. et al., 2018: Options for keeping the food
+   system within environmental limits. *Nature*, 562, 519–525. Used ±20% FCR
+   uncertainty in Monte Carlo analysis (500 samples, uniform distribution).
+   https://doi.org/10.1038/s41586-018-0594-0
 
 
 Running the Analysis
