@@ -21,7 +21,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 
 **Required manual downloads:**
 
-1. Create an account with IHME and download ``IHME-GBD_2023-dealth-rates.csv`` as described in :ref:`ihme-gbd-mortality`.
+1. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
 2. Download the IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`).
 3. Download the IHME 2019 dietary risk exposure estimates ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA`` (:ref:`ihme-diet-risk-exposure`).
 4. Register at the Global Dietary Database portal and download the dataset, placed locally as the directory ``GDD-dietary-intake`` (:ref:`gdd-dietary-intake`).
@@ -348,7 +348,7 @@ Copernicus Satellite Land Cover
 3. Obtain an API key from your account settings
 4. Configure the API key in ``~/.ecmwfdatastoresrc`` or via environment variables (see API documentation for setup instructions)
 
-**Configuration**: Year and version can be configured via ``config['data']['land_cover']['year']`` and ``config['data']['land_cover']['version']`` (defaults: year 2022, version v2_1_1)
+**Configuration**: The land cover year is derived from the top-level ``baseline_year`` parameter. The version can be configured via ``config['data']['land_cover']['version']`` (default: v2_1_1).
 
 .. _esa-biomass-cci:
 
@@ -495,7 +495,7 @@ IHME GBD 2023 — Mortality Rates
   * Causes: Ischemic heart disease, Stroke, Diabetes mellitus, Colon and rectum cancer, Chronic respiratory diseases, All causes
   * Age groups: <1 year, 12-23 months, 2-4 years, 5-9 years, ..., 95+ years (individual age bins)
   * Sex: Both
-  * Year: 2023
+  * Year: must match ``baseline_year`` in the config (default: 2020)
 
 **License**: Free for non-commercial use with attribution (IHME Free-of-Charge Non-commercial User Agreement)
 
@@ -506,8 +506,8 @@ IHME GBD 2023 — Mortality Rates
 **Manual download steps**:
 
 1. Visit https://vizhub.healthdata.org/gbd-results/ and sign in with your IHME account.
-2. Reproduce the query parameters above by following this permanent link: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/05de3cfb56eafc99f2cc8e135644b81f
-3. Export the results as CSV (allow some time for the IHME to process the query) and save to ``data/manually_downloaded``. Rename the file to ``IHME-GBD_2023-dealth-rates.csv`` to match the name expected by the Snakemake workflow. Consider checking the file modification time and potentially resetting it (on Linux, run `touch` on the file); sometimes the modification time of the downloaded time can be in the future, which confuses snakemake.
+2. Reproduce the query parameters above. This permanent link is configured for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/f4c7511d159798f5b8864bc83fa06451 — adjust the year if using a different ``baseline_year``.
+3. Export the results as CSV (allow some time for the IHME to process the query) and save to ``data/manually_downloaded`` as ``IHME-GBD_2023-death-rates-{year}.csv`` where ``{year}`` matches your ``baseline_year``. Consider checking the file modification time and potentially resetting it (on Linux, run ``touch`` on the file); sometimes the modification time of the downloaded file can be in the future, which confuses Snakemake.
 
 .. _ihme-relative-risks:
 

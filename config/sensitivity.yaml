@@ -187,6 +187,10 @@ scenarios:
         #   fat:
         #     min: 56.13
 
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2018
+baseline_year: 2018
+
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true

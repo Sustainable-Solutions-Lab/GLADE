@@ -9,7 +9,7 @@ rule prepare_faostat_emissions:
     output:
         "<processing>/{name}/faostat_emissions.csv",
     params:
-        year=config["validation"]["production_year"],
+        year=config["baseline_year"],
     group:
         "prep"
     resources:

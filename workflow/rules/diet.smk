@@ -16,7 +16,7 @@ rule prepare_gdd_dietary_intake:
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
-        reference_year=config["health"]["reference_year"],
+        reference_year=config["baseline_year"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         stimulant_brewed_to_dry=config["diet"]["stimulant_brewed_to_dry"],
     output:
@@ -46,7 +46,7 @@ rule prepare_faostat_fbs_items:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        reference_year=config["diet"]["baseline_reference_year"],
+        reference_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
@@ -74,7 +74,7 @@ rule prepare_faostat_gdd_supplements:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        reference_year=config["health"]["reference_year"],
+        reference_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
         poultry_carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"][
             "meat-chicken"
@@ -125,7 +125,7 @@ rule prepare_food_loss_waste:
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
-        health_reference_year=config["health"]["reference_year"],
+        baseline_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
@@ -151,7 +151,7 @@ rule prepare_gbd_dietary_risk_exposure:
     input:
         gbd_dir="data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA",
     params:
-        reference_year=config["diet"]["baseline_reference_year"],
+        reference_year=config["baseline_year"],
     output:
         exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
     group:
@@ -184,7 +184,7 @@ rule estimate_baseline_diet:
         food_groups="data/curated/food_groups.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     params:
-        reference_year=config["diet"]["baseline_reference_year"],
+        reference_year=config["baseline_year"],
         baseline_age=config["diet"]["baseline_age"],
         food_groups_included=config["food_groups"]["included"],
         byproducts=config["byproducts"],

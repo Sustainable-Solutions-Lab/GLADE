@@ -10,6 +10,7 @@ description: |
 type: object
 required:
   - planning_horizon
+  - baseline_year
   - currency_base_year
   - downloads
   - paths
@@ -40,6 +41,7 @@ required:
   - countries
   - data
   - irrigation
+  - costs
   - animal_costs
   - crop_costs
   - solving
@@ -63,7 +65,13 @@ properties:
     type: integer
     minimum: 2020
     maximum: 2100
-    description: "Target year for optimization (e.g., 2030)"
+    description: "Target year for optimization. Controls population projections (UN WPP) and GDP clustering (IMF WEO)."
+
+  baseline_year:
+    type: integer
+    minimum: 2010
+    maximum: 2020
+    description: "Reference year for observed baseline data. Controls FAOSTAT production, GDD dietary intake, GBD health data, ESA CCI land cover, and LUIcube grassland data."
 
   currency_base_year:
     type: integer
@@ -141,7 +149,6 @@ properties:
       - slack_marginal_cost
       - grassland_yield_multiplier
       - feed_slack_cost_factor
-      - production_year
       - production_stability
     additionalProperties: false
     properties:
@@ -185,11 +192,6 @@ properties:
         exclusiveMinimum: 0
         maximum: 1
         description: "Feed slack cost as fraction of slack_marginal_cost (lower separates feed from food slack)"
-      production_year:
-        type: integer
-        minimum: 1990
-        maximum: 2024
-        description: "Reference year for production data"
       production_stability:
         type: object
         required: [enabled, penalty_mode, crops, grassland, animals]
@@ -852,17 +854,12 @@ properties:
 
   diet:
     type: object
-    required: [baseline_age, baseline_reference_year]
+    required: [baseline_age]
     additionalProperties: false
     properties:
       baseline_age:
         type: string
         description: "Age group for baseline diet (e.g., 'All ages')"
-      baseline_reference_year:
-        type: integer
-        minimum: 1990
-        maximum: 2019
-        description: "Reference year for baseline diet"
       stimulant_brewed_to_dry:
         type: object
         required: [coffee, tea]
@@ -1018,7 +1015,6 @@ properties:
     required:
       - enabled
       - region_clusters
-      - reference_year
       - intake_grid_points
       - log_rr_points
       - ssb_sugar_g_per_100g
@@ -1037,11 +1033,6 @@ properties:
         type: integer
         minimum: 1
         description: "Number of health clusters"
-      reference_year:
-        type: integer
-        minimum: 1990
-        maximum: 2018
-        description: "Reference year for health data"
       intake_grid_points:
         type: integer
         minimum: 2
@@ -1095,15 +1086,9 @@ properties:
       clustering:
         type: object
         required:
-          - gdp_reference_year
           - weights
         additionalProperties: false
         properties:
-          gdp_reference_year:
-            type: integer
-            minimum: 1990
-            maximum: 2030
-            description: "Reference year for GDP per capita data used in clustering"
           weights:
             type: object
             required:
@@ -1183,7 +1168,7 @@ properties:
 
   data:
     type: object
-    required: [gaez, usda, land_cover, faostat, luicube, soilgrids]
+    required: [gaez, usda, land_cover, faostat, soilgrids]
     additionalProperties: false
     properties:
       gaez:
@@ -1249,13 +1234,9 @@ properties:
                 type: string
       land_cover:
         type: object
-        required: [year, version]
+        required: [version]
         additionalProperties: false
         properties:
-          year:
-            type: string
-            pattern: "^[0-9]{4}$"
-            description: "Year for land cover data"
           version:
             type: string
             description: "Version of land cover dataset"
@@ -1273,15 +1254,6 @@ properties:
           fbs_other_uses_element_code:
             type: integer
             description: "FAOSTAT element code for 'Other uses (non-food)' in 1000 tonnes (FBS dataset)"
-      luicube:
-        type: object
-        required: [year]
-        additionalProperties: false
-        properties:
-          year:
-            type: string
-            pattern: "^[0-9]{4}$"
-            description: "Year for LUIcube grassland data (Matej et al. 2025)"
       soilgrids:
         type: object
         required: [target_resolution_m]
@@ -1308,9 +1280,9 @@ properties:
               pattern: "^[a-z0-9-]+$"
         description: "Which crops are allowed irrigated production ('all' or list)"
 
-  animal_costs:
+  costs:
     type: object
-    required: [averaging_period, fadn, usda, faostat]
+    required: [averaging_period]
     additionalProperties: false
     properties:
       averaging_period:
@@ -1324,6 +1296,12 @@ properties:
           end_year:
             type: integer
             minimum: 1900
+
+  animal_costs:
+    type: object
+    required: [fadn, usda, faostat]
+    additionalProperties: false
+    properties:
       fadn:
         type: object
         required:
@@ -1415,7 +1393,7 @@ properties:
 
   crop_costs:
     type: object
-    required: [per_tonne_cost_fraction, averaging_period, fadn, usda]
+    required: [per_tonne_cost_fraction, fadn, usda]
     additionalProperties: false
     properties:
       per_tonne_cost_fraction:
@@ -1423,17 +1401,6 @@ properties:
         minimum: 0
         maximum: 1
         description: "Fraction of crop production costs applied per tonne (0 = all per-ha, 1 = all per-tonne)"
-      averaging_period:
-        type: object
-        required: [start_year, end_year]
-        additionalProperties: false
-        properties:
-          start_year:
-            type: integer
-            minimum: 1900
-          end_year:
-            type: integer
-            minimum: 1900
       fadn:
         type: object
         required:

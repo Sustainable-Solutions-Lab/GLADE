@@ -556,8 +556,7 @@ Workflow Integration
 **Configuration parameters**:
   * ``config.countries``: List of countries to process
   * ``config.food_groups.included``: Food groups to filter and aggregate
-  * ``config.health.reference_year``: Year for GDD dietary intake data
-  * ``config.diet.baseline_reference_year``: Year for GBD exposure data
+  * ``config.baseline_year``: Reference year for GDD dietary intake and GBD exposure data
   * ``config.diet.baseline_age``: Age group for baseline totals (default: ``"11-74 years"``)
   * ``config.diet.fbs_override_foods``: Foods whose consumption is overridden with waste-corrected FBS supply (default: ``["yam"]``)
   * ``config.byproducts``: Foods to exclude from share calculation (e.g., wheat-bran)

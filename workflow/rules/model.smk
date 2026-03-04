@@ -190,9 +190,7 @@ rule build_model:
         animal_products=lambda w: get_effective_config(w.scenario)["animal_products"],
         trade=lambda w: get_effective_config(w.scenario)["trade"],
         grazing=lambda w: get_effective_config(w.scenario)["grazing"],
-        health_reference_year=lambda w: get_effective_config(w.scenario)["health"][
-            "reference_year"
-        ],
+        baseline_year=lambda w: get_effective_config(w.scenario)["baseline_year"],
         validation=lambda w: get_effective_config(w.scenario)["validation"],
         production_stability=lambda w: get_effective_config(w.scenario)["validation"][
             "production_stability"

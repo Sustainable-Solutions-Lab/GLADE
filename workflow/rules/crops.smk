@@ -17,7 +17,7 @@ rule prepare_faostat_crop_production:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        production_year=config["validation"]["production_year"],
+        production_year=config["baseline_year"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
     output:
         "<processing>/{name}/faostat_crop_production.csv",
@@ -339,7 +339,7 @@ rule prepare_biofuel_baseline:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        reference_year=config["validation"]["production_year"],
+        reference_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_other_uses_element_code"],
     output:
         "<processing>/{name}/biofuel_baseline.csv",
@@ -363,7 +363,7 @@ rule prepare_fiber_baseline:
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        reference_year=config["validation"]["production_year"],
+        reference_year=config["baseline_year"],
     output:
         "<processing>/{name}/fiber_baseline.csv",
     group:

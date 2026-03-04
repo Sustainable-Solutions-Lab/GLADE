@@ -323,7 +323,7 @@ Validation Options
 
 Set ``validation.enforce_baseline_diet`` to ``true`` to force the optimizer to match
 baseline consumption derived from the processed GDD file. When this flag is active,
-the ``diet.baseline_age`` and ``diet.baseline_reference_year`` settings determine which
+the ``diet.baseline_age`` and ``baseline_year`` settings determine which
 cohort/year is enforced. Use ``validation.food_group_slack_marginal_cost`` to set the
 penalty (USD\ :sub:`2024` per Mt) for the slack generators that backstop those fixed
 food-group loads. Keep the value high so slack only activates when recorded production
@@ -540,9 +540,9 @@ Diet Controls
    :start-after: # --- section: diet ---
    :end-before: # --- section: biomass ---
 
-Customize ``baseline_age`` or ``baseline_reference_year`` if you pre-process alternative
-cohorts or years for the baseline diet. These values are used whenever
-``validation.enforce_baseline_diet`` is set to ``true``.
+Customize ``baseline_age`` if you pre-process alternative cohorts for the baseline
+diet. The reference year is controlled by the top-level ``baseline_year`` parameter.
+These values are used whenever ``validation.enforce_baseline_diet`` is set to ``true``.
 
 Biomass
 ~~~~~~~~~~~~~~~

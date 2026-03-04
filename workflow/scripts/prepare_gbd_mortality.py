@@ -9,7 +9,7 @@ Downloads from IHME GBD Results Tool should include:
 - Causes: IHD, Stroke, Diabetes, CRC, Chronic respiratory diseases
 - Ages: <1 year, 12-23 months, 2-4 years, 5-9 years, ..., 95+ years
 - Sex: Both
-- Year: 2019 or 2021
+- Year: matching baseline_year (nearest available used if exact year missing)
 - Metric: Rate (per 100,000)
 """
 
@@ -141,22 +141,18 @@ def main() -> None:
     if df.empty:
         raise ValueError("No 'Rate' metric found in GBD data")
 
-    # Check available years
-    available_years = sorted(df["year"].unique())
-    logger.info("Available years: %s", available_years)
-
-    if reference_year not in available_years:
-        closest_year = min(available_years, key=lambda y: abs(y - reference_year))
-        logger.info(
-            "Reference year %d not found; using closest year %d",
-            reference_year,
-            closest_year,
+    # Filter to reference year (the downloaded file should contain this year)
+    df = df[df["year"] == reference_year].copy()
+    if df.empty:
+        available_years = sorted(
+            pd.read_csv(input_path, usecols=["year"])["year"].unique()
         )
-        target_year = closest_year
-    else:
-        target_year = reference_year
-
-    df = df[df["year"] == target_year].copy()
+        raise ValueError(
+            f"No data for year {reference_year} in {input_path}. "
+            f"Available years: {available_years}. "
+            f"Download death rates for year {reference_year} from "
+            f"https://vizhub.healthdata.org/gbd-results/"
+        )
 
     # Map country names to ISO3 (cache unique values to avoid repeated fuzzy searches)
     logger.info("Mapping country names to ISO3 codes...")

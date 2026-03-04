@@ -13,7 +13,7 @@ This directory contains datasets that must be manually downloaded because they:
 
 ## Current Files
 
-### IHME-GBD_2023-dealth-rates.csv
+### IHME-GBD_2023-death-rates-2020.csv
 
 **Source:** IHME Global Burden of Disease Study 2023
 **Download:** https://vizhub.healthdata.org/gbd-results/
@@ -34,9 +34,9 @@ Viewing and downloading these results requires a user account on the healthdata.
 - **Location:** Choose option to "Select all countries and territories"
 - **Age groups:** <1 year, 12-23 months, 2-4 years, 5-9 years, 10-14 years, 15-19 years, ..., 95+ years
 - **Sex:** Both
-- **Year:** 2023 (or latest available)
+- **Year:** Must match `baseline_year` in the config (default: 2020)
 
-This specific query can also be found at the following URL: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/05de3cfb56eafc99f2cc8e135644b81f
+The following permalink reproduces this query for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/f4c7511d159798f5b8864bc83fa06451. Adjust the year if using a different `baseline_year`.
 
 **Processing:** The Snakemake workflow automatically processes this file via `workflow/scripts/prepare_gbd_mortality.py` to:
 1. Map country names to ISO3 codes
@@ -152,8 +152,7 @@ When new GBD data is released:
 1. Visit https://vizhub.healthdata.org/gbd-results/
 2. Configure query with parameters above
 3. Download as CSV
-4. Replace `IHME-GBD_2023-dealth-rates.csv` (or create new file with updated year)
-5. Update `workflow/Snakefile` rule `prepare_gbd_mortality` if filename changes
+4. Save as `IHME-GBD_2023-death-rates-{year}.csv` (the year in the filename must match `baseline_year`)
 6. Rerun workflow: `tools/smk processing/{name}/gbd_mortality_rates.csv`
 
 ### GDD Dietary Data

@@ -321,7 +321,7 @@ Data Sources
 
 * **FAOSTAT QCL**: National animal product output for 2010 (the GLEAM
   reference year), the model's configured reference year
-  (``validation.production_year``), and the calibration year
+  (``baseline_year``), and the calibration year
   (``validation.gleam_calibration_year``). Used to disaggregate GLEAM totals
   to individual countries, scale the baseline forward in time, and calibrate
   the efficiency correction.

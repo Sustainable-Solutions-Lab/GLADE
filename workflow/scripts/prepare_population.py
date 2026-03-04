@@ -278,7 +278,7 @@ def _process_population(
 if __name__ == "__main__":
     params = snakemake.params  # type: ignore[name-defined]
     planning_year = int(params["planning_horizon"])
-    health_year = int(params["health_reference_year"])
+    health_year = int(params["baseline_year"])
     countries = list(params["countries"])
 
     df = pd.read_csv(snakemake.input.population_gz, compression="gzip")  # type: ignore[name-defined]

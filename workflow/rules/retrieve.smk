@@ -121,7 +121,7 @@ rule retrieve_usda_costs:
     params:
         base_year=config["currency_base_year"],
         cost_params=config["crop_costs"]["usda"],
-        averaging_period=config["crop_costs"]["averaging_period"],
+        averaging_period=config["costs"]["averaging_period"],
     output:
         costs="<processing>/{name}/usda_costs.csv",
     resources:
@@ -145,7 +145,7 @@ rule retrieve_fadn_costs:
         crops=config["crops"],
         base_year=config["currency_base_year"],
         cost_params=config["crop_costs"]["fadn"],
-        averaging_period=config["crop_costs"]["averaging_period"],
+        averaging_period=config["costs"]["averaging_period"],
     output:
         costs="<processing>/{name}/fadn_costs.csv",
     resources:
@@ -189,7 +189,7 @@ rule retrieve_usda_animal_costs:
     params:
         base_year=config["currency_base_year"],
         cost_params=config["animal_costs"]["usda"],
-        averaging_period=config["animal_costs"]["averaging_period"],
+        averaging_period=config["costs"]["averaging_period"],
     output:
         costs="<processing>/{name}/usda_animal_costs.csv",
     resources:
@@ -214,7 +214,7 @@ rule retrieve_fadn_animal_costs:
         animal_products=config["animal_products"]["include"],
         base_year=config["currency_base_year"],
         cost_params=config["animal_costs"]["fadn"],
-        averaging_period=config["animal_costs"]["averaging_period"],
+        averaging_period=config["costs"]["averaging_period"],
     output:
         costs="<processing>/{name}/fadn_animal_costs.csv",
     resources:
@@ -749,7 +749,7 @@ rule download_luicube_grassland:
     params:
         lu_class=lambda w: w.lu_class,
         variable=lambda w: w.variable,
-        year=config["data"]["luicube"]["year"],
+        year=str(config["baseline_year"]),
     output:
         "data/downloads/luicube/{lu_class}_{variable}.tif",
     resources:
@@ -770,7 +770,7 @@ rule download_land_cover:
         dataset="satellite-land-cover",
         request={
             "variable": "all",
-            "year": [config["data"]["land_cover"]["year"]],
+            "year": [str(config["baseline_year"])],
             "version": [config["data"]["land_cover"]["version"]],
         },
     resources:

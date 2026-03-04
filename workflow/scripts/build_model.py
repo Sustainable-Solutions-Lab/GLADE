@@ -398,7 +398,7 @@ if __name__ == "__main__":
     )
     planning_year = int(population_df["year"].iloc[0])
 
-    health_reference_year = int(snakemake.params.health_reference_year)
+    baseline_year = int(snakemake.params.baseline_year)
 
     region_to_country = regions_df.set_index("region")["country"]
     # Warn if any configured countries are missing from regions

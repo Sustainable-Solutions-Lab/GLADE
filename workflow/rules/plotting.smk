@@ -519,9 +519,7 @@ rule plot_food_consumption_baseline_map:
         csv="<results>/{name}/plots/scen-{scenario}/food_consumption_baseline_map.csv",
     params:
         age=config.get("diet", {}).get("baseline_age", "All ages"),
-        reference_year=config.get("diet", {}).get(
-            "baseline_reference_year", config["health"]["reference_year"]
-        ),
+        reference_year=config["baseline_year"],
         group_colors=food_group_colors,
     group:
         "analysis_plot"

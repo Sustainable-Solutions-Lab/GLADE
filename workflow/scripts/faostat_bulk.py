@@ -26,6 +26,7 @@ FBS_COUNTRY_FALLBACKS: dict[str, list[str]] = {
     "BRN": ["MYS", "SGP"],  # Brunei -> Malaysia
     "BTN": ["NPL", "IND"],  # Bhutan -> Nepal
     "CAF": ["TCD", "CMR", "COG"],  # Central African Republic
+    "CUB": ["DOM", "JAM"],  # Cuba -> Dominican Republic / Jamaica
     "ERI": ["ETH"],  # Eritrea -> Ethiopia
     "GNQ": ["GAB", "CMR"],  # Eq. Guinea -> Gabon
     "GUF": ["GUY", "SUR", "FRA"],  # Fr. Guiana

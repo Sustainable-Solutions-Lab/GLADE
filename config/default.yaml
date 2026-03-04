@@ -14,8 +14,28 @@ scenarios:
   # high_ghg:
   #   emissions:
   #     ghg_price: 500
+
+# --- section: temporal ---
+# Temporal configuration
+#
+# planning_horizon: Target year for optimization. Controls population
+#   projections (UN WPP) and GDP clustering (IMF WEO).
+#
+# baseline_year: Reference year for observed baseline data. Controls FAOSTAT
+#   production, GDD dietary intake, GBD health data, ESA CCI land cover,
+#   and LUIcube grassland data.
+#   Hard constraints (data must exist for exact year):
+#     - LUIcube grassland: 1992-2020 (binding upper limit)
+#     - ESA CCI land cover: 1992-2022
+#     - GBD mortality: manual download required for matching year
+#   Soft constraints (nearest available year used automatically):
+#     - GDD dietary intake: latest available is 2018
+#     - GBD dietary risk exposure: latest available is 2019
+#
+# currency_base_year: Base year for inflation-adjusted USD values.
 planning_horizon: 2030
-currency_base_year: 2024  # Base year for inflation-adjusted USD values
+baseline_year: 2020
+currency_base_year: 2024
 
 # --- section: downloads ---
 downloads:
@@ -53,7 +73,6 @@ validation:
   slack_marginal_cost: 50. # bn USD per Mt/Mha for validation slack (food groups, feed, land)
   feed_slack_cost_factor: 0.1 # Feed slack cost as fraction of slack_marginal_cost (lower separates feed from food slack)
   grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
-  production_year: 2018 # To match with GDD baseline year
   production_stability:
     enabled: false
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
@@ -449,7 +468,6 @@ food_groups:
 # --- section: diet ---
 diet:
   baseline_age: "All ages"
-  baseline_reference_year: 2018 # Keeping this the same as the health reference year makes sense
   # Foods whose group-level consumption is overridden with waste-corrected
   # FAOSTAT Food Balance Sheet supply data. This addresses cases where GDD
   # survey intake substantially underestimates actual consumption (e.g. yam
@@ -562,7 +580,6 @@ trade:
 health:
   enabled: true  # Whether to include health costs in the objective function
   region_clusters: 30
-  reference_year: 2018
   intake_grid_points: 15  # Number of grid knots over empirical RR range
   log_rr_points: 15
   ssb_sugar_g_per_100g: 5.7  # ≈50 kcal per 226.8 g sugar-sweetened beverage (SSB) implies ~5.7 g sugar per 100 g
@@ -601,7 +618,6 @@ health:
     # sugar: [CHD, Stroke, T2DM, CRC]
   # Multi-objective clustering settings for grouping countries into health clusters
   clustering:
-    gdp_reference_year: 2025  # Reference year for GDP per capita data
     weights:
       geography: 1.0    # Weight for geographic proximity
       gdp: 0.5          # Weight for GDP per capita similarity
@@ -901,14 +917,11 @@ data:
   land_cover:
     # ECMWF credentials: configure in config/secrets.yaml or via environment variables
     # See config/secrets.yaml.example for setup instructions
-    year: "2020"  # Align with GAEZ current production which is a 2019-2021 average
     version: "v2_1_1"
   faostat:
     qcl_production_element_code: 5510  # "Production" in tonnes (QCL dataset, covers crops and livestock)
     fbs_food_supply_element_code: 645  # "Food supply quantity (kg/capita/yr)" in FBS dataset
     fbs_other_uses_element_code: 5154  # "Other uses (non-food)" in 1000 tonnes (FBS dataset)
-  luicube:
-    year: "2020"
   soilgrids:
     target_resolution_m: 10000  # Target resolution in meters (10000m = 10km)
 
@@ -920,11 +933,12 @@ irrigation:
   irrigated_crops: "all"
 
 # --- section: costs ---
-animal_costs:
+costs:
   averaging_period:
     start_year: 2015
     end_year: 2024
 
+animal_costs:
   fadn:
     high_cost_threshold_usd_per_mt: 50000
     livestock_specific_costs:
@@ -984,10 +998,6 @@ animal_costs:
 
 crop_costs:
   per_tonne_cost_fraction: 0.9  # Fraction of crop costs applied per tonne produced (remainder per hectare)
-  averaging_period:
-    start_year: 2015
-    end_year: 2024
-
   fadn:
     per_year_costs:
       SE340: "Machinery & building current costs"

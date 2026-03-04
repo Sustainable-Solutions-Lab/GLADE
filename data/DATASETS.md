@@ -129,8 +129,8 @@ Brief descriptions of key external datasets used by this project, with links and
   - Causes: Ischemic heart disease, Stroke, Diabetes mellitus, Colon and rectum cancer, Chronic respiratory diseases, All causes
   - Age groups: <1 year, 12-23 months, 2-4 years, 5-9 years, ..., 95+ years (individual bins, not aggregates)
   - Sex: Both
-  - Year: 2023 (or closest available to reference year)
-- Permalink (mortality): https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/05de3cfb56eafc99f2cc8e135644b81f
+  - Year: must match `baseline_year` (default: 2020)
+- Permalink (mortality, year 2020): https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/f4c7511d159798f5b8864bc83fa06451
 - Permalink (dietary relative risks): https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX
 - License/terms (summary): Free for non-commercial use with attribution; GBD data is made available under the IHME Free-of-Charge Non-commercial User Agreement.
   - Terms: https://www.healthdata.org/data-tools-practices/data-practices/ihme-free-charge-non-commercial-user-agreement
@@ -184,7 +184,7 @@ Brief descriptions of key external datasets used by this project, with links and
 - License/terms (summary): Multiple licenses apply: the ESA CCI licence, CC-BY licence, and VITO licence. In addition, users must cite the climate data store entry (see below) and provide attribution to the Copernicus program.
   - Terms of use: https://cds.climate.copernicus.eu/terms-of-use
 - Citation: Copernicus Climate Change Service, Climate Data Store, (2019): Land cover classification gridded maps from 1992 to present derived from satellite observation. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.006f2c9a (Accessed on 16-10-2025).
-- Workflow integration: Retrieved via the `download_land_cover` Snakemake rule using the `ecmwf-datastores` Python client. The full dataset (~2.2GB) contains multiple variables but only the land cover classification (`lccs_class`) is needed. The `extract_land_cover_class` rule automatically extracts just this variable to `data/downloads/land_cover_lccs_class.nc` (~440MB) and deletes the full download. Manual setup required: (1) Register for a free CDS account at https://cds.climate.copernicus.eu/user/register, (2) Accept the dataset licenses at https://cds.climate.copernicus.eu/datasets/satellite-land-cover?tab=download#manage-licences, (3) Configure your API key in `~/.ecmwfdatastoresrc` or via environment variables (see API documentation). The year and version can be configured via `config['data']['land_cover']['year']` and `config['data']['land_cover']['version']`.
+- Workflow integration: Retrieved via the `download_land_cover` Snakemake rule using the `ecmwf-datastores` Python client. The full dataset (~2.2GB) contains multiple variables but only the land cover classification (`lccs_class`) is needed. The `extract_land_cover_class` rule automatically extracts just this variable to `data/downloads/land_cover_lccs_class.nc` (~440MB) and deletes the full download. Manual setup required: (1) Register for a free CDS account at https://cds.climate.copernicus.eu/user/register, (2) Accept the dataset licenses at https://cds.climate.copernicus.eu/datasets/satellite-land-cover?tab=download#manage-licences, (3) Configure your API key in `~/.ecmwfdatastoresrc` or via environment variables (see API documentation). The land cover year is derived from the top-level `baseline_year` parameter; the version can be configured via `config['data']['land_cover']['version']`.
 
 ## ESA Biomass CCI — Global Above-Ground Biomass
 
@@ -268,7 +268,7 @@ Brief descriptions of key external datasets used by this project, with links and
 - Download: Zenodo records 14137284 (GL-owl) and 14013964 (GL-notrees)
 - Version/format: v1.0 (2025); GeoTIFF files within ZIP archives on Zenodo, accessed via HTTP range requests (remotezip).
 - Resolution: 30 arcsec (~1 km) spatial resolution; annual temporal resolution.
-- Coverage: Global; year 2020 (configurable via `config['data']['luicube']['year']`).
+- Coverage: Global; year derived from the top-level `baseline_year` parameter.
 - Variables: Area (km²), HANPP_harv (tC/yr), NPP_eco (tC/yr) per grid cell and land-use class.
 - License/terms (summary): Creative Commons Attribution 4.0 International (CC BY 4.0).
   - License: https://creativecommons.org/licenses/by/4.0/

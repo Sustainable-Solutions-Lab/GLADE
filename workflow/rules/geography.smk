@@ -16,7 +16,7 @@ rule prepare_population:
     params:
         planning_horizon=config["planning_horizon"],
         countries=config["countries"],
-        health_reference_year=config["health"]["reference_year"],
+        baseline_year=config["baseline_year"],
     output:
         population="<processing>/{name}/population.csv",
         population_age="<processing>/{name}/population_age.csv",

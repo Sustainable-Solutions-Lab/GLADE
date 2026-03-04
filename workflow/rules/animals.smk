@@ -17,7 +17,7 @@ rule prepare_faostat_animal_production:
         qcl_csv="data/downloads/faostat/QCL.csv",
         m49_codes="data/curated/M49-codes.csv",
     params:
-        production_year=config["validation"]["production_year"],
+        production_year=config["baseline_year"],
         countries=config["countries"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
@@ -43,7 +43,7 @@ rule prepare_faostat_yields:
         qcl_csv="data/downloads/faostat/QCL.csv",
     params:
         cost_params=config["animal_costs"]["faostat"],
-        averaging_period=config["animal_costs"]["averaging_period"],
+        averaging_period=config["costs"]["averaging_period"],
     output:
         "<processing>/{name}/faostat_animal_yields.csv",
     group:
@@ -148,7 +148,7 @@ rule prepare_feed_baseline:
         feed_to_animal_products="<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
         faostat_animal_production="<processing>/{name}/faostat_animal_production.csv",
     params:
-        reference_year=config["validation"]["production_year"],
+        reference_year=config["baseline_year"],
         countries=config["countries"],
         net_to_me_conversion=config["animal_products"][
             "net_to_metabolizable_energy_conversion"

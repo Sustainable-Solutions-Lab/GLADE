@@ -19,7 +19,7 @@ rule retrieve_gdp_per_capita:
         m49="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
-        year=config["health"]["clustering"]["gdp_reference_year"],
+        year=config["planning_horizon"],
     output:
         gdp="data/downloads/gdp_per_capita.csv",
     resources:
@@ -35,11 +35,11 @@ rule retrieve_gdp_per_capita:
 
 rule prepare_gbd_mortality:
     input:
-        gbd_mortality="data/manually_downloaded/IHME-GBD_2023-dealth-rates.csv",
+        gbd_mortality=f"data/manually_downloaded/IHME-GBD_2023-death-rates-{config['baseline_year']}.csv",
     params:
         countries=config["countries"],
         causes=config["health"]["causes"],
-        reference_year=config["health"]["reference_year"],
+        reference_year=config["baseline_year"],
     output:
         mortality="<processing>/{name}/health/gbd_mortality_rates.csv",
     group:
@@ -81,7 +81,7 @@ rule prepare_life_table:
     input:
         wpp_life_table="data/downloads/WPP_life_table.csv.gz",
     params:
-        reference_year=config["health"]["reference_year"],
+        reference_year=config["baseline_year"],
     output:
         life_table="<processing>/{name}/health/life_table.csv",
     group:
@@ -116,6 +116,7 @@ rule prepare_health_costs:
     params:
         countries=lambda w: get_effective_config(w.scenario)["countries"],
         health=lambda w: get_effective_config(w.scenario)["health"],
+        baseline_year=lambda w: get_effective_config(w.scenario)["baseline_year"],
     output:
         risk_breakpoints="<processing>/{name}/health/scen-{scenario}/risk_breakpoints.csv",
         cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",

@@ -662,7 +662,7 @@ def main():
     output_file = snakemake.output["food_loss_waste"]
     countries = snakemake.params["countries"]
     food_groups = snakemake.params["food_groups"]
-    reference_year = snakemake.params["health_reference_year"]
+    reference_year = snakemake.params["baseline_year"]
 
     logger.info("Processing food loss and waste data")
     logger.info("Countries: %d", len(countries))

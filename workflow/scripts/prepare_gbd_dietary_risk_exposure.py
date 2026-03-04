@@ -135,21 +135,33 @@ def main():
 
         df = pd.read_csv(csv_path)
 
-        # Filter: year, sex=Both, age=25 plus, country-level only
+        # Filter: sex=Both, age=25 plus, country-level only
         df = df[
-            (df["year_id"] == reference_year)
-            & (df["sex_name"] == "Both")
+            (df["sex_name"] == "Both")
             & (df["age_group_name"] == "25 plus")
             & (df["location_set"] == "GBD")
         ].copy()
 
         if df.empty:
             logger.warning(
-                "No data for year %d, sex=Both, age=25+ in %s",
-                reference_year,
+                "No data for sex=Both, age=25+ in %s",
                 csv_path.name,
             )
             continue
+
+        # Filter to reference year, with fallback to nearest available
+        df_year = df[df["year_id"] == reference_year]
+        if df_year.empty:
+            available_years = sorted(df["year_id"].unique())
+            nearest_year = min(available_years, key=lambda y: abs(y - reference_year))
+            logger.warning(
+                "No data for year %d in %s; using nearest year %d",
+                reference_year,
+                csv_path.name,
+                nearest_year,
+            )
+            df_year = df[df["year_id"] == nearest_year]
+        df = df_year
 
         # Map location names to ISO3
         for name in df["location_name"].unique():

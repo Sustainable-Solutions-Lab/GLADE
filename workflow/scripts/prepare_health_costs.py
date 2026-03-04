@@ -941,7 +941,7 @@ def main() -> None:
     risk_cause_map: dict[str, list[str]] = {
         str(risk): list(health_cfg["risk_cause_map"][risk]) for risk in risk_factors
     }
-    reference_year = int(health_cfg["reference_year"])
+    reference_year = int(snakemake.params["baseline_year"])
     intake_grid_points = int(health_cfg["intake_grid_points"])
     log_rr_points = int(health_cfg["log_rr_points"])
     intake_cap_limit = float(health_cfg["intake_cap_g_per_day"])
