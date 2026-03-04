@@ -63,6 +63,69 @@ class TestDistributionParsing:
         with pytest.raises(ValueError, match="requires 'mu' and 'sigma'"):
             _validate_distribution_spec("x", {"distribution": "lognormal", "mu": 0})
 
+    def test_normal_ci_default_confidence(self):
+        spec = {"distribution": "normal_ci", "lower": 0.7, "upper": 1.3}
+        dist = build_chaospy_distribution(spec)
+        assert isinstance(dist, cp.Distribution)
+        # Check that the distribution CDF at the bounds matches the CI
+        assert float(dist.inv(0.5)) == pytest.approx(1.0, abs=1e-10)
+        assert float(dist.inv(0.05)) == pytest.approx(0.7, abs=1e-6)
+        assert float(dist.inv(0.95)) == pytest.approx(1.3, abs=1e-6)
+
+    def test_normal_ci_custom_confidence(self):
+        spec = {
+            "distribution": "normal_ci",
+            "lower": 0.8,
+            "upper": 1.2,
+            "confidence": 0.95,
+        }
+        dist = build_chaospy_distribution(spec)
+        # 95% CI: 2.5th and 97.5th percentiles should match bounds
+        assert float(dist.inv(0.025)) == pytest.approx(0.8, abs=1e-6)
+        assert float(dist.inv(0.975)) == pytest.approx(1.2, abs=1e-6)
+
+    def test_normal_ci_with_null_bounds(self):
+        """null in bounds means unbounded on that side."""
+        spec = {
+            "distribution": "normal_ci",
+            "lower": 0.3,
+            "upper": 1.7,
+            "bounds": [0, None],
+        }
+        dist = build_chaospy_distribution(spec)
+        # Lower bound is enforced
+        assert float(dist.inv(0.0)) >= 0.0
+        # Upper side is unbounded (should extend well past 1.7)
+        assert float(dist.inv(0.999)) > 1.7
+
+    def test_normal_with_bounds(self):
+        spec = {"distribution": "normal", "mean": 1.0, "std": 0.5, "bounds": [0, None]}
+        dist = build_chaospy_distribution(spec)
+        assert float(dist.inv(0.0)) >= 0.0
+        assert float(dist.inv(0.5)) == pytest.approx(1.0, abs=0.05)
+
+    def test_normal_ci_with_bounds(self):
+        spec = {
+            "distribution": "normal_ci",
+            "lower": 0.7,
+            "upper": 1.3,
+            "confidence": 0.9,
+            "bounds": [0, 2],
+        }
+        dist = build_chaospy_distribution(spec)
+        assert isinstance(dist, cp.Distribution)
+        # Samples must stay within bounds
+        assert float(dist.inv(0.0)) >= 0.0
+        assert float(dist.inv(1.0)) <= 2.0
+        # Median should still be the midpoint
+        assert float(dist.inv(0.5)) == pytest.approx(1.0, abs=1e-4)
+
+    def test_validate_normal_ci_missing_fields(self):
+        with pytest.raises(ValueError, match="requires 'lower' and 'upper'"):
+            _validate_distribution_spec(
+                "x", {"distribution": "normal_ci", "lower": 0.7}
+            )
+
 
 class TestSensitivitySampling:
     """Tests for the sensitivity sampling function."""

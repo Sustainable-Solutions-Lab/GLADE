@@ -58,45 +58,59 @@ scenarios:
         yield_factor:
           lower: 0.8
           upper: 1.2
+          bounds: [0, null]
         ch4_factor:
           lower: 0.5
           upper: 1.5
+          bounds: [0, null]
         n2o_factor:
           lower: 0.3
           upper: 1.7
+          bounds: [0, null]
         luc_factor:
           lower: 0.3
           upper: 1.7
+          bounds: [0, null]
         flw_factor:
           lower: 0.7
           upper: 1.3
+          bounds: [0, null]
         fcr_factor:
           lower: 0.8
           upper: 1.2
+          bounds: [0, null]
         # rr_fruits:
         #   lower: 0
         #   upper: 1
+        #   bounds: [0, 1]
         # rr_vegetables:
         #   lower: 0
         #   upper: 1
+        #   bounds: [0, 1]
         rr_whole_grains:
           lower: 0
           upper: 1
+          bounds: [0, 1]
         rr_legumes:
           lower: 0
           upper: 1
+          bounds: [0, 1]
         # rr_nuts_seeds:
         #   lower: 0
         #   upper: 1
+        #   bounds: [0, 1]
         rr_red_meat:
           lower: 0
           upper: 1
+          bounds: [0, 1]
         value_per_yll:
           lower: 0
           upper: 20000
+          bounds: [0, null]
         ghg_price:
           lower: 0
           upper: 300
+          bounds: [0, null]
       template:
         sensitivity:
           crop_yields:

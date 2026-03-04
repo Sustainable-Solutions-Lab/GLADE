@@ -50,6 +50,12 @@ Sensitivity analysis mode using space-filling Sobol sequences:
             distribution: lognormal
             mu: 0.0
             sigma: 0.15
+          land_cost:
+            distribution: normal_ci
+            lower: 0.7
+            upper: 1.3
+            confidence: 0.9
+            bounds: [0, 2]
         template:
           sensitivity:
             crop_yields:
@@ -63,6 +69,7 @@ import itertools
 
 import chaospy as cp
 import numpy as np
+from scipy.stats import norm as sp_norm
 from scipy.stats.qmc import Sobol
 
 
@@ -222,10 +229,16 @@ def _validate_distribution_spec(param_name: str, param_spec: dict) -> None:
                 f"Parameter '{param_name}' with lognormal distribution "
                 "requires 'mu' and 'sigma'"
             )
+    elif dist == "normal_ci":
+        if "lower" not in param_spec or "upper" not in param_spec:
+            raise ValueError(
+                f"Parameter '{param_name}' with normal_ci distribution "
+                "requires 'lower' and 'upper'"
+            )
     else:
         raise ValueError(
             f"Parameter '{param_name}' has unsupported distribution '{dist}'. "
-            "Supported: uniform, normal, lognormal"
+            "Supported: uniform, normal, lognormal, normal_ci"
         )
 
 
@@ -246,9 +259,28 @@ def build_chaospy_distribution(param_spec: dict) -> cp.Distribution:
     if dist == "uniform":
         return cp.Uniform(param_spec["lower"], param_spec["upper"])
     elif dist == "normal":
-        return cp.Normal(param_spec["mean"], param_spec["std"])
+        mean, std = param_spec["mean"], param_spec["std"]
+        bounds = param_spec.get("bounds")
+        if bounds is not None:
+            lo = -np.inf if bounds[0] is None else bounds[0]
+            hi = np.inf if bounds[1] is None else bounds[1]
+            return cp.TruncNormal(lo, hi, mean, std)
+        return cp.Normal(mean, std)
     elif dist == "lognormal":
         return cp.LogNormal(param_spec["mu"], param_spec["sigma"])
+    elif dist == "normal_ci":
+        lower = param_spec["lower"]
+        upper = param_spec["upper"]
+        confidence = param_spec.get("confidence", 0.9)
+        mean = (lower + upper) / 2
+        z = sp_norm.ppf((1 + confidence) / 2)
+        std = (upper - lower) / (2 * z)
+        bounds = param_spec.get("bounds")
+        if bounds is not None:
+            lo = -np.inf if bounds[0] is None else bounds[0]
+            hi = np.inf if bounds[1] is None else bounds[1]
+            return cp.TruncNormal(lo, hi, mean, std)
+        return cp.Normal(mean, std)
     else:
         raise ValueError(f"Unsupported distribution: {dist}")
 
