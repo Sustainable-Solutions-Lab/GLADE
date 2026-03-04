@@ -198,14 +198,26 @@ The joint distribution is the product of the marginals (i.e., parameters are
 assumed independent).
 
 .. csv-table::
-   :header: Distribution, Required fields, Description
+   :header: Distribution, Required fields, Optional fields, Description
 
-   ``uniform`` (default), ``lower``, ``upper``, "Flat distribution over [lower, upper]"
-   ``normal``, ``mean``, ``std``, "Gaussian with given mean and standard deviation"
-   ``lognormal``, ``mu``, ``sigma``, "Log-normal with log-scale mean and std"
+   ``uniform`` (default), "``lower``, ``upper``", , "Flat distribution over [lower, upper]"
+   ``normal``, "``mean``, ``std``", ``bounds``, "Gaussian with given mean and standard deviation"
+   ``normal_ci``, "``lower``, ``upper``", "``confidence``, ``bounds``", "Normal distribution where [lower, upper] defines a confidence interval"
+   ``lognormal``, "``mu``, ``sigma``", , "Log-normal with log-scale mean and std"
 
 When the ``distribution`` field is omitted, ``uniform`` is assumed (requiring
 only ``lower`` and ``upper``).
+
+The ``normal_ci`` distribution derives its mean as ``(lower + upper) / 2`` and
+its standard deviation from the confidence level (default: 0.9, i.e. 90% CI).
+This is useful when the literature reports uncertainty as a confidence interval
+around a central value rather than as explicit standard deviations.
+
+The optional ``bounds`` field (a two-element list ``[lo, hi]``) truncates
+``normal`` and ``normal_ci`` distributions to the given range using a truncated
+normal. Use ``null`` for an unbounded side (e.g., ``bounds: [0, null]`` enforces
+non-negativity). This prevents physically meaningless values (e.g., negative
+multiplicative factors) in the tails of the distribution.
 
 
 Configuration
@@ -234,21 +246,33 @@ distributions rather than fixed value lists.
          yield_factor:
            lower: 0.8
            upper: 1.2
+           bounds: [0, null]
          ch4_factor:
+           distribution: normal_ci
            lower: 0.5
            upper: 1.5
+           confidence: 0.9
+           bounds: [0, null]
          n2o_factor:
+           distribution: normal_ci
            lower: 0.3
            upper: 1.7
+           confidence: 0.9
+           bounds: [0, null]
          luc_factor:
+           distribution: normal_ci
            lower: 0.3
            upper: 1.7
+           confidence: 0.9
+           bounds: [0, null]
          flw_factor:
            lower: 0.7
            upper: 1.3
+           bounds: [0, null]
          fcr_factor:
            lower: 0.8
            upper: 1.2
+           bounds: [0, null]
          rr_fruits:
            lower: 0
            upper: 1
@@ -335,9 +359,19 @@ Parameter Range Justification
 -----------------------------
 
 This section documents the uncertainty ranges assigned to each sensitivity
-parameter, with references to the scientific literature. All emission factor
-parameters use uniform distributions; the range represents the multiplicative
-factor applied to the model's default values.
+parameter, with references to the scientific literature. The range represents
+the multiplicative factor applied to the model's default values.
+
+**Distribution choice.** Parameters whose ranges are derived from formal
+confidence intervals reported in the literature use ``normal_ci`` distributions,
+where ``lower`` and ``upper`` define the 90% confidence interval of a normal
+distribution (truncated at zero to prevent physically meaningless negative
+factors). This applies to the three emission-related factors (CH\ :sub:`4`,
+N\ :sub:`2`\ O, and LUC), whose ranges are grounded in IPCC confidence
+intervals. The remaining parameters (crop yields, food loss & waste, feed
+conversion ratios) use ``uniform`` distributions because their ranges are
+derived from informal expert assessments, inter-estimate disagreement, or error
+metrics that do not correspond to a well-defined confidence level.
 
 The CH\ :sub:`4` and N\ :sub:`2`\ O sensitivity factors represent combined
 uncertainty in both the underlying **emission factors** (measurement and
@@ -371,6 +405,11 @@ range, ±40%, is a reasonable central estimate for the emission factor alone.
 quadrature with the emission factor uncertainty (±40%, 95% CI) gives a combined
 uncertainty of approximately ±57%. The ±50% range is a conservative rounding of
 this combined estimate.
+
+**Distribution.** Since both the IPCC GWP100 (90% CI) and Tier 1 emission factor
+(95% CI) uncertainties are reported as formal confidence intervals, the combined
+range is treated as a 90% CI of a ``normal_ci`` distribution (truncated at
+zero). This is slightly conservative relative to the quadrature result.
 
 N\ :sub:`2`\ O factor (``n2o_factor``: 0.3–1.7)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -416,6 +455,10 @@ factors well above 1.0 in the range.
 quadrature with the emission factor uncertainty (±50%) gives a combined
 uncertainty of approximately ±69%, rounded to ±70%.
 
+**Distribution.** As with CH\ :sub:`4`, both contributing uncertainties are
+formal confidence intervals, so the combined range is treated as a 90% CI of a
+``normal_ci`` distribution (truncated at zero).
+
 Land-use change emissions (``luc_factor``: 0.3–1.7)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -444,6 +487,10 @@ with:
 - **Amortisation period** choices: switching from the conventional 20-year to a
   30-year period changes annualised emissions by ~33% [#maciel]_.
 
+**Distribution.** The IPCC AR6 WGIII directly reports ±70% as a 90% CI, making
+this the most straightforward case for a ``normal_ci`` distribution (truncated
+at zero).
+
 Crop yield factor (``yield_factor``: 0.8–1.2)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -466,6 +513,10 @@ The ±20% range is supported by:
 
 Yield uncertainty propagates strongly to land use (more yield means less land
 required) and GHG emissions (through reduced land-use change pressure).
+
+**Distribution.** A ``uniform`` distribution is used because the range is
+synthesised from heterogeneous error metrics (NRMSE, CV, model spread) that do
+not correspond to a formal confidence interval at any specific level.
 
 Food loss and waste factor (``flw_factor``: 0.7–1.3)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -494,6 +545,10 @@ The ±30% range is supported by:
 The dominant bias direction in the literature is underestimation, which would
 support an asymmetric range skewed higher. The symmetric ±30% range is a
 conservative simplification.
+
+**Distribution.** A ``uniform`` distribution is used because the range is derived
+from inter-estimate disagreement and data gap assessments rather than formal
+confidence intervals.
 
 Feed conversion ratio factor (``fcr_factor``: 0.8–1.2)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -525,6 +580,10 @@ The ±20% range is supported by:
 The ±20% range captures data source disagreement, conversion factor
 uncertainty, and temporal lag without bleeding into inter-system variation
 (which is already represented by the model's regionalized FCR assignment).
+
+**Distribution.** A ``uniform`` distribution is used because the range is based
+on inter-source disagreement and precedent from other studies that also used
+uniform distributions for FCR uncertainty [#alexander]_ [#springmann]_.
 
 Health relative risk parameters (``rr_*``: 0–1)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

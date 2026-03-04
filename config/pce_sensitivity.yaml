@@ -19,12 +19,12 @@ scenarios:
   #
   # Parameters and their uncertainty ranges (see docs/sensitivity_analysis.rst
   # for detailed justification and references):
-  #   - yield_factor: 0.8-1.2 (20% uncertainty in crop yields)
-  #   - ch4_factor: 0.5-1.5 (combined EF + GWP100 uncertainty)
-  #   - n2o_factor: 0.3-1.7 (combined EF + GWP100 uncertainty)
-  #   - luc_factor: 0.3-1.7 (70% uncertainty in LUC emissions)
-  #   - flw_factor: 0.7-1.3 (30% uncertainty in food loss & waste)
-  #   - fcr_factor: 0.8-1.2 (20% uncertainty in feed conversion ratios)
+  #   - yield_factor: 0.8-1.2 uniform (20% uncertainty in crop yields)
+  #   - ch4_factor: 0.5-1.5 normal 90% CI (combined EF + GWP100 uncertainty)
+  #   - n2o_factor: 0.3-1.7 normal 90% CI (combined EF + GWP100 uncertainty)
+  #   - luc_factor: 0.3-1.7 normal 90% CI (70% uncertainty in LUC emissions)
+  #   - flw_factor: 0.7-1.3 uniform (30% uncertainty in food loss & waste)
+  #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
   #   - rr_*: 0-1 (quantile interpolation between GBD rr_low and rr_high)
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
@@ -60,16 +60,22 @@ scenarios:
           upper: 1.2
           bounds: [0, null]
         ch4_factor:
+          distribution: normal_ci
           lower: 0.5
           upper: 1.5
+          confidence: 0.9
           bounds: [0, null]
         n2o_factor:
+          distribution: normal_ci
           lower: 0.3
           upper: 1.7
+          confidence: 0.9
           bounds: [0, null]
         luc_factor:
+          distribution: normal_ci
           lower: 0.3
           upper: 1.7
+          confidence: 0.9
           bounds: [0, null]
         flw_factor:
           lower: 0.7
