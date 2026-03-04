@@ -36,11 +36,20 @@ The =pce_sensitivity_scenarios.yaml= config currently includes the following
 parameters. We haven't done dedicated sweeps for most of these; they were chosen
 based on prior expectations about what drives model uncertainty.
 
-*Emission factors* (currently active):
-- =ch4_factor= [0.7, 1.3]: CH4 emission factor scaling. Affects enteric
-  fermentation and manure management.
-- =n2o_factor= [0.7, 1.3]: N2O emission factor scaling. Affects fertilizer and
-  manure N2O.
+*Emission factors* (currently active; see =docs/sensitivity_analysis.rst= for
+full justification with references):
+- =ch4_factor= [0.5, 1.5]: ±50%, representing combined EF + GWP100
+  uncertainty. EF uncertainty ±40% (midpoint of IPCC Tier 1 ±30–50%)
+  and GWP100 uncertainty ±40% (IPCC AR6, 90% CI) combine in quadrature
+  to ±57%, rounded conservatively to ±50%.
+- =n2o_factor= [0.3, 1.7]: ±70%, representing combined EF + GWP100
+  uncertainty. EF uncertainty ±50% (Tian et al. 2020 global aggregate
+  ×0.66–1.53; structural uncertainty from aggregated EFs) and GWP100
+  uncertainty ±47% (IPCC AR6, 90% CI) combine in quadrature to ±69%,
+  rounded to ±70%.
+- =luc_factor= [0.3, 1.7]: ±70%, matching IPCC AR6 WGIII 90% CI for
+  CO2-LULUCF emissions. Supported by Global Carbon Budget CV ≈ 58% (1σ),
+  AGB uncertainty ~50%, and SOC factor uncertainty ~20–25%.
 
 *Health relative risk quantiles* (currently active):
 - =rr_whole_grains= [0, 1]: Interpolates between GBD low/high RR estimates.
@@ -48,14 +57,13 @@ based on prior expectations about what drives model uncertainty.
 - =rr_red_meat= [0, 1]: Same.
 
 *Valuation / slice parameters* (currently active):
-- =value_per_yll= [0, 20000]: YLL monetary valuation.
-- =ghg_price= [0, 300]: Carbon price.
+- =value_per_yll= [0, 20000]: YLL monetary valuation (policy choice).
+- =ghg_price= [0, 300]: Carbon price (policy choice).
 
-*Commented out* (not yet included):
-- =yield_factor= [0.8, 1.2]: Global crop yield uncertainty. Commented out
-  presumably to reduce dimensionality; might matter for land-use results.
-- =luc_factor= [0.5, 1.5]: Land-use change emission uncertainty. Wide range
-  reflects genuine uncertainty in LUC carbon coefficients.
+*Not currently included*:
+- =yield_factor= [0.8, 1.2]: Global crop yield uncertainty (±20%). Well-
+  supported by grid-cell NRMSE (18–28%) and inter-annual CV (13–22% for major
+  cereals). Excluded to reduce dimensionality.
 - =rr_fruits=, =rr_vegetables=, =rr_nuts_seeds=: Additional health risk
   factors. Left out to keep dimensionality manageable; these food groups may
   be less decision-relevant than grains/legumes/red meat.
@@ -66,6 +74,3 @@ based on prior expectations about what drives model uncertainty.
   a modelling choice; including it would test robustness to this assumption.
 - The =total_width_multiplier= for food utility was not tested (held at 2.0).
   Given the insensitivity to the other utility parameters, this is likely fine.
-- Are the current ranges for =value_per_yll= and =ghg_price= appropriate? The
-  YLL range [0, 20000] is narrower than the full literature range but
-  reasonable for a central analysis.

@@ -235,14 +235,14 @@ distributions rather than fixed value lists.
            lower: 0.8
            upper: 1.2
          ch4_factor:
-           lower: 0.7
-           upper: 1.3
-         n2o_factor:
-           lower: 0.7
-           upper: 1.3
-         luc_factor:
            lower: 0.5
            upper: 1.5
+         n2o_factor:
+           lower: 0.3
+           upper: 1.7
+         luc_factor:
+           lower: 0.3
+           upper: 1.7
          rr_fruits:
            lower: 0
            upper: 1
@@ -319,6 +319,222 @@ parameter per risk factor produces cause-specific adjustments automatically.
 - ``template``: Configuration template with ``{param_name}`` placeholders that
   are substituted with sampled values. Type is preserved when the placeholder
   is the entire value.
+
+
+.. _sensitivity-parameter-ranges:
+
+Parameter Range Justification
+-----------------------------
+
+This section documents the uncertainty ranges assigned to each sensitivity
+parameter, with references to the scientific literature. All emission factor
+parameters use uniform distributions; the range represents the multiplicative
+factor applied to the model's default values.
+
+The CH\ :sub:`4` and N\ :sub:`2`\ O sensitivity factors represent combined
+uncertainty in both the underlying **emission factors** (measurement and
+methodology uncertainty) and the **100-year global warming potentials** (GWP100)
+used to convert physical emissions to CO\ :sub:`2`-equivalents. The IPCC AR6
+reports GWP100 90% confidence intervals of ±40% for CH\ :sub:`4` and ±47% for
+N\ :sub:`2`\ O [#gwp]_. Since EF and GWP uncertainties are independent (the
+former is an agricultural measurement question, the latter a climate science
+question), they combine approximately in quadrature.
+
+CH\ :sub:`4` factor (``ch4_factor``: 0.5–1.5)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales all CH\ :sub:`4` emissions from livestock, covering both
+enteric fermentation and manure management.
+
+**Emission factor uncertainty.** The IPCC 2019 Refinement reports a Tier 1
+uncertainty of ±30–50% (95% CI) for livestock CH\ :sub:`4` emission factors
+[#ipcc_ch10]_. Enteric fermentation dominates total livestock CH\ :sub:`4`
+(roughly 80–90% of the total). Species-specific standard deviations in the 2019
+Refinement (Tables 10.12–10.13) translate to 95% CIs of ±26% (sheep) to ±39%
+(cattle/buffalo). Manure management uncertainty is considerably larger: Hristov
+et al. report a 95% CI of ±63–65% for US manure CH\ :sub:`4` using gridded
+Monte Carlo analysis [#hristov]_. A GLEAM one-at-a-time sensitivity analysis
+found approximately ±39% total variation in ruminant CH\ :sub:`4` when
+perturbing all 92 input parameters [#gleam]_. The midpoint of the IPCC Tier 1
+range, ±40%, is a reasonable central estimate for the emission factor alone.
+
+**Combined uncertainty.** Adding GWP100 uncertainty (±40%, 90% CI [#gwp]_) in
+quadrature with the emission factor uncertainty (±40%, 95% CI) gives a combined
+uncertainty of approximately ±57%. The ±50% range is a conservative rounding of
+this combined estimate.
+
+N\ :sub:`2`\ O factor (``n2o_factor``: 0.3–1.7)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales N\ :sub:`2`\ O emissions from manure management and manure
+applied to soils. N\ :sub:`2`\ O emission factors are among the most uncertain
+parameters in agricultural GHG inventories.
+
+**Emission factor uncertainty.** The IPCC 2019 Refinement [#ipcc_ch11]_ reports
+the aggregated Tier 1 direct emission factor EF\ :sub:`1` = 0.01 with a 95% CI
+of 0.001–0.018, corresponding to multiplicative factors of ×0.1–1.8. When
+disaggregated by climate, the 95% CIs are tighter (e.g., wet-climate synthetic
+fertiliser: 0.013–0.019 around 0.016, i.e., ±19%) but differ substantially
+between wet and dry climates.
+
+Since the model uses the aggregated EF\ :sub:`1` = 0.01 uniformly across
+countries, it mixes climate zones where the true EF differs by a factor of ~3
+(wet 0.016 vs. dry 0.005). An emission-factor-only range of approximately ±50%
+captures:
+
+- The **global aggregate** N\ :sub:`2`\ O **uncertainty** from Tian et al., who
+  synthesise bottom-up inventories to estimate total agricultural N\ :sub:`2`\ O
+  at 3.8 Tg N/yr with a min–max range across methodologies of 2.5–5.8 Tg N/yr,
+  i.e., factors of ×0.66–1.53 relative to the central estimate [#tian]_.
+- The **structural uncertainty** from using aggregated rather than
+  climate-disaggregated emission factors. Hergoualc'h et al. showed that
+  propagating the 95% CIs of disaggregated EFs gives a global estimate of
+  883–1,285 Gg N\ :sub:`2`\ O-N/yr (±19% around the midpoint), whereas the
+  aggregated method spans 539–2,713 Gg/yr [#hergoualch]_.
+- **Indirect** N\ :sub:`2`\ O **pathways** with very wide 95% CIs
+  (EF\ :sub:`4` for volatilisation: 0.002–0.05; Frac\ :sub:`LEACH`:
+  0.10–0.80) [#ipcc_ch11]_.
+
+The range is narrower than the full IPCC aggregated 95% CI [×0.1, ×1.8] because
+global aggregation across countries and N sources averages out regional
+extremes. Evidence of possible systematic underestimation (legacy effects
+suggesting a true global mean EF of ~1.9% [#legacy_n2o]_) supports including
+factors well above 1.0 in the range.
+
+**Combined uncertainty.** Adding GWP100 uncertainty (±47%, 90% CI [#gwp]_) in
+quadrature with the emission factor uncertainty (±50%) gives a combined
+uncertainty of approximately ±69%, rounded to ±70%.
+
+Land-use change emissions (``luc_factor``: 0.3–1.7)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This factor scales CO\ :sub:`2` emissions from land conversion (both cropland
+and pasture expansion). LUC emissions are among the most uncertain components of
+the global carbon budget, driven by uncertainty in carbon stocks, the spatial
+pattern of conversion, and methodological choices.
+
+The ±70% range aligns with the IPCC AR6 WGIII assessment, which reports a 90%
+CI of ±70% for CO\ :sub:`2`-LULUCF emissions — the largest fractional
+uncertainty of any major emission category [#ipcc_ar6_luc]_. This is consistent
+with:
+
+- The **Global Carbon Budget**: E\ :sub:`LUC` for 2022 is 1.2 ± 0.7 GtC/yr
+  (semi-quantitative 1σ / 68% CI), with biogeochemical parameterisation as the
+  dominant uncertainty component [#gcb2023]_.
+- **Above-ground biomass** carbon stock estimates: the IPCC 2019 Refinement
+  default AGB values for tropical forests have standard deviations averaging
+  ~55% of the mean across ecological zones and continents [#rozendaal]_. The
+  GlobBiomass dataset used in global maps has a global mean error of ~50%
+  [#spawn]_.
+- **Soil organic carbon** stock change factors (F\ :sub:`LU`, F\ :sub:`MG`,
+  F\ :sub:`I`): 95% CIs of ±11–16% per factor, propagating to a combined
+  SOC-change uncertainty of ~20–25% for well-characterised climate zones,
+  reaching ±50% in poorly sampled regions [#ipcc_ch5]_.
+- **Amortisation period** choices: switching from the conventional 20-year to a
+  30-year period changes annualised emissions by ~33% [#maciel]_.
+
+Health relative risk parameters (``rr_*``: 0–1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each ``rr_<risk_factor>`` parameter is a quantile :math:`q \in [0, 1]` that
+interpolates between the GBD lower and upper confidence bounds for
+dose-response relative risks. At :math:`q = 0` the strongest effect estimate is
+used; at :math:`q = 1` the weakest. This directly encodes the uncertainty
+reported by the Global Burden of Disease study [#gbd]_ without requiring
+additional assumptions about the shape of the uncertainty distribution.
+
+Policy slice parameters
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The **value per YLL** (``value_per_yll``: 0–20,000 USD) and **GHG price**
+(``ghg_price``: 0–300 USD/tCO\ :sub:`2`-eq) are policy-choice parameters rather
+than epistemic uncertainties. They are designated as **slice parameters**:
+included in the PCE fit but analytically conditioned on specific values to show
+how sensitivity patterns shift across the policy space. Their ranges are chosen
+to span a wide policy-relevant domain without claiming to represent a specific
+probability distribution.
+
+
+.. rubric:: References
+
+.. [#gwp] IPCC, 2021: *Climate Change 2021: The Physical Science Basis*,
+   WG I, Chapter 7, Table 7.15. GWP100 (fossil CH\ :sub:`4`): 29.8 ± 11;
+   GWP100 (N\ :sub:`2`\ O): 273 ± 130 (90% CI).
+   https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-7/
+
+.. [#ipcc_ch10] IPCC, 2019: *2019 Refinement to the 2006 IPCC Guidelines for
+   National Greenhouse Gas Inventories*, Vol. 4, Ch. 10: Emissions from
+   Livestock and Manure Management. Tier 1 uncertainty: ±30–50% (95% CI).
+   https://www.ipcc-nggip.iges.or.jp/public/2019rf/pdf/4_Volume4/19R_V4_Ch10_Livestock.pdf
+
+.. [#hristov] Hristov, A. N. et al., 2017: Discrepancies and uncertainties in
+   bottom-up gridded inventories of livestock methane emissions for the
+   contiguous United States. *Environ. Sci. Technol.*, 51(23), 13668–13677.
+   Enteric fermentation 95% CI: ±16–17%; manure management 95% CI: ±63–65%.
+   https://doi.org/10.1021/acs.est.7b03332
+
+.. [#gleam] Rivera Moncada, A. et al., 2025: Sensitivity analysis of
+   parameters, emission factors, and coefficients for estimating animal
+   emissions of ruminant species in GLEAM. *Int. J. Life Cycle Assess.*
+   One-at-a-time perturbation of 92 input parameters.
+   https://doi.org/10.1007/s11367-025-02529-5
+
+.. [#ipcc_ch11] IPCC, 2019: *2019 Refinement to the 2006 IPCC Guidelines for
+   National Greenhouse Gas Inventories*, Vol. 4, Ch. 11: N\ :sub:`2`\ O
+   Emissions from Managed Soils, and CO\ :sub:`2` Emissions from Lime and Urea
+   Application. EF\ :sub:`1` = 0.01 (95% CI: 0.001–0.018).
+   https://www.ipcc-nggip.iges.or.jp/public/2019rf/pdf/4_Volume4/19R_V4_Ch11_Soils_N2O_CO2.pdf
+
+.. [#tian] Tian, H. et al., 2020: A comprehensive quantification of global
+   nitrous oxide sources and sinks. *Nature*, 586, 248–256. Central estimate
+   3.8 Tg N/yr; range 2.5–5.8 Tg N/yr represents the spread across bottom-up
+   inventory methodologies.
+   https://doi.org/10.1038/s41586-020-2780-0
+
+.. [#hergoualch] Hergoualc'h, K. et al., 2021: Improved accuracy and reduced
+   uncertainty in greenhouse gas inventories by refining the IPCC emission
+   factor for direct N\ :sub:`2`\ O emissions from nitrogen inputs to managed
+   soils. *Global Change Biol.*, 27, 6536–6550. Global estimate ranges derived
+   by propagating IPCC 95% CIs of disaggregated emission factors.
+   https://doi.org/10.1111/gcb.15884
+
+.. [#legacy_n2o] Qian, H. et al., 2025: Legacy effects cause systematic
+   underestimation of N\ :sub:`2`\ O emission factors. *Nat. Commun.*, 16.
+   https://doi.org/10.1038/s41467-025-58090-0
+
+.. [#ipcc_ar6_luc] IPCC, 2022: *Climate Change 2022: Mitigation of Climate
+   Change*, WG III, Chapter 7: Agriculture, Forestry, and Other Land Uses.
+   CO\ :sub:`2`-LULUCF uncertainty: ±70% (90% CI).
+   https://www.ipcc.ch/report/ar6/wg3/chapter/chapter-7/
+
+.. [#gcb2023] Friedlingstein, P. et al., 2023: Global Carbon Budget 2023.
+   *Earth Syst. Sci. Data*, 15, 5301–5369. E\ :sub:`LUC` uncertainty described
+   as a "semi-quantitative" 1σ (68% CI).
+   https://doi.org/10.5194/essd-15-5301-2023
+
+.. [#rozendaal] Rozendaal, D. M. A. et al., 2022: Aboveground forest biomass
+   varies across continents, ecological zones and successional stages: refined
+   IPCC default values for tropical and subtropical forests. *Environ. Res.
+   Lett.*, 17, 014047.
+   https://doi.org/10.1088/1748-9326/ac45b3
+
+.. [#spawn] Spawn, S. A. et al., 2020: Harmonized global maps of above and
+   belowground biomass carbon density in the year 2010. *Sci. Data*, 7, 112.
+   https://doi.org/10.1038/s41597-020-0444-4
+
+.. [#ipcc_ch5] IPCC, 2019: *2019 Refinement to the 2006 IPCC Guidelines for
+   National Greenhouse Gas Inventories*, Vol. 4, Ch. 5: Cropland. SOC stock
+   change factor uncertainties: ±11–50%.
+   https://www.ipcc-nggip.iges.or.jp/public/2019rf/pdf/4_Volume4/19R_V4_Ch05_Cropland.pdf
+
+.. [#maciel] Maciel, V. G. et al., 2022: Towards a non-ambiguous view of the
+   amortization period for quantifying direct land-use change in LCA. *Int. J.
+   Life Cycle Assess.*, 27, 1299–1315.
+   https://doi.org/10.1007/s11367-022-02103-3
+
+.. [#gbd] GBD 2017 Diet Collaborators, 2019: Health effects of dietary risks
+   in 195 countries, 1990–2017. *Lancet*, 393, 1958–1972.
+   https://doi.org/10.1016/S0140-6736(19)30041-8
 
 
 Running the Analysis
