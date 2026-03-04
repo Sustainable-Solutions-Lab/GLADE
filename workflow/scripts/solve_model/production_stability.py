@@ -123,6 +123,7 @@ def add_production_stability_constraints(
                 "grassland",
                 grassland_cfg,
                 slack_marginal_cost,
+                include_all_links=True,
             )
         elif penalty_mode == "l1":
             _add_production_l1_penalty(
@@ -216,9 +217,9 @@ def _production_and_baselines(
 
     Returns ``(link_names, area, baselines)`` where ``area`` is the link
     dispatch variable (Mha) and ``baselines`` is the observed baseline area
-    (Mha).  Returns ``None`` if there are no eligible links. In hard mode,
-    only links above ``min_baseline`` are included; in penalty modes all
-    links are included.
+    (Mha).  Returns ``None`` if there are no eligible links. When
+    ``include_all_links`` is False, only links above ``min_baseline`` are
+    included; when True, all links are included (including zero-baseline).
     """
     prod_links = links_df[links_df["carrier"] == carrier]
     if prod_links.empty or "baseline_area_mha" not in prod_links.columns:
@@ -318,12 +319,20 @@ def _add_production_hard_constraints(
     label: str,
     cfg: dict,
     slack_marginal_cost: float,
+    *,
+    include_all_links: bool = False,
 ) -> None:
     """Add per-link production stability bounds (hard mode).
 
     ``(1 - delta) * baseline <= area <= (1 + delta) * baseline``
     """
-    result = _production_and_baselines(link_p, links_df, carrier, cfg["min_baseline"])
+    result = _production_and_baselines(
+        link_p,
+        links_df,
+        carrier,
+        cfg["min_baseline"],
+        include_all_links=include_all_links,
+    )
     if result is None:
         return
 
