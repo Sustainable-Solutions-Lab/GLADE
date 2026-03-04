@@ -1515,6 +1515,135 @@ ANIMAL_COLORS = {
 }
 
 
+def _get_crop_group_style() -> tuple[dict[str, str], dict[str, tuple[float, ...]]]:
+    """Return crop-to-group mapping and group colors used by crop production map.
+
+    The mapping and palette mirror
+    `workflow/scripts/plotting/plot_crop_production_map.py`.
+    """
+    crop_to_group = {
+        # Cereals
+        "wheat": "Cereals",
+        "dryland-rice": "Cereals",
+        "wetland-rice": "Cereals",
+        "maize": "Cereals",
+        "barley": "Cereals",
+        "oat": "Cereals",
+        "rye": "Cereals",
+        "sorghum": "Cereals",
+        "buckwheat": "Cereals",
+        "foxtail-millet": "Cereals",
+        "pearl-millet": "Cereals",
+        # Legumes
+        "soybean": "Legumes",
+        "dry-pea": "Legumes",
+        "chickpea": "Legumes",
+        "cowpea": "Legumes",
+        "gram": "Legumes",
+        "phaseolus-bean": "Legumes",
+        "pigeonpea": "Legumes",
+        # Roots & tubers
+        "white-potato": "Roots & tubers",
+        "sweet-potato": "Roots & tubers",
+        "cassava": "Roots & tubers",
+        "yam": "Roots & tubers",
+        # Vegetables
+        "tomato": "Vegetables",
+        "carrot": "Vegetables",
+        "onion": "Vegetables",
+        "cabbage": "Vegetables",
+        # Fruits
+        "banana": "Fruits",
+        "citrus": "Fruits",
+        "coconut": "Fruits",
+        # Oilseeds
+        "sunflower": "Oilseeds",
+        "rapeseed": "Oilseeds",
+        "groundnut": "Oilseeds",
+        "sesame": "Oilseeds",
+        "oil-palm": "Oilseeds",
+        "olive": "Oilseeds",
+        # Sugar crops
+        "sugarcane": "Sugar crops",
+        "sugarbeet": "Sugar crops",
+        # Feed crops
+        "alfalfa": "Feed crops",
+        "silage-maize": "Feed crops",
+        "biomass-sorghum": "Feed crops",
+        "grassland": "Feed crops",
+    }
+
+    dark2 = plt.get_cmap("Dark2").colors
+    group_colors = {
+        "Cereals": dark2[5],
+        "Legumes": dark2[7],
+        "Roots & tubers": dark2[6],
+        "Vegetables": dark2[0],
+        "Fruits": dark2[1],
+        "Oilseeds": dark2[2],
+        "Sugar crops": dark2[3],
+        "Feed crops": dark2[4],
+    }
+    return crop_to_group, group_colors
+
+
+CROP_TO_GROUP, CROP_GROUP_COLORS = _get_crop_group_style()
+
+
+def aggregate_crop_metrics_by_group(
+    yield_df: pd.DataFrame,
+    production_df: pd.DataFrame,
+    crop_to_group: dict[str, str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Aggregate crop-level yield/production to crop groups.
+
+    Group yield is computed as production-weighted mean crop yield:
+    sum(yield * production) / sum(production).
+
+    Args:
+        yield_df: Crop-level average yields (Mt/Mha), indexed by scenario value
+        production_df: Crop-level production (Mt), indexed by scenario value
+        crop_to_group: Optional mapping from crop name to group label
+
+    Returns:
+        Tuple `(yield_by_group, production_by_group)` with group labels as
+        columns and the same index as inputs.
+    """
+    if yield_df.empty or production_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    if crop_to_group is None:
+        crop_to_group = CROP_TO_GROUP
+
+    common_index = yield_df.index.intersection(production_df.index)
+    crops = yield_df.columns.union(production_df.columns)
+
+    y = yield_df.reindex(index=common_index, columns=crops, fill_value=0.0)
+    p = production_df.reindex(index=common_index, columns=crops, fill_value=0.0)
+
+    group_cols = {crop: crop_to_group.get(crop, "Other") for crop in crops}
+
+    # Aggregate production by group
+    p_group = p.T.groupby(group_cols).sum().T
+
+    # Production-weighted mean yield by group
+    yp_group = (y * p).T.groupby(group_cols).sum().T
+    y_group = yp_group.div(p_group.where(p_group > 0.0)).replace(
+        [np.inf, -np.inf], np.nan
+    )
+    y_group = y_group.fillna(0.0)
+
+    # Use map color order first, then any unexpected groups alphabetically
+    preferred_order = [g for g in CROP_GROUP_COLORS if g in p_group.columns]
+    extras = sorted([g for g in p_group.columns if g not in preferred_order])
+    col_order = preferred_order + extras
+
+    p_group = p_group.reindex(columns=col_order, fill_value=0.0)
+    y_group = y_group.reindex(columns=col_order, fill_value=0.0)
+
+    return y_group, p_group
+
+
 def _extract_feed_totals(
     n: pypsa.Network, groupby: str = "feed_category"
 ) -> dict[str, float]:
