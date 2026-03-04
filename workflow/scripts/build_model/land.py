@@ -98,6 +98,8 @@ def add_land_components(
     disable_spared_grassland: bool = False,
     existing_grassland_convertible_area: pd.Series | None = None,
     existing_grassland_marginal_area: pd.Series | None = None,
+    conversion_cost_forest_bnusd_per_mha: float = 0.0,
+    conversion_cost_nonforest_bnusd_per_mha: float = 0.0,
 ) -> None:
     """Add dual-pool land system with separate cropland and pasture pools.
 
@@ -141,6 +143,10 @@ def add_land_components(
     existing_grassland_marginal_area : pd.Series | None
         Current grazing-only grassland area that is not suitable for crop growth,
         indexed by (region, resource_class) in hectares.
+    conversion_cost_forest_bnusd_per_mha : float
+        Annualized investment cost for converting forested land (bnUSD/Mha).
+    conversion_cost_nonforest_bnusd_per_mha : float
+        Annualized investment cost for converting non-forested land (bnUSD/Mha).
     """
 
     if total_land_area.empty:
@@ -463,6 +469,11 @@ def add_land_components(
                     efficiency2=link_df["luc_lef"],
                     p_nom_extendable=True,
                     p_nom_max=link_df["p_nom_mha"],
+                    marginal_cost=(
+                        conversion_cost_forest_bnusd_per_mha
+                        if cover_type == "forest"
+                        else conversion_cost_nonforest_bnusd_per_mha
+                    ),
                     region=link_df["region"],
                     resource_class=link_df["resource_class"],
                     water_supply=link_df["water_supply"],
@@ -518,6 +529,11 @@ def add_land_components(
                         efficiency2=link_df["luc_lef"],
                         p_nom_extendable=True,
                         p_nom_max=link_df["p_nom_mha"],
+                        marginal_cost=(
+                            conversion_cost_forest_bnusd_per_mha
+                            if cover_type == "forest"
+                            else conversion_cost_nonforest_bnusd_per_mha
+                        ),
                         region=link_df["region"],
                         resource_class=link_df["resource_class"],
                         water_supply=link_df["water_supply"],

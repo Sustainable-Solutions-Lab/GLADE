@@ -30,6 +30,9 @@ The model distinguishes between three main categories of production costs:
 **Grazing Costs**
    Costs specifically associated with pasture-based livestock production, representing the management and maintenance of grassland feed systems.
 
+**Land Conversion Costs**
+   Investment costs for expanding agriculture onto new land, covering physical clearing and soil preparation. Differentiated by forest vs. non-forest cover type, annualized using a capital recovery factor over a configurable investment horizon. Applied as marginal costs on ``land_conversion`` and ``new_to_pasture`` links. See :doc:`land_use` for details.
+
 What Costs Include and Exclude
 -------------------------------
 

@@ -327,7 +327,7 @@ properties:
 
   land:
     type: object
-    required: [regional_limit, land_use_cost_usd_per_ha, filtering]
+    required: [regional_limit, land_use_cost_usd_per_ha, conversion_cost_forest_usd_per_ha, conversion_cost_nonforest_usd_per_ha, investment_horizon, discount_rate, filtering]
     additionalProperties: false
     properties:
       regional_limit:
@@ -339,6 +339,23 @@ properties:
         type: number
         minimum: 0
         description: "Optional marginal land-use cost applied to land supply dispatch (USD per ha)"
+      conversion_cost_forest_usd_per_ha:
+        type: number
+        minimum: 0
+        description: "Overnight investment cost for converting forested land to agriculture (USD/ha)"
+      conversion_cost_nonforest_usd_per_ha:
+        type: number
+        minimum: 0
+        description: "Overnight investment cost for converting non-forested land to agriculture (USD/ha)"
+      investment_horizon:
+        type: integer
+        minimum: 1
+        description: "Years over which to annualize land conversion investment costs"
+      discount_rate:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Annual discount rate for annualizing land conversion investment costs"
       filtering:
         type: object
         required: [min_crop_yield_t_per_ha, min_grassland_yield_t_per_ha, min_area_ha]

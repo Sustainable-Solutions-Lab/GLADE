@@ -197,6 +197,53 @@ When the model allocates more land to agriculture than the existing baseline, th
 
 See :doc:`environment` for details on how LUC emissions are calculated from above-ground biomass, soil organic carbon, and foregone regrowth potential.
 
+Land Conversion Costs
+~~~~~~~~~~~~~~~~~~~~~
+
+Expanding agriculture onto new land incurs physical investment costs for clearing vegetation, stumping, grading, and initial soil preparation. These costs are applied as ``marginal_cost`` on ``land_conversion`` (cropland expansion) and ``new_to_pasture`` (pasture expansion) links, differentiated by cover type:
+
+- **Forest → agriculture**: ``conversion_cost_forest_usd_per_ha`` (default: 8,000 USD/ha) — covers clearing dense vegetation, stumping, grading, and soil preparation.
+- **Non-forest → agriculture**: ``conversion_cost_nonforest_usd_per_ha`` (default: 2,000 USD/ha) — lighter clearing of brush and grassland with soil preparation.
+
+These values are in the model's currency base year (2024 USD).
+
+Since these are one-time investment costs, they are annualized using a **capital recovery factor** (CRF):
+
+.. math::
+
+   \text{CRF} = \frac{r}{1 - (1 + r)^{-n}}
+
+where *r* is the discount rate (``discount_rate``, default 0.05) and *n* is the investment horizon (``investment_horizon``, default 25 years, matching the LUC emissions horizon). The annualized cost is then converted to model units (bnUSD/Mha) and applied to the conversion links.
+
+**Sources and rationale for default cost values.**
+Direct estimates of the full private cost of converting land to crop-ready agriculture are sparse in the academic literature, which tends to focus on opportunity costs and returns from conversion rather than upfront clearing expenditure. The default values are chosen as middle-of-the-road estimates based on the following sources (original values inflation-adjusted to approximate 2024 USD where needed):
+
+*Forest clearing:*
+
+- The FAO Soils Bulletin 19 (FAO, 1979) reports that manual clearing of tropical high forest requires ~86 man-days/ha, while previously logged forest requires ~50 man-days/ha. At modern developing-country wages, this implies $430--1,300/ha for labor alone, before stumping, grading, and soil preparation.
+- Margulis (2004), in World Bank Working Paper No. 22, reports ~$500/ha (~$830/ha in 2024 USD) for basic slash-and-burn clearing in the Brazilian Amazon — the cheapest method, representing a lower bound.
+- An IUCN workshop on land clearing economics (IUCN, 2002) found that mechanized clearing of secondary forest in Indonesia costs $600--1,800/ha (~$1,050--3,150/ha in 2024 USD), while fire-based clearing costs $200--595/ha.
+- Nhiuane et al. (2024), in *Trees, Forests and People*, report clearing costs of $302--508/ha for slash-and-burn and $1,662/ha for conventional logging-based clearing in Mozambique.
+- Oil palm plantation development in Southeast Asia, which includes clearing, stumping, terracing, and establishment, costs $3,000--8,000/ha (Sumarga & Hein, 2014; industry reports).
+
+The default of 8,000 USD/ha represents the full cost of bringing forested land to a crop-ready state at commercial scale, including clearing, stumping, root removal, grading, soil preparation, and basic access infrastructure. This is above the cost of tree-felling alone, but below the total cost of plantation establishment which includes planting and multi-year maintenance.
+
+*Non-forest clearing:*
+
+- The FAO Soils Bulletin 19 (FAO, 1979) notes that jungle clearing costs up to 120 times as much as light brush clearing.
+- The IUCN (2002) workshop describes alang-alang grassland clearing costs as "substantially lower" than secondary forest, implying a ratio of roughly 3:1 for the same clearing method.
+- Nhiuane et al. (2024) report $302--508/ha for slash-and-burn clearing of savanna woodland in Mozambique.
+
+The default of 2,000 USD/ha covers mechanized clearing of brush and grassland plus soil preparation, consistent with a 4:1 forest-to-non-forest ratio that falls within the range supported by the FAO and IUCN data.
+
+**References:**
+
+- FAO (1979). *Land Clearing and Development*. FAO Soils Bulletin 19, Chapters II--III. Rome: FAO. [`Manual methods <https://www.fao.org/4/ad083e/AD083e03.htm>`__] [`Mechanized methods <https://www.fao.org/4/ad083e/AD083e04.htm>`__]
+- Margulis, S. (2004). *Causes of Deforestation of the Brazilian Amazon*. World Bank Working Paper No. 22. Washington, DC: World Bank. [`PDF <https://documents1.worldbank.org/curated/en/758171468768828889/pdf/277150PAPER0wbwp0no1022.pdf>`__]
+- IUCN (2002). *Workshop Report: Land Clearing on Degraded Lands for Plantation Development*. IUCN Fire & Forest Programme. [`PDF <https://iucn.org/sites/default/files/import/downloads/ff_workshop_economics.pdf>`__]
+- Nhiuane, O., Lisboa, S. N., Popat, M. & Sitoe, A. (2024). Quantifying the costs and benefits of forest conversion through slash-and-burn cultivation and conventional logging. *Trees, Forests and People*, 15, 100504. `doi:10.1016/j.tfp.2024.100504 <https://doi.org/10.1016/j.tfp.2024.100504>`__
+- Sumarga, E. & Hein, L. (2014). Mapping ecosystem services for land use planning, the case of Central Kalimantan. *Environmental Management*, 54(1), 84--97. `doi:10.1007/s00267-014-0282-2 <https://doi.org/10.1007/s00267-014-0282-2>`__
+
 Configuration Reference
 -----------------------
 

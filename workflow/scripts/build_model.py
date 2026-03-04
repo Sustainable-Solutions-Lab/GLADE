@@ -619,6 +619,27 @@ if __name__ == "__main__":
     reg_limit = float(land_cfg["regional_limit"])
     land_use_cost_usd_per_ha = float(land_cfg["land_use_cost_usd_per_ha"])
     land_use_cost_bnusd_per_mha = land_use_cost_usd_per_ha * HA_PER_MHA * USD_TO_BNUSD
+
+    # Land conversion costs: annualize overnight investment using capital recovery factor
+    investment_horizon = int(land_cfg["investment_horizon"])
+    discount_rate = float(land_cfg["discount_rate"])
+    if discount_rate > 0:
+        crf = discount_rate / (1 - (1 + discount_rate) ** (-investment_horizon))
+    else:
+        crf = 1.0 / investment_horizon
+    conv_cost_forest = (
+        float(land_cfg["conversion_cost_forest_usd_per_ha"])
+        * crf
+        * HA_PER_MHA
+        * USD_TO_BNUSD
+    )
+    conv_cost_nonforest = (
+        float(land_cfg["conversion_cost_nonforest_usd_per_ha"])
+        * crf
+        * HA_PER_MHA
+        * USD_TO_BNUSD
+    )
+
     filtering_cfg = land_cfg["filtering"]
     min_crop_yield = float(filtering_cfg["min_crop_yield_t_per_ha"])
     min_grassland_yield = float(filtering_cfg["min_grassland_yield_t_per_ha"])
@@ -638,6 +659,8 @@ if __name__ == "__main__":
         disable_spared_grassland=disable_spared_grassland,
         existing_grassland_convertible_area=convertible_grassland_area_series,
         existing_grassland_marginal_area=marginal_grassland_area_series,
+        conversion_cost_forest_bnusd_per_mha=conv_cost_forest,
+        conversion_cost_nonforest_bnusd_per_mha=conv_cost_nonforest,
     )
 
     # Apply the same min_area_ha filter to land_rainfed_df so that grassland
