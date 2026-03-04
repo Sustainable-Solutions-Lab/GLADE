@@ -1030,6 +1030,71 @@ def _add_stage2_delta(
 # =============================================================================
 
 
+def _expand_rr_groups(
+    rr_quantiles: dict[str, float],
+    risk_breakpoints: pd.DataFrame,
+) -> dict[str, float]:
+    """Expand grouped RR quantile keys to individual risk factors.
+
+    The keys ``"protective"`` and ``"harmful"`` are expanded to the
+    individual risk factors whose dose-response curves decrease or
+    increase with intake, respectively. Direction is inferred from
+    the data: for each risk factor, compare log_rr at the lowest and
+    highest intake — if log_rr increases with intake, the factor is
+    harmful; otherwise protective.
+
+    Individual risk factor keys pass through unchanged and take
+    precedence over group keys (an overlap raises ``ValueError``).
+
+    Parameters
+    ----------
+    rr_quantiles
+        Mapping that may contain ``"protective"`` / ``"harmful"`` group
+        keys and/or individual risk factor keys.
+    risk_breakpoints
+        DataFrame with columns ``risk_factor``, ``intake_g_per_day``,
+        ``log_rr``.
+
+    Returns
+    -------
+    dict[str, float]
+        Expanded mapping from individual risk factor names to quantiles.
+    """
+    group_keys = {"protective", "harmful"}
+    present_groups = group_keys & rr_quantiles.keys()
+    if not present_groups:
+        return rr_quantiles
+
+    # Classify each risk factor by slope direction
+    protective, harmful = [], []
+    for risk, grp in risk_breakpoints.groupby("risk_factor"):
+        sorted_grp = grp.sort_values("intake_g_per_day")
+        log_rr_low_intake = sorted_grp["log_rr"].iloc[0]
+        log_rr_high_intake = sorted_grp["log_rr"].iloc[-1]
+        if log_rr_high_intake > log_rr_low_intake:
+            harmful.append(risk)
+        else:
+            protective.append(risk)
+
+    group_map = {"protective": protective, "harmful": harmful}
+
+    # Build expanded dict: individual keys first, then fill from groups
+    individual_keys = {k: v for k, v in rr_quantiles.items() if k not in group_keys}
+    expanded = dict(individual_keys)
+
+    for group_key in present_groups:
+        q = rr_quantiles[group_key]
+        for risk in group_map[group_key]:
+            if risk in individual_keys:
+                raise ValueError(
+                    f"Risk factor '{risk}' is specified both individually and "
+                    f"via the '{group_key}' group key"
+                )
+            expanded[risk] = q
+
+    return expanded
+
+
 def _apply_rr_quantiles(
     risk_breakpoints: pd.DataFrame,
     rr_quantiles: dict[str, float],
@@ -1039,18 +1104,22 @@ def _apply_rr_quantiles(
     For each risk factor with a quantile value q in [0, 1]:
         log_rr(q) = (1 - q) * log_rr_low + q * log_rr_high
 
+    Accepts grouped keys (``"protective"``, ``"harmful"``) which are
+    expanded to individual risk factors based on slope direction.
+
     Parameters
     ----------
     risk_breakpoints
         DataFrame with columns: risk_factor, log_rr, log_rr_low, log_rr_high.
     rr_quantiles
-        Mapping from risk factor name to quantile value in [0, 1].
+        Mapping from risk factor name (or group key) to quantile in [0, 1].
 
     Returns
     -------
     pd.DataFrame
         Modified risk_breakpoints with interpolated log_rr values.
     """
+    rr_quantiles = _expand_rr_groups(rr_quantiles, risk_breakpoints)
     risk_breakpoints = risk_breakpoints.copy()
     for risk, q in rr_quantiles.items():
         mask = risk_breakpoints["risk_factor"] == risk

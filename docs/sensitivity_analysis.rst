@@ -273,22 +273,10 @@ distributions rather than fixed value lists.
            lower: 0.8
            upper: 1.2
            bounds: [0, null]
-         rr_fruits:
+         rr_protective:
            lower: 0
            upper: 1
-         rr_vegetables:
-           lower: 0
-           upper: 1
-         rr_whole_grains:
-           lower: 0
-           upper: 1
-         rr_legumes:
-           lower: 0
-           upper: 1
-         rr_nuts_seeds:
-           lower: 0
-           upper: 1
-         rr_red_meat:
+         rr_harmful:
            lower: 0
            upper: 1
          value_per_yll:
@@ -308,12 +296,8 @@ distributions rather than fixed value lists.
            food_loss_waste: "{flw_factor}"
            feed_conversion: "{fcr_factor}"
            health_relative_risk:
-             fruits: "{rr_fruits}"
-             vegetables: "{rr_vegetables}"
-             whole_grains: "{rr_whole_grains}"
-             legumes: "{rr_legumes}"
-             nuts_seeds: "{rr_nuts_seeds}"
-             red_meat: "{rr_red_meat}"
+             protective: "{rr_protective}"
+             harmful: "{rr_harmful}"
          health:
            value_per_yll: "{value_per_yll}"
          emissions:
@@ -585,15 +569,30 @@ uncertainty, and temporal lag without bleeding into inter-system variation
 on inter-source disagreement and precedent from other studies that also used
 uniform distributions for FCR uncertainty [#alexander]_ [#springmann]_.
 
-Health relative risk parameters (``rr_*``: 0–1)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Health relative risk parameters (``rr_protective``, ``rr_harmful``: 0–1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each ``rr_<risk_factor>`` parameter is a quantile :math:`q \in [0, 1]` that
-interpolates between the GBD lower and upper confidence bounds for
+Relative risk uncertainty is parameterized as quantiles :math:`q \in [0, 1]`
+that interpolate between the GBD lower and upper confidence bounds for
 dose-response relative risks. At :math:`q = 0` the strongest effect estimate is
-used; at :math:`q = 1` the weakest. This directly encodes the uncertainty
-reported by the Global Burden of Disease study [#gbd]_ without requiring
-additional assumptions about the shape of the uncertainty distribution.
+used; at :math:`q = 1` the weakest.
+
+Rather than specifying a separate quantile per risk factor, two **grouped**
+parameters reduce dimensionality:
+
+- ``rr_protective``: applies to all risk factors whose RR *decreases* with
+  intake (e.g., fruits, vegetables, whole grains, legumes, nuts & seeds).
+- ``rr_harmful``: applies to all risk factors whose RR *increases* with
+  intake (e.g., red meat, processed meat).
+
+Direction is inferred automatically from the dose-response data: for each risk
+factor, log_rr at the lowest intake is compared with log_rr at the highest
+intake. This grouping is justified because protective food groups share a common
+uncertainty mechanism (GBD confidence interval bounds).
+
+Individual risk factor keys (e.g., ``whole_grains: 0.5``) remain supported and
+take precedence over group keys when both are specified. However, specifying
+both a group key and an individual key for the same risk factor raises an error.
 
 Policy slice parameters
 ~~~~~~~~~~~~~~~~~~~~~~~

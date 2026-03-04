@@ -15,6 +15,7 @@ from workflow.scripts.build_model.sensitivity import (
     _apply_emission_factors,
     apply_sensitivity_factors,
 )
+from workflow.scripts.solve_model.health import _expand_rr_groups
 
 
 @pytest.fixture
@@ -320,3 +321,67 @@ class TestApplySensitivityFactors:
 
         pd.testing.assert_frame_equal(n.links.static, original_links)
         pd.testing.assert_frame_equal(n.stores.static, original_stores)
+
+
+@pytest.fixture
+def risk_breakpoints():
+    """Create risk breakpoints with protective and harmful factors."""
+    return pd.DataFrame(
+        {
+            "risk_factor": [
+                # whole_grains: protective (log_rr decreases with intake)
+                "whole_grains",
+                "whole_grains",
+                "whole_grains",
+                # legumes: protective
+                "legumes",
+                "legumes",
+                # red_meat: harmful (log_rr increases with intake)
+                "red_meat",
+                "red_meat",
+                "red_meat",
+            ],
+            "intake_g_per_day": [0, 50, 100, 0, 50, 0, 50, 100],
+            "cause": "cvd",
+            "log_rr": [0.0, -0.1, -0.2, 0.0, -0.15, 0.0, 0.1, 0.2],
+            "log_rr_low": 0.0,
+            "log_rr_high": 0.0,
+        }
+    )
+
+
+class TestExpandRrGroups:
+    def test_protective_group(self, risk_breakpoints):
+        """Protective group expands to all decreasing-RR risk factors."""
+        result = _expand_rr_groups({"protective": 0.5}, risk_breakpoints)
+        assert result == {"whole_grains": 0.5, "legumes": 0.5}
+
+    def test_harmful_group(self, risk_breakpoints):
+        """Harmful group expands to all increasing-RR risk factors."""
+        result = _expand_rr_groups({"harmful": 0.3}, risk_breakpoints)
+        assert result == {"red_meat": 0.3}
+
+    def test_both_groups(self, risk_breakpoints):
+        """Both groups expand simultaneously."""
+        result = _expand_rr_groups(
+            {"protective": 0.5, "harmful": 0.8}, risk_breakpoints
+        )
+        assert result == {"whole_grains": 0.5, "legumes": 0.5, "red_meat": 0.8}
+
+    def test_individual_keys_passthrough(self, risk_breakpoints):
+        """Individual risk factor keys pass through unchanged."""
+        result = _expand_rr_groups({"whole_grains": 0.7}, risk_breakpoints)
+        assert result == {"whole_grains": 0.7}
+
+    def test_no_groups_passthrough(self, risk_breakpoints):
+        """Dict without group keys is returned unchanged."""
+        original = {"whole_grains": 0.5, "red_meat": 0.3}
+        result = _expand_rr_groups(original, risk_breakpoints)
+        assert result == original
+
+    def test_overlap_raises(self, risk_breakpoints):
+        """Overlap between group and individual key raises ValueError."""
+        with pytest.raises(ValueError, match="whole_grains.*protective"):
+            _expand_rr_groups(
+                {"protective": 0.5, "whole_grains": 0.7}, risk_breakpoints
+            )
