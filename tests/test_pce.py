@@ -201,7 +201,7 @@ class TestPCEFitting:
 
         y = 3 * x[:, 0] + 2 * x[:, 1]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
         assert result["r2"] > 0.99
         assert result["loo_error"] < 0.01
 
@@ -225,7 +225,7 @@ class TestPCEFitting:
 
         y = x[:, 0] ** 2 + x[:, 1]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
         assert result["r2"] > 0.99
 
         s1, s_total = sobol_from_pce(result["coefficients"], result["multi_indices"], 2)
@@ -248,7 +248,7 @@ class TestPCEFitting:
 
         y = x[:, 0] * x[:, 1]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         s1, s_total = sobol_from_pce(result["coefficients"], result["multi_indices"], 2)
         # For Y = X1*X2 with X_i ~ U(0,1):
@@ -270,7 +270,7 @@ class TestConditionalSobol:
 
         y = 3 * x[:, 0] + 2 * x[:, 1] + x[:, 2]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         # Get global variance
         coefficients = result["coefficients"]
@@ -305,7 +305,7 @@ class TestConditionalSobol:
         # Y depends only on X0 and X1, not X2
         y = 3 * x[:, 0] + 2 * x[:, 1]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         # Condition on X2 (the irrelevant param)
         s1_c, st_c, cond_var = conditional_sobol(
@@ -336,7 +336,7 @@ class TestConditionalSobol:
         # X2 is slice parameter; interaction makes X0 sensitivity depend on X2.
         y = x[:, 0] + 0.3 * x[:, 1] + 2.0 * x[:, 0] * x[:, 2]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         s1_low, _, var_low = conditional_sobol(
             result["coefficients"],
@@ -384,7 +384,7 @@ class TestConditionalSobol:
         # Conditional model at (s2, s3): Y = (1+2s2)X0 + (0.5+s3)X1
         y = (1 + 2 * x[:, 2]) * x[:, 0] + (0.5 + x[:, 3]) * x[:, 1]
 
-        result = fit_pce(x, y, dist, max_degree=3)
+        result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         s2, s3 = 0.2, 0.8
         s1_cond, _, _ = conditional_sobol(

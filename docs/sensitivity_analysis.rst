@@ -335,6 +335,15 @@ parameter per risk factor produces cause-specific adjustments automatically.
 - ``template``: Configuration template with ``{param_name}`` placeholders that
   are substituted with sampled values. Type is preserved when the placeholder
   is the entire value.
+- ``method_options`` (optional): Method-specific hyperparameters. For
+  ``method: pce``:
+
+  - ``max_degree`` (default: 3): Maximum polynomial degree for the PCE basis.
+  - ``cross_truncation`` (default: 0.5): Cross-truncation parameter
+    :math:`q \in (0, 1]`. Lower values favour lower-order interactions,
+    keeping the basis compact.
+  - ``n_mc_conditional`` (default: 4096): Number of Monte Carlo samples for
+    conditional Sobol index grid evaluation.
 
 
 .. _sensitivity-parameter-ranges:

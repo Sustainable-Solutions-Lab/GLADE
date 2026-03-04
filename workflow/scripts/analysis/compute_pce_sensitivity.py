@@ -36,8 +36,8 @@ def fit_pce(
     x_design: np.ndarray,
     y: np.ndarray,
     distribution: cp.Distribution,
-    max_degree: int = 3,
-    cross_truncation: float = 0.75,
+    max_degree: int,
+    cross_truncation: float,
 ) -> dict:
     """Fit a sparse PCE using LARS with cross-validation.
 
@@ -316,11 +316,19 @@ def run(snakemake) -> None:
     slice_param_names = generator_spec.get("slice_parameters", [])
     slice_indices = [param_names.index(sp) for sp in slice_param_names]
 
+    # Read PCE hyperparameters
+    method_options = generator_spec.get("method_options", {})
+    max_degree = method_options.get("max_degree", 3)
+    cross_truncation = method_options.get("cross_truncation", 0.5)
+
     logger.info(
-        "PCE sensitivity analysis: %d parameters, %d samples, %d slice parameters",
+        "PCE sensitivity analysis: %d parameters, %d samples, %d slice parameters, "
+        "degree=%d, cross_truncation=%.2f",
         n_params,
         len(scenario_names),
         len(slice_param_names),
+        max_degree,
+        cross_truncation,
     )
 
     # Reconstruct design matrix
@@ -358,7 +366,7 @@ def run(snakemake) -> None:
         y = outputs_df[col].values
 
         # Fit PCE
-        pce_result = fit_pce(x_design, y, joint_dist)
+        pce_result = fit_pce(x_design, y, joint_dist, max_degree, cross_truncation)
 
         logger.info(
             "PCE for %s: R^2=%.4f, LOO=%.4f, %d/%d active terms",
@@ -386,7 +394,7 @@ def run(snakemake) -> None:
                 "n_active_terms": pce_result["n_active_terms"],
                 "n_samples": len(y),
                 "method": "pce",
-                "max_degree": 3,
+                "max_degree": max_degree,
             }
         )
 
