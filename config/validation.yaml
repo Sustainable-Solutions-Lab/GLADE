@@ -37,8 +37,6 @@ residues:
     Asia: 0.70
 
 animal_products:
-  # Use regionalized feed efficiency values
-  feed_efficiency_regions: null
   feed_efficiency_calibration:
     generate: true
     scenario: uncalibrated

@@ -205,9 +205,6 @@ emissions:
 validation:
   use_actual_yields: true
 
-animal_products:
-  feed_efficiency_regions: null
-
 # Legacy linear incentives (disabled for piecewise-utility testing)
 food_incentives:
   enabled: false

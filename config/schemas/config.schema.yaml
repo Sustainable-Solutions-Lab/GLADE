@@ -642,11 +642,10 @@ properties:
     type: object
     required:
       - include
-      - feed_efficiency_regions
+      - gleam3_system_product_map
       - net_to_metabolizable_energy_conversion
       - carcass_to_retail_meat
       - faostat_items
-      - feed_proxy_map
       - feed_efficiency_calibration
       - residue_crops
     additionalProperties: false
@@ -659,22 +658,24 @@ properties:
           type: string
           pattern: "^[a-z0-9-]+$"
         description: "Animal products to include in the model"
-      feed_efficiency_regions:
-        oneOf:
-          - type: array
-            items:
-              type: string
-              enum:
-                - East Asia
-                - East Europe
-                - Latin America & Caribbean
-                - North Africa & West Asia
-                - North America & Oceania
-                - South & Central Asia
-                - Sub-Saharan Africa
-                - West Europe
-          - type: "null"
-        description: "Regions for averaging feed conversion efficiencies (list) or null for country-specific regional values"
+      gleam3_system_product_map:
+        type: object
+        minProperties: 1
+        additionalProperties: false
+        patternProperties:
+          "^[A-Z][a-z]+$":
+            type: object
+            minProperties: 1
+            additionalProperties: false
+            patternProperties:
+              "^[A-Z][a-z]+$":
+                type: array
+                minItems: 1
+                items:
+                  type: string
+                  pattern: "^[a-z0-9-]+$"
+                description: "Model products produced by this (Animal, LPS) system"
+        description: "GLEAM3 (Animal, LPS) → model product mapping"
       net_to_metabolizable_energy_conversion:
         type: object
         required: [k_m, k_g, k_l]
@@ -722,15 +723,6 @@ properties:
               type: string
             description: "FAOSTAT QCL item names to aggregate for this product"
         description: "FAOSTAT QCL item names to aggregate for each model product"
-      feed_proxy_map:
-        type: object
-        additionalProperties: false
-        patternProperties:
-          "^[a-z0-9-]+$":
-            type: string
-            pattern: "^[a-z0-9-]+$"
-            description: "Source product whose feed requirements are reused"
-        description: "Mapping of proxy animal products to source products"
       feed_efficiency_calibration:
         type: object
         required: [enabled, generate, source, max_multiplier, scenario]

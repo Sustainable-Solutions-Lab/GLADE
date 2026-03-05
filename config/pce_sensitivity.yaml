@@ -137,10 +137,6 @@ validation:
     deviation_type: "absolute"
     l1_cost: 0.5
 
-animal_products:
-  # Use regionalized feed efficiency values
-  feed_efficiency_regions: null
-
 health:
   region_clusters: 15
   intake_grid_points: 8  # Number of grid knots over empirical RR range

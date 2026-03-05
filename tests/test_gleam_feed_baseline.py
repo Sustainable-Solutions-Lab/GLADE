@@ -9,10 +9,10 @@ from typing import ClassVar
 import pandas as pd
 import pytest
 
-from workflow.scripts.animal_utils import SPECIES_PRODUCTS
 from workflow.scripts.prepare_feed_baseline import (
-    GLEAM3_SYSTEM_PRODUCT_MAP,
     RUMINANT_ANIMALS,
+    _build_item_to_product,
+    _flatten_system_product_map,
     _validate_fraction_table,
     _validate_intake_fraction_coverage,
     compute_fcr_lookup,
@@ -20,51 +20,98 @@ from workflow.scripts.prepare_feed_baseline import (
 )
 
 # ---------------------------------------------------------------------------
-# Tests: constant consistency
+# Fixture: default config system product map
+# ---------------------------------------------------------------------------
+
+# Mirrors config/default.yaml animal_products.gleam3_system_product_map
+_DEFAULT_SYSTEM_PRODUCT_MAP_NESTED = {
+    "Cattle": {
+        "Grassland": ["dairy", "meat-cattle"],
+        "Mixed": ["dairy", "meat-cattle"],
+        "Feedlots": ["meat-cattle"],
+    },
+    "Buffalo": {
+        "Grassland": ["dairy-buffalo", "meat-cattle"],
+        "Mixed": ["dairy-buffalo", "meat-cattle"],
+    },
+    "Sheep": {"Grassland": ["dairy", "meat-sheep"], "Mixed": ["dairy", "meat-sheep"]},
+    "Goats": {"Grassland": ["dairy", "meat-sheep"], "Mixed": ["dairy", "meat-sheep"]},
+    "Chicken": {
+        "Broiler": ["meat-chicken"],
+        "Layer": ["eggs"],
+        "Backyard": ["eggs", "meat-chicken"],
+    },
+    "Pigs": {
+        "Backyard": ["meat-pig"],
+        "Intermediate": ["meat-pig"],
+        "Industrial": ["meat-pig"],
+    },
+}
+
+_DEFAULT_SYSTEM_PRODUCT_MAP = _flatten_system_product_map(
+    _DEFAULT_SYSTEM_PRODUCT_MAP_NESTED
+)
+
+# ---------------------------------------------------------------------------
+# Tests: _flatten_system_product_map and _build_item_to_product
 # ---------------------------------------------------------------------------
 
 
-class TestConstants:
-    """Verify internal consistency of module-level constants."""
+class TestSystemProductMap:
+    """Tests for config-derived system product map helpers."""
 
-    def test_system_product_map_products_in_species_products(self):
-        """Every product in GLEAM3_SYSTEM_PRODUCT_MAP appears in SPECIES_PRODUCTS."""
-        all_sp_products = {p for prods in SPECIES_PRODUCTS.values() for p in prods}
-        for key, products in GLEAM3_SYSTEM_PRODUCT_MAP.items():
-            for p in products:
-                assert p in all_sp_products, (
-                    f"Product '{p}' from GLEAM3_SYSTEM_PRODUCT_MAP[{key}] "
-                    f"not in SPECIES_PRODUCTS"
-                )
+    def test_flatten_round_trips(self):
+        """Flattened map has (Animal, LPS) tuple keys."""
+        flat = _DEFAULT_SYSTEM_PRODUCT_MAP
+        assert ("Cattle", "Grassland") in flat
+        assert flat[("Cattle", "Feedlots")] == ["meat-cattle"]
 
-    def test_system_product_map_covers_all_species_products(self):
-        """Every product from SPECIES_PRODUCTS appears in at least one system."""
-        all_sp_products = {p for prods in SPECIES_PRODUCTS.values() for p in prods}
-        mapped_products = {
-            p for prods in GLEAM3_SYSTEM_PRODUCT_MAP.values() for p in prods
-        }
-        for p in all_sp_products:
-            assert p in mapped_products, (
-                f"Product '{p}' from SPECIES_PRODUCTS not covered by "
-                f"GLEAM3_SYSTEM_PRODUCT_MAP"
-            )
-
-    def test_ruminant_animals_consistent(self):
-        """RUMINANT_ANIMALS matches ruminant species in GLEAM3_SYSTEM_PRODUCT_MAP."""
-        ruminant_species = {"Cattle & buffaloes", "Small Ruminants"}
-        ruminant_products = {p for sp in ruminant_species for p in SPECIES_PRODUCTS[sp]}
-        for (animal, _lps), products in GLEAM3_SYSTEM_PRODUCT_MAP.items():
-            for p in products:
-                if p in ruminant_products:
-                    assert animal in RUMINANT_ANIMALS, (
-                        f"Animal '{animal}' produces ruminant product '{p}' "
-                        f"but is not in RUMINANT_ANIMALS"
-                    )
+    def test_all_included_products_mapped(self):
+        """Every product from the default include list appears in the map."""
+        include = [
+            "meat-cattle",
+            "meat-pig",
+            "meat-chicken",
+            "dairy",
+            "eggs",
+            "dairy-buffalo",
+            "meat-sheep",
+        ]
+        mapped = {p for prods in _DEFAULT_SYSTEM_PRODUCT_MAP.values() for p in prods}
+        for p in include:
+            assert p in mapped, f"Product '{p}' not in system product map"
 
     def test_feedlots_single_product(self):
         """Feedlots should map to a single product (meat-cattle)."""
-        feedlot_products = GLEAM3_SYSTEM_PRODUCT_MAP[("Cattle", "Feedlots")]
-        assert feedlot_products == ["meat-cattle"]
+        assert _DEFAULT_SYSTEM_PRODUCT_MAP[("Cattle", "Feedlots")] == ["meat-cattle"]
+
+    def test_sheep_goat_systems_include_dairy(self):
+        """Sheep and goat systems should include dairy product (proxy)."""
+        for animal in ("Sheep", "Goats"):
+            for lps in ("Grassland", "Mixed"):
+                products = _DEFAULT_SYSTEM_PRODUCT_MAP[(animal, lps)]
+                assert (
+                    "dairy" in products
+                ), f"({animal}, {lps}) should include 'dairy' product"
+                assert "meat-sheep" in products
+
+    def test_build_item_to_product(self):
+        """Derived item-to-product mapping matches expected values."""
+        itp = _build_item_to_product(_DEFAULT_SYSTEM_PRODUCT_MAP)
+        assert itp[("Cattle", "Milk")] == "dairy"
+        assert itp[("Cattle", "Meat")] == "meat-cattle"
+        assert itp[("Buffalo", "Milk")] == "dairy-buffalo"
+        assert itp[("Sheep", "Milk")] == "dairy"
+        assert itp[("Goats", "Milk")] == "dairy"
+        assert itp[("Sheep", "Meat")] == "meat-sheep"
+        assert itp[("Goats", "Meat")] == "meat-sheep"
+        assert itp[("Chicken", "Eggs")] == "eggs"
+
+    def test_ruminant_animals_in_map(self):
+        """Every RUMINANT_ANIMALS member appears as an animal in the map."""
+        animals_in_map = {a for a, _lps in _DEFAULT_SYSTEM_PRODUCT_MAP}
+        for animal in RUMINANT_ANIMALS:
+            assert animal in animals_in_map
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +125,13 @@ class TestComputeProductShares:
     def test_single_product_returns_one(self):
         """A single-product list always returns share of 1.0."""
         fao = pd.DataFrame(columns=["country", "product", "production_tonnes"])
-        result = compute_product_shares(["meat-pig"], "USA", fao, {}, "R")
+        result = compute_product_shares(["meat-pig"], "USA", fao, {})
         assert result == {"meat-pig": 1.0}
 
-    def test_no_wirsenius_region_gives_equal_shares(self):
-        """Fallback to equal split when Wirsenius region is None."""
+    def test_no_fcr_data_gives_equal_shares(self):
+        """Fallback to equal split when no FCR data for country."""
         fao = pd.DataFrame(columns=["country", "product", "production_tonnes"])
-        result = compute_product_shares(["dairy", "meat-cattle"], "USA", fao, {}, None)
+        result = compute_product_shares(["dairy", "meat-cattle"], "USA", fao, {})
         assert result["dairy"] == pytest.approx(0.5)
         assert result["meat-cattle"] == pytest.approx(0.5)
 
@@ -94,7 +141,7 @@ class TestComputeProductShares:
             {"country": ["CAN"], "product": ["dairy"], "production_tonnes": [100]}
         )
         result = compute_product_shares(
-            ["dairy", "meat-cattle"], "USA", fao, {("dairy", "R"): 10.0}, "R"
+            ["dairy", "meat-cattle"], "USA", fao, {("dairy", "USA"): 10.0}
         )
         assert result["dairy"] == pytest.approx(0.5)
         assert result["meat-cattle"] == pytest.approx(0.5)
@@ -109,11 +156,11 @@ class TestComputeProductShares:
             }
         )
         fcr_lookup = {
-            ("dairy", "NAO"): 10.0,
-            ("meat-cattle", "NAO"): 200.0,
+            ("dairy", "USA"): 10.0,
+            ("meat-cattle", "USA"): 200.0,
         }
         result = compute_product_shares(
-            ["dairy", "meat-cattle"], "USA", fao, fcr_lookup, "NAO"
+            ["dairy", "meat-cattle"], "USA", fao, fcr_lookup
         )
         # dairy: 1000 * 10 = 10000; cattle: 500 * 200 = 100000
         assert result["dairy"] == pytest.approx(10000 / 110000)
@@ -129,12 +176,12 @@ class TestComputeProductShares:
             }
         )
         fcr_lookup = {
-            ("dairy", "R"): 12.0,
-            ("dairy-buffalo", "R"): 12.0,
-            ("meat-cattle", "R"): 250.0,
+            ("dairy", "USA"): 12.0,
+            ("dairy-buffalo", "USA"): 12.0,
+            ("meat-cattle", "USA"): 250.0,
         }
         result = compute_product_shares(
-            ["dairy", "dairy-buffalo", "meat-cattle"], "USA", fao, fcr_lookup, "R"
+            ["dairy", "dairy-buffalo", "meat-cattle"], "USA", fao, fcr_lookup
         )
         assert sum(result.values()) == pytest.approx(1.0)
 
@@ -237,7 +284,7 @@ class TestFeedFractionValidation:
 
 
 class TestComputeFcrLookup:
-    """Tests for FCR lookup computation."""
+    """Tests for FCR lookup computation from GLEAM3 ME requirements CSV."""
 
     PRODUCTS: ClassVar[list[str]] = [
         "dairy",
@@ -250,109 +297,49 @@ class TestComputeFcrLookup:
     ]
 
     @pytest.fixture()
-    def wirsenius_data(self):
-        """Minimal Wirsenius data with one region."""
-        return pd.DataFrame(
-            {
-                "animal_product": [
-                    "dairy",
-                    "dairy",
-                    "dairy",
-                    "meat-cattle",
-                    "meat-cattle",
-                    "meat-pig",
-                    "meat-chicken",
-                    "eggs",
-                ],
-                "region": ["R"] * 8,
-                "unit": [
-                    "NE_l",
-                    "NE_m",
-                    "NE_g",
-                    "NE_m",
-                    "NE_g",
-                    "ME",
-                    "ME",
-                    "ME",
-                ],
-                "value": [
-                    5.0,
-                    1.0,
-                    0.5,
-                    100.0,
-                    20.0,
-                    80.0,
-                    50.0,
-                    30.0,
-                ],
-            }
+    def me_requirements_csv(self, tmp_path):
+        """Create a minimal GLEAM3 ME requirements CSV."""
+        csv_content = (
+            "animal_product,country,ME_MJ_per_kg\n"
+            "dairy,USA,10.0\n"
+            "meat-cattle,USA,250.0\n"
+            "meat-pig,USA,80.0\n"
+            "meat-chicken,USA,50.0\n"
+            "eggs,USA,30.0\n"
+            "dairy-buffalo,USA,12.0\n"
+            "meat-sheep,USA,200.0\n"
         )
+        path = tmp_path / "me_requirements.csv"
+        path.write_text(csv_content)
+        return str(path)
 
-    def test_returns_all_products(self, wirsenius_data):
-        """Lookup includes ruminant and monogastric products."""
-        lookup = compute_fcr_lookup(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            feed_proxy_map={"dairy-buffalo": "dairy", "meat-sheep": "meat-cattle"},
-            products=self.PRODUCTS,
-        )
-        products_in_lookup = {p for p, _r in lookup}
-        assert "dairy" in products_in_lookup
-        assert "meat-cattle" in products_in_lookup
-        assert "meat-pig" in products_in_lookup
-        assert "eggs" in products_in_lookup
-        assert "meat-chicken" in products_in_lookup
-        assert "dairy-buffalo" in products_in_lookup
-        assert "meat-sheep" in products_in_lookup
+    def test_returns_all_products(self, me_requirements_csv):
+        """Lookup includes all products from the CSV."""
+        lookup = compute_fcr_lookup(me_requirements_csv, self.PRODUCTS)
+        products_in_lookup = {p for p, _c in lookup}
+        for p in self.PRODUCTS:
+            assert p in products_in_lookup, f"Product '{p}' missing from lookup"
 
-    def test_unity_carcass_to_retail(self, wirsenius_data):
-        """With unity carcass-to-retail, meat-cattle ME = NE_m/k_m + NE_g/k_g."""
-        lookup = compute_fcr_lookup(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            feed_proxy_map={},
-            products=self.PRODUCTS,
-        )
-        expected = 100.0 / 0.6 + 20.0 / 0.4
-        assert lookup[("meat-cattle", "R")] == pytest.approx(expected)
+    def test_values_match_csv(self, me_requirements_csv):
+        """Values match what's in the CSV."""
+        lookup = compute_fcr_lookup(me_requirements_csv, self.PRODUCTS)
+        assert lookup[("dairy", "USA")] == pytest.approx(10.0)
+        assert lookup[("meat-cattle", "USA")] == pytest.approx(250.0)
+        assert lookup[("meat-pig", "USA")] == pytest.approx(80.0)
 
-    def test_proxy_inherits_source_fcr(self, wirsenius_data):
-        """Proxy product inherits source's FCR at unity carcass-to-retail."""
-        lookup = compute_fcr_lookup(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            feed_proxy_map={"dairy-buffalo": "dairy"},
-            products=self.PRODUCTS,
-        )
-        assert lookup[("dairy-buffalo", "R")] == pytest.approx(lookup[("dairy", "R")])
-
-    def test_all_values_positive(self, wirsenius_data):
+    def test_all_values_positive(self, me_requirements_csv):
         """All FCR values should be positive."""
-        lookup = compute_fcr_lookup(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            feed_proxy_map={"dairy-buffalo": "dairy", "meat-sheep": "meat-cattle"},
-            products=self.PRODUCTS,
-        )
+        lookup = compute_fcr_lookup(me_requirements_csv, self.PRODUCTS)
         for key, val in lookup.items():
             assert val > 0, f"Non-positive FCR for {key}: {val}"
 
-    def test_dairy_fcr_lower_than_beef(self, wirsenius_data):
+    def test_dairy_fcr_lower_than_beef(self, me_requirements_csv):
         """Dairy (per kg milk) requires much less energy than beef (per kg carcass)."""
-        lookup = compute_fcr_lookup(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            feed_proxy_map={},
-            products=self.PRODUCTS,
-        )
-        assert lookup[("dairy", "R")] < lookup[("meat-cattle", "R")]
+        lookup = compute_fcr_lookup(me_requirements_csv, self.PRODUCTS)
+        assert lookup[("dairy", "USA")] < lookup[("meat-cattle", "USA")]
+
+    def test_filters_to_requested_products(self, me_requirements_csv):
+        """Only requested products appear in lookup."""
+        lookup = compute_fcr_lookup(me_requirements_csv, ["dairy", "meat-cattle"])
+        products_in_lookup = {p for p, _c in lookup}
+        assert products_in_lookup == {"dairy", "meat-cattle"}

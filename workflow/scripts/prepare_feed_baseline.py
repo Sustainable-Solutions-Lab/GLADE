@@ -8,8 +8,8 @@ Prepare GLEAM 3.0 feed baseline estimates by country and product.
 Uses country-level feed intake data from FAO's GLEAM 3.0 model (229 countries,
 reference year 2015) combined with pre-computed feed fractions to produce
 model-ready feed baselines. Splits multi-product systems using FCR-weighted
-shares from Wirsenius (2000), and scales to the configured reference year
-using FAOSTAT production data.
+shares from GLEAM3-derived ME requirements, and scales to the configured
+reference year using FAOSTAT production data.
 
 Output: CSV with columns (country, product, feed_category, feed_use_mt_dm,
 exogenous_mt_dm).  The exogenous_mt_dm column tracks feed demand that the
@@ -21,48 +21,62 @@ from pathlib import Path
 
 import pandas as pd
 
-from workflow.scripts.animal_utils import SPECIES_PRODUCTS, load_faostat_qcl
-from workflow.scripts.build_feed_to_animal_products import (
-    calculate_ruminant_me_requirements,
-    get_monogastric_me_requirements,
-)
+from workflow.scripts.animal_utils import load_faostat_qcl
 from workflow.scripts.faostat_bulk import filter_bulk
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
-# (Animal, LPS) -> model products served by each GLEAM 3.0 production system.
-# Most systems map to a single product; cattle grazing/mixed, buffalo, and
-# chicken backyard serve multiple products and require FCR-weighted splitting.
-GLEAM3_SYSTEM_PRODUCT_MAP = {
-    ("Cattle", "Grassland"): ["dairy", "meat-cattle"],
-    ("Cattle", "Mixed"): ["dairy", "meat-cattle"],
-    ("Cattle", "Feedlots"): ["meat-cattle"],
-    ("Buffalo", "Grassland"): ["dairy-buffalo", "meat-cattle"],
-    ("Buffalo", "Mixed"): ["dairy-buffalo", "meat-cattle"],
-    ("Sheep", "Grassland"): ["meat-sheep"],
-    ("Sheep", "Mixed"): ["meat-sheep"],
-    ("Goats", "Grassland"): ["meat-sheep"],
-    ("Goats", "Mixed"): ["meat-sheep"],
-    ("Chicken", "Broiler"): ["meat-chicken"],
-    ("Chicken", "Layer"): ["eggs"],
-    ("Chicken", "Backyard"): ["eggs", "meat-chicken"],
-    ("Pigs", "Backyard"): ["meat-pig"],
-    ("Pigs", "Intermediate"): ["meat-pig"],
-    ("Pigs", "Industrial"): ["meat-pig"],
-}
-
 RUMINANT_ANIMALS = {"Cattle", "Buffalo", "Sheep", "Goats"}
 
-# GLEAM3 production Item/Element → model product type for share computation.
-_GLEAM3_ITEM_TO_PRODUCT = {
-    ("Cattle", "Meat"): "meat-cattle",
-    ("Cattle", "Milk"): "dairy",
-    ("Buffalo", "Meat"): "meat-cattle",
-    ("Buffalo", "Milk"): "dairy-buffalo",
-    ("Chicken", "Meat"): "meat-chicken",
-    ("Chicken", "Eggs"): "eggs",
+# GLEAM3 production Item → product-type tag, used to match GLEAM3 production
+# rows to model products when computing FCR-weighted shares in multi-product
+# systems.  The tag is matched against the model products for each animal
+# (from the config-provided system product map).
+_GLEAM3_ITEM_TYPE = {
+    "Meat": "meat",
+    "Milk": "dairy",
+    "Eggs": "eggs",
 }
+
+
+def _flatten_system_product_map(
+    nested: dict[str, dict[str, list[str]]],
+) -> dict[tuple[str, str], list[str]]:
+    """Convert nested config {Animal: {LPS: [products]}} to flat {(Animal, LPS): [products]}."""
+    return {
+        (animal, lps): products
+        for animal, systems in nested.items()
+        for lps, products in systems.items()
+    }
+
+
+def _build_item_to_product(
+    system_product_map: dict[tuple[str, str], list[str]],
+) -> dict[tuple[str, str], str]:
+    """Derive (Animal, GLEAM3-Item) → model product mapping from the system product map.
+
+    For each animal, collects the unique products across all its LPS systems,
+    then matches GLEAM3 production items (Meat/Milk/Eggs) to model products
+    by type prefix (meat-*, dairy*, eggs).
+    """
+    # Collect unique products per animal
+    animal_products: dict[str, set[str]] = {}
+    for (animal, _lps), products in system_product_map.items():
+        animal_products.setdefault(animal, set()).update(products)
+
+    mapping: dict[tuple[str, str], str] = {}
+    for animal, products in animal_products.items():
+        for item, tag in _GLEAM3_ITEM_TYPE.items():
+            matches = [p for p in products if p.startswith(tag)]
+            if len(matches) == 1:
+                mapping[(animal, item)] = matches[0]
+            elif len(matches) > 1:
+                raise ValueError(
+                    f"Ambiguous GLEAM3 item mapping: {animal}/{item} matches "
+                    f"multiple products {matches}"
+                )
+    return mapping
 
 
 def load_fao_production(
@@ -126,33 +140,19 @@ def load_fao_production(
 
 
 def compute_fcr_lookup(
-    wirsenius: pd.DataFrame,
-    k_m: float,
-    k_g: float,
-    k_l: float,
-    feed_proxy_map: dict[str, str],
+    me_requirements_path: str,
     products: list[str],
 ) -> dict[tuple[str, str], float]:
-    """Compute feed conversion ratios (ME MJ per kg product) at carcass level.
+    """Load ME requirements from GLEAM3-derived CSV.
 
-    Uses carcass_to_retail=1.0 for all products so FCRs are at the same
-    basis as FAO production data (carcass/farm-gate weight).
-
-    Returns dict mapping (product, wirsenius_region) to ME MJ/kg.
+    Returns dict mapping (product, country) to ME MJ/kg at
+    carcass/farm-gate level (no retail conversion).
     """
-    all_products = list(products)
-    unity = dict.fromkeys(all_products, 1.0)
-
-    ruminant_me = calculate_ruminant_me_requirements(
-        wirsenius, k_m, k_g, k_l, unity, feed_proxy_map
-    )
-    monogastric_me = get_monogastric_me_requirements(wirsenius, unity)
-
-    me_all = pd.concat([ruminant_me, monogastric_me], ignore_index=True)
-
+    me_df = pd.read_csv(me_requirements_path, comment="#")
+    me_df = me_df[me_df["animal_product"].isin(products)]
     return {
-        (row["animal_product"], row["region"]): row["ME_MJ_per_kg"]
-        for _, row in me_all.iterrows()
+        (row["animal_product"], row["country"]): row["ME_MJ_per_kg"]
+        for _, row in me_df.iterrows()
     }
 
 
@@ -161,20 +161,16 @@ def compute_product_shares(
     country: str,
     fao_prod: pd.DataFrame,
     fcr_lookup: dict[tuple[str, str], float],
-    wirsenius_region: str | None,
 ) -> dict[str, float]:
     """Compute FCR-weighted product shares for splitting feed within a system.
 
     share_i = prod_i * FCR_i / sum(prod_j * FCR_j) per country,
     where FCR is total ME per kg product at carcass/farm-gate level.
 
-    Falls back to equal shares if no Wirsenius region or no production data.
+    Falls back to equal shares if no production data.
     """
     if len(products) == 1:
         return {products[0]: 1.0}
-
-    if wirsenius_region is None:
-        return {p: 1.0 / len(products) for p in products}
 
     country_fao = fao_prod[fao_prod["country"] == country]
 
@@ -182,7 +178,7 @@ def compute_product_shares(
     for p in products:
         prod_match = country_fao.loc[country_fao["product"] == p, "production_tonnes"]
         prod = prod_match.sum() if not prod_match.empty else 0.0
-        fcr = fcr_lookup.get((p, wirsenius_region), 0.0)
+        fcr = fcr_lookup.get((p, country), 0.0)
         weighted[p] = prod * fcr
 
     total = sum(weighted.values())
@@ -200,19 +196,23 @@ def _compute_product_shares_gleam3(
     gleam3_prod: pd.DataFrame,
     fao_prod: pd.DataFrame,
     fcr_lookup: dict[tuple[str, str], float],
-    wirsenius_region: str | None,
+    item_to_product: dict[tuple[str, str], str],
 ) -> dict[str, float]:
     """Compute product shares using GLEAM3 production data, with FAOSTAT fallback.
 
-    For multi-product systems (e.g. Cattle Grassland → dairy + meat-cattle),
+    For multi-product systems (e.g. Cattle Grassland -> dairy + meat-cattle),
     uses GLEAM3 per-LPS production to compute FCR-weighted shares.
     Falls back to FAOSTAT-based shares if GLEAM3 data is missing.
     """
     if len(products) == 1:
         return {products[0]: 1.0}
 
-    if wirsenius_region is None:
-        return {p: 1.0 / len(products) for p in products}
+    # Build reverse lookup: model product → GLEAM3 item for this animal
+    product_to_item = {
+        prod: item
+        for (a, item), prod in item_to_product.items()
+        if a == animal and prod in products
+    }
 
     # Try GLEAM3 production data first
     lps_prod = gleam3_prod[
@@ -223,19 +223,17 @@ def _compute_product_shares_gleam3(
 
     weighted = {}
     for p in products:
-        # Find matching GLEAM3 production row
         prod_val = 0.0
-        for (g_animal, g_item), model_product in _GLEAM3_ITEM_TO_PRODUCT.items():
-            if model_product == p and g_animal == animal:
-                match = lps_prod[
-                    (lps_prod["Item"] == g_item)
-                    & (lps_prod["Element"].isin(["CarcassWeight", "Weight"]))
-                ]
-                if not match.empty:
-                    prod_val = match["Total"].sum()
-                break
+        g_item = product_to_item.get(p)
+        if g_item is not None:
+            match = lps_prod[
+                (lps_prod["Item"] == g_item)
+                & (lps_prod["Element"].isin(["CarcassWeight", "Weight"]))
+            ]
+            if not match.empty:
+                prod_val = match["Total"].sum()
 
-        fcr = fcr_lookup.get((p, wirsenius_region), 0.0)
+        fcr = fcr_lookup.get((p, country), 0.0)
         weighted[p] = prod_val * fcr
 
     total = sum(weighted.values())
@@ -243,9 +241,7 @@ def _compute_product_shares_gleam3(
         return {p: w / total for p, w in weighted.items()}
 
     # Fallback to FAOSTAT-based shares
-    return compute_product_shares(
-        products, country, fao_prod, fcr_lookup, wirsenius_region
-    )
+    return compute_product_shares(products, country, fao_prod, fcr_lookup)
 
 
 def _validate_fraction_table(fractions: pd.DataFrame) -> None:
@@ -372,8 +368,7 @@ def main() -> None:
     gleam3_intakes_path = snakemake.input.gleam3_intakes  # type: ignore[name-defined]
     gleam3_production_path = snakemake.input.gleam3_production  # type: ignore[name-defined]
     gleam3_feed_fractions_path = snakemake.input.gleam3_feed_fractions  # type: ignore[name-defined]
-    wirsenius_path = snakemake.input.wirsenius  # type: ignore[name-defined]
-    country_wirsenius_region_path = snakemake.input.country_wirsenius_region  # type: ignore[name-defined]
+    me_requirements_path = snakemake.input.me_requirements  # type: ignore[name-defined]
     qcl_csv_path = snakemake.input.qcl_csv  # type: ignore[name-defined]
     m49_codes_path = snakemake.input.m49_codes  # type: ignore[name-defined]
     ruminant_mapping_path = snakemake.input.ruminant_feed_mapping  # type: ignore[name-defined]
@@ -383,9 +378,11 @@ def main() -> None:
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     reference_year = int(snakemake.params.reference_year)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
-    net_to_me = snakemake.params.net_to_me_conversion  # type: ignore[name-defined]
-    feed_proxy_map = dict(snakemake.params.feed_proxy_map)  # type: ignore[name-defined]
     faostat_items: dict[str, list[str]] = dict(snakemake.params.faostat_items)  # type: ignore[name-defined]
+    system_product_map = _flatten_system_product_map(
+        dict(snakemake.params.gleam3_system_product_map)  # type: ignore[name-defined]
+    )
+    item_to_product = _build_item_to_product(system_product_map)
 
     # -- Phase 1: Load GLEAM3 data ----------------------------------------
     logger.info("Loading GLEAM3 feed intake data")
@@ -409,16 +406,6 @@ def main() -> None:
     fractions = pd.read_csv(gleam3_feed_fractions_path)
     _validate_fraction_table(fractions)
 
-    logger.info("Loading Wirsenius data and region mapping")
-    wirsenius = pd.read_csv(wirsenius_path, comment="#")
-    wirsenius_region_df = pd.read_csv(country_wirsenius_region_path, comment="#")
-    country_to_wirsenius = dict(
-        zip(
-            wirsenius_region_df["country"],
-            wirsenius_region_df["wirsenius_region"],
-        )
-    )
-
     logger.info("Loading feed category mappings")
     rum_mapping = pd.read_csv(ruminant_mapping_path, comment="#")
     mono_mapping = pd.read_csv(monogastric_mapping_path, comment="#")
@@ -431,13 +418,9 @@ def main() -> None:
     fao_2015 = load_fao_production(bulk, item_map, 2015, countries, faostat_items)
 
     # -- Phase 2: Compute FCR lookup and product shares -------------------
-    logger.info("Computing FCR lookup from Wirsenius data")
+    logger.info("Computing FCR lookup from GLEAM3 ME requirements")
     fcr_lookup = compute_fcr_lookup(
-        wirsenius,
-        net_to_me["k_m"],
-        net_to_me["k_g"],
-        net_to_me["k_l"],
-        feed_proxy_map,
+        me_requirements_path,
         list(faostat_items.keys()),
     )
 
@@ -445,31 +428,29 @@ def main() -> None:
     logger.info("Mapping GLEAM3 intakes to model products")
 
     # Filter to valid (Animal, LPS) combinations
-    valid_systems = set(GLEAM3_SYSTEM_PRODUCT_MAP.keys())
+    valid_systems = set(system_product_map.keys())
     intakes["system_key"] = list(zip(intakes["Animal"], intakes["LPS"]))
     intakes = intakes[intakes["system_key"].isin(valid_systems)].copy()
     intakes = intakes[intakes["intake_mt"] > 0]
 
-    # Expand to products via GLEAM3_SYSTEM_PRODUCT_MAP
+    # Expand to products via system_product_map
     system_prods = pd.DataFrame(
         [
             {"Animal": a, "LPS": lps, "product": p}
-            for (a, lps), prods in GLEAM3_SYSTEM_PRODUCT_MAP.items()
+            for (a, lps), prods in system_product_map.items()
             for p in prods
         ]
     )
     intakes = intakes.merge(system_prods, on=["Animal", "LPS"], how="inner")
 
     # Determine animal type
-    intakes["animal_type"] = intakes["Animal"].map(
-        lambda a: "ruminant" if a in RUMINANT_ANIMALS else "monogastric"
-    )
+    is_ruminant = intakes["Animal"].isin(RUMINANT_ANIMALS)
+    intakes["animal_type"] = "monogastric"
+    intakes.loc[is_ruminant, "animal_type"] = "ruminant"
 
     # Pre-compute product shares for all multi-product systems
     logger.info("Computing FCR-weighted product shares")
-    multi_product_systems = {
-        k: v for k, v in GLEAM3_SYSTEM_PRODUCT_MAP.items() if len(v) > 1
-    }
+    multi_product_systems = {k: v for k, v in system_product_map.items() if len(v) > 1}
     unique_countries = intakes["ISO3"].unique()
 
     prod_share_records = []
@@ -483,7 +464,7 @@ def main() -> None:
                 gleam3_prod,
                 fao_2015,
                 fcr_lookup,
-                country_to_wirsenius.get(country),
+                item_to_product,
             )
             for p, s in p_shares.items():
                 prod_share_records.append(
@@ -701,12 +682,19 @@ def main() -> None:
     )
 
     # -- Phase 8: Expand full index and write output ----------------------
-    ruminant_products = [
-        p
-        for sp in ["Cattle & buffaloes", "Small Ruminants"]
-        for p in SPECIES_PRODUCTS[sp]
-    ]
-    all_products = [p for prods in SPECIES_PRODUCTS.values() for p in prods]
+    # Derive product lists from the system product map: ruminant products
+    # come from ruminant animals, the rest are monogastric.
+    ruminant_products = list(
+        dict.fromkeys(
+            p
+            for (animal, _lps), prods in system_product_map.items()
+            if animal in RUMINANT_ANIMALS
+            for p in prods
+        )
+    )
+    all_products = list(
+        dict.fromkeys(p for prods in system_product_map.values() for p in prods)
+    )
     monogastric_products = [p for p in all_products if p not in ruminant_products]
 
     ruminant_feed_cats = sorted({f"ruminant_{c}" for c in rum_item_to_cat.values()})

@@ -66,10 +66,6 @@ scenarios:
 validation:
   use_actual_yields: true
 
-animal_products:
-  # Use regionalized feed efficiency values
-  feed_efficiency_regions: null
-
 plotting:
   comparison_scenarios: "all"
 

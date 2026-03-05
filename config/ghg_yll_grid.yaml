@@ -96,10 +96,6 @@ validation:
     l1_cost: 0.1
     # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
 
-animal_products:
-  # Use regionalized feed efficiency values
-  feed_efficiency_regions: null
-
 # Compare all scenarios in plots
 plotting:
   comparison_scenarios: "all"
@@ -108,13 +104,8 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 2
-  mem_mb: 6000
-  export_for_tuning: true
-  options_gurobi:
-    Method: 2
-    MIPGap: 0.001
-    MIPFocus: 2
-    # VarBranch: 0
+  mem_mb: 8000
+  runtime: 30
 
 remote_solve:
   enabled: true

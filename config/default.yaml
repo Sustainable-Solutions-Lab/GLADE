@@ -320,17 +320,40 @@ animal_products:
   - eggs
   - dairy-buffalo
   - meat-sheep
-  # Feed conversion efficiency mode (how much feed is required per unit product)
-  # Source: Wirsenius (2000) regional feed energy requirements
-  # Options:
-  #   - List of regions: average efficiencies across those regions (all countries use same values)
-  #   - null: use country-specific regional efficiencies based on geographic mapping
-  # Available regions: East Asia, East Europe, Latin America & Caribbean,
-  #   North Africa & West Asia, North America & Oceania, South & Central Asia,
-  #   Sub-Saharan Africa, West Europe
-  feed_efficiency_regions:
-  - North America & Oceania
-  - West Europe
+  # GLEAM 3.0 production system → model product mapping.
+  # Defines which model products each (Animal, LPS) system contributes to.
+  # Multi-product systems (e.g. cattle grazing → dairy + meat) are split
+  # using FCR-weighted shares in the feed baseline.
+  #
+  # Sheep/goat milk is proxied through "dairy" (cattle milk pathway) rather
+  # than modeled as a separate product. At ~3-4% of global milk production
+  # the volume doesn't justify a distinct product with its own efficiency,
+  # emissions, and nutritional profile. The feed accounting is still correct:
+  # GLEAM3 sheep/goat feed intake is captured in the dairy baseline, and
+  # FAOSTAT dairy production (see faostat_items.dairy) includes sheep/goat
+  # milk. The production-based scaling step reconciles any efficiency mismatch.
+  gleam3_system_product_map:
+    Cattle:
+      Grassland: [dairy, meat-cattle]
+      Mixed: [dairy, meat-cattle]
+      Feedlots: [meat-cattle]
+    Buffalo:
+      Grassland: [dairy-buffalo, meat-cattle]
+      Mixed: [dairy-buffalo, meat-cattle]
+    Sheep:
+      Grassland: [dairy, meat-sheep]
+      Mixed: [dairy, meat-sheep]
+    Goats:
+      Grassland: [dairy, meat-sheep]
+      Mixed: [dairy, meat-sheep]
+    Chicken:
+      Broiler: [meat-chicken]
+      Layer: [eggs]
+      Backyard: [eggs, meat-chicken]
+    Pigs:
+      Backyard: [meat-pig]
+      Intermediate: [meat-pig]
+      Industrial: [meat-pig]
   # Ruminant net-to-metabolizable energy conversion efficiency factors
   # Used to convert net energy (NE) requirements to metabolizable energy (ME) requirements
   # Based on NRC (2000) typical values for mixed diets
@@ -375,9 +398,6 @@ animal_products:
     meat-sheep:
       - "Meat of sheep, fresh or chilled"
       - "Meat of goat, fresh or chilled"              # proxy: goat → sheep
-  feed_proxy_map:
-    dairy-buffalo: dairy
-    meat-sheep: meat-cattle
   feed_efficiency_calibration:
     enabled: true
     generate: false

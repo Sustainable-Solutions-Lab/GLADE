@@ -165,11 +165,10 @@ Byproducts from food processing (with ``source_type=food``) are automatically ex
 Feed Conversion Efficiencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Feed conversion efficiencies (tonnes **retail product** per tonne feed DM) are generated automatically from Wirsenius (2000) regional feed energy requirements combined with GLEAM 3.0 feed category energy values.
-
-**Proxy Products**: Buffalo milk (``dairy-buffalo``) and sheep meat (``meat-sheep``) use cattle feed requirements as proxies, since Wirsenius (2000) does not provide separate regional estimates for these products. Buffalo milk inherits dairy cattle parameters, while sheep meat inherits beef cattle parameters with adjustments for the different carcass-to-retail conversion factor (0.63 for sheep vs 0.67 for cattle).
+Feed conversion efficiencies (tonnes **retail product** per tonne feed DM) are derived from GLEAM 3.0 country-level feed intake and production data, combined with GLEAM 3.0 feed category energy values.
 
 In this calculation, we have to account for the following units:
+
 * **Feed inputs**: Dry matter (tonnes DM)
 * **Animal product outputs**: Fresh weight, retail meat (tonnes fresh weight)
 
@@ -177,7 +176,7 @@ In this calculation, we have to account for the following units:
   * For dairy: whole milk (fresh weight)
   * For eggs: whole eggs (fresh weight)
 
-Wirsenius (2000) [1]_ provides feed requirements per kg **carcass weight** (dressed, bone-in). We apply carcass-to-retail conversion factors to obtain feed requirements per kg **retail meat**, from OECD-FAO Agricultural Outlook 2023-2032, Box 6.1 [2]_:
+GLEAM 3.0 ME requirements are at **carcass/farm-gate** level. We apply carcass-to-retail conversion factors to obtain feed requirements per kg **retail meat**, from OECD-FAO Agricultural Outlook 2023-2032, Box 6.1 [2]_:
 
 * Cattle meat: 0.67 kg boneless retail per kg carcass
 * Sheep meat: 0.63 kg boneless retail per kg carcass
@@ -187,20 +186,14 @@ Wirsenius (2000) [1]_ provides feed requirements per kg **carcass weight** (dres
 
 **Generation workflow**:
 
-1. **Regional feed energy requirements** from Wirsenius (2000) provide MJ per kg **carcass** output for eight world regions
+1. **GLEAM3 ME derivation** (``compute_gleam3_me_requirements``): For each country, compute implied ME per kg product from GLEAM3 feed intakes and production data. For multi-product species (cattle, buffalo, chicken, sheep/goats), Wirsenius (2000) dairy:meat ratios guide the product split while GLEAM3 sets the absolute level. Countries without GLEAM3 data receive the production-weighted global average.
 2. **Carcass-to-retail conversion**: Convert MJ per kg carcass → MJ per kg retail meat
 
    * For meats: ME_retail = ME_carcass / carcass_to_retail_factor
    * For dairy/eggs: No conversion (already retail products)
 
-3. **Energy conversion for ruminants**: Net energy (NE) requirements converted to metabolizable energy (ME) using NRC (2000) efficiency factors:
-
-   * k_m = 0.60 (maintenance)
-   * k_g = 0.40 (growth)
-   * k_l = 0.60 (lactation)
-
-4. **Feed category energy content** from GLEAM 3.0 provides ME (MJ per kg DM) for each feed quality category
-5. **Efficiency calculation**: efficiency = ME_feed / ME_retail (tonnes **retail product** per tonne feed DM)
+3. **Feed category energy content** from GLEAM 3.0 provides ME (MJ per kg DM) for each feed quality category
+4. **Efficiency calculation**: efficiency = ME_feed / ME_retail (tonnes **retail product** per tonne feed DM)
 
 **Output**: ``processing/{name}/feed_to_animal_products_uncalibrated.csv`` with columns:
 
@@ -208,41 +201,15 @@ Wirsenius (2000) [1]_ provides feed requirements per kg **carcass weight** (dres
 * ``product``: Product name (e.g., "meat-cattle", "dairy")
 * ``feed_category``: Feed pool (e.g., ``ruminant_forage``, ``ruminant_grain``, ``monogastric_grain``)
 * ``efficiency``: Feed conversion efficiency (t product / t feed DM)
-* ``notes``: Description with inverse feed requirement
-
-**Configuration**: The ``feed_efficiency_regions`` setting controls how feed conversion efficiencies are assigned:
-
-.. code-block:: yaml
-
-   animal_products:
-     # Option 1: Average specific regions (all countries use same values)
-     feed_efficiency_regions:
-     - North America & Oceania
-     - West Europe
-
-     # Option 2: Use country-specific regional values (set to null)
-     # feed_efficiency_regions: null
-
-Available regions (from Wirsenius 2000): East Asia, East Europe, Latin America & Caribbean, North Africa & West Asia, North America & Oceania, South & Central Asia, Sub-Saharan Africa, West Europe
-
-When ``feed_efficiency_regions`` is null, each country uses the feed conversion efficiencies from its geographic region. The mapping from countries to Wirsenius regions is defined in ``data/curated/country_wirsenius_region.csv``.
-
-**Example efficiencies** (North America & Oceania + West Europe average, with carcass-to-retail conversion):
-
-* Cattle meat from forage: ~0.026 t/t (~38 t DM feed per tonne retail beef)
-* Cattle meat from grain: ~0.035 t/t (~28 t DM feed per tonne retail beef)
-* Dairy from forage: ~0.480 t/t (~2.1 t DM feed per tonne milk)
-* Pig meat from grain: ~0.110 t/t (~9.1 t DM feed per tonne retail pork)
-* Chicken meat from grain: ~0.226 t/t (~4.4 t DM feed per tonne retail chicken)
 
 Note: Carcass-to-retail conversion increases feed requirements per kg retail meat by ~33-50% compared to per kg carcass, reflecting bone removal and trimming losses.
 
 This structure allows modeling different production systems for the same product (grass-fed vs. grain-finished beef, pasture vs. intensive dairy, etc.).
 
-Regional Feed Energy Requirements
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Regional Feed Energy Requirements (Wirsenius reference)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Feed requirements vary significantly by region due to differences in production systems, genetics, and environmental conditions. Wirsenius (2000) [1]_ provides estimated feed energy requirements per unit of commodity output:
+Feed requirements vary significantly by region due to differences in production systems, genetics, and environmental conditions. Wirsenius (2000) [1]_ provides estimated feed energy requirements per unit of commodity output, which are used as reference ratios for splitting multi-product systems in the GLEAM3 ME derivation:
 
 .. table:: Feed energy requirements per unit of animal product output (Wirsenius 2000, Table 3.9)
    :widths: auto

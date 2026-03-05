@@ -195,6 +195,8 @@ def _cancel_all_jobs(
 
 def _main_inner(args, jobid_dir: Path, cache_file: Path, logger: logging.Logger):
     """Core poll loop. Exceptions propagate to the crash-safe wrapper."""
+    global _shutdown_requested
+
     # PID file is written by the parent process (start_daemon_if_needed);
     # we only clean it up on exit.
     pid_file = jobid_dir / ".poll_daemon.pid"

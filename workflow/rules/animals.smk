@@ -103,22 +103,43 @@ rule categorize_feeds:
         "../scripts/categorize_feeds.py"
 
 
-rule build_feed_to_animal_products:
+rule compute_gleam3_me_requirements:
     input:
-        wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
+        gleam3_intakes="data/bundled/GLEAM3_intakes.csv",
+        gleam3_production="data/bundled/GLEAM3_production.csv",
         ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
         monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
-        country_region_map="data/curated/country_wirsenius_region.csv",
-    output:
-        "<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
+        wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
+        country_wirsenius_region="data/curated/country_wirsenius_region.csv",
     params:
-        feed_efficiency_regions=config["animal_products"]["feed_efficiency_regions"],
         countries=config["countries"],
         net_to_me_conversion=config["animal_products"][
             "net_to_metabolizable_energy_conversion"
         ],
+    output:
+        "<processing>/{name}/gleam3_me_requirements.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=500,
+    log:
+        "<logs>/{name}/compute_gleam3_me_requirements.log",
+    benchmark:
+        "<benchmarks>/{name}/compute_gleam3_me_requirements.tsv"
+    script:
+        "../scripts/compute_gleam3_me_requirements.py"
+
+
+rule build_feed_to_animal_products:
+    input:
+        me_requirements="<processing>/{name}/gleam3_me_requirements.csv",
+        ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
+        monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
+    output:
+        "<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
+    params:
         carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
-        feed_proxy_map=config["animal_products"]["feed_proxy_map"],
     group:
         "prep"
     resources:
@@ -160,8 +181,7 @@ rule prepare_feed_baseline:
         gleam3_intakes="data/bundled/GLEAM3_intakes.csv",
         gleam3_production="data/bundled/GLEAM3_production.csv",
         gleam3_feed_fractions="<processing>/{name}/gleam3_feed_fractions.csv",
-        wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
-        country_wirsenius_region="data/curated/country_wirsenius_region.csv",
+        me_requirements="<processing>/{name}/gleam3_me_requirements.csv",
         qcl_csv="data/downloads/faostat/QCL.csv",
         m49_codes="data/curated/M49-codes.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
@@ -171,11 +191,8 @@ rule prepare_feed_baseline:
     params:
         reference_year=config["baseline_year"],
         countries=config["countries"],
-        net_to_me_conversion=config["animal_products"][
-            "net_to_metabolizable_energy_conversion"
-        ],
-        feed_proxy_map=config["animal_products"]["feed_proxy_map"],
         faostat_items=config["animal_products"]["faostat_items"],
+        gleam3_system_product_map=config["animal_products"]["gleam3_system_product_map"],
     output:
         "<processing>/{name}/feed_baseline_uncalibrated.csv",
     group:

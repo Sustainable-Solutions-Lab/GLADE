@@ -9,305 +9,7 @@ import pytest
 
 from workflow.scripts.build_feed_to_animal_products import (
     calculate_feed_efficiencies,
-    calculate_ruminant_me_requirements,
-    get_monogastric_me_requirements,
 )
-
-# ---------------------------------------------------------------------------
-# Tests: calculate_ruminant_me_requirements
-# ---------------------------------------------------------------------------
-
-
-class TestCalculateRuminantMeRequirements:
-    """Tests for NE-to-ME conversion for ruminant products."""
-
-    def test_beef_me_calculation(self):
-        """Beef ME = NE_m/k_m + NE_g/k_g, divided by carcass_to_retail."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-cattle", "meat-cattle"],
-                "region": ["North America", "North America"],
-                "unit": ["NE_m", "NE_g"],
-                "value": [10.0, 5.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            carcass_to_retail={"meat-cattle": 0.7},
-            feed_proxy_map={},
-        )
-        # ME_carcass = 10/0.6 + 5/0.4 = 16.667 + 12.5 = 29.167
-        # ME_retail = 29.167 / 0.7 = 41.667
-        assert len(result) == 1
-        assert result["animal_product"].iloc[0] == "meat-cattle"
-        assert result["ME_MJ_per_kg"].iloc[0] == pytest.approx(
-            (10.0 / 0.6 + 5.0 / 0.4) / 0.7
-        )
-
-    def test_dairy_me_calculation(self):
-        """Dairy ME = NE_l/k_l + NE_m/k_m + NE_g/k_g, no carcass conversion."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["dairy", "dairy", "dairy"],
-                "region": ["Europe", "Europe", "Europe"],
-                "unit": ["NE_l", "NE_m", "NE_g"],
-                "value": [3.0, 8.0, 2.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.65,
-            carcass_to_retail={"dairy": 1.0},
-            feed_proxy_map={},
-        )
-        expected = 3.0 / 0.65 + 8.0 / 0.6 + 2.0 / 0.4
-        assert len(result) == 1
-        assert result["animal_product"].iloc[0] == "dairy"
-        assert result["ME_MJ_per_kg"].iloc[0] == pytest.approx(expected)
-
-    def test_non_ruminants_skipped(self):
-        """Non-ruminant products (e.g. meat-pig) are skipped."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": [
-                    "meat-pig",
-                    "meat-pig",
-                    "meat-cattle",
-                    "meat-cattle",
-                ],
-                "region": ["Europe", "Europe", "Europe", "Europe"],
-                "unit": ["ME", "ME", "NE_m", "NE_g"],
-                "value": [30.0, 30.0, 10.0, 5.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            carcass_to_retail={"meat-cattle": 0.7, "meat-pig": 0.8},
-            feed_proxy_map={},
-        )
-        products = result["animal_product"].unique().tolist()
-        assert "meat-pig" not in products
-        assert "meat-cattle" in products
-
-    def test_multiple_regions(self):
-        """Each region gets its own ME requirement."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": [
-                    "meat-cattle",
-                    "meat-cattle",
-                    "meat-cattle",
-                    "meat-cattle",
-                ],
-                "region": [
-                    "North America",
-                    "North America",
-                    "Sub-Saharan Africa",
-                    "Sub-Saharan Africa",
-                ],
-                "unit": ["NE_m", "NE_g", "NE_m", "NE_g"],
-                "value": [10.0, 5.0, 15.0, 8.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            carcass_to_retail={"meat-cattle": 0.7},
-            feed_proxy_map={},
-        )
-        assert len(result) == 2
-        na_row = result[result["region"] == "North America"]
-        ssa_row = result[result["region"] == "Sub-Saharan Africa"]
-        assert na_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(
-            (10.0 / 0.6 + 5.0 / 0.4) / 0.7
-        )
-        assert ssa_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(
-            (15.0 / 0.6 + 8.0 / 0.4) / 0.7
-        )
-
-    def test_proxy_product_copies_source(self):
-        """Proxy products copy from their source with same carcass_to_retail."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["dairy", "dairy", "dairy"],
-                "region": ["Europe", "Europe", "Europe"],
-                "unit": ["NE_l", "NE_m", "NE_g"],
-                "value": [3.0, 8.0, 2.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.65,
-            carcass_to_retail={"dairy": 1.0, "dairy-buffalo": 1.0},
-            feed_proxy_map={"dairy-buffalo": "dairy"},
-        )
-        dairy_row = result[result["animal_product"] == "dairy"]
-        buffalo_row = result[result["animal_product"] == "dairy-buffalo"]
-        assert len(dairy_row) == 1
-        assert len(buffalo_row) == 1
-        assert buffalo_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(
-            dairy_row["ME_MJ_per_kg"].iloc[0]
-        )
-
-    def test_proxy_with_different_carcass_factor(self):
-        """Proxy products adjust ME if carcass_to_retail differs from source."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-cattle", "meat-cattle"],
-                "region": ["Europe", "Europe"],
-                "unit": ["NE_m", "NE_g"],
-                "value": [10.0, 5.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            carcass_to_retail={"meat-cattle": 0.7, "meat-buffalo": 0.5},
-            feed_proxy_map={"meat-buffalo": "meat-cattle"},
-        )
-        cattle_me = result[result["animal_product"] == "meat-cattle"][
-            "ME_MJ_per_kg"
-        ].iloc[0]
-        buffalo_me = result[result["animal_product"] == "meat-buffalo"][
-            "ME_MJ_per_kg"
-        ].iloc[0]
-        # adjustment = source_factor / proxy_factor = 0.7 / 0.5 = 1.4
-        assert buffalo_me == pytest.approx(cattle_me * 0.7 / 0.5)
-
-    def test_missing_ne_defaults_to_zero(self):
-        """Missing NE component (e.g. NE_g for beef) defaults to zero."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-cattle"],
-                "region": ["Europe"],
-                "unit": ["NE_m"],
-                "value": [10.0],
-            }
-        )
-        result = calculate_ruminant_me_requirements(
-            wirsenius_data,
-            k_m=0.6,
-            k_g=0.4,
-            k_l=0.6,
-            carcass_to_retail={"meat-cattle": 0.7},
-            feed_proxy_map={},
-        )
-        # Only NE_m present, NE_g defaults to 0
-        assert result["ME_MJ_per_kg"].iloc[0] == pytest.approx((10.0 / 0.6) / 0.7)
-
-
-# ---------------------------------------------------------------------------
-# Tests: get_monogastric_me_requirements
-# ---------------------------------------------------------------------------
-
-
-class TestGetMonogastricMeRequirements:
-    """Tests for ME extraction for monogastric products."""
-
-    def test_basic_me_extraction(self):
-        """ME values are divided by carcass_to_retail."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-pig", "meat-chicken", "eggs"],
-                "region": ["Europe", "Europe", "Europe"],
-                "unit": ["ME", "ME", "ME"],
-                "value": [30.0, 20.0, 15.0],
-            }
-        )
-        carcass_to_retail = {
-            "meat-pig": 0.7,
-            "meat-chicken": 0.8,
-            "eggs": 1.0,
-        }
-        result = get_monogastric_me_requirements(wirsenius_data, carcass_to_retail)
-        pig_row = result[result["animal_product"] == "meat-pig"]
-        chicken_row = result[result["animal_product"] == "meat-chicken"]
-        egg_row = result[result["animal_product"] == "eggs"]
-        assert pig_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(30.0 / 0.7)
-        assert chicken_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(20.0 / 0.8)
-        assert egg_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(15.0 / 1.0)
-
-    def test_filters_to_monogastric_only(self):
-        """Ruminant products are excluded."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-pig", "meat-cattle", "dairy"],
-                "region": ["Europe", "Europe", "Europe"],
-                "unit": ["ME", "NE_m", "NE_l"],
-                "value": [30.0, 10.0, 5.0],
-            }
-        )
-        carcass_to_retail = {"meat-pig": 0.7, "meat-cattle": 0.7, "dairy": 1.0}
-        result = get_monogastric_me_requirements(wirsenius_data, carcass_to_retail)
-        products = result["animal_product"].unique().tolist()
-        assert "meat-pig" in products
-        assert "meat-cattle" not in products
-        assert "dairy" not in products
-
-    def test_only_me_unit_rows_used(self):
-        """Rows with non-ME units are excluded."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-pig", "meat-pig"],
-                "region": ["Europe", "Europe"],
-                "unit": ["ME", "NE_m"],
-                "value": [30.0, 10.0],
-            }
-        )
-        result = get_monogastric_me_requirements(
-            wirsenius_data, carcass_to_retail={"meat-pig": 0.7}
-        )
-        assert len(result) == 1
-        assert result["ME_MJ_per_kg"].iloc[0] == pytest.approx(30.0 / 0.7)
-
-    def test_multiple_regions(self):
-        """Each region produces a separate row."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["meat-pig", "meat-pig"],
-                "region": ["Europe", "East Asia"],
-                "unit": ["ME", "ME"],
-                "value": [30.0, 35.0],
-            }
-        )
-        result = get_monogastric_me_requirements(
-            wirsenius_data, carcass_to_retail={"meat-pig": 0.7}
-        )
-        assert len(result) == 2
-        eu_row = result[result["region"] == "Europe"]
-        asia_row = result[result["region"] == "East Asia"]
-        assert eu_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(30.0 / 0.7)
-        assert asia_row["ME_MJ_per_kg"].iloc[0] == pytest.approx(35.0 / 0.7)
-
-    def test_eggs_no_carcass_conversion(self):
-        """Eggs with carcass_to_retail=1.0 keep original ME value."""
-        wirsenius_data = pd.DataFrame(
-            {
-                "animal_product": ["eggs"],
-                "region": ["Europe"],
-                "unit": ["ME"],
-                "value": [15.0],
-            }
-        )
-        result = get_monogastric_me_requirements(
-            wirsenius_data, carcass_to_retail={"eggs": 1.0}
-        )
-        assert result["ME_MJ_per_kg"].iloc[0] == pytest.approx(15.0)
-
 
 # ---------------------------------------------------------------------------
 # Tests: calculate_feed_efficiencies
@@ -322,7 +24,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [30.0],
             }
         )
@@ -340,7 +42,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-pig"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [40.0],
             }
         )
@@ -357,7 +59,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle", "dairy"],
-                "region": ["Europe", "Europe"],
+                "country": ["Europe", "Europe"],
                 "ME_MJ_per_kg": [40.0, 20.0],
             }
         )
@@ -385,7 +87,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [40.0],
             }
         )
@@ -411,7 +113,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle", "dairy"],
-                "region": ["Europe", "Europe"],
+                "country": ["Europe", "Europe"],
                 "ME_MJ_per_kg": [40.0, 20.0],
             }
         )
@@ -430,7 +132,7 @@ class TestCalculateFeedEfficiencies:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [30.0],
             }
         )
@@ -443,16 +145,16 @@ class TestCalculateFeedEfficiencies:
         assert set(result.columns) == {
             "product",
             "feed_category",
-            "region",
+            "country",
             "efficiency",
         }
 
-    def test_region_preserved(self):
-        """Region from me_requirements is preserved in output."""
+    def test_country_preserved(self):
+        """Country from me_requirements is preserved in output."""
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle", "meat-cattle"],
-                "region": ["Europe", "Sub-Saharan Africa"],
+                "country": ["USA", "BRA"],
                 "ME_MJ_per_kg": [30.0, 50.0],
             }
         )
@@ -462,9 +164,9 @@ class TestCalculateFeedEfficiencies:
         result = calculate_feed_efficiencies(
             me_requirements, feed_categories, "ruminant"
         )
-        regions = result["region"].unique().tolist()
-        assert "Europe" in regions
-        assert "Sub-Saharan Africa" in regions
+        countries = result["country"].unique().tolist()
+        assert "USA" in countries
+        assert "BRA" in countries
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +182,7 @@ class TestEfficiencyRanges:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [50.0],
             }
         )
@@ -504,7 +206,7 @@ class TestEfficiencyRanges:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["meat-cattle", "dairy"],
-                "region": ["Europe", "Europe"],
+                "country": ["Europe", "Europe"],
                 "ME_MJ_per_kg": [50.0, 5.0],
             }
         )
@@ -523,7 +225,7 @@ class TestEfficiencyRanges:
         me_requirements = pd.DataFrame(
             {
                 "animal_product": ["eggs"],
-                "region": ["Europe"],
+                "country": ["Europe"],
                 "ME_MJ_per_kg": [15.0],
             }
         )
