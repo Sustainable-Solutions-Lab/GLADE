@@ -646,7 +646,6 @@ properties:
       - net_to_metabolizable_energy_conversion
       - carcass_to_retail_meat
       - faostat_items
-      - feed_efficiency_calibration
       - residue_crops
     additionalProperties: false
     properties:
@@ -723,28 +722,6 @@ properties:
               type: string
             description: "FAOSTAT QCL item names to aggregate for this product"
         description: "FAOSTAT QCL item names to aggregate for each model product"
-      feed_efficiency_calibration:
-        type: object
-        required: [enabled, generate, source, max_multiplier, scenario]
-        additionalProperties: false
-        properties:
-          enabled:
-            type: boolean
-            description: "Apply per-(country, product, category) efficiency calibration multipliers"
-          generate:
-            type: boolean
-            description: "Generate calibration CSV from a solved model's feed slack"
-          source:
-            type: string
-            description: "Path to calibration CSV (read when enabled, written when generate)"
-          max_multiplier:
-            type: number
-            exclusiveMinimum: 1
-            description: "Maximum allowed calibration multiplier per feed bus"
-          scenario:
-            type: string
-            pattern: "^[a-zA-Z0-9_]+$"
-            description: "Scenario whose solved model is used to generate calibration"
       residue_crops:
         type: array
         uniqueItems: true

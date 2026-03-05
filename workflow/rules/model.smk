@@ -54,24 +54,6 @@ def harvested_area_model_inputs(wildcards):
     return inputs
 
 
-def feed_baseline_input(wildcards):
-    """Select calibrated or uncalibrated feed baseline per scenario."""
-    eff = get_effective_config(wildcards.scenario)
-    if eff["animal_products"]["feed_efficiency_calibration"]["enabled"]:
-        return {"feed_baseline": "<processing>/{name}/feed_baseline.csv"}
-    return {"feed_baseline": "<processing>/{name}/feed_baseline_uncalibrated.csv"}
-
-
-def feed_to_products_input(wildcards):
-    """Select calibrated or uncalibrated feed efficiencies per scenario."""
-    eff = get_effective_config(wildcards.scenario)
-    if eff["animal_products"]["feed_efficiency_calibration"]["enabled"]:
-        return {"feed_to_products": "<processing>/{name}/feed_to_animal_products.csv"}
-    return {
-        "feed_to_products": "<processing>/{name}/feed_to_animal_products_uncalibrated.csv"
-    }
-
-
 def build_model_biofuel_baseline_input(wildcards):
     """Conditionally include biofuel baseline data when enforce_baseline_demand is true."""
     eff = get_effective_config(wildcards.scenario)
@@ -109,11 +91,11 @@ rule build_model:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
-        unpack(feed_baseline_input),
-        unpack(feed_to_products_input),
         unpack(build_model_grassland_calibration_input),
         unpack(build_model_biofuel_baseline_input),
         unpack(build_model_fiber_baseline_input),
+        feed_baseline="<processing>/{name}/feed_baseline.csv",
+        feed_to_products="<processing>/{name}/feed_to_animal_products.csv",
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",

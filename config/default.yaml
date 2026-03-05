@@ -398,12 +398,6 @@ animal_products:
     meat-sheep:
       - "Meat of sheep, fresh or chilled"
       - "Meat of goat, fresh or chilled"              # proxy: goat → sheep
-  feed_efficiency_calibration:
-    enabled: true
-    generate: false
-    source: "data/curated/feed_efficiency_calibration.csv"
-    max_multiplier: 2.0
-    scenario: "default" # Which scenario's solved model to generate calibration from
   residue_crops:
   - banana
   - barley

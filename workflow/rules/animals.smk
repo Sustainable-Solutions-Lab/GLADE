@@ -9,8 +9,6 @@ Includes feed properties, feed categorization, feed-to-product conversions,
 and manure emissions calculations.
 """
 
-_cal_cfg = config["animal_products"]["feed_efficiency_calibration"]
-
 
 rule prepare_faostat_animal_production:
     input:
@@ -137,7 +135,7 @@ rule build_feed_to_animal_products:
         ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
         monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
     output:
-        "<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
+        "<processing>/{name}/feed_to_animal_products.csv",
     params:
         carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
     group:
@@ -186,7 +184,7 @@ rule prepare_feed_baseline:
         m49_codes="data/curated/M49-codes.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
-        feed_to_animal_products="<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
+        feed_to_animal_products="<processing>/{name}/feed_to_animal_products.csv",
         faostat_animal_production="<processing>/{name}/faostat_animal_production.csv",
     params:
         reference_year=config["baseline_year"],
@@ -194,7 +192,7 @@ rule prepare_feed_baseline:
         faostat_items=config["animal_products"]["faostat_items"],
         gleam3_system_product_map=config["animal_products"]["gleam3_system_product_map"],
     output:
-        "<processing>/{name}/feed_baseline_uncalibrated.csv",
+        "<processing>/{name}/feed_baseline.csv",
     group:
         "prep"
     resources:
@@ -206,50 +204,6 @@ rule prepare_feed_baseline:
         "<benchmarks>/{name}/prepare_feed_baseline.tsv"
     script:
         "../scripts/prepare_feed_baseline.py"
-
-
-if _cal_cfg["generate"]:
-    _cal_scenario = _cal_cfg["scenario"]
-
-    rule compute_feed_efficiency_calibration:
-        input:
-            network=f"<results>/{name}/solved/model_scen-{_cal_scenario}.nc",
-            feed_baseline=f"<processing>/{name}/feed_baseline_uncalibrated.csv",
-            feed_to_products=f"<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
-        params:
-            max_multiplier=_cal_cfg["max_multiplier"],
-        output:
-            _cal_cfg["source"],
-        resources:
-            runtime="2m",
-            mem_mb=4000,
-        log:
-            f"<logs>/{name}/compute_feed_efficiency_calibration_scen-{_cal_scenario}.log",
-        benchmark:
-            f"<benchmarks>/{name}/compute_feed_efficiency_calibration_scen-{_cal_scenario}.tsv"
-        script:
-            "../scripts/compute_feed_efficiency_calibration.py"
-
-
-if _cal_cfg["generate"] or _cal_cfg["enabled"]:
-
-    rule apply_feed_calibration:
-        input:
-            feed_baseline="<processing>/{name}/feed_baseline_uncalibrated.csv",
-            feed_to_products="<processing>/{name}/feed_to_animal_products_uncalibrated.csv",
-            calibration=_cal_cfg["source"],
-        output:
-            feed_baseline="<processing>/{name}/feed_baseline.csv",
-            feed_to_products="<processing>/{name}/feed_to_animal_products.csv",
-        resources:
-            runtime="1m",
-            mem_mb=500,
-        log:
-            "<logs>/{name}/apply_feed_calibration.log",
-        benchmark:
-            "<benchmarks>/{name}/apply_feed_calibration.tsv"
-        script:
-            "../scripts/apply_feed_calibration.py"
 
 
 _grassland_cal_cfg = config["grazing"]["grassland_forage_calibration"]

@@ -44,8 +44,6 @@ tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_validation.yaml -- \
     docs/_static/figures/validation_slack_overview.png \
     docs/_static/figures/validation_feed_breakdown.svg \
     docs/_static/figures/validation_feed_breakdown.png \
-    docs/_static/figures/validation_feed_calibration.svg \
-    docs/_static/figures/validation_feed_calibration.png \
     docs/_static/figures/validation_grassland_calibration.svg \
     docs/_static/figures/validation_grassland_calibration.png
 
