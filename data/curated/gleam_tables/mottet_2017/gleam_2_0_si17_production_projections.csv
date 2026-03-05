@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Source: Mottet et al. (2017) Table SI 17.
+# Projected meat production and crop yields by 2025 (OECD/FAO, 2016) and related
+# animal feed demand and area needed.
+# Meat production 2010 in Mt cwe (carcass weight equivalent).
+# DM = dry matter. Cwe = carcass weight equivalent. FCR = Feed Conversion Ratio.
+#
+Region,Species,Meat production 2010 (Mt cwe),Meat production 2025/2010 (%),Range of FCR improvement (%),Crop yields 2025/2010 (%),Human-edible feed intake 2010 (Mt DM),Non-human-edible feed intake 2010 (Mt DM),Human-edible feed intake 2025 (Mt DM),Non-human-edible feed intake 2025 (Mt DM)
+Non OECD,Cattle & buffaloes,46.3,21,[5-15],25,124,3387,[131-143],[3568-3907]
+Non OECD,Small Ruminants,11.6,33,[5-15],25,2,451,[2.2-2.4],[523-573]
+Non OECD,Poultry,71.8,32,[5-10],25,263,170,[315-330],[203-213]
+Non OECD,Pigs,92.8,19,[5-10],25,103,279,[112-117],[304-318]
+OECD,Cattle & buffaloes,28.0,4,[0-5],10,134,673,[133-140],[669-703]
+OECD,Small Ruminants,2.5,15,[0-5],10,5,73,[5.0-5.3],[80-84]
+OECD,Poultry,41.3,24,[0-5],10,118,47,[139-146],[55-58]
+OECD,Pigs,39.8,10,[0-5],10,114,53,[119-125],[56-58]
+Total non OECD,,,222.6,24,,,,492,4287,[560-593],[4597-5011]
+Total OECD,,,111.5,14,,,,370,846,[396-416],[860-903]
+Total World,,,334.1,21,,,,863,5133,[956-1009],[5457-5914]

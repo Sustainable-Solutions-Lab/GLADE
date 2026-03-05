@@ -36,7 +36,7 @@ _RUMINANT_FEED_ME_MAP = {
     "Grains": "grain",
     "Oil seed cakes": "protein",
     "Crop residues": "roughage",
-    "Grass and leaves": "grassland",
+    "Grass and leaves": "forage",
     "Fodder crop": "forage",
     "By-products": "grain",
 }
@@ -171,7 +171,7 @@ def _compute_country_me(
     w_meat_cattle = _wirsenius_me(wirsenius, "meat-cattle", region, k_m, k_g, k_l)
 
     w_cattle_implied = w_dairy * cattle_milk + w_meat_cattle * cattle_meat
-    if w_cattle_implied > 0:
+    if w_cattle_implied > 0 and cattle_feed > 0:
         f_cattle = cattle_feed / w_cattle_implied
         out["dairy"] = w_dairy * f_cattle
         out["meat-cattle"] = w_meat_cattle * f_cattle
@@ -185,7 +185,7 @@ def _compute_country_me(
     buffalo_meat = _sum_production(cp, ["Buffalo"], "Meat", "CarcassWeight")
 
     w_buffalo_implied = w_dairy * buffalo_milk + w_meat_cattle * buffalo_meat
-    if w_buffalo_implied > 0:
+    if w_buffalo_implied > 0 and buffalo_feed > 0:
         f_buffalo = buffalo_feed / w_buffalo_implied
         out["dairy-buffalo"] = w_dairy * f_buffalo
     else:
@@ -194,7 +194,7 @@ def _compute_country_me(
     # --- Pigs (direct) ---
     pig_feed = _sum_feed_me(ci, ["Pigs"])
     pig_meat = _sum_production(cp, ["Pigs"], "Meat", "CarcassWeight")
-    out["meat-pig"] = pig_feed / pig_meat if pig_meat > 0 else None
+    out["meat-pig"] = pig_feed / pig_meat if pig_meat > 0 and pig_feed > 0 else None
 
     # --- Chicken (combined: Backyard is dual-product) ---
     chicken_feed = _sum_feed_me(ci, ["Chicken"])
@@ -205,7 +205,7 @@ def _compute_country_me(
     w_eggs = _wirsenius_me(wirsenius, "eggs", region, k_m, k_g, k_l)
 
     w_chicken_implied = w_chicken * chicken_meat + w_eggs * chicken_eggs
-    if w_chicken_implied > 0:
+    if w_chicken_implied > 0 and chicken_feed > 0:
         f_chicken = chicken_feed / w_chicken_implied
         out["meat-chicken"] = w_chicken * f_chicken
         out["eggs"] = w_eggs * f_chicken
@@ -234,6 +234,11 @@ def _compute_country_me(
         out["meat-sheep"] = None
 
     return out
+
+
+def _has_valid_me(me_val: float | None) -> bool:
+    """Return True for finite, strictly positive ME values."""
+    return me_val is not None and pd.notna(me_val) and me_val > 0
 
 
 def compute_gleam3_me_requirements(
@@ -309,7 +314,7 @@ def compute_gleam3_me_requirements(
         total_prod = 0.0
         for country in countries:
             me_val = country_me[country].get(product)
-            if me_val is None:
+            if not _has_valid_me(me_val):
                 continue
             # Weight by the production that informed this ME
             cp = production[production["ISO3"] == country]
@@ -339,7 +344,7 @@ def compute_gleam3_me_requirements(
     for country in countries:
         for product in products:
             me_val = country_me[country].get(product)
-            if me_val is None:
+            if not _has_valid_me(me_val):
                 me_val = global_avg[product]
             results.append(
                 {
@@ -364,7 +369,10 @@ def compute_gleam3_me_requirements(
             prod_data["ME_MJ_per_kg"].mean(),
         )
     n_fallback = sum(
-        1 for c in countries for p in products if country_me[c].get(p) is None
+        1
+        for c in countries
+        for p in products
+        if not _has_valid_me(country_me[c].get(p))
     )
     if n_fallback:
         logger.info(

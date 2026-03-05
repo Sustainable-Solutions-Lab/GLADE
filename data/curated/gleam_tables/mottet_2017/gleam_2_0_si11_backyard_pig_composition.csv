@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Source: Mottet et al. (2017) Table SI 11.
+# Backyard pig feed rations, regional averages.
+# Values are percentage of total dry matter intake.
+#
+Feed component,NA,RUSS,WE,EE,NENA,ESEA,OC,SA,LAC,SSA
+Swill,,20,,19,,20,,,19,19
+Pulses straw (local),,5,,7,,2,,,1,14
+Sugarcane tops (local),,,,1,,5,,,27,6
+Banana residues (local),,,,,,,,,4,2
+Pulses (local),,1,,1,,,,,,2
+Cassava (local),,,,,,,,, 1,7
+Wheat (local),,18,,12,,6,,,1,
+Maize (local),,1,,7,,7,,,5,8
+Barley (local),,7,,5,,,,,,
+Millet (local),,,,,,,,,,2
+Rice (local),,,,,,17,,,2,3
+Sorghum (local),,,,,,,,, 1,3
+Soybean (local),,,,,,1,,,2,
+Banana (local),,,,,,,,, 1,2
+Soybean meal (local),,1,,1,,8,,,15,1
+Oilseed meal (local),,13,,17,,8,,,5,9
+Oilseed meal (non-local),,10,,8,,5,,,5,2
+Cottonseed meal (local),,,,,,,,,1,3
+Cottonseed meal (non-local),,10,,8,,5,,,5,2
+Dry by-product grain industries (local),,13,,12,,15,,,5,8

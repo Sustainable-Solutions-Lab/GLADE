@@ -115,6 +115,15 @@ def build_feed_to_animal_products(
         / carcass_to_retail.get(row["animal_product"], 1.0),
         axis=1,
     )
+    invalid_me = ~me_reqs["ME_MJ_per_kg"].gt(0) | ~me_reqs["ME_MJ_per_kg"].notna()
+    if invalid_me.any():
+        invalid_rows = me_reqs.loc[
+            invalid_me, ["animal_product", "country", "ME_MJ_per_kg"]
+        ]
+        raise ValueError(
+            "Feed conversion requires strictly positive ME requirements; "
+            f"found invalid rows:\n{invalid_rows.to_string(index=False)}"
+        )
     logger.info("Carcass-to-retail conversion factors:")
     for product, factor in carcass_to_retail.items():
         logger.info("  %s: %.2f", product, factor)

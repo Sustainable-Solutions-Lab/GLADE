@@ -1,0 +1,26 @@
+Region,Species,System,Total intake,Roughages,Swill,Cereal grains,2nd grade grain,Brans spent brewer and biofuel grains,Soybean cakes,Other oil seed cakes,Other edible,Other non-edible,Total human-edible feed intake,Total in competition with food production
+Non OECD,Cattle & buffaloes,Grazing,1148,1092,,10,,35,2,8,,2,11,13
+Non OECD,Cattle & buffaloes,Mixed,2326,2079,,65,,112,12,25,,34,77,88
+Non OECD,Cattle & buffaloes,Feedlots*,37,14,,14,,6,1,2,,,15,16
+Non OECD,Small Ruminants,Grazing,215,208,,,,6,,1,,,, 1
+Non OECD,Small Ruminants,Mixed,238,226,,1,,9,,1,,,1,1
+Non OECD,Poultry,Backyard,73,,28,,21,11,6,3,2,1,8,15
+Non OECD,Poultry,Layers,141,,,87,,6,7,6,21,14,115,123
+Non OECD,Poultry,Broilers,219,,,155,,,52,2,3,6,210,262
+Non OECD,Pigs,Backyard,217,32,42,,66,33,27,11,2,3,30,57
+Non OECD,Pigs,Intermediate,85,7,3,43,,11,14,2,3,2,59,73
+Non OECD,Pigs,Industrial,81,,,52,,5,14,2,4,3,70,84
+OECD,Cattle & buffaloes,Grazing,340,293,,24,,11,4,5,,3,28,32
+OECD,Cattle & buffaloes,Mixed,396,307,,48,,14,8,11,,8,56,64
+OECD,Cattle & buffaloes,Feedlots*,71,17,,51,,1,1,,,,52,54
+OECD,Small Ruminants,Grazing,32,29,,1,,1,,,,1,1,1
+OECD,Small Ruminants,Mixed,45,39,,1,,3,,,,2,1,1
+OECD,Poultry,Backyard,1,,,,,,,,,,, 0
+OECD,Poultry,Layers,40,0,,27,,,4,1,5,4,36,40
+OECD,Poultry,Broilers,124,,,82,,,24,5,7,6,113,137
+OECD,Pigs,Backyard,6,2,1,,2,1,,,,,,0
+OECD,Pigs,Intermediate,6,,,4,,1,1,,,,5,5
+OECD,Pigs,Industrial,155,,,105,,7,23,12,3,5,131,154
+World,Ruminants,,4849,4304,,214,,199,28,53,,51,242,270
+World,Monogastrics,,1147,41,75,554,90,76,173,45,50,43,777,949
+World,All,,5996,4345,75,768,90,275,201,98,50,95,1019,1220
