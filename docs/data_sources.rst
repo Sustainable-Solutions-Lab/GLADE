@@ -294,6 +294,43 @@ Grassland Yield Data
 
 **Usage**: Grazing-based livestock production potential
 
+GLEAM 3.0 — Feed Intake and Animal Production
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: FAO (Food and Agriculture Organization of the United Nations)
+
+**Description**: Country-level feed intake and animal production data from
+FAO's Global Livestock Environmental Assessment Model (GLEAM) version 3.0.
+Feed intakes are reported by country, species, production system, and
+aggregate feed category (kg DM/year). Production data covers meat (carcass
+weight), milk, and eggs (kg/year) per country and system.
+
+**Coverage**: Global; reference year 2015. 229 countries, 6 animal species
+(cattle, buffalo, sheep, goats, chicken, pigs), 8 production systems, 8 feed
+categories.
+
+**Source**: Obtained directly from FAO upon request.
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0),
+with additional FAO data terms requiring acknowledgement of FAO as the source
+and copyright holder and that FAO's endorsement of users' views, products or
+services is not implied.
+
+**Citation**: FAO (2022). Global Livestock Environmental Assessment Model
+(GLEAM). Rome. https://www.fao.org/gleam/
+
+**Data files**:
+  * ``data/bundled/GLEAM3_intakes.csv``: Feed intake by country, species, production system, and feed category
+  * ``data/bundled/GLEAM3_production.csv``: Animal production by country, species, production system, and product type
+
+**Usage**: Provides the feed baseline for the livestock module. Country-level
+intakes are mapped to model feed categories, split between co-products using
+FCR-weighted shares, and scaled to the configured reference year.
+
+**Workflow integration**: Consumed by ``prepare_feed_baseline.py`` (via
+``compute_gleam3_feed_fractions.py`` for category mapping). See
+:ref:`gleam-feed-baseline` for details.
+
 Spatial and Administrative Data
 --------------------------------
 
@@ -717,6 +754,6 @@ Data License Summary
 Most datasets used in this project require attribution. Some disallow redistribution, meaning that ``food-opt`` cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
 
 * **CC0 1.0 (Public Domain)** (USDA FoodData Central): Public domain, no restrictions; attribution requested
-* **CC BY 4.0** (GAEZ, FAOSTAT): Requires attribution
+* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
 * **Academic use only** (GADM, GBD, GDD): Commercial use requires permission or paid licensed.

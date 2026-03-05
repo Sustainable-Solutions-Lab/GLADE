@@ -132,13 +132,34 @@ rule build_feed_to_animal_products:
         "../scripts/build_feed_to_animal_products.py"
 
 
+rule compute_gleam3_feed_fractions:
+    input:
+        foods="data/curated/foods.csv",
+        faostat_crop_production="<processing>/{name}/faostat_crop_production.csv",
+        ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
+        monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
+    output:
+        "<processing>/{name}/gleam3_feed_fractions.csv",
+    params:
+        countries=config["countries"],
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=500,
+    log:
+        "<logs>/{name}/compute_gleam3_feed_fractions.log",
+    benchmark:
+        "<benchmarks>/{name}/compute_gleam3_feed_fractions.tsv"
+    script:
+        "../scripts/compute_gleam3_feed_fractions.py"
+
+
 rule prepare_feed_baseline:
     input:
-        si_table_2="data/curated/gleam_tables/mottet_2017/gleam_2_0_si2_global_livestock_feed_intake.csv",
-        si_table_4="data/curated/gleam_tables/mottet_2017/gleam_2_0_si4_dairy_cattle_composition.csv",
-        si_table_5="data/curated/gleam_tables/mottet_2017/gleam_2_0_si5_beef_cattle_composition.csv",
-        oecd_status="data/curated/country_oecd_status.csv",
-        gleam_regions="data/curated/country_gleam_region.csv",
+        gleam3_intakes="data/bundled/GLEAM3_intakes.csv",
+        gleam3_production="data/bundled/GLEAM3_production.csv",
+        gleam3_feed_fractions="<processing>/{name}/gleam3_feed_fractions.csv",
         wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
         country_wirsenius_region="data/curated/country_wirsenius_region.csv",
         qcl_csv="data/downloads/faostat/QCL.csv",

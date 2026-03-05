@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Unit tests for GLEAM feed baseline preparation."""
+"""Unit tests for GLEAM 3.0 feed baseline preparation."""
 
 from typing import ClassVar
 
@@ -11,15 +11,12 @@ import pytest
 
 from workflow.scripts.animal_utils import SPECIES_PRODUCTS
 from workflow.scripts.prepare_feed_baseline import (
-    PRODUCT_COMPOSITION,
-    ROUGHAGE_COMPONENT_TO_FEED_ITEM,
-    SI2_TO_MONOGASTRIC_FEED_ITEM,
-    SI2_TO_RUMINANT_FEED_ITEM,
-    SYSTEM_PRODUCT_MAP,
-    compute_country_shares,
+    GLEAM3_SYSTEM_PRODUCT_MAP,
+    RUMINANT_ANIMALS,
+    _validate_fraction_table,
+    _validate_intake_fraction_coverage,
     compute_fcr_lookup,
     compute_product_shares,
-    decompose_roughage,
 )
 
 # ---------------------------------------------------------------------------
@@ -31,67 +28,43 @@ class TestConstants:
     """Verify internal consistency of module-level constants."""
 
     def test_system_product_map_products_in_species_products(self):
-        """Every product in SYSTEM_PRODUCT_MAP appears in SPECIES_PRODUCTS."""
+        """Every product in GLEAM3_SYSTEM_PRODUCT_MAP appears in SPECIES_PRODUCTS."""
         all_sp_products = {p for prods in SPECIES_PRODUCTS.values() for p in prods}
-        for key, products in SYSTEM_PRODUCT_MAP.items():
+        for key, products in GLEAM3_SYSTEM_PRODUCT_MAP.items():
             for p in products:
                 assert p in all_sp_products, (
-                    f"Product '{p}' from SYSTEM_PRODUCT_MAP[{key}] "
+                    f"Product '{p}' from GLEAM3_SYSTEM_PRODUCT_MAP[{key}] "
                     f"not in SPECIES_PRODUCTS"
                 )
 
-    def test_system_product_map_species_in_species_products(self):
-        """Every species in SYSTEM_PRODUCT_MAP keys is in SPECIES_PRODUCTS."""
-        for species, _system in SYSTEM_PRODUCT_MAP:
-            assert species in SPECIES_PRODUCTS
+    def test_system_product_map_covers_all_species_products(self):
+        """Every product from SPECIES_PRODUCTS appears in at least one system."""
+        all_sp_products = {p for prods in SPECIES_PRODUCTS.values() for p in prods}
+        mapped_products = {
+            p for prods in GLEAM3_SYSTEM_PRODUCT_MAP.values() for p in prods
+        }
+        for p in all_sp_products:
+            assert p in mapped_products, (
+                f"Product '{p}' from SPECIES_PRODUCTS not covered by "
+                f"GLEAM3_SYSTEM_PRODUCT_MAP"
+            )
 
-    def test_product_composition_covers_ruminant_products(self):
-        """All ruminant products have a composition table assignment."""
+    def test_ruminant_animals_consistent(self):
+        """RUMINANT_ANIMALS matches ruminant species in GLEAM3_SYSTEM_PRODUCT_MAP."""
         ruminant_species = {"Cattle & buffaloes", "Small Ruminants"}
-        ruminant_products = set()
-        for species, products in SPECIES_PRODUCTS.items():
-            if species in ruminant_species:
-                ruminant_products.update(products)
-        for p in ruminant_products:
-            assert (
-                p in PRODUCT_COMPOSITION
-            ), f"Ruminant product '{p}' missing from PRODUCT_COMPOSITION"
+        ruminant_products = {p for sp in ruminant_species for p in SPECIES_PRODUCTS[sp]}
+        for (animal, _lps), products in GLEAM3_SYSTEM_PRODUCT_MAP.items():
+            for p in products:
+                if p in ruminant_products:
+                    assert animal in RUMINANT_ANIMALS, (
+                        f"Animal '{animal}' produces ruminant product '{p}' "
+                        f"but is not in RUMINANT_ANIMALS"
+                    )
 
-    def test_all_feed_mappings_produce_valid_categories(self):
-        """All SI2 feed items exist in the respective feed_mapping CSV."""
-        rum_mapping = pd.read_csv(
-            "processing/validation/ruminant_feed_mapping.csv", comment="#"
-        )
-        mono_mapping = pd.read_csv(
-            "processing/validation/monogastric_feed_mapping.csv", comment="#"
-        )
-        rum_items = set(rum_mapping["feed_item"])
-        mono_items = set(mono_mapping["feed_item"])
-
-        for si2_type, feed_item in SI2_TO_RUMINANT_FEED_ITEM.items():
-            assert feed_item in rum_items, (
-                f"Ruminant feed item '{feed_item}' (from SI2 '{si2_type}') "
-                f"not in ruminant_feed_mapping.csv"
-            )
-        for si2_type, feed_item in SI2_TO_MONOGASTRIC_FEED_ITEM.items():
-            assert feed_item in mono_items, (
-                f"Monogastric feed item '{feed_item}' (from SI2 '{si2_type}') "
-                f"not in monogastric_feed_mapping.csv"
-            )
-
-    def test_roughage_components_produce_ruminant_categories(self):
-        """Roughage component feed items are in ruminant_feed_mapping or None."""
-        rum_mapping = pd.read_csv(
-            "processing/validation/ruminant_feed_mapping.csv", comment="#"
-        )
-        rum_items = set(rum_mapping["feed_item"])
-
-        for component, feed_item in ROUGHAGE_COMPONENT_TO_FEED_ITEM.items():
-            if feed_item is not None:
-                assert feed_item in rum_items, (
-                    f"Roughage feed item '{feed_item}' (from '{component}') "
-                    f"not in ruminant_feed_mapping.csv"
-                )
+    def test_feedlots_single_product(self):
+        """Feedlots should map to a single product (meat-cattle)."""
+        feedlot_products = GLEAM3_SYSTEM_PRODUCT_MAP[("Cattle", "Feedlots")]
+        assert feedlot_products == ["meat-cattle"]
 
 
 # ---------------------------------------------------------------------------
@@ -136,8 +109,8 @@ class TestComputeProductShares:
             }
         )
         fcr_lookup = {
-            ("dairy", "NAO"): 10.0,  # MJ/kg
-            ("meat-cattle", "NAO"): 200.0,  # MJ/kg
+            ("dairy", "NAO"): 10.0,
+            ("meat-cattle", "NAO"): 200.0,
         }
         result = compute_product_shares(
             ["dairy", "meat-cattle"], "USA", fao, fcr_lookup, "NAO"
@@ -167,162 +140,95 @@ class TestComputeProductShares:
 
 
 # ---------------------------------------------------------------------------
-# Tests: decompose_roughage
+# Tests: feed-fraction validation
 # ---------------------------------------------------------------------------
 
 
-class TestDecomposeRoughage:
-    """Tests for roughage decomposition using composition tables."""
+class TestFeedFractionValidation:
+    """Tests for feed-fraction table and coverage validation."""
 
-    # Explicit component → category mapping (grassland items → ruminant_forage)
-    COMPONENT_CATEGORIES: ClassVar[dict[str, str]] = {
-        "Fresh grass": "ruminant_forage",
-        "Hay": "ruminant_forage",
-        "Legumes and silage": "ruminant_forage",
-        "Crop residues": "ruminant_roughage",
-        "Sugarcane tops": "ruminant_roughage",
-        "Leaves": "ruminant_roughage",
-    }
-
-    @pytest.fixture()
-    def simple_comp(self):
-        """Composition table with two roughage components in one region."""
-        return pd.DataFrame(
-            {"R1": [60.0, 20.0, 10.0, 10.0]},
-            index=["Fresh grass", "Hay", "Crop residues", "Grains"],
-        )
-
-    def test_zero_roughage(self, simple_comp):
-        """Zero roughage returns empty dict and zero leaves."""
-        assert decompose_roughage(
-            0.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
-        ) == ({}, 0.0)
-
-    def test_negative_roughage(self, simple_comp):
-        """Negative roughage returns empty dict and zero leaves."""
-        assert decompose_roughage(
-            -1.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
-        ) == ({}, 0.0)
-
-    def test_basic_decomposition(self, simple_comp):
-        """Roughage is split by composition percentages."""
-        result, leaves = decompose_roughage(
-            100.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
-        )
-        # Only roughage components used: grass 60%, hay 20%, crop residues 10%
-        # Total from roughage components = 90% -> normalized to 100
-        assert "ruminant_forage" in result  # Fresh grass + Hay
-        assert "ruminant_roughage" in result  # Crop residues
-        # "Grains" is a concentrate component, not in ROUGHAGE_COMPONENT_MAPPING
-        assert sum(result.values()) == pytest.approx(100.0)
-        # No Leaves in simple_comp -> leaves == 0
-        assert leaves == pytest.approx(0.0)
-
-    def test_unknown_region_returns_empty(self, simple_comp):
-        """Unknown GLEAM region yields empty decomposition."""
-        result, leaves = decompose_roughage(
-            100.0, "UNKNOWN", simple_comp, self.COMPONENT_CATEGORIES
-        )
-        assert result == {}
-        assert leaves == pytest.approx(0.0)
-
-    def test_all_categories_are_ruminant(self, simple_comp):
-        """Decomposition only produces ruminant_* feed categories."""
-        result, _ = decompose_roughage(
-            50.0, "R1", simple_comp, self.COMPONENT_CATEGORIES
-        )
-        for cat in result:
-            assert cat.startswith("ruminant_")
-
-    def test_total_preserved(self):
-        """Decomposed amounts sum to the input roughage total."""
-        comp = pd.DataFrame(
-            {"R1": [40.0, 30.0, 5.0, 15.0, 2.0, 3.0]},
-            index=[
-                "Fresh grass",
-                "Hay",
-                "Legumes and silage",
-                "Crop residues",
-                "Sugarcane tops",
-                "Leaves",
-            ],
-        )
-        result, _ = decompose_roughage(200.0, "R1", comp, self.COMPONENT_CATEGORIES)
-        assert sum(result.values()) == pytest.approx(200.0)
-
-    def test_leaves_tracked_separately(self):
-        """Leaves portion is tracked separately from other roughage."""
-        comp = pd.DataFrame(
-            {"R1": [40.0, 20.0, 5.0, 10.0, 2.0, 8.0]},
-            index=[
-                "Fresh grass",
-                "Hay",
-                "Legumes and silage",
-                "Crop residues",
-                "Sugarcane tops",
-                "Leaves",
-            ],
-        )
-        result, leaves = decompose_roughage(
-            100.0, "R1", comp, self.COMPONENT_CATEGORIES
-        )
-        assert leaves > 0
-        # Leaves are included in ruminant_roughage but must be smaller
-        assert leaves < result["ruminant_roughage"]
-        # Total still preserved
-        assert sum(result.values()) == pytest.approx(100.0)
-
-
-# ---------------------------------------------------------------------------
-# Tests: compute_country_shares
-# ---------------------------------------------------------------------------
-
-
-class TestComputeCountryShares:
-    """Tests for country share computation."""
-
-    def test_shares_sum_to_one_per_group(self):
-        """Within each (species, OECD/Non-OECD) group, shares sum to 1.0."""
-        fao = pd.DataFrame(
+    def test_validate_fraction_table_rejects_bad_sum(self):
+        fractions = pd.DataFrame(
             {
-                "country": ["USA", "DEU", "IND", "BRA"],
-                "product": ["dairy", "dairy", "dairy", "dairy"],
-                "production_tonnes": [100, 50, 200, 150],
-            }
-        )
-        oecd = {"USA": True, "DEU": True, "IND": False, "BRA": False}
-        shares = compute_country_shares(fao, oecd)
-        for (species, region), group in shares.groupby(["species", "region"]):
-            assert group["share"].sum() == pytest.approx(
-                1.0
-            ), f"Shares don't sum to 1 for {species}/{region}"
-
-    def test_single_country_gets_full_share(self):
-        """A sole producer in its OECD group gets share 1.0."""
-        fao = pd.DataFrame(
-            {
-                "country": ["USA"],
-                "product": ["meat-pig"],
-                "production_tonnes": [500],
-            }
-        )
-        shares = compute_country_shares(fao, {"USA": True})
-        assert len(shares) == 1
-        assert shares.iloc[0]["share"] == pytest.approx(1.0)
-
-    def test_products_aggregated_to_species(self):
-        """Multiple products for the same species are summed."""
-        fao = pd.DataFrame(
-            {
+                "gleam3_category": ["By-products", "By-products"],
+                "animal_type": ["ruminant", "ruminant"],
                 "country": ["USA", "USA"],
-                "product": ["dairy", "meat-cattle"],
-                "production_tonnes": [1000, 500],
+                "model_feed_category": ["ruminant_grain", "ruminant_forage"],
+                "fraction": [0.6, 0.3],
+                "exogenous": [False, False],
             }
         )
-        shares = compute_country_shares(fao, {"USA": True})
-        # Both map to "Cattle & buffaloes" -> single species row
-        cattle_rows = shares[shares["species"] == "Cattle & buffaloes"]
-        assert len(cattle_rows) == 1
+        with pytest.raises(ValueError, match=r"must sum to 1\.0"):
+            _validate_fraction_table(fractions)
+
+    def test_validate_fraction_coverage_rejects_missing_key(self):
+        intakes = pd.DataFrame(
+            {
+                "ISO3": ["USA"],
+                "feed_category": ["By-products"],
+                "animal_type": ["ruminant"],
+                "intake_mt": [1.0],
+            }
+        )
+        global_fractions = pd.DataFrame(
+            {
+                "gleam3_category": ["Grains"],
+                "animal_type": ["ruminant"],
+                "country": ["_global"],
+                "model_feed_category": ["ruminant_grain"],
+                "fraction": [1.0],
+                "exogenous": [False],
+            }
+        )
+        country_fractions = pd.DataFrame(
+            columns=[
+                "gleam3_category",
+                "animal_type",
+                "country",
+                "model_feed_category",
+                "fraction",
+                "exogenous",
+            ]
+        )
+        with pytest.raises(ValueError, match="Missing feed-fraction mapping"):
+            _validate_intake_fraction_coverage(
+                intakes, global_fractions, country_fractions
+            )
+
+    def test_validate_fraction_coverage_allows_country_fallback(self):
+        intakes = pd.DataFrame(
+            {
+                "ISO3": ["GUF"],
+                "feed_category": ["By-products"],
+                "animal_type": ["ruminant"],
+                "intake_mt": [1.0],
+            }
+        )
+        global_fractions = pd.DataFrame(
+            {
+                "gleam3_category": ["Grains"],
+                "animal_type": ["ruminant"],
+                "country": ["_global"],
+                "model_feed_category": ["ruminant_grain"],
+                "fraction": [1.0],
+                "exogenous": [False],
+            }
+        )
+        country_fractions = pd.DataFrame(
+            {
+                "gleam3_category": ["By-products", "By-products"],
+                "animal_type": ["ruminant", "ruminant"],
+                "country": ["GUF", "GUF"],
+                "model_feed_category": ["ruminant_grain", "ruminant_forage"],
+                "fraction": [0.5, 0.5],
+                "exogenous": [False, False],
+            }
+        )
+        out = _validate_intake_fraction_coverage(
+            intakes, global_fractions, country_fractions
+        )
+        assert out["has_country"].all()
+        assert not out["has_global"].any()
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +304,6 @@ class TestComputeFcrLookup:
         assert "meat-pig" in products_in_lookup
         assert "eggs" in products_in_lookup
         assert "meat-chicken" in products_in_lookup
-        # Proxies
         assert "dairy-buffalo" in products_in_lookup
         assert "meat-sheep" in products_in_lookup
 

@@ -239,16 +239,15 @@ Brief descriptions of key external datasets used by this project, with links and
 - License/terms (summary): Material may be copied, downloaded, and printed for private study, research and teaching purposes, or for use in non-commercial products or services, provided that appropriate acknowledgement of FAO as the source and copyright holder is given and that FAO's endorsement of users' views, products or services is not implied in any way.
 - Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
 
-## GLEAM 2.0 Feed Intake Data — Mottet et al. (2017)
+## GLEAM 3.0 Feed Intake and Production Data
 
-- Description: Global livestock feed intake data from the second version of FAO's Global Livestock Environmental Assessment Model (GLEAM 2.0). Provides total feed use (Mt DM/year, 2010) disaggregated by OECD/Non-OECD region, species (cattle & buffaloes, small ruminants, poultry, pigs), production system (grazing, mixed, feedlot, backyard, intermediate, industrial, layers, broilers), and feed type (roughages, cereal grains, soybean cakes, etc.). Supplementary tables provide per-animal rations (kg DM/animal/year) and regional composition percentages for ruminant and monogastric diets across 9 GLEAM regions.
-- Source publication: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8. https://doi.org/10.1016/j.gfs.2017.01.001
-- Version/format: Supplementary information PDF (Tables SI 2-17), manually digitized into CSV files.
-- Coverage: Global; reference year 2010. Regional composition data for 9 GLEAM regions (NA, RUSS, WE, EE, NENA, ESEA, OC, SA, LAC, SSA).
-- License/terms: **Copyright Elsevier. Not redistributed with this repository.** Contact the maintainer to obtain the files.
-- Availability: Files must be placed in `data/curated/gleam_tables/mottet_2017/` (gitignored). The workflow will raise an informative error if they are absent.
-- Citation: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1-8.
-- Workflow integration: CSV files in `data/curated/gleam_tables/mottet_2017/` (SI Tables 2-5, 6-15, 17). Processed by `prepare_gleam_feed_baseline.py` which disaggregates global totals to countries using FAO production shares, decomposes ruminant roughage using regional composition tables, and scales to a reference year.
+- Description: Country-level feed intake and animal production data from FAO's Global Livestock Environmental Assessment Model version 3.0. Provides total feed use (kg DM/year) by country, species (cattle, buffalo, sheep, goats, chicken, pigs), production system (grassland, mixed, feedlot, backyard, industrial, intermediate, layer, broiler), and feed category (grains, oil seed cakes, grass and leaves, crop residues, fodder crop, by-products, other edible, other non-edible). Production data provides corresponding animal product outputs (meat carcass weight, milk/egg weight) per country and system.
+- Source: Obtained directly from FAO upon request. The data are outputs of the GLEAM 3.0 model.
+- Version/format: Two CSV files bundled in `data/bundled/`: `GLEAM3_intakes.csv` (feed intake, 229 countries) and `GLEAM3_production.csv` (animal production, 229 countries).
+- Coverage: Global; reference year 2015. 229 countries, 6 animal species, 8 production systems, 8 feed categories.
+- License: Creative Commons Attribution 4.0 International (CC BY 4.0), with the additional FAO data terms requiring acknowledgement of FAO as the source and copyright holder, and that FAO's endorsement of users' views, products or services is not implied.
+- Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
+- Workflow integration: Consumed by `prepare_feed_baseline.py` which maps GLEAM3 country-level intakes to model feed categories via `compute_gleam3_feed_fractions.py`, splits multi-product systems using FCR-weighted shares, and scales to the configured reference year.
 
 ## IFA FUBC — Global Fertilizer Use by Crop and Country
 

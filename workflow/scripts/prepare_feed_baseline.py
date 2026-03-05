@@ -3,17 +3,17 @@ SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later
 
-Prepare GLEAM 2.0 feed baseline estimates by country and product.
+Prepare GLEAM 3.0 feed baseline estimates by country and product.
 
-Disaggregates global feed intake from Mottet et al. (2017) SI Table 2 to
-individual countries using FAO production shares, splits multi-product
-systems using FCR-weighted shares from Wirsenius (2000), decomposes ruminant
-roughage using regional composition tables (SI 4-5), maps to model feed
-categories, and scales to the configured reference year.
+Uses country-level feed intake data from FAO's GLEAM 3.0 model (229 countries,
+reference year 2015) combined with pre-computed feed fractions to produce
+model-ready feed baselines. Splits multi-product systems using FCR-weighted
+shares from Wirsenius (2000), and scales to the configured reference year
+using FAOSTAT production data.
 
 Output: CSV with columns (country, product, feed_category, feed_use_mt_dm,
 exogenous_mt_dm).  The exogenous_mt_dm column tracks feed demand that the
-model cannot produce endogenously (tree leaves/browse, swill).
+model cannot produce endogenously (synthetic amino acids, minerals, etc.).
 """
 
 import logging
@@ -31,97 +31,38 @@ from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
-# (Species, System) -> model products served by each GLEAM production system.
-# Most systems map to a single product; cattle grazing/mixed and poultry
-# backyard serve multiple products and require FCR-weighted splitting.
-SYSTEM_PRODUCT_MAP = {
-    ("Cattle & buffaloes", "Feedlots*"): ["meat-cattle"],
-    ("Cattle & buffaloes", "Grazing"): ["dairy", "dairy-buffalo", "meat-cattle"],
-    ("Cattle & buffaloes", "Mixed"): ["dairy", "dairy-buffalo", "meat-cattle"],
-    ("Small Ruminants", "Grazing"): ["meat-sheep"],
-    ("Small Ruminants", "Mixed"): ["meat-sheep"],
-    ("Poultry", "Layers"): ["eggs"],
-    ("Poultry", "Broilers"): ["meat-chicken"],
-    ("Poultry", "Backyard"): ["eggs", "meat-chicken"],
+# (Animal, LPS) -> model products served by each GLEAM 3.0 production system.
+# Most systems map to a single product; cattle grazing/mixed, buffalo, and
+# chicken backyard serve multiple products and require FCR-weighted splitting.
+GLEAM3_SYSTEM_PRODUCT_MAP = {
+    ("Cattle", "Grassland"): ["dairy", "meat-cattle"],
+    ("Cattle", "Mixed"): ["dairy", "meat-cattle"],
+    ("Cattle", "Feedlots"): ["meat-cattle"],
+    ("Buffalo", "Grassland"): ["dairy-buffalo", "meat-cattle"],
+    ("Buffalo", "Mixed"): ["dairy-buffalo", "meat-cattle"],
+    ("Sheep", "Grassland"): ["meat-sheep"],
+    ("Sheep", "Mixed"): ["meat-sheep"],
+    ("Goats", "Grassland"): ["meat-sheep"],
+    ("Goats", "Mixed"): ["meat-sheep"],
+    ("Chicken", "Broiler"): ["meat-chicken"],
+    ("Chicken", "Layer"): ["eggs"],
+    ("Chicken", "Backyard"): ["eggs", "meat-chicken"],
     ("Pigs", "Backyard"): ["meat-pig"],
     ("Pigs", "Intermediate"): ["meat-pig"],
     ("Pigs", "Industrial"): ["meat-pig"],
 }
 
-# Which composition table to use per ruminant product for roughage
-# decomposition. Dairy products use dairy cattle composition (SI4); meat
-# products use beef cattle composition (SI5).
-PRODUCT_COMPOSITION = {
-    "dairy": "dairy",
-    "dairy-buffalo": "dairy",
-    "meat-cattle": "beef",
-    "meat-sheep": "beef",
+RUMINANT_ANIMALS = {"Cattle", "Buffalo", "Sheep", "Goats"}
+
+# GLEAM3 production Item/Element → model product type for share computation.
+_GLEAM3_ITEM_TO_PRODUCT = {
+    ("Cattle", "Meat"): "meat-cattle",
+    ("Cattle", "Milk"): "dairy",
+    ("Buffalo", "Meat"): "meat-cattle",
+    ("Buffalo", "Milk"): "dairy-buffalo",
+    ("Chicken", "Meat"): "meat-chicken",
+    ("Chicken", "Eggs"): "eggs",
 }
-
-# SI2 column → representative model feed item for ruminants.
-# Categories resolved at runtime from ruminant_feed_mapping.csv.
-SI2_TO_RUMINANT_FEED_ITEM = {
-    "Cereal grains": "maize",
-    "Brans spent brewer and biofuel grains": "wheat-bran",
-    "Soybean cakes": "oilseed-meal",
-    "Other oil seed cakes": "rapeseed-meal",
-    "Other edible": "sugarbeet",
-    "Other non-edible": "barley",
-}
-
-# SI2 column → representative model feed item for monogastrics.
-# Categories resolved at runtime from monogastric_feed_mapping.csv.
-SI2_TO_MONOGASTRIC_FEED_ITEM = {
-    "Cereal grains": "maize",
-    "2nd grade grain": "maize",
-    "Soybean cakes": "oilseed-meal",
-    "Other oil seed cakes": "rapeseed-meal",
-    "Other edible": "cassava",
-    "Brans spent brewer and biofuel grains": "wheat-bran",
-    "Other non-edible": "wheat-bran",
-}
-
-# SI Table 4/5 composition components → representative model feed items.
-# None = exogenous (no model production route).
-ROUGHAGE_COMPONENT_TO_FEED_ITEM = {
-    "Fresh grass": "grassland",
-    "Hay": "grassland",
-    "Legumes and silage": "alfalfa",
-    "Crop residues": "wheat-straw",
-    "Sugarcane tops": "sugarcane-tops",
-    "Leaves": None,  # exogenous — no model production route
-}
-
-
-# Species that are classified as ruminants (vs. monogastrics)
-RUMINANT_SPECIES = {"Cattle & buffaloes", "Small Ruminants"}
-
-
-def load_si_table_2(path: str) -> pd.DataFrame:
-    """Load SI Table 2 (global feed intake by region/species/system).
-
-    Returns a DataFrame with columns:
-        Region, Species, System, and one column per feed type (Mt DM).
-    """
-    df = pd.read_csv(path, comment="#")
-    # Replace empty strings with 0
-    feed_cols = [c for c in df.columns if c not in ("Region", "Species", "System")]
-    for col in feed_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-    return df
-
-
-def load_composition_table(path: str) -> pd.DataFrame:
-    """Load a ruminant composition table (SI 4, 5, etc.).
-
-    Returns a DataFrame indexed by 'Feed component' with GLEAM region columns.
-    Values are percentages of total DM intake.
-    """
-    df = pd.read_csv(path, comment="#", index_col=0)
-    # Convert all values to numeric, missing = 0
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-    return df
 
 
 def load_fao_production(
@@ -132,9 +73,6 @@ def load_fao_production(
     faostat_items: dict[str, list[str]],
 ) -> pd.DataFrame:
     """Load FAO production data at model product level.
-
-    Uses *faostat_items* (``{product: [fao_item_name, …]}``) to map
-    FAOSTAT QCL items to model products.
 
     Returns DataFrame with columns: country, product, production_tonnes.
     """
@@ -155,7 +93,6 @@ def load_fao_production(
             logger.warning("No FAOSTAT items found for product '%s'", product)
             continue
 
-        # Element code 5510 = Production (tonnes)
         df = filter_bulk(
             bulk,
             element_codes=["5510"],
@@ -173,7 +110,6 @@ def load_fao_production(
             )
             continue
 
-        # Aggregate across items per country
         country_prod = (
             df.groupby("iso3")["Value"]
             .sum()
@@ -187,53 +123,6 @@ def load_fao_production(
         raise RuntimeError(f"No FAO production data loaded for year {year}")
 
     return pd.concat(all_records, ignore_index=True)
-
-
-def compute_country_shares(
-    fao_prod: pd.DataFrame,
-    oecd_status: dict[str, bool],
-) -> pd.DataFrame:
-    """Compute each country's share of production within its OECD/Non-OECD group.
-
-    Groups product-level production into species using SPECIES_PRODUCTS,
-    then computes shares within OECD/Non-OECD groups per species.
-
-    Returns DataFrame with: country, species, region (OECD/Non OECD), share.
-    """
-    # Build product -> species mapping
-    product_to_species = {}
-    for species, products in SPECIES_PRODUCTS.items():
-        for product in products:
-            product_to_species[product] = species
-
-    # Sum production per country per species
-    fao_prod = fao_prod.copy()
-    fao_prod["species"] = fao_prod["product"].map(product_to_species)
-    species_prod = (
-        fao_prod.groupby(["country", "species"])["production_tonnes"]
-        .sum()
-        .reset_index()
-    )
-
-    species_prod["region"] = species_prod["country"].map(
-        lambda c: "OECD" if oecd_status.get(c, False) else "Non OECD"
-    )
-
-    # Compute group totals
-    group_totals = (
-        species_prod.groupby(["species", "region"])["production_tonnes"]
-        .sum()
-        .reset_index()
-        .rename(columns={"production_tonnes": "group_total"})
-    )
-
-    species_prod = species_prod.merge(group_totals, on=["species", "region"])
-    species_prod["share"] = (
-        species_prod["production_tonnes"] / species_prod["group_total"]
-    )
-    species_prod.loc[species_prod["group_total"] == 0, "share"] = 0
-
-    return species_prod[["country", "species", "region", "share"]]
 
 
 def compute_fcr_lookup(
@@ -252,7 +141,7 @@ def compute_fcr_lookup(
     Returns dict mapping (product, wirsenius_region) to ME MJ/kg.
     """
     all_products = list(products)
-    unity = {p: 1.0 for p in all_products}
+    unity = dict.fromkeys(all_products, 1.0)
 
     ruminant_me = calculate_ruminant_me_requirements(
         wirsenius, k_m, k_g, k_l, unity, feed_proxy_map
@@ -303,83 +192,186 @@ def compute_product_shares(
     return {p: w / total for p, w in weighted.items()}
 
 
-def resolve_roughage_categories(
-    rum_item_to_cat: dict[str, str],
-) -> dict[str, str]:
-    """Build roughage component → prefixed feed category from CSV-derived lookup.
+def _compute_product_shares_gleam3(
+    products: list[str],
+    country: str,
+    animal: str,
+    lps: str,
+    gleam3_prod: pd.DataFrame,
+    fao_prod: pd.DataFrame,
+    fcr_lookup: dict[tuple[str, str], float],
+    wirsenius_region: str | None,
+) -> dict[str, float]:
+    """Compute product shares using GLEAM3 production data, with FAOSTAT fallback.
 
-    Resolves each component's representative feed item through *rum_item_to_cat*
-    (loaded from ``ruminant_feed_mapping.csv``).  Leaves (None feed item) fall
-    back to ``ruminant_roughage``.
+    For multi-product systems (e.g. Cattle Grassland → dairy + meat-cattle),
+    uses GLEAM3 per-LPS production to compute FCR-weighted shares.
+    Falls back to FAOSTAT-based shares if GLEAM3 data is missing.
     """
-    result = {}
-    for component, feed_item in ROUGHAGE_COMPONENT_TO_FEED_ITEM.items():
-        if feed_item is None:
-            result[component] = "ruminant_roughage"
-        else:
-            cat = rum_item_to_cat.get(feed_item)
-            if cat is None:
-                raise ValueError(
-                    f"Feed item '{feed_item}' from ROUGHAGE_COMPONENT_TO_FEED_ITEM "
-                    f"not found in ruminant feed mapping CSV"
-                )
-            result[component] = f"ruminant_{cat}"
-    return result
+    if len(products) == 1:
+        return {products[0]: 1.0}
+
+    if wirsenius_region is None:
+        return {p: 1.0 / len(products) for p in products}
+
+    # Try GLEAM3 production data first
+    lps_prod = gleam3_prod[
+        (gleam3_prod["ISO3"] == country)
+        & (gleam3_prod["Animal"] == animal)
+        & (gleam3_prod["LPS"] == lps)
+    ]
+
+    weighted = {}
+    for p in products:
+        # Find matching GLEAM3 production row
+        prod_val = 0.0
+        for (g_animal, g_item), model_product in _GLEAM3_ITEM_TO_PRODUCT.items():
+            if model_product == p and g_animal == animal:
+                match = lps_prod[
+                    (lps_prod["Item"] == g_item)
+                    & (lps_prod["Element"].isin(["CarcassWeight", "Weight"]))
+                ]
+                if not match.empty:
+                    prod_val = match["Total"].sum()
+                break
+
+        fcr = fcr_lookup.get((p, wirsenius_region), 0.0)
+        weighted[p] = prod_val * fcr
+
+    total = sum(weighted.values())
+    if total > 0:
+        return {p: w / total for p, w in weighted.items()}
+
+    # Fallback to FAOSTAT-based shares
+    return compute_product_shares(
+        products, country, fao_prod, fcr_lookup, wirsenius_region
+    )
 
 
-def decompose_roughage(
-    roughage_mt: float,
-    gleam_region: str,
-    composition: pd.DataFrame,
-    component_to_category: dict[str, str],
-) -> tuple[dict[str, float], float]:
-    """Decompose a roughage total using regional composition percentages.
+def _validate_fraction_table(fractions: pd.DataFrame) -> None:
+    """Validate feed-fraction mappings before applying them."""
+    required_columns = {
+        "gleam3_category",
+        "animal_type",
+        "country",
+        "model_feed_category",
+        "fraction",
+        "exogenous",
+    }
+    missing_cols = required_columns.difference(fractions.columns)
+    if missing_cols:
+        raise ValueError(
+            "Feed fractions file is missing required columns: "
+            + ", ".join(sorted(missing_cols))
+        )
 
-    Uses the specified composition table (dairy or beef cattle). Only applies
-    the roughage portion of the composition (Fresh grass, Hay, Legumes and
-    silage, Crop residues, Sugarcane tops, Leaves).
+    key_cols = ["gleam3_category", "animal_type", "country", "model_feed_category"]
+    duplicate_mask = fractions.duplicated(subset=key_cols, keep=False)
+    if duplicate_mask.any():
+        dupes = fractions.loc[duplicate_mask, [*key_cols, "fraction"]].sort_values(
+            key_cols
+        )
+        raise ValueError(
+            "Duplicate feed-fraction rows found for the same key:\n"
+            + dupes.head(20).to_string(index=False)
+        )
 
-    *component_to_category* maps roughage component names to prefixed model
-    feed categories.
+    if fractions["fraction"].isna().any():
+        bad = fractions[fractions["fraction"].isna()].head(20)
+        raise ValueError(
+            "Feed fractions contain NaN values:\n" + bad.to_string(index=False)
+        )
 
-    Returns a tuple of (dict mapping model feed category to Mt DM, leaves Mt DM).
-    The leaves amount is the portion of ruminant_roughage attributable to tree
-    leaves/browse, tracked separately for exogenous supply since the model has
-    no endogenous production route for leaves.
-    """
-    if roughage_mt <= 0:
-        return {}, 0.0
+    if (fractions["fraction"] < 0).any():
+        bad = fractions[fractions["fraction"] < 0].head(20)
+        raise ValueError(
+            "Feed fractions contain negative values:\n" + bad.to_string(index=False)
+        )
 
-    result: dict[str, float] = {}
-    leaves_raw = 0.0
+    sums = fractions.groupby(
+        ["gleam3_category", "animal_type", "country"], as_index=False
+    )["fraction"].sum()
+    bad_sums = sums[sums["fraction"].sub(1.0).abs() > 1e-6]
+    if not bad_sums.empty:
+        raise ValueError(
+            "Feed fractions must sum to 1.0 per "
+            "(gleam3_category, animal_type, country). Bad groups:\n"
+            + bad_sums.head(20).to_string(index=False)
+        )
 
-    for component, feed_cat in component_to_category.items():
-        pct = 0.0
-        if component in composition.index and gleam_region in composition.columns:
-            pct = composition.loc[component, gleam_region]
-        if pct > 0:
-            amount = roughage_mt * pct / 100.0
-            result[feed_cat] = result.get(feed_cat, 0) + amount
-            if component == "Leaves":
-                leaves_raw = amount
 
-    # Normalize: ensure decomposed amounts sum to the roughage total.
-    # Any residual is distributed proportionally across existing categories.
-    decomposed_total = sum(result.values())
-    if decomposed_total > 0 and abs(decomposed_total - roughage_mt) > 0.01:
-        scale = roughage_mt / decomposed_total
-        result = {k: v * scale for k, v in result.items()}
-        leaves_raw *= scale
+def _validate_intake_fraction_coverage(
+    intakes: pd.DataFrame,
+    global_fractions: pd.DataFrame,
+    country_fractions: pd.DataFrame,
+) -> pd.DataFrame:
+    """Validate and annotate which fraction source applies to each intake key."""
+    global_keys = global_fractions[["gleam3_category", "animal_type"]].drop_duplicates()
+    country_keys = country_fractions[
+        ["country", "gleam3_category", "animal_type"]
+    ].drop_duplicates()
+    country_keys = country_keys.rename(columns={"country": "ISO3"})
 
-    return result, leaves_raw
+    intake_keys = intakes[["ISO3", "feed_category", "animal_type"]].drop_duplicates()
+    key_totals = (
+        intakes.groupby(["ISO3", "feed_category", "animal_type"], as_index=False)[
+            "intake_mt"
+        ]
+        .sum()
+        .rename(columns={"intake_mt": "total_intake_mt"})
+    )
+
+    key_coverage = intake_keys.merge(
+        global_keys,
+        left_on=["feed_category", "animal_type"],
+        right_on=["gleam3_category", "animal_type"],
+        how="left",
+        indicator="global_match",
+    )
+    key_coverage["has_global"] = key_coverage["global_match"] == "both"
+    key_coverage = key_coverage.drop(columns=["gleam3_category", "global_match"])
+    key_coverage = key_coverage.merge(
+        country_keys,
+        left_on=["ISO3", "feed_category", "animal_type"],
+        right_on=["ISO3", "gleam3_category", "animal_type"],
+        how="left",
+        indicator="country_match",
+    )
+    key_coverage["has_country"] = key_coverage["country_match"] == "both"
+    key_coverage = key_coverage.drop(columns=["gleam3_category", "country_match"])
+
+    ambiguous = key_coverage[key_coverage["has_global"] & key_coverage["has_country"]]
+    if not ambiguous.empty:
+        ambiguous = ambiguous.merge(
+            key_totals, on=["ISO3", "feed_category", "animal_type"], how="left"
+        )
+        raise ValueError(
+            "Feed-fraction mapping is ambiguous for some intake keys "
+            "(both global and country-specific mappings exist):\n"
+            + ambiguous.head(20).to_string(index=False)
+        )
+
+    missing = key_coverage[~key_coverage["has_global"] & ~key_coverage["has_country"]]
+    if not missing.empty:
+        missing = missing.merge(
+            key_totals, on=["ISO3", "feed_category", "animal_type"], how="left"
+        )
+        raise ValueError(
+            "Missing feed-fraction mapping for intake keys. "
+            "This would drop input data:\n" + missing.head(20).to_string(index=False)
+        )
+
+    return intakes.merge(
+        key_coverage,
+        on=["ISO3", "feed_category", "animal_type"],
+        how="left",
+    )
 
 
 def main() -> None:
-    si_table_2_path = snakemake.input.si_table_2  # type: ignore[name-defined]
-    si_table_4_path = snakemake.input.si_table_4  # type: ignore[name-defined]
-    si_table_5_path = snakemake.input.si_table_5  # type: ignore[name-defined]
-    oecd_status_path = snakemake.input.oecd_status  # type: ignore[name-defined]
-    gleam_regions_path = snakemake.input.gleam_regions  # type: ignore[name-defined]
+    gleam3_intakes_path = snakemake.input.gleam3_intakes  # type: ignore[name-defined]
+    gleam3_production_path = snakemake.input.gleam3_production  # type: ignore[name-defined]
+    gleam3_feed_fractions_path = snakemake.input.gleam3_feed_fractions  # type: ignore[name-defined]
     wirsenius_path = snakemake.input.wirsenius  # type: ignore[name-defined]
     country_wirsenius_region_path = snakemake.input.country_wirsenius_region  # type: ignore[name-defined]
     qcl_csv_path = snakemake.input.qcl_csv  # type: ignore[name-defined]
@@ -395,26 +387,27 @@ def main() -> None:
     feed_proxy_map = dict(snakemake.params.feed_proxy_map)  # type: ignore[name-defined]
     faostat_items: dict[str, list[str]] = dict(snakemake.params.faostat_items)  # type: ignore[name-defined]
 
-    # -- Load input data ------------------------------------------------
-    logger.info("Loading SI Table 2 (global feed intake)")
-    si2 = load_si_table_2(si_table_2_path)
+    # -- Phase 1: Load GLEAM3 data ----------------------------------------
+    logger.info("Loading GLEAM3 feed intake data")
+    intakes = pd.read_csv(gleam3_intakes_path, comment="#")
+    # Filter to config countries and convert kg DM/year → Mt DM
+    intakes = intakes[intakes["ISO3"].isin(countries)].copy()
+    intakes["intake_mt"] = intakes["DM.intake"] * 1e-9
 
-    logger.info("Loading composition tables")
-    dairy_comp = load_composition_table(si_table_4_path)
-    beef_comp = load_composition_table(si_table_5_path)
+    logger.info("Loading GLEAM3 production data")
+    gleam3_prod = pd.read_csv(gleam3_production_path, comment="#")
+    # Keep CarcassWeight for Meat, Weight for Milk/Eggs; convert kg → tonnes
+    gleam3_prod = gleam3_prod[
+        gleam3_prod["Element"].isin(["CarcassWeight", "Weight"])
+    ].copy()
+    gleam3_prod = gleam3_prod[
+        ~((gleam3_prod["Item"] == "Meat") & (gleam3_prod["Element"] == "Weight"))
+    ]
+    gleam3_prod["Total"] = gleam3_prod["Total"] / 1e3  # kg → tonnes
 
-    logger.info("Loading OECD status")
-    oecd_df = pd.read_csv(oecd_status_path, comment="#")
-    oecd_members = set(oecd_df["country"].tolist())
-    oecd_status = {c: c in oecd_members for c in countries}
-
-    logger.info("Loading GLEAM region mapping")
-    gleam_region_df = pd.read_csv(
-        gleam_regions_path, comment="#", keep_default_na=False
-    )
-    country_to_gleam = dict(
-        zip(gleam_region_df["country"], gleam_region_df["gleam_region"])
-    )
+    logger.info("Loading feed fractions")
+    fractions = pd.read_csv(gleam3_feed_fractions_path)
+    _validate_fraction_table(fractions)
 
     logger.info("Loading Wirsenius data and region mapping")
     wirsenius = pd.read_csv(wirsenius_path, comment="#")
@@ -426,28 +419,18 @@ def main() -> None:
         )
     )
 
-    bulk, item_map = load_faostat_qcl(qcl_csv_path, m49_codes_path)
-
     logger.info("Loading feed category mappings")
     rum_mapping = pd.read_csv(ruminant_mapping_path, comment="#")
     mono_mapping = pd.read_csv(monogastric_mapping_path, comment="#")
     rum_item_to_cat = dict(zip(rum_mapping["feed_item"], rum_mapping["category"]))
     mono_item_to_cat = dict(zip(mono_mapping["feed_item"], mono_mapping["category"]))
 
-    # -- Step 1: Load FAO production at product level ------------------
-    logger.info("Loading FAO 2010 production for disaggregation")
-    fao_2010 = load_fao_production(bulk, item_map, 2010, countries, faostat_items)
+    # Load FAOSTAT for product shares and reference year scaling
+    bulk, item_map = load_faostat_qcl(qcl_csv_path, m49_codes_path)
+    logger.info("Loading FAO 2015 production for product shares")
+    fao_2015 = load_fao_production(bulk, item_map, 2015, countries, faostat_items)
 
-    logger.info("Loading FAO %d production for scaling", reference_year)
-    fao_ref = load_fao_production(
-        bulk, item_map, reference_year, countries, faostat_items
-    )
-
-    # -- Step 2: Compute species-level country shares ------------------
-    logger.info("Computing country production shares (2010)")
-    shares = compute_country_shares(fao_2010, oecd_status)
-
-    # -- Step 3: Compute FCR lookup ------------------------------------
+    # -- Phase 2: Compute FCR lookup and product shares -------------------
     logger.info("Computing FCR lookup from Wirsenius data")
     fcr_lookup = compute_fcr_lookup(
         wirsenius,
@@ -458,381 +441,190 @@ def main() -> None:
         list(faostat_items.keys()),
     )
 
-    # -- Step 4: Disaggregate to countries and products ----------------
-    logger.info("Disaggregating feed intake to countries and products")
+    # -- Phase 3: Map GLEAM3 intakes → model products ---------------------
+    logger.info("Mapping GLEAM3 intakes to model products")
 
-    feed_cols = [
-        "Roughages",
-        "Swill",
-        "Cereal grains",
-        "2nd grade grain",
-        "Brans spent brewer and biofuel grains",
-        "Soybean cakes",
-        "Other oil seed cakes",
-        "Other edible",
-        "Other non-edible",
-    ]
+    # Filter to valid (Animal, LPS) combinations
+    valid_systems = set(GLEAM3_SYSTEM_PRODUCT_MAP.keys())
+    intakes["system_key"] = list(zip(intakes["Animal"], intakes["LPS"]))
+    intakes = intakes[intakes["system_key"].isin(valid_systems)].copy()
+    intakes = intakes[intakes["intake_mt"] > 0]
 
-    # Filter out World summary rows
-    si2_data = si2[~si2["Region"].str.contains("World", na=False)].copy()
-
-    # -- Step A: Melt SI2 to long format --------------------------------
-    si2_long = si2_data.melt(
-        id_vars=["Region", "Species", "System"],
-        value_vars=feed_cols,
-        var_name="feed_type",
-        value_name="global_mt_dm",
-    )
-    si2_long = si2_long[si2_long["global_mt_dm"] > 0]
-
-    # -- Step B: Expand to products via SYSTEM_PRODUCT_MAP ----------------
+    # Expand to products via GLEAM3_SYSTEM_PRODUCT_MAP
     system_prods = pd.DataFrame(
         [
-            {"Species": sp, "System": sys, "product": p}
-            for (sp, sys), prods in SYSTEM_PRODUCT_MAP.items()
+            {"Animal": a, "LPS": lps, "product": p}
+            for (a, lps), prods in GLEAM3_SYSTEM_PRODUCT_MAP.items()
             for p in prods
         ]
     )
-    si2_long = si2_long.merge(system_prods, on=["Species", "System"], how="inner")
-    si2_long["is_ruminant"] = si2_long["Species"].isin(RUMINANT_SPECIES)
+    intakes = intakes.merge(system_prods, on=["Animal", "LPS"], how="inner")
 
-    # -- Step C: Merge country shares ------------------------------------
-    si2_long = si2_long.merge(
-        shares.rename(
-            columns={"region": "Region", "species": "Species", "share": "country_share"}
-        ),
-        on=["Region", "Species"],
-        how="inner",
+    # Determine animal type
+    intakes["animal_type"] = intakes["Animal"].map(
+        lambda a: "ruminant" if a in RUMINANT_ANIMALS else "monogastric"
     )
-    si2_long = si2_long[si2_long["country_share"] > 0]
 
-    # -- Step D: Pre-compute and merge product shares --------------------
-    unique_countries = si2_long["country"].unique()
+    # Pre-compute product shares for all multi-product systems
+    logger.info("Computing FCR-weighted product shares")
+    multi_product_systems = {
+        k: v for k, v in GLEAM3_SYSTEM_PRODUCT_MAP.items() if len(v) > 1
+    }
+    unique_countries = intakes["ISO3"].unique()
+
     prod_share_records = []
-    for (species, system), products in SYSTEM_PRODUCT_MAP.items():
-        if len(products) == 1:
-            continue  # single-product systems get share 1.0 via fillna
+    for (animal, lps), products in multi_product_systems.items():
         for country in unique_countries:
-            p_shares = compute_product_shares(
+            p_shares = _compute_product_shares_gleam3(
                 products,
                 country,
-                fao_2010,
+                animal,
+                lps,
+                gleam3_prod,
+                fao_2015,
                 fcr_lookup,
                 country_to_wirsenius.get(country),
             )
             for p, s in p_shares.items():
                 prod_share_records.append(
                     {
-                        "Species": species,
-                        "System": system,
-                        "country": country,
+                        "Animal": animal,
+                        "LPS": lps,
+                        "ISO3": country,
                         "product": p,
                         "product_share": s,
                     }
                 )
+
     if prod_share_records:
         prod_shares_df = pd.DataFrame(prod_share_records)
-        si2_long = si2_long.merge(
+        intakes = intakes.merge(
             prod_shares_df,
-            on=["Species", "System", "country", "product"],
+            on=["Animal", "LPS", "ISO3", "product"],
             how="left",
         )
-        si2_long["product_share"] = si2_long["product_share"].fillna(1.0)
+        intakes["product_share"] = intakes["product_share"].fillna(1.0)
     else:
-        si2_long["product_share"] = 1.0
+        intakes["product_share"] = 1.0
 
-    # -- Step E: Compute amounts -----------------------------------------
-    si2_long["amount"] = (
-        si2_long["global_mt_dm"] * si2_long["country_share"] * si2_long["product_share"]
-    )
-    si2_long = si2_long[si2_long["amount"] > 0]
+    # -- Phase 4: Apply feed fractions ------------------------------------
+    logger.info("Applying feed fractions to compute model feed categories")
 
-    # -- Step F: Branch into four sub-pipelines --------------------------
-    result_parts = []
-
-    # F1: Roughage (ruminant) — decompose via composition tables
-    f1_mask = (si2_long["feed_type"] == "Roughages") & si2_long["is_ruminant"]
-    f1 = si2_long[f1_mask].copy()
-
-    if not f1.empty:
-        f1["gleam_region"] = f1["country"].map(country_to_gleam)
-        f1["comp_type"] = f1["product"].map(PRODUCT_COMPOSITION)
-
-        # Rows without GLEAM region or composition type → ruminant_roughage
-        f1_fallback_mask = f1["gleam_region"].isna() | f1["comp_type"].isna()
-        if f1_fallback_mask.any():
-            for _, row in f1[f1_fallback_mask].iterrows():
-                if pd.isna(row["gleam_region"]):
-                    logger.warning(
-                        "No GLEAM region for country %s; "
-                        "assigning roughage to ruminant_roughage",
-                        row["country"],
-                    )
-            f1_fb = f1.loc[f1_fallback_mask, ["country", "product", "amount"]].copy()
-            f1_fb["feed_category"] = "ruminant_roughage"
-            f1_fb = f1_fb.rename(columns={"amount": "feed_use_mt_dm"})
-            f1_fb["exogenous_mt_dm"] = 0.0
-            result_parts.append(f1_fb)
-
-        # Normal rows: vectorized roughage decomposition
-        f1_normal = f1[~f1_fallback_mask].copy()
-        if not f1_normal.empty:
-            # Build composition fraction table (long format)
-            comp_records = []
-            roughage_categories = resolve_roughage_categories(rum_item_to_cat)
-            for comp_type_name, comp_df in [("dairy", dairy_comp), ("beef", beef_comp)]:
-                for component in ROUGHAGE_COMPONENT_TO_FEED_ITEM:
-                    for gleam_region in comp_df.columns:
-                        pct = 0.0
-                        if component in comp_df.index:
-                            pct = comp_df.loc[component, gleam_region]
-                        comp_records.append(
-                            {
-                                "comp_type": comp_type_name,
-                                "gleam_region": gleam_region,
-                                "component": component,
-                                "pct": pct,
-                            }
-                        )
-            comp_fractions = pd.DataFrame(comp_records)
-            # Normalize so roughage components sum to 1.0
-            comp_totals = comp_fractions.groupby(["comp_type", "gleam_region"])[
-                "pct"
-            ].transform("sum")
-            comp_fractions["norm_fraction"] = 0.0
-            nonzero_ct = comp_totals > 0
-            comp_fractions.loc[nonzero_ct, "norm_fraction"] = (
-                comp_fractions.loc[nonzero_ct, "pct"] / comp_totals[nonzero_ct]
-            )
-
-            f1_expanded = f1_normal.merge(
-                comp_fractions, on=["comp_type", "gleam_region"], how="left"
-            )
-            f1_expanded["norm_fraction"] = f1_expanded["norm_fraction"].fillna(0)
-            f1_expanded["feed_use_mt_dm"] = (
-                f1_expanded["amount"] * f1_expanded["norm_fraction"]
-            )
-            f1_expanded["feed_category"] = f1_expanded["component"].map(
-                roughage_categories
-            )
-            # Exogenous: Leaves amount
-            f1_expanded["exogenous_mt_dm"] = 0.0
-            leaves_mask = f1_expanded["component"] == "Leaves"
-            f1_expanded.loc[leaves_mask, "exogenous_mt_dm"] = f1_expanded.loc[
-                leaves_mask, "feed_use_mt_dm"
-            ]
-            f1_expanded = f1_expanded[f1_expanded["feed_use_mt_dm"] > 0]
-            result_parts.append(
-                f1_expanded[
-                    [
-                        "country",
-                        "product",
-                        "feed_category",
-                        "feed_use_mt_dm",
-                        "exogenous_mt_dm",
-                    ]
-                ]
-            )
-
-    # F2: Roughage (monogastric) → monogastric_low_quality
-    f2_mask = (si2_long["feed_type"] == "Roughages") & ~si2_long["is_ruminant"]
-    f2 = si2_long[f2_mask].copy()
-    if not f2.empty:
-        f2["feed_category"] = "monogastric_low_quality"
-        f2["feed_use_mt_dm"] = f2["amount"]
-        f2["exogenous_mt_dm"] = 0.0
-        result_parts.append(
-            f2[
-                [
-                    "country",
-                    "product",
-                    "feed_category",
-                    "feed_use_mt_dm",
-                    "exogenous_mt_dm",
-                ]
-            ]
-        )
-
-    # F3: Swill → exogenous
-    f3_mask = si2_long["feed_type"] == "Swill"
-    f3 = si2_long[f3_mask].copy()
-    if not f3.empty:
-        f3["feed_category"] = f3["is_ruminant"].map(
-            {True: "ruminant_grain", False: "monogastric_low_quality"}
-        )
-        f3["feed_use_mt_dm"] = f3["amount"]
-        f3["exogenous_mt_dm"] = f3["amount"]
-        result_parts.append(
-            f3[
-                [
-                    "country",
-                    "product",
-                    "feed_category",
-                    "feed_use_mt_dm",
-                    "exogenous_mt_dm",
-                ]
-            ]
-        )
-
-    # F4: Other feed types → category via mapping CSVs
-    f4_mask = ~(
-        (si2_long["feed_type"] == "Roughages") | (si2_long["feed_type"] == "Swill")
-    )
-    f4 = si2_long[f4_mask].copy()
-    if not f4.empty:
-        f4_rum = f4[f4["is_ruminant"]].copy()
-        f4_mono = f4[~f4["is_ruminant"]].copy()
-
-        if not f4_rum.empty:
-            f4_rum["feed_item"] = f4_rum["feed_type"].map(SI2_TO_RUMINANT_FEED_ITEM)
-            f4_rum["category"] = f4_rum["feed_item"].map(rum_item_to_cat)
-            f4_rum["feed_category"] = "ruminant_" + f4_rum["category"].astype(str)
-            unmapped = f4_rum["feed_item"].isna() | f4_rum["category"].isna()
-            if unmapped.any():
-                for ft in f4_rum.loc[unmapped, "feed_type"].unique():
-                    logger.warning("No ruminant mapping for feed type '%s'", ft)
-            f4_rum = f4_rum[~unmapped]
-
-        if not f4_mono.empty:
-            f4_mono["feed_item"] = f4_mono["feed_type"].map(
-                SI2_TO_MONOGASTRIC_FEED_ITEM
-            )
-            f4_mono["category"] = f4_mono["feed_item"].map(mono_item_to_cat)
-            f4_mono["feed_category"] = "monogastric_" + f4_mono["category"].astype(str)
-            unmapped = f4_mono["feed_item"].isna() | f4_mono["category"].isna()
-            if unmapped.any():
-                for ft in f4_mono.loc[unmapped, "feed_type"].unique():
-                    logger.warning("No monogastric mapping for feed type '%s'", ft)
-            f4_mono = f4_mono[~unmapped]
-
-        f4 = pd.concat([f4_rum, f4_mono])
-        if not f4.empty:
-            f4["feed_use_mt_dm"] = f4["amount"]
-            f4["exogenous_mt_dm"] = 0.0
-            result_parts.append(
-                f4[
-                    [
-                        "country",
-                        "product",
-                        "feed_category",
-                        "feed_use_mt_dm",
-                        "exogenous_mt_dm",
-                    ]
-                ]
-            )
-
-    # -- Combine and aggregate -------------------------------------------
-    if not result_parts:
-        raise RuntimeError("No feed baseline records generated")
-
-    result = pd.concat(result_parts, ignore_index=True)
-    result = result.groupby(["country", "product", "feed_category"], as_index=False)[
-        ["feed_use_mt_dm", "exogenous_mt_dm"]
-    ].sum()
-
-    # -- Step 5: Scale to reference year -------------------------------
-    logger.info("Scaling from 2010 to reference year %d", reference_year)
-
-    # Compute scaling factors per country and product
-    prod_2010 = (
-        fao_2010.groupby(["country", "product"])["production_tonnes"]
-        .sum()
-        .reset_index()
-        .rename(columns={"production_tonnes": "prod_2010"})
-    )
-    prod_ref = (
-        fao_ref.groupby(["country", "product"])["production_tonnes"]
-        .sum()
-        .reset_index()
-        .rename(columns={"production_tonnes": "prod_ref"})
+    # Split fractions into global and country-specific
+    global_fractions = fractions[fractions["country"] == "_global"].copy()
+    country_fractions = fractions[fractions["country"] != "_global"].copy()
+    intakes = _validate_intake_fraction_coverage(
+        intakes, global_fractions, country_fractions
     )
 
-    scale_df = prod_2010.merge(prod_ref, on=["country", "product"], how="left")
-    scale_df["prod_ref"] = scale_df["prod_ref"].fillna(0)
-    scale_df["scale"] = 1.0
-    nonzero = scale_df["prod_2010"] > 0
-    scale_df.loc[nonzero, "scale"] = (
-        scale_df.loc[nonzero, "prod_ref"] / scale_df.loc[nonzero, "prod_2010"]
+    # Merge global fractions for keys explicitly assigned global mappings.
+    intakes_global = intakes[intakes["has_global"] & ~intakes["has_country"]].merge(
+        global_fractions.drop(columns=["country"]),
+        left_on=["feed_category", "animal_type"],
+        right_on=["gleam3_category", "animal_type"],
+        how="inner",
     )
 
-    result = result.merge(
-        scale_df[["country", "product", "scale"]],
-        on=["country", "product"],
-        how="left",
-    )
-    result["scale"] = result["scale"].fillna(1.0)
-    result["feed_use_mt_dm"] = result["feed_use_mt_dm"] * result["scale"]
-    result["exogenous_mt_dm"] = result["exogenous_mt_dm"] * result["scale"]
-    result = result.drop(columns=["scale"])
-
-    # -- Step 6: Normalize ---------------------------------------------
-    # Ensure country-level totals per OECD/Non-OECD group and species sum
-    # to scaled global totals (prevent leakage from countries missing data).
-    logger.info("Normalizing to preserve group totals")
-
-    product_to_species = {}
-    for species, prods in SPECIES_PRODUCTS.items():
-        for p in prods:
-            product_to_species[p] = species
-
-    result["species"] = result["product"].map(product_to_species)
-    result["region"] = result["country"].map(
-        lambda c: "OECD" if oecd_status.get(c, False) else "Non OECD"
+    # Merge country-specific fractions.
+    intakes_country = intakes[intakes["has_country"]].merge(
+        country_fractions,
+        left_on=["feed_category", "animal_type", "ISO3"],
+        right_on=["gleam3_category", "animal_type", "country"],
+        how="inner",
     )
 
-    # SI2 totals by Region and Species (summed across systems)
-    si2_totals = si2_data.groupby(["Region", "Species"])[feed_cols].sum()
+    # Combine
+    frac_cols = [
+        "ISO3",
+        "Animal",
+        "LPS",
+        "feed_category",
+        "intake_mt",
+        "product",
+        "animal_type",
+        "product_share",
+        "model_feed_category",
+        "fraction",
+        "exogenous",
+    ]
+    combined = pd.concat(
+        [intakes_global[frac_cols], intakes_country[frac_cols]],
+        ignore_index=True,
+    )
+    if combined.empty:
+        raise ValueError("No feed baseline records generated after applying fractions.")
 
-    for (region, species), _ in si2_totals.iterrows():
-        group_mask = (result["region"] == region) & (result["species"] == species)
-        if not group_mask.any():
-            continue
+    # Compute feed amounts
+    combined["feed_use_mt_dm"] = (
+        combined["intake_mt"] * combined["product_share"] * combined["fraction"]
+    )
+    combined["exogenous_mt_dm"] = combined["feed_use_mt_dm"] * combined[
+        "exogenous"
+    ].astype(float)
 
-        actual_total = result.loc[group_mask, "feed_use_mt_dm"].sum()
-
-        # Compute expected scaled total using production-weighted average
-        species_prods = SPECIES_PRODUCTS[species]
-        group_countries = result.loc[group_mask, "country"].unique()
-
-        group_scale = scale_df[
-            (scale_df["country"].isin(group_countries))
-            & (scale_df["product"].isin(species_prods))
+    # -- Phase 5: Aggregate by (country, product, feed_category) ----------
+    logger.info("Aggregating feed baseline")
+    result = (
+        combined.groupby(["ISO3", "product", "model_feed_category"], as_index=False)[
+            ["feed_use_mt_dm", "exogenous_mt_dm"]
         ]
+        .sum()
+        .rename(columns={"ISO3": "country", "model_feed_category": "feed_category"})
+    )
 
-        if group_scale.empty or group_scale["prod_2010"].sum() == 0:
-            continue
+    global_total_pre_scale = result["feed_use_mt_dm"].sum()
+    logger.info(
+        "Global feed total before scaling: %.1f Mt DM (%.2f Gt DM)",
+        global_total_pre_scale,
+        global_total_pre_scale / 1000.0,
+    )
 
-        avg_scale = group_scale["prod_ref"].sum() / group_scale["prod_2010"].sum()
+    # -- Phase 6: Reference year scaling ----------------------------------
+    if reference_year != 2015:
+        logger.info("Scaling from 2015 to reference year %d", reference_year)
+        fao_ref = load_fao_production(
+            bulk, item_map, reference_year, countries, faostat_items
+        )
 
-        si2_row = si2_totals.loc[(region, species)]
-        expected_total = si2_row[feed_cols].sum() * avg_scale
+        prod_2015 = (
+            fao_2015.groupby(["country", "product"])["production_tonnes"]
+            .sum()
+            .reset_index()
+            .rename(columns={"production_tonnes": "prod_2015"})
+        )
+        prod_ref = (
+            fao_ref.groupby(["country", "product"])["production_tonnes"]
+            .sum()
+            .reset_index()
+            .rename(columns={"production_tonnes": "prod_ref"})
+        )
 
-        if actual_total > 0 and expected_total > 0:
-            correction = expected_total / actual_total
-            if abs(correction - 1.0) > 0.01:
-                logger.info(
-                    "  %s / %s: correction factor %.3f",
-                    region,
-                    species,
-                    correction,
-                )
-                result.loc[group_mask, "feed_use_mt_dm"] *= correction
-                result.loc[group_mask, "exogenous_mt_dm"] *= correction
+        scale_df = prod_2015.merge(prod_ref, on=["country", "product"], how="left")
+        scale_df["prod_ref"] = scale_df["prod_ref"].fillna(0)
+        scale_df["scale"] = 1.0
+        nonzero = scale_df["prod_2015"] > 0
+        scale_df.loc[nonzero, "scale"] = (
+            scale_df.loc[nonzero, "prod_ref"] / scale_df.loc[nonzero, "prod_2015"]
+        )
 
-    result = result.drop(columns=["species", "region"])
+        result = result.merge(
+            scale_df[["country", "product", "scale"]],
+            on=["country", "product"],
+            how="left",
+        )
+        result["scale"] = result["scale"].fillna(1.0)
+        result["feed_use_mt_dm"] *= result["scale"]
+        result["exogenous_mt_dm"] *= result["scale"]
+        result = result.drop(columns=["scale"])
+    else:
+        logger.info("Reference year is 2015 (GLEAM3 base year); no temporal scaling")
 
-    # -- Step 7: Production-based scaling ----------------------------------
-    # Scale feed per (country, product) so that implied production
-    # (feed x efficiency) matches FAOSTAT production. This preserves the
-    # GLEAM-derived feed *composition* (category splits) while correcting
-    # the absolute level to observed production data.
+    # -- Phase 7: Production-based scaling --------------------------------
     logger.info("Applying production-based feed scaling")
 
     feed_eff = pd.read_csv(feed_efficiencies_path)
     faostat_prod = pd.read_csv(faostat_production_path)
 
-    # Compute implied production per (country, product) from current feed
-    # and efficiency values: sum over categories of feed x efficiency.
     result_with_eff = result.merge(
         feed_eff[["country", "product", "feed_category", "efficiency"]],
         on=["country", "product", "feed_category"],
@@ -848,7 +640,6 @@ def main() -> None:
         .reset_index()
     )
 
-    # Merge with FAOSTAT production (Mt, retail weight)
     implied = implied.merge(
         faostat_prod[["country", "product", "production_mt"]],
         on=["country", "product"],
@@ -856,18 +647,14 @@ def main() -> None:
     )
     implied["production_mt"] = implied["production_mt"].fillna(0)
 
-    # Compute scale factors
     implied["scale_factor"] = 1.0
-    # Case: FAOSTAT production = 0 → set feed to 0
     zero_prod = implied["production_mt"] == 0
     implied.loc[zero_prod, "scale_factor"] = 0.0
-    # Case: implied > 0 and FAOSTAT > 0 → scale
     has_implied = implied["implied_prod"] > 0
     scalable = has_implied & ~zero_prod
     implied.loc[scalable, "scale_factor"] = (
         implied.loc[scalable, "production_mt"] / implied.loc[scalable, "implied_prod"]
     )
-    # Case: implied = 0 but FAOSTAT > 0 → can't create feed from nothing
     no_feed = ~has_implied & ~zero_prod
     if no_feed.any():
         for _, row in implied[no_feed].iterrows():
@@ -879,7 +666,7 @@ def main() -> None:
             )
         implied.loc[no_feed, "scale_factor"] = 1.0
 
-    # Log scale factors, flagging extreme values
+    # Log extreme scale factors
     for _, row in implied[scalable].iterrows():
         sf = row["scale_factor"]
         flag = ""
@@ -898,7 +685,6 @@ def main() -> None:
                 flag,
             )
 
-    # Apply scale factors
     scale_map = implied.set_index(["country", "product"])["scale_factor"]
     result_idx = result.set_index(["country", "product"])
     result_idx["scale_factor"] = scale_map
@@ -914,10 +700,12 @@ def main() -> None:
         new_global_total / 1000.0,
     )
 
-    # Expand to all valid (country, product, feed_category) combinations,
-    # filling 0 where GLEAM has no data.  This ensures every model link gets
-    # an explicit baseline rather than relying on implicit defaults.
-    ruminant_products = [p for sp in RUMINANT_SPECIES for p in SPECIES_PRODUCTS[sp]]
+    # -- Phase 8: Expand full index and write output ----------------------
+    ruminant_products = [
+        p
+        for sp in ["Cattle & buffaloes", "Small Ruminants"]
+        for p in SPECIES_PRODUCTS[sp]
+    ]
     all_products = [p for prods in SPECIES_PRODUCTS.values() for p in prods]
     monogastric_products = [p for p in all_products if p not in ruminant_products]
 
@@ -959,7 +747,8 @@ def main() -> None:
             cat_total = prod_data[prod_data["feed_category"] == cat][
                 "feed_use_mt_dm"
             ].sum()
-            logger.info("    %s: %.1f Mt DM", cat, cat_total)
+            if cat_total > 0:
+                logger.info("    %s: %.1f Mt DM", cat, cat_total)
 
     n_countries = result["country"].nunique()
     n_nonzero = int((result["feed_use_mt_dm"] > 0).sum())

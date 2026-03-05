@@ -293,11 +293,13 @@ Baseline Feed Intake
 --------------------
 
 To ground the livestock module in observed feed flows, the model constructs a
-country-level baseline from GLEAM 2.0 (Mottet et al. 2017 [4]_) that
-describes how much dry-matter feed of each category each animal product
-consumed in the reference year. In validation mode this baseline can pin the
-model to observed feed mixes; in optimisation runs it serves as a reference
-point for comparison with solved results.
+country-level baseline from FAO's GLEAM 3.0 model [4]_ that describes how
+much dry-matter feed of each category each animal product consumed in the
+reference year. GLEAM 3.0 provides country-level data for 229 countries
+(reference year 2015), eliminating the need for the OECD/Non-OECD
+disaggregation required by the earlier GLEAM 2.0 data. In validation mode
+this baseline can pin the model to observed feed mixes; in optimisation runs
+it serves as a reference point for comparison with solved results.
 
 The script ``workflow/scripts/prepare_feed_baseline.py`` produces
 ``processing/{name}/feed_baseline_uncalibrated.csv``.
@@ -305,219 +307,129 @@ The script ``workflow/scripts/prepare_feed_baseline.py`` produces
 Data Sources
 ~~~~~~~~~~~~
 
-* **GLEAM 2.0 SI Table 2** (``data/curated/gleam_tables/gleam_2_0_si2_global_livestock_feed_intake.csv``):
-  Global dry-matter feed intake by species (Cattle & buffaloes, Small
-  Ruminants, Poultry, Pigs), production system (Grazing, Mixed, Feedlots,
-  Layers, Broilers, Backyard, Intermediate, Industrial), and feed type
-  (Roughages, Cereal grains, Brans, Soybean cakes, Oil seed cakes, Other
-  edible, Other non-edible, Swill). Totals are reported separately for OECD
-  and Non-OECD country groups.
+* **GLEAM 3.0 feed intakes** (``data/bundled/GLEAM3_intakes.csv``):
+  Country-level dry-matter feed intake by species (Cattle, Buffalo, Sheep,
+  Goats, Chicken, Pigs), production system (Grassland, Mixed, Feedlots,
+  Layer, Broiler, Backyard, Intermediate, Industrial), and feed category
+  (Grains, Oil seed cakes, Grass and leaves, Crop residues, Fodder crop,
+  By-products, Other edible, Other non-edible). Global total: ~6,208 Mt DM.
 
-* **GLEAM 2.0 SI Tables 4–5** (``gleam_2_0_si4_dairy_cattle_composition.csv``,
-  ``gleam_2_0_si5_beef_cattle_composition.csv``):
-  Percentage breakdown of ruminant roughage into components (fresh grass,
-  hay, legumes & silage, crop residues, etc.) by GLEAM region, used to
-  decompose the aggregate "Roughages" entry into model-specific feed pools.
+* **GLEAM 3.0 production** (``data/bundled/GLEAM3_production.csv``):
+  Country-level animal product output (meat carcass weight, milk/egg weight)
+  per species and production system, used for FCR-weighted product splitting.
 
-* **FAOSTAT QCL**: National animal product output for 2010 (the GLEAM
-  reference year), the model's configured reference year
-  (``baseline_year``), and the calibration year
-  (``validation.gleam_calibration_year``). Used to disaggregate GLEAM totals
-  to individual countries, scale the baseline forward in time, and calibrate
-  the efficiency correction.
+* **Feed fractions** (``processing/{name}/gleam3_feed_fractions.csv``):
+  Pre-computed mapping from GLEAM3 aggregate feed categories to model feed
+  categories, produced by ``compute_gleam3_feed_fractions.py``. Most
+  categories have constant 1:1 mappings; By-products and Other edible use
+  country-varying fractions estimated from FAOSTAT crop production volumes.
+
+* **FAOSTAT QCL**: National animal product output for 2015 (the GLEAM 3.0
+  reference year) and the model's configured reference year
+  (``baseline_year``). Used for product splitting and temporal scaling.
 
 * **Wirsenius (2000) [1]_** feed energy requirements: Regional metabolizable
   energy demand per unit of product output, used to split feed between
   co-products in multi-product production systems.
 
-Disaggregation Pipeline
-~~~~~~~~~~~~~~~~~~~~~~~
+Processing Pipeline
+~~~~~~~~~~~~~~~~~~~
 
-Global GLEAM totals are converted to a country × product × feed-category
-matrix through seven sequential steps.
+GLEAM 3.0 country-level intakes are converted to a country × product ×
+feed-category matrix through the following steps.
 
-**Step 1 — Country disaggregation**
-
-GLEAM Table 2 reports totals for OECD and Non-OECD groups. Each country is
-assigned to one group, and its share of the group's total species-level output
-in 2010 (from FAOSTAT) determines how much of the group's feed is allocated
-to it:
-
-.. math::
-
-   \begin{aligned}
-   \text{share}_{c,s} &= \frac{\text{production}_{c,s,2010}}
-                               {\sum_{c' \in \text{group}(c)} \text{production}_{c',s,2010}} \\[6pt]
-   \text{intake}_{c,s,f} &= \text{intake}_{\text{GLEAM},\,\text{group}(c),s,f}
-                             \times \text{share}_{c,s}
-   \end{aligned}
-
-**Step 2 — Product split for multi-product systems**
+**Step 1 — Product split for multi-product systems**
 
 Several GLEAM systems serve more than one model product simultaneously:
-cattle Grazing and Mixed systems supply dairy, dairy-buffalo, and meat-cattle;
-poultry Backyard systems supply both eggs and meat-chicken. Feed is allocated
-between co-products in proportion to their energy demand, using ME
-requirements from Wirsenius (2000):
+Cattle Grassland and Mixed systems supply dairy and meat-cattle; Buffalo
+systems supply dairy-buffalo and meat-cattle; Chicken Backyard systems
+supply both eggs and meat-chicken. Feed is allocated between co-products
+in proportion to their energy demand, using GLEAM3 per-LPS production
+data and ME requirements from Wirsenius (2000):
 
 .. math::
 
-   \text{product_share}_{p} =
-       \frac{\text{production}_{c,p} \times \text{FCR}_{c,p}}
-            {\sum_{p'} \text{production}_{c,p'} \times \text{FCR}_{c,p'}}
+   \text{product\_share}_{p} =
+       \frac{\text{production}_{c,p,\text{LPS}} \times \text{FCR}_{c,p}}
+            {\sum_{p'} \text{production}_{c,p',\text{LPS}} \times \text{FCR}_{c,p'}}
 
-Countries with no reported production for a co-product fall back to equal
-sharing.
+Countries with no GLEAM3 production data for a system fall back to FAOSTAT
+production ratios. Cattle Feedlots map 100% to meat-cattle (finishing only).
 
-**Step 3 — Roughage decomposition**
+**Step 2 — Feed category mapping**
 
-GLEAM Table 2 lumps all ruminant roughage into a single "Roughages" entry. SI
-Tables 4 and 5 supply regional percentage breakdowns of this roughage into
-specific components. These percentages are applied to country-level roughage
-totals and the components are mapped to model feed categories:
+Each GLEAM3 aggregate feed category is mapped to one or more model feed
+categories using pre-computed fractions:
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 30
+   :widths: 30 20 30 10
 
-   * - Roughage component
-     - Model feed category
-   * - Fresh grass, Hay
+   * - GLEAM3 category
+     - Animal type
+     - Model category
+     - Exogenous
+   * - Grains
+     - ruminant / monogastric
+     - ``ruminant_grain`` / ``monogastric_grain``
+     - No
+   * - Oil seed cakes
+     - ruminant / monogastric
+     - ``ruminant_protein`` / ``monogastric_protein``
+     - No
+   * - Crop residues
+     - ruminant / monogastric
+     - ``ruminant_roughage`` / ``monogastric_low_quality``
+     - No
+   * - Grass and leaves
+     - ruminant / monogastric
+     - ``ruminant_forage`` / ``monogastric_low_quality``
+     - No
+   * - Fodder crop
+     - ruminant
      - ``ruminant_forage``
-   * - Legumes and silage
-     - ``ruminant_forage``
-   * - Crop residues, Sugarcane tops
-     - ``ruminant_roughage``
-   * - Leaves (tree leaves/browse)
-     - ``ruminant_roughage`` (tracked as exogenous)
-
-Dairy and dairy-buffalo products use Table 4 (dairy cattle composition);
-meat-cattle and meat-sheep use Table 5 (beef cattle composition).
-
-Tree leaves and forest browse are mapped to ``ruminant_roughage`` but
-tracked separately via the ``exogenous_mt_dm`` column, since the model
-has no endogenous production route for these feeds.
-
-**Step 4 — Mapping remaining GLEAM feed types**
-
-**Swill** (food waste recycled as animal feed) is mapped to
-``monogastric_low_quality`` for monogastrics and ``ruminant_grain`` for
-ruminants, with the full amount marked as exogenous since swill is not
-produced endogenously by the model.
-
-Feed types other than "Roughages" and "Swill" (handled above) are mapped
-to model feed categories via a two-step chain: each GLEAM SI2 feed type is
-first mapped to a **representative model feed item**, and that item's
-category is then looked up from the authoritative
-``ruminant_feed_mapping.csv`` / ``monogastric_feed_mapping.csv`` produced by
-the ``categorize_feeds`` rule. This avoids a second hardcoded source of
-truth for feed categorisation.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 36 18 18 18 18
-
-   * - GLEAM feed type
-     - Rum. item
-     - Rum. category
-     - Mono. item
-     - Mono. category
-   * - Cereal grains
-     - maize
-     - ``ruminant_grain``
-     - maize
-     - ``monogastric_grain``
-   * - 2nd grade grain
-     - —
-     - —
-     - maize
-     - ``monogastric_grain``
-   * - Brans, spent brewer & biofuel grains
-     - wheat-bran
-     - ``ruminant_grain``
-     - wheat-bran
-     - ``monogastric_low_quality``
-   * - Soybean cakes
-     - oilseed-meal
-     - ``ruminant_protein``
-     - oilseed-meal
-     - ``monogastric_protein``
-   * - Other oil seed cakes
-     - rapeseed-meal
-     - ``ruminant_protein``
-     - rapeseed-meal
-     - ``monogastric_protein``
+     - No
+   * - By-products
+     - both
+     - Country-varying (bran → grain, DDGS → forage/protein, molasses → grain)
+     - No
    * - Other edible
-     - sugarbeet
-     - ``ruminant_grain``
-     - cassava
-     - ``monogastric_grain``
+     - monogastric
+     - Country-varying (cassava/banana → grain, soy/pulses → protein)
+     - No
    * - Other non-edible
-     - barley
-     - ``ruminant_grain``
-     - wheat-bran
+     - monogastric
      - ``monogastric_low_quality``
+     - **Yes**
 
-**Step 5 — Scaling to the reference year and normalization**
+**Other non-edible** (~180 Mt DM, ~14% of monogastric feed) consists of
+synthetic amino acids, minerals, limestone, and fishmeal. The entire amount
+is marked as exogenous since these feeds have no endogenous crop-based
+production route.
 
-The GLEAM baseline reflects 2010 conditions. Country- and product-level feed
-intakes are scaled to the configured reference year using FAO production
-trends:
+**Grass and leaves** maps 100% to ``ruminant_forage``. The grassland forage
+calibration mechanism (see :ref:`grassland-forage-calibration`) detects any
+forage shortfall from the leaves/browse component and creates exogenous
+supply to compensate.
+
+**Step 3 — Scaling to the reference year**
+
+The GLEAM 3.0 baseline reflects 2015 conditions. If the configured reference
+year differs from 2015, country- and product-level feed intakes are scaled
+using FAO production trends:
 
 .. math::
 
-   \text{feed}_{\text{ref}} = \text{feed}_{2010}
+   \text{feed}_{\text{ref}} = \text{feed}_{2015}
        \times \frac{\text{production}_{\text{ref}}}
-                   {\text{production}_{2010}}
+                   {\text{production}_{2015}}
 
-After scaling, totals within each OECD/Non-OECD group are normalized to
-match the scaled GLEAM group total, correcting for countries with incomplete
-FAOSTAT coverage.
+**Step 4 — Production-based feed scaling**
 
-**Step 6 — Efficiency calibration**
-
-The production-based scaling in Step 5 assumes constant feed conversion
-efficiency, but efficiencies improved between 2010 and the reference year.
-GLEAM 3.0 (FAO 2023 [5]_) reports a global feed total of
-approximately 6.2 Gt DM for its 2015 baseline, whereas naively scaling the
-6.0 Gt DM GLEAM 2.0 total (2010) by production growth predicts a
-substantially higher figure—roughly 6.7 Gt for 2015.
-
-The pipeline calibrates against this known data point. First, a
-constant-efficiency prediction for the calibration year is computed using
-species-level production growth from FAOSTAT:
-
-.. math::
-
-   \hat{T}_{\text{cal}} = \sum_s T_{s,2010}
-       \times \frac{\text{production}_{s,\text{cal}}}
-                   {\text{production}_{s,2010}}
-
-The ratio of the known GLEAM 3.0 total to this naive prediction yields the
-cumulative efficiency improvement at the calibration year.  Assuming a
-constant annual rate, the correction for the reference year is:
-
-.. math::
-
-   \begin{aligned}
-   r &= \left(
-       \frac{T_{\text{known}}}{\hat{T}_{\text{cal}}}
-   \right)^{1/(\text{cal_year} - 2010)} \\[6pt]
-   \text{correction} &= r^{\,\text{ref_year} - 2010}
-   \end{aligned}
-
-All feed values are multiplied by this correction factor.  The two
-configuration keys ``validation.gleam_calibration_year`` (default: 2015) and
-``validation.gleam_calibration_total_gt_dm`` (default: 6.2) control the
-calibration data point.
-
-**Step 7 — Production-based feed scaling**
-
-After scaling to the reference year and applying the efficiency calibration,
-the pipeline rescales feed quantities per (country, product) so that the
-implied animal output matches FAOSTAT production data.  This preserves
-GLEAM's feed composition (the relative split across feed categories) while
-correcting absolute feed levels to observed production:
+The pipeline rescales feed quantities per (country, product) so that the
+implied animal output matches FAOSTAT production data. This preserves
+GLEAM 3.0's feed composition (the relative split across feed categories)
+while correcting absolute feed levels to observed production:
 
 .. math::
 
@@ -552,8 +464,8 @@ Output
   ``ruminant_grain``, ``monogastric_protein``)
 * ``feed_use_mt_dm``: Dry-matter feed consumption (Mt DM) in the reference year
 * ``exogenous_mt_dm``: Portion of feed demand that must be supplied
-  exogenously (Mt DM) — tree leaves/browse for ruminants and swill for
-  monogastrics
+  exogenously (Mt DM) — primarily Other non-edible for monogastrics
+  (synthetic amino acids, minerals, limestone, fishmeal)
 
 All (country, product, feed category) combinations are always present,
 including zeros, so every animal production link in the model has an explicit
@@ -583,13 +495,11 @@ The baseline participates in the model in two distinct ways:
 Exogenous Feed Supply
 ~~~~~~~~~~~~~~~~~~~~~
 
-Some GLEAM feed types have no endogenous supply route in the model:
+Some GLEAM 3.0 feed types have no endogenous supply route in the model:
 
-* **Tree leaves/browse** (~100–150 Mt DM globally): Forest browse consumed
-  by ruminants, mapped to ``ruminant_roughage``.
-* **Swill** (~75 Mt DM globally): Food waste recycled as pig/poultry feed,
-  mapped to ``monogastric_low_quality`` (or ``ruminant_grain`` for
-  ruminants).
+* **Other non-edible** (~180 Mt DM globally): Synthetic amino acids,
+  minerals, limestone, and fishmeal consumed by monogastrics, mapped to
+  ``monogastric_low_quality``.
 
 These are tracked in the ``exogenous_mt_dm`` column of the baseline and
 supplied via ``exogenous_feed`` generators on the corresponding feed buses
@@ -998,7 +908,7 @@ Workflow Rules
   * **Script**: ``workflow/scripts/build_grassland_yields.py``
 
 **prepare_feed_baseline**
-  * **Input**: GLEAM SI tables, FAOSTAT QCL, feed mappings, uncalibrated efficiencies
+  * **Input**: GLEAM 3.0 intakes/production, feed fractions, FAOSTAT QCL, feed mappings, uncalibrated efficiencies
   * **Output**: ``processing/{name}/feed_baseline_uncalibrated.csv``
   * **Script**: ``workflow/scripts/prepare_feed_baseline.py``
 
@@ -1028,6 +938,6 @@ References
 
 .. [3] Havlík, P., Valin, H., Herrero, M., Obersteiner, M., Schmid, E., Rufino, M. C., ... & Notenbaert, A. (2014). Climate change mitigation through livestock system transitions. *Proceedings of the National Academy of Sciences*, 111(10), 3709-3714, https://doi.org/10.1073/pnas.130804411. See the supporting information, Section 2.4.
 
-.. [4] Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., & Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security*, 14, 1–8. https://doi.org/10.1016/j.gfs.2017.01.001. The supplementary tables of this paper provide the GLEAM 2.0 global feed intake data used in this model.
+.. [4] FAO (2022). Global Livestock Environmental Assessment Model (GLEAM) version 3.0. Rome. https://www.fao.org/gleam/. Country-level feed intake and production data (reference year 2015), obtained directly from FAO upon request under CC BY 4.0, used as the feed baseline in this model.
 
 .. [5] FAO (2023). *Pathways towards lower emissions – A global assessment of the greenhouse gas emissions and mitigation options from livestock agrifood systems*. Rome. https://doi.org/10.4060/cc9029en. This GLEAM 3.0-based assessment (2015 baseline) reports updated global feed totals reflecting improved efficiencies relative to the GLEAM 2.0 (2010) estimates.

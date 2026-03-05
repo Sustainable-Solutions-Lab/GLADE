@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Reference mapping: GLEAM 3.0 aggregate feed categories to individual feed codes.
+# Derived from Tables 3.1 and 3.5 in the GLEAM 3.0 model description (FAO 2022).
+# For auditability only — not consumed programmatically.
+# Update this file if GLEAM3 data changes.
+gleam3_aggregate,gleam_code,animal_type,description
+Grains,GRAINS,ruminant,"Grains from barley, oat, buckwheat, fonio"
+Grains,CORN,ruminant,Grains from maize
+Grains,WHEAT,monogastric,Grains from wheat
+Grains,MAIZE,monogastric,Grains from maize
+Grains,BARLEY,monogastric,Grains from barley
+Grains,MILLET,monogastric,Grains from millet
+Grains,RICE,monogastric,Grains from rice
+Grains,SORGHUM,monogastric,Grains from sorghum
+Oil seed cakes,MLSOY,ruminant,Soybean meal
+Oil seed cakes,MLRAPE,ruminant,Rapeseed meal
+Oil seed cakes,MLCTTN,ruminant,Cottonseed meal
+Oil seed cakes,PKEXP,ruminant,Palm kernel cake
+Oil seed cakes,MLSOY,monogastric,Soybean meal
+Oil seed cakes,MLCTTN,monogastric,Cottonseed meal
+Oil seed cakes,MLOILSDS,monogastric,Other oilseed meals
+Oil seed cakes,MLRAPE,monogastric,Rapeseed meal
+Oil seed cakes,PKEXP,monogastric,Palm kernel cake
+By-products,MZGLTM,ruminant,Maize gluten meal
+By-products,MZGLTF,ruminant,Maize gluten feed
+By-products,BPULP,ruminant,Beet pulp
+By-products,MOLASSES,ruminant,Sugarcane molasses
+By-products,GRNBYDRY,ruminant,"Dry grain by-products (brans, middlings)"
+By-products,GRNBYWET,ruminant,"Wet grain by-products (DDGS, distillery, brewery)"
+By-products,GRNBYDRY,monogastric,"Dry grain by-products (brans, middlings)"
+By-products,GRNBYWET,monogastric,"Wet grain by-products (DDGS, distillery, brewery)"
+By-products,MOLASSES,monogastric,Sugarcane molasses
+By-products,FISHMEAL,monogastric,Fish meal
+By-products,MLOILSDS,monogastric,Other oilseed meals (counted in by-products context)
+Crop residues,RSTRAW,ruminant,Rice straw
+Crop residues,WSTRAW,ruminant,Wheat straw
+Crop residues,BSTRAW,ruminant,"Barley, rye, oat straw"
+Crop residues,ZSTOVER,ruminant,Maize stover
+Crop residues,MSTOVER,ruminant,Millet stover
+Crop residues,SSTOVER,ruminant,Sorghum stover
+Crop residues,TOPS,ruminant,Sugarcane tops
+Crop residues,LEAVES,ruminant,"Leaves from trees, forest"
+Crop residues,PSTRAW,monogastric,Pulse straw
+Crop residues,TOPS,monogastric,Sugarcane tops
+Crop residues,LEAVES,monogastric,"Leaves from trees, forest"
+Crop residues,BNSTEM,monogastric,Banana stems
+Grass and leaves,GRASSF,ruminant,Fresh grass (grazed or cut)
+Grass and leaves,GRASSH,ruminant,Hay or grass silage
+Grass and leaves,GRASSH2,ruminant,Hay from adjacent areas
+Grass and leaves,GRASSLEGF,ruminant,Fresh grass-legume mixture
+Grass and leaves,GRASSLEGH,ruminant,Grass-legume hay or silage
+Grass and leaves,GRASSF,monogastric,Fresh grass (grazed or fed)
+Fodder crop,FDDRSIL,ruminant,"Alfalfa, whole-crop barley/oat/maize silage"
+Fodder crop,FDDRBEET,ruminant,Fodder beet
+Other edible,CASSAVA,monogastric,Cassava pellets
+Other edible,BNFRUIT,monogastric,Banana fruit
+Other edible,SOY,monogastric,Whole soybeans
+Other edible,PULSES,monogastric,Leguminous beans
+Other edible,RAPESEED,monogastric,Rapeseed (whole)
+Other edible,SOYOIL,monogastric,Soybean oil
+Other edible,SWILL,monogastric,Household food waste (swill)
+Other non-edible,SYNTHETIC,monogastric,Synthetic amino acids and minerals
+Other non-edible,LIMESTONE,monogastric,Limestone (calcium source)
+Other non-edible,FISHMEAL,monogastric,Fish meal (also in By-products)
