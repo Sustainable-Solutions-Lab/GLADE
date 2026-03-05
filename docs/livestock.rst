@@ -165,18 +165,81 @@ Byproducts from food processing (with ``source_type=food``) are automatically ex
 Feed Conversion Efficiencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Feed conversion efficiencies (tonnes **retail product** per tonne feed DM) are derived from GLEAM 3.0 country-level feed intake and production data, combined with GLEAM 3.0 feed category energy values.
+Feed conversion efficiencies (tonnes **retail product** per tonne feed DM) are
+derived per country from GLEAM 3.0 feed intake and production data, combined
+with GLEAM 3.0 feed category energy values.  The pipeline has two stages:
+first, per-country ME requirements are computed from GLEAM3; then, these are
+combined with per-category feed energy contents to produce conversion
+efficiencies.
 
-In this calculation, we have to account for the following units:
+ME Requirements from GLEAM3
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The script ``compute_gleam3_me_requirements.py`` derives metabolizable energy
+(ME) requirements per kg product for each country and product.  For each
+country, the total feed ME intake of a species is computed from GLEAM3 intake
+data (kg DM × ME per kg DM for each feed category), then divided among the
+species' products to obtain ME per kg product output.
+
+**Multi-product splitting**.  Most animal species produce multiple model
+products simultaneously (e.g. cattle produce both dairy and meat).  The total
+system ME must be allocated between these co-products.  Wirsenius (2000) [1]_
+provides regional dairy-to-meat energy ratios (see table below) that serve as
+the proportional guide, while GLEAM3 sets the absolute level:
+
+.. math::
+
+   f_\text{cattle} = \frac{\text{ME}_\text{feed,GLEAM3}}
+       {W_\text{dairy} \times \text{prod}_\text{milk}
+       + W_\text{meat} \times \text{prod}_\text{meat}}
+
+where :math:`W_\text{dairy}` and :math:`W_\text{meat}` are Wirsenius reference
+ME values, and :math:`f` is a country-specific scaling factor applied to both
+products.  This preserves the Wirsenius dairy:meat *ratio* while anchoring the
+absolute ME to observed GLEAM3 feed intake.
+
+For **ruminant products**, the Wirsenius net-energy values (NE) are first
+converted to metabolizable energy using NRC (2000) efficiency factors from
+config (``animal_products.net_to_metabolizable_energy_conversion``):
+
+* ``k_m`` = 0.60 — maintenance efficiency
+* ``k_g`` = 0.40 — growth efficiency
+* ``k_l`` = 0.60 — lactation efficiency (dairy only)
+
+For **monogastric products** (pigs, chicken), Wirsenius values are already in
+ME and the conversion step is skipped.  Single-product species (pigs) are
+computed directly as total feed ME / total production.
+
+**Sheep/goat milk proxy**.  Sheep and goat milk (~3–4% of global production)
+is proxied through the cattle ``dairy`` product rather than modeled separately.
+For ME derivation, the cattle dairy ME is used as a proxy for sheep/goat milk
+ME: sheep/goat system feed ME is split by subtracting
+``milk_production × dairy_ME_proxy`` and assigning the residual to
+``meat-sheep``.  See the config comment on ``gleam3_system_product_map`` for
+the rationale.
+
+**Fallback**.  Countries without sufficient GLEAM3 data for a species receive
+the production-weighted global average ME for that product.
+
+**Output**: ``processing/{name}/gleam3_me_requirements.csv`` with columns
+``animal_product``, ``country``, ``ME_MJ_per_kg`` (at carcass/farm-gate level).
+
+Efficiency Calculation
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The script ``build_feed_to_animal_products.py`` converts ME requirements to
+feed conversion efficiencies.  Units at each stage:
 
 * **Feed inputs**: Dry matter (tonnes DM)
 * **Animal product outputs**: Fresh weight, retail meat (tonnes fresh weight)
 
-  * For meats: **retail/edible meat** weight (boneless, trimmed) - NOT carcass weight
+  * For meats: **retail/edible meat** weight (boneless, trimmed) — not carcass
   * For dairy: whole milk (fresh weight)
   * For eggs: whole eggs (fresh weight)
 
-GLEAM 3.0 ME requirements are at **carcass/farm-gate** level. We apply carcass-to-retail conversion factors to obtain feed requirements per kg **retail meat**, from OECD-FAO Agricultural Outlook 2023-2032, Box 6.1 [2]_:
+GLEAM3 ME requirements are at **carcass/farm-gate** level.  Carcass-to-retail
+conversion factors (from OECD-FAO Agricultural Outlook 2023-2032, Box 6.1
+[2]_) are applied to obtain feed requirements per kg retail meat:
 
 * Cattle meat: 0.67 kg boneless retail per kg carcass
 * Sheep meat: 0.63 kg boneless retail per kg carcass
@@ -184,32 +247,37 @@ GLEAM 3.0 ME requirements are at **carcass/farm-gate** level. We apply carcass-t
 * Chicken meat: 0.60 kg boneless retail per kg carcass
 * Eggs, dairy, & buffalo milk: 1.00 (no conversion, already retail products)
 
-**Generation workflow**:
+This increases feed requirements per kg retail meat by ~33–50% compared to per
+kg carcass, reflecting bone removal and trimming losses.
 
-1. **GLEAM3 ME derivation** (``compute_gleam3_me_requirements``): For each country, compute implied ME per kg product from GLEAM3 feed intakes and production data. For multi-product species (cattle, buffalo, chicken, sheep/goats), Wirsenius (2000) dairy:meat ratios guide the product split while GLEAM3 sets the absolute level. Countries without GLEAM3 data receive the production-weighted global average.
-2. **Carcass-to-retail conversion**: Convert MJ per kg carcass → MJ per kg retail meat
+The final efficiency for each (country, product, feed_category) triple:
 
-   * For meats: ME_retail = ME_carcass / carcass_to_retail_factor
-   * For dairy/eggs: No conversion (already retail products)
+.. math::
 
-3. **Feed category energy content** from GLEAM 3.0 provides ME (MJ per kg DM) for each feed quality category
-4. **Efficiency calculation**: efficiency = ME_feed / ME_retail (tonnes **retail product** per tonne feed DM)
+   \text{efficiency} = \frac{\text{ME}_\text{feed} \;[\text{MJ/kg DM}]}
+       {\text{ME}_\text{product,retail} \;[\text{MJ/kg retail}]}
 
-**Output**: ``processing/{name}/feed_to_animal_products_uncalibrated.csv`` with columns:
+This gives tonnes of retail product per tonne of feed DM.  Each product ×
+feed-category combination yields a distinct efficiency, allowing the model to
+represent different production systems (grass-fed vs. grain-finished beef,
+pasture vs. intensive dairy, etc.).
+
+**Output**: ``processing/{name}/feed_to_animal_products_uncalibrated.csv`` with
+columns:
 
 * ``country``: ISO 3166-1 alpha-3 country code
 * ``product``: Product name (e.g., "meat-cattle", "dairy")
-* ``feed_category``: Feed pool (e.g., ``ruminant_forage``, ``ruminant_grain``, ``monogastric_grain``)
+* ``feed_category``: Feed pool (e.g., ``ruminant_forage``, ``monogastric_grain``)
 * ``efficiency``: Feed conversion efficiency (t product / t feed DM)
 
-Note: Carcass-to-retail conversion increases feed requirements per kg retail meat by ~33-50% compared to per kg carcass, reflecting bone removal and trimming losses.
-
-This structure allows modeling different production systems for the same product (grass-fed vs. grain-finished beef, pasture vs. intensive dairy, etc.).
-
 Regional Feed Energy Requirements (Wirsenius reference)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Feed requirements vary significantly by region due to differences in production systems, genetics, and environmental conditions. Wirsenius (2000) [1]_ provides estimated feed energy requirements per unit of commodity output, which are used as reference ratios for splitting multi-product systems in the GLEAM3 ME derivation:
+Feed requirements vary significantly by region due to differences in production
+systems, genetics, and environmental conditions.  Wirsenius (2000) [1]_
+provides estimated feed energy requirements per unit of commodity output.
+These values serve as reference ratios for splitting multi-product systems in
+the GLEAM3 ME derivation described above:
 
 .. table:: Feed energy requirements per unit of animal product output (Wirsenius 2000, Table 3.9)
    :widths: auto
@@ -291,13 +359,13 @@ Data Sources
   categories have constant 1:1 mappings; By-products and Other edible use
   country-varying fractions estimated from FAOSTAT crop production volumes.
 
+* **GLEAM3-derived ME requirements**
+  (``processing/{name}/gleam3_me_requirements.csv``): Per-country metabolizable
+  energy requirements per kg product, used as FCR weights for product splitting.
+
 * **FAOSTAT QCL**: National animal product output for 2015 (the GLEAM 3.0
   reference year) and the model's configured reference year
   (``baseline_year``). Used for product splitting and temporal scaling.
-
-* **Wirsenius (2000) [1]_** feed energy requirements: Regional metabolizable
-  energy demand per unit of product output, used to split feed between
-  co-products in multi-product production systems.
 
 Processing Pipeline
 ~~~~~~~~~~~~~~~~~~~
@@ -307,18 +375,22 @@ feed-category matrix through the following steps.
 
 **Step 1 — Product split for multi-product systems**
 
-Several GLEAM systems serve more than one model product simultaneously:
-Cattle Grassland and Mixed systems supply dairy and meat-cattle; Buffalo
-systems supply dairy-buffalo and meat-cattle; Chicken Backyard systems
-supply both eggs and meat-chicken. Feed is allocated between co-products
-in proportion to their energy demand, using GLEAM3 per-LPS production
-data and ME requirements from Wirsenius (2000):
+The mapping from GLEAM3 (Animal, LPS) systems to model products is defined in
+``animal_products.gleam3_system_product_map`` in the configuration.  Several
+systems serve more than one model product simultaneously: Cattle Grassland and
+Mixed systems supply dairy and meat-cattle; Buffalo systems supply
+dairy-buffalo and meat-cattle; Sheep and Goat systems supply dairy and
+meat-sheep (sheep/goat milk is proxied through the cattle dairy pathway);
+Chicken Backyard systems supply both eggs and meat-chicken.
+
+Feed is allocated between co-products in proportion to their energy demand,
+using GLEAM3 per-LPS production data and per-country ME requirements:
 
 .. math::
 
    \text{product\_share}_{p} =
-       \frac{\text{production}_{c,p,\text{LPS}} \times \text{FCR}_{c,p}}
-            {\sum_{p'} \text{production}_{c,p',\text{LPS}} \times \text{FCR}_{c,p'}}
+       \frac{\text{production}_{c,p,\text{LPS}} \times \text{ME}_{c,p}}
+            {\sum_{p'} \text{production}_{c,p',\text{LPS}} \times \text{ME}_{c,p'}}
 
 Countries with no GLEAM3 production data for a system fall back to FAOSTAT
 production ratios. Cattle Feedlots map 100% to meat-cattle (finishing only).
@@ -760,27 +832,39 @@ The ``add_feed_supply_links()`` function creates links from crops, crop residues
 Feed-to-Animal-Product Links
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``add_feed_to_animal_product_links()`` function converts feed pools to animal products with CH₄ emissions:
+The ``add_feed_to_animal_product_links()`` function converts feed pools to
+animal products with associated emissions and manure outputs.  Each link is
+named ``animal:{product}_{feed_category}:{country}`` (carrier
+``animal_production``):
 
-**Feed-Pool-to-Product Links**:
-  * **Inputs**: Feed pool bus (``bus0``, e.g., ``feed_ruminant_forage``)
-  * **Outputs**:
+**Multi-bus structure**:
 
-    * Animal product bus (``bus1``, e.g., ``food_cattle_meat``)
-    * CH₄ emissions bus (``bus2``) - all animal products
+* **bus0** (input): Feed pool bus (e.g., ``feed:ruminant_forage:USA``)
+* **bus1** (output): Animal product food bus (e.g., ``food:meat-cattle:USA``)
+* **bus2** (output): CH₄ emissions bus (``emission:ch4``) — enteric
+  fermentation + manure methane
+* **bus3** (output): Manure nitrogen to country fertilizer bus
+  (``fertilizer:{country}``) — recycled as organic N
+* **bus4** (output): N₂O emissions bus (``emission:n2o``) — from manure
+  application and deposition
 
-  * **Efficiency**: Feed conversion ratio (tonnes product per tonne feed DM)
-  * **CH₄ calculation**: Combines enteric fermentation (ruminants) and manure management (all animals)
+**Efficiency** (bus0 → bus1): Feed conversion ratio (tonnes retail product per
+tonne feed DM), from the per-country efficiencies described above.
 
-    .. math::
+**CH₄ calculation** (efficiency2): Combines enteric fermentation (ruminants
+only) and manure management (all animals):
 
-       \text{CH}_4\text{/t feed} = \text{MY}_\text{enteric} + \text{MY}_\text{manure}
+.. math::
 
-    where methane yields (MY) are in kg CH₄ per kg dry matter intake.
+   \text{CH}_4\text{/t feed} = \text{MY}_\text{enteric} + \text{MY}_\text{manure}
 
-**Example**: Grass-fed beef from forage feed with enteric MY 23.3 g/kg and manure MY 2.2 g/kg:
-  * Total CH₄ = 23.3 + 2.2 = 25.5 g CH₄ per kg feed DM
-  * For 1 tonne feed → 0.0255 t CH₄ emissions
+where methane yields (MY) are in kg CH₄ per kg dry matter intake.
+
+**Example**: Grass-fed beef from forage feed with enteric MY 23.3 g/kg and
+manure MY 2.2 g/kg:
+
+* Total CH₄ = 23.3 + 2.2 = 25.5 g CH₄ per kg feed DM
+* For 1 tonne feed → 0.0255 t CH₄ emissions
 
 See :ref:`livestock-emissions` for detailed methodology and data sources.
 
@@ -869,23 +953,56 @@ Disabling grazing (``enabled: false``) forces all animal products to come from f
 Workflow Rules
 --------------
 
+Rules are listed in pipeline order.  All rules are defined in
+``workflow/rules/animals.smk``.
+
+**prepare_gleam_feed_properties**
+  * **Input**: GLEAM 3.0 supplement, feed mapping
+  * **Output**: ``ruminant_feed_properties.csv``, ``monogastric_feed_properties.csv``
+  * **Script**: ``workflow/scripts/prepare_gleam_feed_properties.py``
+
+**categorize_feeds**
+  * **Input**: Feed properties, enteric methane yields, ash content
+  * **Output**: ``ruminant_feed_categories.csv``,
+    ``monogastric_feed_categories.csv``, ``ruminant_feed_mapping.csv``,
+    ``monogastric_feed_mapping.csv``
+  * **Script**: ``workflow/scripts/categorize_feeds.py``
+
+**compute_gleam3_me_requirements**
+  * **Input**: GLEAM3 intakes/production, feed categories, Wirsenius data,
+    country-region mapping
+  * **Output**: ``gleam3_me_requirements.csv``
+  * **Script**: ``workflow/scripts/compute_gleam3_me_requirements.py``
+
+**build_feed_to_animal_products**
+  * **Input**: ME requirements, ruminant/monogastric feed categories
+  * **Output**: ``feed_to_animal_products_uncalibrated.csv``
+  * **Script**: ``workflow/scripts/build_feed_to_animal_products.py``
+
+**compute_gleam3_feed_fractions**
+  * **Input**: Foods, crop production, feed mappings
+  * **Output**: ``gleam3_feed_fractions.csv``
+  * **Script**: ``workflow/scripts/compute_gleam3_feed_fractions.py``
+
 **build_grassland_yields**
   * **Input**: ISIMIP grassland yield NetCDF, resource classes, regions
-  * **Output**: ``processing/{name}/grassland_yields.csv``
+  * **Output**: ``grassland_yields.csv``
   * **Script**: ``workflow/scripts/build_grassland_yields.py``
 
 **prepare_feed_baseline**
-  * **Input**: GLEAM 3.0 intakes/production, feed fractions, FAOSTAT QCL, feed mappings, uncalibrated efficiencies
-  * **Output**: ``processing/{name}/feed_baseline_uncalibrated.csv``
+  * **Input**: GLEAM3 intakes/production, feed fractions, ME requirements,
+    FAOSTAT QCL, feed mappings, uncalibrated efficiencies
+  * **Output**: ``feed_baseline_uncalibrated.csv``
   * **Script**: ``workflow/scripts/prepare_feed_baseline.py``
 
 **apply_feed_calibration**
   * **Input**: Uncalibrated baseline and efficiencies, calibration multipliers
-  * **Output**: ``processing/{name}/feed_baseline.csv``, ``processing/{name}/feed_to_animal_products.csv``
+  * **Output**: ``feed_baseline.csv``, ``feed_to_animal_products.csv``
   * **Script**: ``workflow/scripts/apply_feed_calibration.py``
 
 **compute_feed_efficiency_calibration**
-  * **Input**: Solved network (uncalibrated scenario), uncalibrated baseline and efficiencies
+  * **Input**: Solved network (uncalibrated scenario), uncalibrated baseline
+    and efficiencies
   * **Output**: ``data/curated/feed_efficiency_calibration.csv``
   * **Script**: ``workflow/scripts/compute_feed_efficiency_calibration.py``
 
@@ -894,7 +1011,9 @@ Workflow Rules
   * **Output**: ``data/curated/grassland_forage_calibration.csv``
   * **Script**: ``workflow/scripts/compute_grassland_calibration.py``
 
-Livestock production is then integrated into the ``build_model`` rule using the grassland yields and feed conversion CSVs.
+All ``processing/`` outputs are prefixed with ``{name}/`` (the config name).
+Livestock production is integrated into the ``build_model`` rule using the
+grassland yields and feed conversion CSVs.
 
 References
 ----------
