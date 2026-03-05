@@ -129,7 +129,7 @@ fi
 # caller explicitly passes --show-failed-logs.
 set -- --logger compact "$@"
 
-# When using SLURM, pass the profile and skip the local memory cap.
+# When using SLURM, pass the profile and run inside srun on service partition.
 if [ "$USE_SLURM" = true ]; then
   SLURM_PROFILE="${SMK_SLURM_PROFILE:-$HOME/.config/snakemake/slurm}"
   if [ ! -f "$SLURM_PROFILE/config.yaml" ]; then
@@ -138,9 +138,9 @@ if [ "$USE_SLURM" = true ]; then
   fi
   set -- --profile "$SLURM_PROFILE" "$@"
   if [ -n "$PIXI_ENV" ]; then
-    pixi run -e "$PIXI_ENV" snakemake "$@"
+    exec srun --partition=service --mem=8G --time=2-00:00:00 pixi run -e "$PIXI_ENV" snakemake "$@"
   else
-    pixi run snakemake "$@"
+    exec srun --partition=service --mem=8G --time=2-00:00:00 pixi run snakemake "$@"
   fi
   exit $?
 fi
