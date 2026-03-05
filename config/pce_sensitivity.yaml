@@ -120,6 +120,10 @@ scenarios:
         emissions:
           ghg_price: "{ghg_price}"
 
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2020
+baseline_year: 2020
+
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true
@@ -130,32 +134,27 @@ validation:
   production_stability:
     enabled: true
     penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.5
 
-# Enable health modeling for RR sensitivity
-health:
-  enabled: true
-  value_per_yll: 50000
-
-# Enable GHG pricing
-emissions:
-  ghg_pricing_enabled: true
-  ghg_price: 100
-
-# Use regionalized feed efficiency values
 animal_products:
+  # Use regionalized feed efficiency values
   feed_efficiency_regions: null
+
+health:
+  region_clusters: 15
+  intake_grid_points: 8  # Number of grid knots over empirical RR range
 
 # Compare all scenarios in plots
 plotting:
   comparison_scenarios: "all"
 
-# Solver configuration
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 6
-  mem_mb: 8000
-  runtime: 10
+  threads: 8
+  mem_mb: 9000
+  runtime: 20
 
 remote_solve:
   enabled: true
