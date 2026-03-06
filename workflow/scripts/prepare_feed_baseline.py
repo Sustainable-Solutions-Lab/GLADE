@@ -19,6 +19,7 @@ model cannot produce endogenously (synthetic amino acids, minerals, etc.).
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from workflow.scripts.animal_utils import load_faostat_qcl
@@ -150,98 +151,12 @@ def compute_fcr_lookup(
     """
     me_df = pd.read_csv(me_requirements_path, comment="#")
     me_df = me_df[me_df["animal_product"].isin(products)]
-    return {
-        (row["animal_product"], row["country"]): row["ME_MJ_per_kg"]
-        for _, row in me_df.iterrows()
-    }
-
-
-def compute_product_shares(
-    products: list[str],
-    country: str,
-    fao_prod: pd.DataFrame,
-    fcr_lookup: dict[tuple[str, str], float],
-) -> dict[str, float]:
-    """Compute FCR-weighted product shares for splitting feed within a system.
-
-    share_i = prod_i * FCR_i / sum(prod_j * FCR_j) per country,
-    where FCR is total ME per kg product at carcass/farm-gate level.
-
-    Falls back to equal shares if no production data.
-    """
-    if len(products) == 1:
-        return {products[0]: 1.0}
-
-    country_fao = fao_prod[fao_prod["country"] == country]
-
-    weighted = {}
-    for p in products:
-        prod_match = country_fao.loc[country_fao["product"] == p, "production_tonnes"]
-        prod = prod_match.sum() if not prod_match.empty else 0.0
-        fcr = fcr_lookup.get((p, country), 0.0)
-        weighted[p] = prod * fcr
-
-    total = sum(weighted.values())
-    if total <= 0:
-        return {p: 1.0 / len(products) for p in products}
-
-    return {p: w / total for p, w in weighted.items()}
-
-
-def _compute_product_shares_gleam3(
-    products: list[str],
-    country: str,
-    animal: str,
-    lps: str,
-    gleam3_prod: pd.DataFrame,
-    fao_prod: pd.DataFrame,
-    fcr_lookup: dict[tuple[str, str], float],
-    item_to_product: dict[tuple[str, str], str],
-) -> dict[str, float]:
-    """Compute product shares using GLEAM3 production data, with FAOSTAT fallback.
-
-    For multi-product systems (e.g. Cattle Grassland -> dairy + meat-cattle),
-    uses GLEAM3 per-LPS production to compute FCR-weighted shares.
-    Falls back to FAOSTAT-based shares if GLEAM3 data is missing.
-    """
-    if len(products) == 1:
-        return {products[0]: 1.0}
-
-    # Build reverse lookup: model product → GLEAM3 item for this animal
-    product_to_item = {
-        prod: item
-        for (a, item), prod in item_to_product.items()
-        if a == animal and prod in products
-    }
-
-    # Try GLEAM3 production data first
-    lps_prod = gleam3_prod[
-        (gleam3_prod["ISO3"] == country)
-        & (gleam3_prod["Animal"] == animal)
-        & (gleam3_prod["LPS"] == lps)
-    ]
-
-    weighted = {}
-    for p in products:
-        prod_val = 0.0
-        g_item = product_to_item.get(p)
-        if g_item is not None:
-            match = lps_prod[
-                (lps_prod["Item"] == g_item)
-                & (lps_prod["Element"].isin(["CarcassWeight", "Weight"]))
-            ]
-            if not match.empty:
-                prod_val = match["Total"].sum()
-
-        fcr = fcr_lookup.get((p, country), 0.0)
-        weighted[p] = prod_val * fcr
-
-    total = sum(weighted.values())
-    if total > 0:
-        return {p: w / total for p, w in weighted.items()}
-
-    # Fallback to FAOSTAT-based shares
-    return compute_product_shares(products, country, fao_prod, fcr_lookup)
+    return dict(
+        zip(
+            zip(me_df["animal_product"], me_df["country"]),
+            me_df["ME_MJ_per_kg"],
+        )
+    )
 
 
 def _validate_fraction_table(fractions: pd.DataFrame) -> None:
@@ -364,6 +279,116 @@ def _validate_intake_fraction_coverage(
     )
 
 
+def _compute_all_product_shares(
+    multi_product_systems: dict[tuple[str, str], list[str]],
+    unique_countries,
+    gleam3_prod: pd.DataFrame,
+    fao_2015: pd.DataFrame,
+    fcr_lookup: dict[tuple[str, str], float],
+    item_to_product: dict[tuple[str, str], str],
+) -> pd.DataFrame:
+    """Vectorized computation of FCR-weighted product shares for multi-product systems.
+
+    Returns DataFrame with columns: Animal, LPS, ISO3, product, product_share.
+    """
+
+    # Build the full cross-product of (animal, lps, country, product)
+    expand_rows = []
+    for (animal, lps), products in multi_product_systems.items():
+        for p in products:
+            expand_rows.append({"Animal": animal, "LPS": lps, "product": p})
+    expand_df = pd.DataFrame(expand_rows)
+    countries_df = pd.DataFrame({"ISO3": unique_countries})
+    cross = expand_df.merge(countries_df, how="cross")
+
+    # Build reverse mapping: (animal, product) → GLEAM3 item
+    product_to_item = {}
+    for (a, item), prod in item_to_product.items():
+        product_to_item[(a, prod)] = item
+
+    # --- GLEAM3 production lookup (vectorized) ---
+    # Pre-aggregate GLEAM3 production by (ISO3, Animal, LPS, Item)
+    g_agg = (
+        gleam3_prod.groupby(["ISO3", "Animal", "LPS", "Item"], as_index=False)["Total"]
+        .sum()
+        .rename(columns={"Total": "gleam3_prod_val"})
+    )
+
+    # Map each (animal, product) → GLEAM3 Item
+    cross["gleam3_item"] = [
+        product_to_item.get((a, p)) for a, p in zip(cross["Animal"], cross["product"])
+    ]
+
+    # Merge GLEAM3 production
+    cross = cross.merge(
+        g_agg,
+        left_on=["ISO3", "Animal", "LPS", "gleam3_item"],
+        right_on=["ISO3", "Animal", "LPS", "Item"],
+        how="left",
+    )
+    cross["gleam3_prod_val"] = cross["gleam3_prod_val"].fillna(0.0)
+
+    # Map FCR values
+    cross["fcr"] = [
+        fcr_lookup.get((p, c), 0.0) for p, c in zip(cross["product"], cross["ISO3"])
+    ]
+
+    # Compute weighted = gleam3_prod_val * fcr
+    cross["weighted"] = cross["gleam3_prod_val"] * cross["fcr"]
+
+    # Compute group totals for GLEAM3-based shares
+    group_cols = ["Animal", "LPS", "ISO3"]
+    group_total = cross.groupby(group_cols, as_index=False)["weighted"].sum()
+    group_total = group_total.rename(columns={"weighted": "total_weighted"})
+    cross = cross.merge(group_total, on=group_cols, how="left")
+
+    # Where GLEAM3 total > 0, compute share directly
+    has_gleam = cross["total_weighted"] > 0
+    cross.loc[has_gleam, "product_share"] = (
+        cross.loc[has_gleam, "weighted"] / cross.loc[has_gleam, "total_weighted"]
+    )
+
+    # --- FAOSTAT fallback for rows where GLEAM3 total == 0 ---
+    needs_fallback = cross[~has_gleam]
+    if not needs_fallback.empty:
+        # Merge FAOSTAT production
+        fao_lookup = fao_2015.groupby(["country", "product"], as_index=False)[
+            "production_tonnes"
+        ].sum()
+        fb = needs_fallback[[*group_cols, "product"]].merge(
+            fao_lookup,
+            left_on=["ISO3", "product"],
+            right_on=["country", "product"],
+            how="left",
+        )
+        fb["production_tonnes"] = fb["production_tonnes"].fillna(0.0)
+        fb["fcr"] = [
+            fcr_lookup.get((p, c), 0.0) for p, c in zip(fb["product"], fb["ISO3"])
+        ]
+        fb["weighted_fao"] = fb["production_tonnes"] * fb["fcr"]
+        fb_total = fb.groupby(group_cols, as_index=False)["weighted_fao"].sum()
+        fb_total = fb_total.rename(columns={"weighted_fao": "total_fao"})
+        fb = fb.merge(fb_total, on=group_cols, how="left")
+
+        has_fao = fb["total_fao"] > 0
+        fb["product_share"] = np.nan
+        fb.loc[has_fao, "product_share"] = (
+            fb.loc[has_fao, "weighted_fao"] / fb.loc[has_fao, "total_fao"]
+        )
+
+        # Equal shares where neither source has data
+        for (animal, lps), products in multi_product_systems.items():
+            equal_share = 1.0 / len(products)
+            mask = ~has_fao & (fb["Animal"] == animal) & (fb["LPS"] == lps)
+            fb.loc[mask, "product_share"] = equal_share
+
+        # Write fallback shares back
+        fallback_idx = cross.index[~has_gleam]
+        cross.loc[fallback_idx, "product_share"] = fb["product_share"].values
+
+    return cross[["Animal", "LPS", "ISO3", "product", "product_share"]]
+
+
 def main() -> None:
     gleam3_intakes_path = snakemake.input.gleam3_intakes  # type: ignore[name-defined]
     gleam3_production_path = snakemake.input.gleam3_production  # type: ignore[name-defined]
@@ -451,34 +476,16 @@ def main() -> None:
     # Pre-compute product shares for all multi-product systems
     logger.info("Computing FCR-weighted product shares")
     multi_product_systems = {k: v for k, v in system_product_map.items() if len(v) > 1}
-    unique_countries = intakes["ISO3"].unique()
 
-    prod_share_records = []
-    for (animal, lps), products in multi_product_systems.items():
-        for country in unique_countries:
-            p_shares = _compute_product_shares_gleam3(
-                products,
-                country,
-                animal,
-                lps,
-                gleam3_prod,
-                fao_2015,
-                fcr_lookup,
-                item_to_product,
-            )
-            for p, s in p_shares.items():
-                prod_share_records.append(
-                    {
-                        "Animal": animal,
-                        "LPS": lps,
-                        "ISO3": country,
-                        "product": p,
-                        "product_share": s,
-                    }
-                )
-
-    if prod_share_records:
-        prod_shares_df = pd.DataFrame(prod_share_records)
+    if multi_product_systems:
+        prod_shares_df = _compute_all_product_shares(
+            multi_product_systems,
+            intakes["ISO3"].unique(),
+            gleam3_prod,
+            fao_2015,
+            fcr_lookup,
+            item_to_product,
+        )
         intakes = intakes.merge(
             prod_shares_df,
             on=["Animal", "LPS", "ISO3", "product"],
@@ -638,33 +645,44 @@ def main() -> None:
     )
     no_feed = ~has_implied & ~zero_prod
     if no_feed.any():
-        for _, row in implied[no_feed].iterrows():
+        for c, p, pm in zip(
+            implied.loc[no_feed, "country"],
+            implied.loc[no_feed, "product"],
+            implied.loc[no_feed, "production_mt"],
+        ):
             logger.warning(
                 "  %s/%s: FAOSTAT production %.3f Mt but no GLEAM feed; skipping",
-                row["country"],
-                row["product"],
-                row["production_mt"],
+                c,
+                p,
+                pm,
             )
         implied.loc[no_feed, "scale_factor"] = 1.0
 
     # Log extreme scale factors
-    for _, row in implied[scalable].iterrows():
-        sf = row["scale_factor"]
+    notable = implied[
+        scalable & ((implied["scale_factor"] > 2.0) | (implied["scale_factor"] < 0.5))
+    ]
+    for c, p, sf, ip, pm in zip(
+        notable["country"],
+        notable["product"],
+        notable["scale_factor"],
+        notable["implied_prod"],
+        notable["production_mt"],
+    ):
         flag = ""
         if sf > 3.0:
             flag = " [EXTREME HIGH]"
         elif sf < 0.3:
             flag = " [EXTREME LOW]"
-        if flag or sf > 2.0 or sf < 0.5:
-            logger.info(
-                "  %s/%s: scale=%.3f (implied=%.3f Mt, FAOSTAT=%.3f Mt)%s",
-                row["country"],
-                row["product"],
-                sf,
-                row["implied_prod"],
-                row["production_mt"],
-                flag,
-            )
+        logger.info(
+            "  %s/%s: scale=%.3f (implied=%.3f Mt, FAOSTAT=%.3f Mt)%s",
+            c,
+            p,
+            sf,
+            ip,
+            pm,
+            flag,
+        )
 
     scale_map = implied.set_index(["country", "product"])["scale_factor"]
     result_idx = result.set_index(["country", "product"])

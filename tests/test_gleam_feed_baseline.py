@@ -12,11 +12,11 @@ import pytest
 from workflow.scripts.prepare_feed_baseline import (
     RUMINANT_ANIMALS,
     _build_item_to_product,
+    _compute_all_product_shares,
     _flatten_system_product_map,
     _validate_fraction_table,
     _validate_intake_fraction_coverage,
     compute_fcr_lookup,
-    compute_product_shares,
 )
 
 # ---------------------------------------------------------------------------
@@ -115,75 +115,203 @@ class TestSystemProductMap:
 
 
 # ---------------------------------------------------------------------------
-# Tests: compute_product_shares
+# Tests: _compute_all_product_shares
 # ---------------------------------------------------------------------------
 
+# Minimal GLEAM3 production DataFrame schema:
+#   ISO3, Animal, LPS, Item, Element, Total
+_EMPTY_GLEAM3_PROD = pd.DataFrame(
+    columns=["ISO3", "Animal", "LPS", "Item", "Element", "Total"]
+)
+_EMPTY_FAO = pd.DataFrame(columns=["country", "product", "production_tonnes"])
 
-class TestComputeProductShares:
-    """Tests for FCR-weighted product share computation."""
 
-    def test_single_product_returns_one(self):
-        """A single-product list always returns share of 1.0."""
-        fao = pd.DataFrame(columns=["country", "product", "production_tonnes"])
-        result = compute_product_shares(["meat-pig"], "USA", fao, {})
-        assert result == {"meat-pig": 1.0}
+def _get_share(result: pd.DataFrame, country: str, product: str) -> float:
+    """Extract a single product_share from _compute_all_product_shares output."""
+    row = result[(result["ISO3"] == country) & (result["product"] == product)]
+    assert len(row) == 1, f"Expected 1 row for {country}/{product}, got {len(row)}"
+    return float(row["product_share"].iloc[0])
 
-    def test_no_fcr_data_gives_equal_shares(self):
-        """Fallback to equal split when no FCR data for country."""
-        fao = pd.DataFrame(columns=["country", "product", "production_tonnes"])
-        result = compute_product_shares(["dairy", "meat-cattle"], "USA", fao, {})
-        assert result["dairy"] == pytest.approx(0.5)
-        assert result["meat-cattle"] == pytest.approx(0.5)
 
-    def test_no_production_gives_equal_shares(self):
-        """Fallback to equal split when country has no FAO production."""
-        fao = pd.DataFrame(
-            {"country": ["CAN"], "product": ["dairy"], "production_tonnes": [100]}
+class TestComputeAllProductShares:
+    """Tests for vectorized FCR-weighted product share computation."""
+
+    def test_gleam3_based_shares(self):
+        """Shares use GLEAM3 production * FCR when GLEAM3 data is available."""
+        systems = {("Cattle", "Grassland"): ["dairy", "meat-cattle"]}
+        gleam3_prod = pd.DataFrame(
+            {
+                "ISO3": ["USA", "USA"],
+                "Animal": ["Cattle", "Cattle"],
+                "LPS": ["Grassland", "Grassland"],
+                "Item": ["Milk", "Meat"],
+                "Element": ["Weight", "CarcassWeight"],
+                "Total": [5000.0, 1000.0],  # tonnes
+            }
         )
-        result = compute_product_shares(
-            ["dairy", "meat-cattle"], "USA", fao, {("dairy", "USA"): 10.0}
-        )
-        assert result["dairy"] == pytest.approx(0.5)
-        assert result["meat-cattle"] == pytest.approx(0.5)
+        fcr_lookup = {("dairy", "USA"): 10.0, ("meat-cattle", "USA"): 250.0}
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+        }
 
-    def test_fcr_weighted_shares(self):
-        """Shares are proportional to production * FCR."""
+        result = _compute_all_product_shares(
+            systems, ["USA"], gleam3_prod, _EMPTY_FAO, fcr_lookup, item_to_product
+        )
+        # dairy: 5000 * 10 = 50000; cattle: 1000 * 250 = 250000
+        assert _get_share(result, "USA", "dairy") == pytest.approx(50000 / 300000)
+        assert _get_share(result, "USA", "meat-cattle") == pytest.approx(
+            250000 / 300000
+        )
+
+    def test_faostat_fallback_when_no_gleam3(self):
+        """Falls back to FAOSTAT production * FCR when GLEAM3 data is missing."""
+        systems = {("Cattle", "Grassland"): ["dairy", "meat-cattle"]}
         fao = pd.DataFrame(
             {
                 "country": ["USA", "USA"],
                 "product": ["dairy", "meat-cattle"],
-                "production_tonnes": [1000, 500],
+                "production_tonnes": [1000.0, 500.0],
+            }
+        )
+        fcr_lookup = {("dairy", "USA"): 10.0, ("meat-cattle", "USA"): 200.0}
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+        }
+
+        result = _compute_all_product_shares(
+            systems, ["USA"], _EMPTY_GLEAM3_PROD, fao, fcr_lookup, item_to_product
+        )
+        # dairy: 1000 * 10 = 10000; cattle: 500 * 200 = 100000
+        assert _get_share(result, "USA", "dairy") == pytest.approx(10000 / 110000)
+        assert _get_share(result, "USA", "meat-cattle") == pytest.approx(
+            100000 / 110000
+        )
+
+    def test_equal_shares_when_no_data(self):
+        """Falls back to equal shares when neither GLEAM3 nor FAOSTAT has data."""
+        systems = {("Cattle", "Grassland"): ["dairy", "meat-cattle"]}
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+        }
+
+        result = _compute_all_product_shares(
+            systems, ["USA"], _EMPTY_GLEAM3_PROD, _EMPTY_FAO, {}, item_to_product
+        )
+        assert _get_share(result, "USA", "dairy") == pytest.approx(0.5)
+        assert _get_share(result, "USA", "meat-cattle") == pytest.approx(0.5)
+
+    def test_shares_sum_to_one_per_group(self):
+        """Shares always sum to 1.0 per (Animal, LPS, country) group."""
+        systems = {
+            ("Cattle", "Grassland"): ["dairy", "meat-cattle"],
+            ("Chicken", "Backyard"): ["eggs", "meat-chicken"],
+        }
+        gleam3_prod = pd.DataFrame(
+            {
+                "ISO3": ["USA", "USA", "BRA", "BRA"],
+                "Animal": ["Cattle", "Cattle", "Cattle", "Cattle"],
+                "LPS": ["Grassland"] * 4,
+                "Item": ["Milk", "Meat", "Milk", "Meat"],
+                "Element": ["Weight", "CarcassWeight", "Weight", "CarcassWeight"],
+                "Total": [3000.0, 800.0, 5000.0, 1200.0],
             }
         )
         fcr_lookup = {
             ("dairy", "USA"): 10.0,
-            ("meat-cattle", "USA"): 200.0,
+            ("meat-cattle", "USA"): 250.0,
+            ("dairy", "BRA"): 10.0,
+            ("meat-cattle", "BRA"): 250.0,
+            ("eggs", "USA"): 30.0,
+            ("meat-chicken", "USA"): 50.0,
+            ("eggs", "BRA"): 30.0,
+            ("meat-chicken", "BRA"): 50.0,
         }
-        result = compute_product_shares(
-            ["dairy", "meat-cattle"], "USA", fao, fcr_lookup
-        )
-        # dairy: 1000 * 10 = 10000; cattle: 500 * 200 = 100000
-        assert result["dairy"] == pytest.approx(10000 / 110000)
-        assert result["meat-cattle"] == pytest.approx(100000 / 110000)
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+            ("Chicken", "Eggs"): "eggs",
+            ("Chicken", "Meat"): "meat-chicken",
+        }
 
-    def test_shares_sum_to_one(self):
-        """Shares always sum to 1.0."""
-        fao = pd.DataFrame(
+        result = _compute_all_product_shares(
+            systems,
+            ["USA", "BRA"],
+            gleam3_prod,
+            _EMPTY_FAO,
+            fcr_lookup,
+            item_to_product,
+        )
+        for (animal, lps), _ in systems.items():
+            for country in ["USA", "BRA"]:
+                group = result[
+                    (result["Animal"] == animal)
+                    & (result["LPS"] == lps)
+                    & (result["ISO3"] == country)
+                ]
+                assert group["product_share"].sum() == pytest.approx(
+                    1.0
+                ), f"Shares don't sum to 1.0 for {animal}/{lps}/{country}"
+
+    def test_multiple_countries(self):
+        """Each country gets independent shares based on its own production."""
+        systems = {("Cattle", "Grassland"): ["dairy", "meat-cattle"]}
+        gleam3_prod = pd.DataFrame(
             {
-                "country": ["USA", "USA", "USA"],
-                "product": ["dairy", "dairy-buffalo", "meat-cattle"],
-                "production_tonnes": [800, 200, 300],
+                "ISO3": ["USA", "USA", "IND", "IND"],
+                "Animal": ["Cattle"] * 4,
+                "LPS": ["Grassland"] * 4,
+                "Item": ["Milk", "Meat", "Milk", "Meat"],
+                "Element": ["Weight", "CarcassWeight", "Weight", "CarcassWeight"],
+                # USA: mostly meat; IND: mostly milk
+                "Total": [100.0, 5000.0, 8000.0, 100.0],
             }
         )
         fcr_lookup = {
-            ("dairy", "USA"): 12.0,
-            ("dairy-buffalo", "USA"): 12.0,
+            ("dairy", "USA"): 10.0,
             ("meat-cattle", "USA"): 250.0,
+            ("dairy", "IND"): 10.0,
+            ("meat-cattle", "IND"): 250.0,
         }
-        result = compute_product_shares(
-            ["dairy", "dairy-buffalo", "meat-cattle"], "USA", fao, fcr_lookup
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+        }
+
+        result = _compute_all_product_shares(
+            systems,
+            ["USA", "IND"],
+            gleam3_prod,
+            _EMPTY_FAO,
+            fcr_lookup,
+            item_to_product,
         )
-        assert sum(result.values()) == pytest.approx(1.0)
+        # USA: meat-heavy → meat-cattle share should dominate
+        assert _get_share(result, "USA", "meat-cattle") > 0.9
+        # IND: milk-heavy → dairy share should dominate
+        assert _get_share(result, "IND", "dairy") > 0.7
+
+    def test_output_columns(self):
+        """Output has exactly the expected columns."""
+        systems = {("Cattle", "Grassland"): ["dairy", "meat-cattle"]}
+        item_to_product = {
+            ("Cattle", "Milk"): "dairy",
+            ("Cattle", "Meat"): "meat-cattle",
+        }
+
+        result = _compute_all_product_shares(
+            systems, ["USA"], _EMPTY_GLEAM3_PROD, _EMPTY_FAO, {}, item_to_product
+        )
+        assert set(result.columns) == {
+            "Animal",
+            "LPS",
+            "ISO3",
+            "product",
+            "product_share",
+        }
+        assert not result["product_share"].isna().any()
 
 
 # ---------------------------------------------------------------------------
