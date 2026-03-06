@@ -27,7 +27,7 @@ from workflow.scripts.faostat_bulk import (
     FBS_COUNTRY_FALLBACKS,
     add_iso3_column,
     filter_bulk,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -52,11 +52,11 @@ def main():
 
     logger.info("Found %d unique FBS item codes to fetch", len(unique_item_codes))
 
-    # Load bulk CSV
-    logger.info("Loading FAOSTAT FBS bulk CSV")
-    bulk = load_bulk_csv(fbs_csv)
+    # Load bulk data
+    logger.info("Loading FAOSTAT FBS bulk data")
+    bulk = load_bulk(fbs_csv)
 
-    elem_code = str(snakemake.params.fbs_element_code)
+    elem_code = int(snakemake.params.fbs_element_code)
 
     # Add ISO3 column
     m49_to_iso3 = load_m49_to_iso3(m49_codes)
@@ -78,7 +78,7 @@ def main():
     df = filter_bulk(
         bulk,
         element_codes=[elem_code],
-        item_codes=[str(c) for c in unique_item_codes],
+        item_codes=unique_item_codes,
         years=[reference_year],
         iso3_codes=filter_countries,
     )
@@ -88,7 +88,7 @@ def main():
 
     df["country"] = df["iso3"].astype(str).str.upper()
     df["supply_kg_per_capita_year"] = df["Value"].fillna(0.0)
-    df["item_code"] = pd.to_numeric(df["Item Code"], errors="coerce")
+    df["item_code"] = df["Item Code"]
     df = df.dropna(subset=["item_code"])
     df["item_code"] = df["item_code"].astype(int)
     df["item_name"] = df["Item"].astype(str)

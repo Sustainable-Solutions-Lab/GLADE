@@ -13,7 +13,7 @@ and crop residue processing.
 rule prepare_faostat_crop_production:
     input:
         mapping="data/curated/faostat_crop_item_map.csv",
-        qcl_csv="data/downloads/faostat/QCL.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
@@ -334,7 +334,7 @@ def residue_yield_inputs(_wildcards):
 rule prepare_biofuel_baseline:
     input:
         biofuel_crop_map="data/curated/faostat_biofuel_crop_map.csv",
-        fbs_csv="data/downloads/faostat/FBS.csv",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
         moisture_content="data/curated/crop_moisture_content.csv",
         m49_codes="data/curated/M49-codes.csv",
     params:
@@ -359,7 +359,7 @@ rule prepare_biofuel_baseline:
 rule prepare_fiber_baseline:
     input:
         fiber_demand_map="data/curated/faostat_fiber_demand_map.csv",
-        qcl_csv="data/downloads/faostat/QCL.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],

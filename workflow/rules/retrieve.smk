@@ -273,18 +273,16 @@ rule extract_faostat_qcl:
     input:
         "data/downloads/faostat/QCL.zip",
     output:
-        "data/downloads/faostat/QCL.csv",
+        "data/downloads/faostat/QCL.parquet",
     resources:
-        runtime="5m",
-        mem_mb=200,
+        runtime="2m",
+        mem_mb=2500,
     log:
         "<logs>/shared/extract_faostat_qcl.log",
     benchmark:
         "<benchmarks>/shared/extract_faostat_qcl.tsv"
-    shell:
-        r"""
-        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
-        """
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
 
 
 rule download_faostat_fbs:
@@ -310,18 +308,16 @@ rule extract_faostat_fbs:
     input:
         "data/downloads/faostat/FBS.zip",
     output:
-        "data/downloads/faostat/FBS.csv",
+        "data/downloads/faostat/FBS.parquet",
     resources:
-        runtime="5m",
-        mem_mb=200,
+        runtime="2m",
+        mem_mb=3000,
     log:
         "<logs>/shared/extract_faostat_fbs.log",
     benchmark:
         "<benchmarks>/shared/extract_faostat_fbs.tsv"
-    shell:
-        r"""
-        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
-        """
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
 
 
 rule download_faostat_gt:
@@ -347,18 +343,16 @@ rule extract_faostat_gt:
     input:
         "data/downloads/faostat/GT.zip",
     output:
-        "data/downloads/faostat/GT.csv",
+        "data/downloads/faostat/GT.parquet",
     resources:
-        runtime="5m",
-        mem_mb=200,
+        runtime="2m",
+        mem_mb=1500,
     log:
         "<logs>/shared/extract_faostat_gt.log",
     benchmark:
         "<benchmarks>/shared/extract_faostat_gt.tsv"
-    shell:
-        r"""
-        unzip -p "{input}" "*.csv" > "{output}" 2> {log}
-        """
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
 
 
 rule download_unsd_sdg:

@@ -40,6 +40,7 @@ libgdal-netcdf = ">=3.10.3,<4"       # GDAL netCDF driver plugin
 # File format support
 openpyxl = ">=3.1.5,<4"              # Excel (.xlsx) file support
 xlrd = ">=2.0.2,<3"                  # Excel (.xls) file support
+pyarrow = ">=23.0.0,<24"             # Parquet file support
 
 # Data retrieval
 requests = ">=2.32.5,<3"             # HTTP requests for downloading data

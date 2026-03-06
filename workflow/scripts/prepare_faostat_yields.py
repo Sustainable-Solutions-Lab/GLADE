@@ -14,10 +14,7 @@ import pandas as pd
 import yaml
 
 from workflow.scripts.animal_utils import load_faostat_qcl
-from workflow.scripts.faostat_bulk import (
-    filter_bulk,
-    int_str,
-)
+from workflow.scripts.faostat_bulk import filter_bulk
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -25,20 +22,20 @@ logger = logging.getLogger(__name__)
 
 
 def map_items_to_codes(
-    item_names: list[str], bulk_item_map: dict[str, str]
-) -> dict[str, str]:
-    """Map item names to FAOSTAT item codes using bulk CSV metadata."""
+    item_names: list[str], bulk_item_map: dict[str, int]
+) -> dict[str, int]:
+    """Map item names to FAOSTAT item codes using bulk data metadata."""
     item_name_to_code = {}
 
     for name in item_names:
         # Try exact match first
         if name in bulk_item_map:
-            item_name_to_code[name] = str(bulk_item_map[name])
+            item_name_to_code[name] = bulk_item_map[name]
         else:
             # Try case-insensitive match
             for k, v in bulk_item_map.items():
                 if str(k).lower() == name.lower():
-                    item_name_to_code[name] = str(v)
+                    item_name_to_code[name] = v
                     break
             else:
                 logger.warning("Item %r not found in FAOSTAT bulk data", name)
@@ -63,8 +60,7 @@ def calculate_yields(
     if "area_code" in df.columns:
         df = df[pd.to_numeric(df["area_code"], errors="coerce") < aggregate_limit]
 
-    # Normalise element codes once upfront
-    df["element_code"] = df["element_code"].map(int_str)
+    # Element codes are already integers from Parquet
 
     records = []
 
@@ -141,9 +137,9 @@ if __name__ == "__main__":
         for y in range(averaging_period["start_year"], averaging_period["end_year"] + 1)
     ]
     element_codes = cost_params["element_codes"]
-    # Convert all codes to strings to ensure matching works
+    # Convert all codes to int to ensure matching works
     for key in element_codes:
-        element_codes[key] = [int_str(c) for c in element_codes[key]]
+        element_codes[key] = [int(c) for c in element_codes[key]]
 
     aggregate_limit = int(cost_params["aggregate_area_code_limit"])
 

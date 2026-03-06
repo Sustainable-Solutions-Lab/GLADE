@@ -14,8 +14,7 @@ from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
     get_item_map,
-    int_str,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -56,12 +55,12 @@ def main() -> None:
             "All FAOSTAT item mappings are empty after filtering missing entries"
         )
 
-    # Load bulk CSV and extract metadata
-    logger.info("Loading FAOSTAT QCL bulk CSV")
-    bulk = load_bulk_csv(qcl_csv)
+    # Load bulk data and extract metadata
+    logger.info("Loading FAOSTAT QCL bulk data")
+    bulk = load_bulk(qcl_csv)
     item_map = get_item_map(bulk)
 
-    element_code = str(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
+    element_code = int(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
     logger.info("Using FAOSTAT element 'Production' (code %s)", element_code)
 
     missing_items = sorted(
@@ -72,7 +71,7 @@ def main() -> None:
             "FAOSTAT item(s) missing from parameter table: " + ", ".join(missing_items)
         )
 
-    mapping_df["item_code"] = mapping_df["faostat_item"].map(item_map).astype(str)
+    mapping_df["item_code"] = mapping_df["faostat_item"].map(item_map)
 
     # Build exploded mapping: one row per (item_code, crop) with equal share
     crop_mapping = mapping_df[["item_code", "crop"]].drop_duplicates()
@@ -87,7 +86,7 @@ def main() -> None:
     df = filter_bulk(
         bulk,
         element_codes=[element_code],
-        item_codes=sorted(crop_mapping["item_code"].unique()),
+        item_codes=sorted(crop_mapping["item_code"].dropna().astype(int).unique()),
         years=[production_year],
         iso3_codes=countries,
     )
@@ -117,7 +116,7 @@ def main() -> None:
         )
 
     # Merge with crop mapping and compute per-crop production shares
-    df = df.assign(item_code=df["Item Code"].map(int_str))
+    df = df.assign(item_code=df["Item Code"])
     merged = df.merge(crop_mapping, on="item_code", how="inner")
     merged = merged[np.isfinite(merged["Value"])]
     merged["production_tonnes"] = merged["Value"] * merged["share"]

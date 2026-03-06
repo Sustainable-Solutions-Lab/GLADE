@@ -96,7 +96,7 @@ def load_fao_production(
         item_codes = []
         for item_name in fao_items:
             if item_name in item_map:
-                item_codes.append(str(item_map[item_name]))
+                item_codes.append(item_map[item_name])
             else:
                 logger.warning(
                     "FAOSTAT item '%s' not found for product '%s'",
@@ -110,7 +110,7 @@ def load_fao_production(
 
         df = filter_bulk(
             bulk,
-            element_codes=["5510"],
+            element_codes=[5510],
             item_codes=item_codes,
             years=[year],
             iso3_codes=countries,

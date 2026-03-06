@@ -42,7 +42,7 @@ rule prepare_faostat_fbs_items:
     """
     input:
         food_item_map="data/curated/faostat_food_item_map.csv",
-        fbs_csv="data/downloads/faostat/FBS.csv",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
@@ -70,7 +70,7 @@ rule prepare_faostat_gdd_supplements:
     fill gaps in the Global Dietary Database (GDD).
     """
     input:
-        fbs_csv="data/downloads/faostat/FBS.csv",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
@@ -120,7 +120,7 @@ rule prepare_food_loss_waste:
         animal_production="<processing>/{name}/faostat_animal_production.csv",
         faostat_gdd_supplements="<processing>/{name}/faostat_gdd_supplements.csv",
         population="<processing>/{name}/population.csv",
-        fbs_csv="data/downloads/faostat/FBS.csv",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
     params:
         countries=config["countries"],

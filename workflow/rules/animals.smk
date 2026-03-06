@@ -12,7 +12,7 @@ and manure emissions calculations.
 
 rule prepare_faostat_animal_production:
     input:
-        qcl_csv="data/downloads/faostat/QCL.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         production_year=config["baseline_year"],
@@ -38,7 +38,7 @@ rule prepare_faostat_animal_production:
 rule prepare_faostat_yields:
     input:
         mapping="data/curated/faostat_animal_yield_mapping.yaml",
-        qcl_csv="data/downloads/faostat/QCL.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
     params:
         cost_params=config["animal_costs"]["faostat"],
         averaging_period=config["costs"]["averaging_period"],
@@ -181,7 +181,7 @@ rule prepare_feed_baseline:
         gleam3_production="data/bundled/gleam3/production.csv",
         gleam3_feed_fractions="<processing>/{name}/gleam3_feed_fractions.csv",
         me_requirements="<processing>/{name}/gleam3_me_requirements.csv",
-        qcl_csv="data/downloads/faostat/QCL.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",

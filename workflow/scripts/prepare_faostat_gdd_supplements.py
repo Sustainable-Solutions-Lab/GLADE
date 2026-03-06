@@ -31,7 +31,7 @@ from workflow.scripts.faostat_bulk import (
     FBS_COUNTRY_FALLBACKS,
     add_iso3_column,
     filter_bulk,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -85,11 +85,11 @@ def main():
         poultry_carcass_to_retail,
     )
 
-    # Load bulk CSV
-    logger.info("Loading FAOSTAT FBS bulk CSV")
-    bulk = load_bulk_csv(fbs_csv)
+    # Load bulk data
+    logger.info("Loading FAOSTAT FBS bulk data")
+    bulk = load_bulk(fbs_csv)
 
-    elem_code = str(snakemake.params.fbs_element_code)
+    elem_code = int(snakemake.params.fbs_element_code)
 
     # Collect all item codes
     item_codes = []
@@ -115,7 +115,7 @@ def main():
     df = filter_bulk(
         bulk,
         element_codes=[elem_code],
-        item_codes=[str(c) for c in item_codes],
+        item_codes=item_codes,
         years=[reference_year],
         iso3_codes=filter_countries,
     )
@@ -125,9 +125,7 @@ def main():
 
     df["iso3"] = df["iso3"].astype(str).str.upper()
     df["Value"] = df["Value"].fillna(0.0)
-    df["Item Code"] = (
-        pd.to_numeric(df["Item Code"], errors="coerce").fillna(0).astype(int)
-    )
+    df["Item Code"] = df["Item Code"].fillna(0).astype(int)
 
     results = []
 

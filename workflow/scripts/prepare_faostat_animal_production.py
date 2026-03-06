@@ -20,10 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scripts.animal_utils import load_faostat_qcl
-from workflow.scripts.faostat_bulk import (
-    filter_bulk,
-    int_str,
-)
+from workflow.scripts.faostat_bulk import filter_bulk
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -44,12 +41,12 @@ def main() -> None:
     # Load bulk CSV, extract metadata, and add ISO3 column
     bulk, item_map = load_faostat_qcl(qcl_csv, m49_codes)
 
-    element_code = str(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
+    element_code = int(snakemake.params.qcl_element_code)  # type: ignore[name-defined]
     logger.info("Using FAOSTAT element 'Production' (code %s)", element_code)
 
     # Map FAOSTAT items to codes
-    faostat_to_model: dict[str, str] = {}  # faostat_item_code -> model_product
-    item_codes: list[str] = []
+    faostat_to_model: dict[int, str] = {}  # faostat_item_code -> model_product
+    item_codes: list[int] = []
 
     for model_product, fao_items in faostat_items.items():
         for faostat_item in fao_items:
@@ -61,8 +58,8 @@ def main() -> None:
                 )
                 continue
             item_code = item_map[faostat_item]
-            item_codes.append(str(item_code))
-            faostat_to_model[str(item_code)] = model_product
+            item_codes.append(item_code)
+            faostat_to_model[item_code] = model_product
             logger.info(
                 "Mapped '%s' -> FAOSTAT item '%s' (code %s)",
                 model_product,
@@ -106,11 +103,10 @@ def main() -> None:
 
     # Map rows to model products and aggregate
     df = df.assign(
-        item_code=df["Item Code"].map(int_str),
         country=df["iso3"].astype(str).str.strip(),
-        year=pd.to_numeric(df["Year"], errors="coerce").astype(int),
+        year=df["Year"].astype(int),
     )
-    df["product"] = df["item_code"].map(faostat_to_model)
+    df["product"] = df["Item Code"].map(faostat_to_model)
     df = df[df["product"].notna() & df["Value"].notna() & (df["Value"] >= 0)]
 
     if df.empty:

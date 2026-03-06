@@ -5,7 +5,7 @@
 
 rule prepare_faostat_emissions:
     input:
-        gt_csv="data/downloads/faostat/GT.csv",
+        gt_csv="data/downloads/faostat/GT.parquet",
     output:
         "<processing>/{name}/faostat_emissions.csv",
     params:

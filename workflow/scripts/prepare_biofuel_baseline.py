@@ -34,7 +34,7 @@ import pandas as pd
 from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def main():
     countries = [str(c).upper() for c in snakemake.params.countries]
     reference_year = int(snakemake.params.reference_year)
-    fbs_element_code = str(snakemake.params.fbs_element_code)
+    fbs_element_code = int(snakemake.params.fbs_element_code)
 
     biofuel_map_path = snakemake.input.biofuel_crop_map
     fbs_csv = snakemake.input.fbs_csv
@@ -67,8 +67,8 @@ def main():
     moisture_lookup = moisture_df.set_index("crop")["moisture_fraction"].to_dict()
 
     # Load and filter FBS bulk data
-    logger.info("Loading FAOSTAT FBS bulk CSV")
-    bulk = load_bulk_csv(fbs_csv)
+    logger.info("Loading FAOSTAT FBS bulk data")
+    bulk = load_bulk(fbs_csv)
 
     m49_to_iso3 = load_m49_to_iso3(m49_codes)
     bulk = add_iso3_column(bulk, m49_to_iso3)
@@ -82,7 +82,7 @@ def main():
     df = filter_bulk(
         bulk,
         element_codes=[fbs_element_code],
-        item_codes=[str(c) for c in item_codes],
+        item_codes=item_codes,
         years=[reference_year],
         iso3_codes=countries,
     )
@@ -94,7 +94,7 @@ def main():
 
     df["country"] = df["iso3"].astype(str).str.upper()
     df["value_1000t"] = df["Value"].fillna(0.0)
-    df["item_code"] = pd.to_numeric(df["Item Code"], errors="coerce")
+    df["item_code"] = df["Item Code"]
     df = df.dropna(subset=["item_code"])
     df["item_code"] = df["item_code"].astype(int)
 

@@ -27,7 +27,7 @@ import pandas as pd
 from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -60,8 +60,8 @@ def main():
     )
 
     # Load and filter QCL bulk data
-    logger.info("Loading FAOSTAT QCL bulk CSV")
-    bulk = load_bulk_csv(qcl_csv)
+    logger.info("Loading FAOSTAT QCL bulk data")
+    bulk = load_bulk(qcl_csv)
 
     m49_to_iso3 = load_m49_to_iso3(m49_codes)
     bulk = add_iso3_column(bulk, m49_to_iso3)
@@ -74,8 +74,8 @@ def main():
     )
     df = filter_bulk(
         bulk,
-        element_codes=[str(c) for c in element_codes],
-        item_codes=[str(c) for c in item_codes],
+        element_codes=element_codes,
+        item_codes=item_codes,
         years=[reference_year],
         iso3_codes=countries,
     )
@@ -87,7 +87,7 @@ def main():
 
     df["country"] = df["iso3"].astype(str).str.upper()
     df["value_tonnes"] = df["Value"].fillna(0.0)
-    df["item_code"] = pd.to_numeric(df["Item Code"], errors="coerce")
+    df["item_code"] = df["Item Code"]
     df = df.dropna(subset=["item_code"])
     df["item_code"] = df["item_code"].astype(int)
 

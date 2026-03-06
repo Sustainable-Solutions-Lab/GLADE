@@ -38,7 +38,7 @@ import pycountry
 from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
-    load_bulk_csv,
+    load_bulk,
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
@@ -354,9 +354,9 @@ def fetch_faostat_food_supply(
     """
     logger.info("Reading FAOSTAT food supply data for %d", reference_year)
 
-    bulk = load_bulk_csv(fbs_csv)
+    bulk = load_bulk(fbs_csv)
 
-    elem_code = str(fbs_element_code)
+    elem_code = int(fbs_element_code)
 
     # Add ISO3 column
     m49_to_iso3 = load_m49_to_iso3(m49_csv)
