@@ -76,7 +76,6 @@ USDA Cost and Returns Data
 **Citation**: U.S. Department of Agriculture, Economic Research Service. Commodity Costs and Returns. https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
 
 **Retrieval**: Direct CSV download via ``workflow/scripts/retrieve_usda_costs.py``. The script implements robust retries (5 attempts with backoff) to handle server instability. URLs are listed in ``data/curated/usda_cost_sources.csv``.
-
   * **Manual Fallback**: If automated retrieval fails, download the CSVs from the URLs listed in ``data/curated/usda_cost_sources.csv``.
 
 **Usage**: Bottom-up mechanistic estimates of crop production costs per hectare. Costs are split into:
@@ -117,7 +116,6 @@ USDA Livestock Cost Data
 **Citation**: U.S. Department of Agriculture, Economic Research Service. Milk Cost of Production Estimates / Commodity Costs and Returns (Livestock).
 
 **Retrieval**: Excel download and processing via ``workflow/scripts/retrieve_usda_animal_costs.py``. The script implements robust retries (5 attempts with backoff) to handle intermittent server timeouts. URLs are listed in ``data/curated/usda_animal_cost_sources.csv``.
-
   * **Manual Fallback**: If automated retrieval fails, users can manually download the CSVs from the URLs listed in ``data/curated/usda_animal_cost_sources.csv`` and place them in the processing directory, or simply re-run the workflow as the server often recovers.
 
 **Usage**: Production cost estimates per unit of output. Costs are converted from per-head-per-year or per-cwt to per-tonne-product for model integration.
@@ -448,7 +446,6 @@ ISRIC SoilGrids -- Global Soil Organic Carbon Stock
   * Temporal: Based on data from April 1905 to July 2016
 
 **Access**:
-
   * Website: https://www.isric.org/explore/soilgrids
   * Data catalogue: https://data.isric.org/geonetwork/srv/api/records/713396f4-1687-11ea-a7c0-a0481ca9e724
   * FAQ: https://docs.isric.org/globaldata/soilgrids/SoilGrids_faqs.html
@@ -781,33 +778,23 @@ FAO Nutrient Conversion Table for SUA (2024)
 
 **Usage**: Contains data on edible portion of foods. ``workflow/scripts/prepare_fao_edible_portion.py`` reads sheet ``03`` to export edible portion coefficients for configured crops into ``processing/{name}/fao_edible_portion.csv``. Moisture fractions required for fresh-mass scaling live in ``data/curated/crop_moisture_content.csv`` (derived primarily from the GAEZ v5 Module VII documentation with a few documented assumptions) and are joined inside ``workflow/scripts/build_model.py``. Note that for certain crops (grains: rice, barley, oat, buckwheat; sugar crops: sugarcane, sugarbeet; oil crops: oil-palm, rapeseed), the script overrides FAO's coefficients to 1.0 so that downstream processing pathways manage the losses explicitly.
 
-Mock and Placeholder Data
---------------------------
-
-Several CSV files in ``data/`` currently contain **mock placeholder values** and must be replaced with sourced data before publication-quality analysis:
-
-data/feed_conversion.csv
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Status**: Mock data
-
-**Description**: Crop nutrient content for animal feed
-
-data/feed_to_animal_products.csv
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Status**: Mock data
-
-**Description**: Feed-to-product conversion ratios for livestock
-
 Data License Summary
 --------------------
 
 Most datasets used in this project require attribution. Some disallow redistribution, meaning that ``food-opt`` cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
 
-* **CC0 1.0 (Public Domain)** (USDA FoodData Central, IFA FUBC): Public domain, no restrictions; attribution requested
-* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0, SoilGrids, Cook-Patton, LUIcube, ESA Biomass CCI, FADN/LAMASUS): Requires attribution
+**Open licenses (attribution required, redistribution allowed)**:
+
+* **CC0 1.0 / Public domain** (USDA FoodData Central, IFA FUBC, BLS CPI-U): No restrictions; attribution requested
+* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
-* **Academic use only** (GADM, GBD, GDD): Commercial use requires permission or paid license
-* **Public domain** (BLS CPI-U): No restrictions
+* **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
+* **Open access** (Huang et al. irrigation, UNSD SDG, IMF WEO): Free to use with attribution/citation
 * **GPL-3.0** (DIA Health Inputs): Copyleft; derived works must use same license
+
+**Restrictive licenses (non-commercial use and/or no redistribution)**:
+
+* **Non-commercial, no redistribution** (IHME GBD mortality, IHME GBD relative risks, IHME GBD dietary exposure, GDD): Free for non-commercial research; data may not be redistributed or used commercially without permission
+* **Non-commercial with attribution** (GADM, FADN): Free for academic/non-commercial use; GADM prohibits redistribution, FADN requires EU attribution
+* **FAO terms** (GLEAM 3.0 Supplement, FAO Nutrient Conversion): Non-commercial reuse with FAO acknowledgement; commercial use requires prior permission
+* **Custom terms** (ESA Biomass CCI, Copernicus Land Cover, ISIMIP/LPJmL, Water Footprint Network): Various provider-specific terms; see individual entries above
