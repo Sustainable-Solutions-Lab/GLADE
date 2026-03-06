@@ -299,7 +299,7 @@ GLEAM 3.0 Supplementary Tables
 
 **Access**: https://www.fao.org/fileadmin/user_upload/gleam/docs/GLEAM_3.0_Supplement_S1.xlsx
 
-**License**: FAO terms -- material may be copied, downloaded, and printed for private study, research and teaching purposes, or for use in non-commercial products or services, provided that appropriate acknowledgement of FAO as the source and copyright holder is given.
+**License**: FAO terms (`Terms of Use <https://www.fao.org/contact-us/terms/db-terms-of-use/en/>`_)
 
 **Citation**: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
 
@@ -312,23 +312,30 @@ GLEAM 3.0 Feed Intake and Production Data
 
 **Provider**: FAO (Food and Agriculture Organization of the United Nations)
 
-**Description**: Country-level feed intake and animal production data from GLEAM version 3.0. Feed intakes are reported by country, species, production system, and aggregate feed category (kg DM/year). Production data covers meat (carcass weight), milk, and eggs (kg/year) per country and system.
+**Description**: Country-level feed intake and animal production data from GLEAM version 3.0, together with supporting tables from the GLEAM documentation. Feed intakes are reported by country, species, production system, and aggregate feed category (kg DM/year). Production data covers meat (carcass weight), milk, and eggs (kg/year) per country and system. The documentation tables provide feed composition, yield fractions, and manure management parameters.
 
-**Version**: GLEAM 3.0 outputs; two CSV files bundled in ``data/bundled/``
+**Version**: GLEAM 3.0 outputs; bundled in ``data/bundled/gleam3/``
 
 **Coverage**:
   * Spatial: 229 countries, 6 animal species (cattle, buffalo, sheep, goats, chicken, pigs), 8 production systems, 8 feed categories
   * Temporal: Reference year 2015
 
-**Access**: Obtained directly from FAO upon request
+**Access**: Intake and production data obtained directly from FAO upon request. Documentation tables available from the `GLEAM resources page <https://www.fao.org/gleam/resources/en/>`_.
 
-**License**: Creative Commons Attribution 4.0 International (CC BY 4.0), with additional FAO data terms requiring acknowledgement of FAO as source.
+**License**: CC BY 4.0 + FAO database terms (`Terms of Use <https://www.fao.org/contact-us/terms/db-terms-of-use/en/>`_)
 
 **Citation**: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/
 
-**Retrieval**: Bundled with the repository:
-  * ``data/bundled/GLEAM3_intakes.csv``: Feed intake by country, species, production system, and feed category
-  * ``data/bundled/GLEAM3_production.csv``: Animal production by country, species, production system, and product type
+**Retrieval**: Bundled with the repository under ``data/bundled/gleam3/``:
+  * ``intakes.csv``: Feed intake by country, species, production system, and feed category
+  * ``production.csv``: Animal production by country, species, production system, and product type
+  * ``feed_items_categories.xlsx``: Authoritative feed item categorisation used for feed fraction computation
+  * ``livestock_emissions.csv``: Livestock GHG emissions by country and species (used for validation)
+  * ``manure_management_systems_fraction.csv``, ``manure_management_systems_type.csv``: Manure management system data
+  * ``ruminants_feed_yield_fractions.csv``, ``ruminants_feed_codes.csv``: Ruminant feed composition
+  * ``monogastrics_feed_yeild_fractions.csv``, ``monogastrics_feed_codes.csv``: Monogastric feed composition
+
+Additionally, model-specific feed category mappings live in ``data/curated/gleam/feed_mapping.csv``.
 
 **Usage**: Provides the feed baseline for the livestock module. Country-level intakes are mapped to model feed categories via ``compute_gleam3_feed_fractions.py``, split between co-products using FCR-weighted shares, and scaled to the configured reference year. Consumed by ``prepare_feed_baseline.py``. See :ref:`gleam-feed-baseline` for details.
 
