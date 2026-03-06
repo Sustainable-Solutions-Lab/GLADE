@@ -150,6 +150,7 @@ properties:
       - grassland_yield_multiplier
       - feed_slack_cost_factor
       - production_stability
+      - animal_growth_cap
     additionalProperties: false
     properties:
       use_actual_yields:
@@ -277,6 +278,23 @@ properties:
                 type: number
                 exclusiveMinimum: 0
                 description: "Mt DM floor (scaled to Mha-eq internally). Hard mode: minimum animal baseline to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+      animal_growth_cap:
+        type: object
+        required: [enabled, max_relative_increase, min_baseline]
+        additionalProperties: false
+        description: "Cap animal production growth to prevent unrealistic spatial reallocation. Applies a hard upper bound per animal production link."
+        properties:
+          enabled:
+            type: boolean
+            description: "Whether to apply animal growth caps"
+          max_relative_increase:
+            type: number
+            minimum: 0
+            description: "Maximum relative increase from baseline (e.g., 0.1 = +10%)"
+          min_baseline:
+            type: number
+            exclusiveMinimum: 0
+            description: "Mt DM floor; ignore near-zero baselines below this threshold"
 
   food_incentives:
     type: object

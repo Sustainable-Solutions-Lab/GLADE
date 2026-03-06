@@ -688,3 +688,63 @@ def _add_animal_quadratic_penalty(
         quadratic_cost,
         deviation_type,
     )
+
+
+# ─── Animal growth caps ────────────────────────────────────────────────────
+
+
+def add_animal_growth_cap_constraints(
+    n: pypsa.Network,
+    growth_cap_cfg: dict,
+) -> None:
+    """Add per-link upper bounds on animal production growth.
+
+    Constrains each animal production link to at most
+    ``(1 + max_relative_increase) * baseline_feed_use_mt_dm``, preventing
+    unrealistic spatial reallocation of livestock production.
+
+    Only links with baselines above ``min_baseline`` are constrained; links
+    with near-zero baselines are left uncapped.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    growth_cap_cfg : dict
+        Configuration with ``enabled``, ``max_relative_increase``, and
+        ``min_baseline``.
+    """
+    if not growth_cap_cfg["enabled"]:
+        return
+
+    m = n.model
+    link_p = m.variables["Link-p"].sel(snapshot="now")
+    links_df = n.links.static
+
+    result = _animal_feed_and_baselines(
+        link_p, links_df, growth_cap_cfg["min_baseline"]
+    )
+    if result is None:
+        return
+
+    link_names, feed_use, baselines = result
+    cap = growth_cap_cfg["max_relative_increase"]
+    upper_bounds = (1.0 + cap) * baselines
+
+    m.add_constraints(
+        feed_use <= upper_bounds,
+        name="GlobalConstraint-animal_growth_cap",
+    )
+
+    n.global_constraints.add(
+        [f"animal_growth_cap_{name}" for name in link_names],
+        sense="<=",
+        constant=upper_bounds.values,
+        type="animal_growth_cap",
+    )
+
+    logger.info(
+        "Added %d per-link animal growth cap constraints (max +%.0f%%)",
+        len(link_names),
+        cap * 100,
+    )

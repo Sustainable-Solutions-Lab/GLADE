@@ -28,6 +28,7 @@ from workflow.scripts.solve_model.health import (
     evaluate_health_posthoc,
 )
 from workflow.scripts.solve_model.production_stability import (
+    add_animal_growth_cap_constraints,
     add_production_stability_constraints,
 )
 
@@ -1119,6 +1120,10 @@ def _run_solve() -> None:
             snakemake.config["validation"]["slack_marginal_cost"]
         )
         add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
+
+    # Add animal growth cap constraints (independent of production stability)
+    animal_growth_cap_cfg = snakemake.params.animal_growth_cap
+    add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
 
     # Add biofuel/industrial demand constraints
     if bool(snakemake.params.enforce_biofuel_baseline):

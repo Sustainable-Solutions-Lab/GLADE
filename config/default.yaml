@@ -94,6 +94,10 @@ validation:
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline: 0.00001  # Mt DM floor (scaled to Mha-eq internally). Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
+  animal_growth_cap:
+    enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
+    max_relative_increase: 0.1  # Maximum relative increase from baseline (0.1 = +10%)
+    min_baseline: 0.00001  # Mt DM floor; ignore near-zero baselines below this threshold
 
 # --- section: food_incentives ---
 food_incentives:

@@ -315,6 +315,9 @@ rule solve_model:
         production_stability=lambda w: get_effective_config(w.scenario)["validation"][
             "production_stability"
         ],
+        animal_growth_cap=lambda w: get_effective_config(w.scenario)["validation"][
+            "animal_growth_cap"
+        ],
         food_utility_piecewise=lambda w: get_effective_config(w.scenario)[
             "food_utility_piecewise"
         ],
