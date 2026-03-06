@@ -81,7 +81,7 @@ tools/smk -e gurobi -j4 --configfile config/validation.yaml
 - `tools/` – Helper wrappers such as `tools/smk` for consistent CLI entry points.
 - `results/` – Generated artifacts grouped by configuration (never hand-edit).
 
-Additional contribution guidance can be found in the documentation; dataset provenance is tracked in `data/DATASETS.md`.
+Additional contribution guidance can be found in the documentation; dataset provenance is tracked in `docs/data_sources.rst`.
 
 ## License
 

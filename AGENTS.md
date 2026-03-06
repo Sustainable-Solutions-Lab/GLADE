@@ -272,7 +272,7 @@ pixi run -e dev pytest -v         # verbose output
 - Configuration lives under `config/` (e.g., `config.yaml`).
 - Input data under `data/`; outputs under `results/` (structured by config name).
 - Don’t commit large data or generated results; `.gitignore` and the workflow manage these.
-- If you are working on incorporating a new dataset, check that the dataset is listed in data/DATASETS.md.
+- If you are working on incorporating a new dataset, check that the dataset is documented in `docs/data_sources.rst`.
 
 ### Git guidelines
 
