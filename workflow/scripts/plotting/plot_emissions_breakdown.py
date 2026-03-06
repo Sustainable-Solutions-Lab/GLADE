@@ -24,12 +24,18 @@ logger = logging.getLogger(__name__)
 
 
 def load_emissions_csv(path: Path) -> dict[str, dict[str, float]]:
-    """Load emissions CSV (gas, source, mtco2eq) into nested dict."""
+    """Load emissions CSV (gas, source, *co2eq) into nested dict."""
     df = pd.read_csv(path, comment="#")
+    value_cols = [c for c in df.columns if c.endswith("co2eq")]
+    if len(value_cols) != 1:
+        raise ValueError(
+            f"Expected exactly one *co2eq column in {path}, got {value_cols}"
+        )
+    value_col = value_cols[0]
     result: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for _, row in df.iterrows():
         gas = str(row["gas"]).upper()
-        result[gas][row["source"]] += float(row["mtco2eq"])
+        result[gas][row["source"]] += float(row[value_col])
     return {gas: dict(srcs) for gas, srcs in result.items()}
 
 
