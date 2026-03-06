@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: FAO 2023
+# SPDX-License-Identifier: CC-BY-4.0
+#
 # Source: FAO: "Pathways towards lower emissions", 2023, https://doi.org/10.4060/cc9029en
 gas,source,emissions_mtco2eq
 CH4,Enteric fermentation,2900

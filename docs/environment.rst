@@ -246,7 +246,7 @@ Data Sources
 
 * **IPCC values**: ``data/curated/ipcc_enteric_methane_yields.csv`` maps feed categories to MY values from IPCC (2019) Table 10.12
 * **Feed properties**: ``processing/{name}/ruminant_feed_categories.csv`` generated from GLEAM 3.0 [2]_ Supplement S1, Table S.3.3 (Ruminant Nutrition Parameters)
-* **Feed mapping**: ``data/curated/gleam_feed_mapping.csv`` links model feed items to GLEAM feed categories
+* **Feed mapping**: ``data/curated/gleam/feed_mapping.csv`` links model feed items to GLEAM feed categories
 
 Implementation
 ^^^^^^^^^^^^^^
@@ -362,14 +362,14 @@ The weighted MCF is calculated as:
 
    \text{MCF}_\text{weighted} = \sum_{i} f_i \times \text{MCF}_i
 
-where **f**\ :sub:`i` is the fraction of manure managed in system *i* (from ``data/curated/gleam_tables/manure_management_systems_fraction.csv``).
+where **f**\ :sub:`i` is the fraction of manure managed in system *i* (from ``data/bundled/gleam3/manure_management_systems_fraction.csv``).
 
 Data Sources
 ^^^^^^^^^^^^
 
 * **B₀ values**: ``data/curated/ipcc_manure_methane_producing_capacity.csv`` (IPCC 2019 Table 10.16)
 * **MCF values**: ``data/curated/ipcc_manure_methane_conversion_factors.csv`` (IPCC 2019 Table 10.17)
-* **MMS distributions**: ``data/curated/gleam_tables/manure_management_systems_fraction.csv`` (GLEAM 3.0 Supplement S1)
+* **MMS distributions**: ``data/bundled/gleam3/manure_management_systems_fraction.csv`` (GLEAM 3.0 Supplement S1)
 * **Ash content**: ``data/curated/feed_ash_content.csv`` (from feedtables.com, matched to model feed entities)
 * **Feed properties**: ``processing/{name}/ruminant_feed_categories.csv`` and ``processing/{name}/monogastric_feed_categories.csv`` (digestibility from GLEAM 3.0)
 
@@ -544,7 +544,7 @@ Manure N₂O emission factors are preprocessed in ``workflow/scripts/calculate_m
 
 1. For each (product, feed_category) combination, calculate MMS-weighted emission factors:
 
-   * Load MMS distributions from GLEAM (``data/curated/gleam_tables/manure_management_systems_fraction.csv``)
+   * Load MMS distributions from GLEAM (``data/bundled/gleam3/manure_management_systems_fraction.csv``)
    * Map feed categories to Livestock Production Systems (LPS):
 
      - All ruminant categories → Mixed LPS (moderate pasture fraction)

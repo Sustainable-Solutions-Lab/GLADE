@@ -304,8 +304,8 @@ rule build_crop_residue_yields:
             else []
         ),
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
-        ruminant_feed_table="data/curated/gleam_tables/ruminants_feed_yield_fractions.csv",
-        monogastric_feed_table="data/curated/gleam_tables/monogastrics_feed_yeild_fractions.csv",
+        ruminant_feed_table="data/bundled/gleam3/ruminants_feed_yield_fractions.csv",
+        monogastric_feed_table="data/bundled/gleam3/monogastrics_feed_yeild_fractions.csv",
         regions="<processing>/{name}/regions.geojson",
     output:
         "<processing>/{name}/crop_residue_yields/{crop}.csv",

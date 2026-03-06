@@ -140,7 +140,7 @@ Each file contains:
 * ``ash_pct_DM``: Ash content (% of dry matter)
 * ``NDF_pct_DM``: Neutral detergent fiber (% of dry matter)
 
-These properties are extracted from the GLEAM 3.0 supplement using ``data/curated/gleam_feed_mapping.csv`` to map between model feed items and GLEAM feed categories.
+These properties are extracted from the GLEAM 3.0 supplement using ``data/curated/gleam/feed_mapping.csv`` to map between model feed items and GLEAM feed categories.
 
 **Feed quality categories** (assigned based on nitrogen content and digestibility):
 
@@ -342,14 +342,14 @@ The script ``workflow/scripts/prepare_feed_baseline.py`` produces
 Data Sources
 ~~~~~~~~~~~~
 
-* **GLEAM 3.0 feed intakes** (``data/bundled/GLEAM3_intakes.csv``):
+* **GLEAM 3.0 feed intakes** (``data/bundled/gleam3/intakes.csv``):
   Country-level dry-matter feed intake by species (Cattle, Buffalo, Sheep,
   Goats, Chicken, Pigs), production system (Grassland, Mixed, Feedlots,
   Layer, Broiler, Backyard, Intermediate, Industrial), and feed category
   (Grains, Oil seed cakes, Grass and leaves, Crop residues, Fodder crop,
   By-products, Other edible, Other non-edible). Global total: ~6,208 Mt DM.
 
-* **GLEAM 3.0 production** (``data/bundled/GLEAM3_production.csv``):
+* **GLEAM 3.0 production** (``data/bundled/gleam3/production.csv``):
   Country-level animal product output (meat carcass weight, milk/egg weight)
   per species and production system, used for FCR-weighted product splitting.
 
@@ -680,7 +680,7 @@ Crop residues (e.g., straw, stover, pulse haulms) are now generated explicitly u
 * **Configuration**: Select residue crops via ``animal_products.residue_crops`` in ``config/default.yaml``. Only crops present in ``config.crops`` are processed.
 * **Data sources**:
   - GLEAM Supplement S1 Table S.3.1 (slope/intercept) and Tables 3.3 / 3.6 (FUE factors)
-  - GLEAM feed codes → model mapping in ``data/curated/gleam_feed_mapping.csv``
+  - GLEAM feed codes → model mapping in ``data/curated/gleam/feed_mapping.csv``
 * **Outputs**: Per-crop CSVs at ``processing/{name}/crop_residue_yields/{crop}.csv`` with net dry-matter residue yields (t/ha) by region, resource class, and water supply.
 * **Integration**: ``build_model`` reads all residue CSVs, adds ``residue_{feed_item}_{country}`` buses, and attaches them as additional outputs on crop production links. Residues flow through the same feed supply logic as crops/foods and enter the appropriate feed pools or soil incorporation.
 

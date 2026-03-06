@@ -320,8 +320,8 @@ services is not implied.
 (GLEAM). Rome. https://www.fao.org/gleam/
 
 **Data files**:
-  * ``data/bundled/GLEAM3_intakes.csv``: Feed intake by country, species, production system, and feed category
-  * ``data/bundled/GLEAM3_production.csv``: Animal production by country, species, production system, and product type
+  * ``data/bundled/gleam3/intakes.csv``: Feed intake by country, species, production system, and feed category
+  * ``data/bundled/gleam3/production.csv``: Animal production by country, species, production system, and product type
 
 **Usage**: Provides the feed baseline for the livestock module. Country-level
 intakes are mapped to model feed categories, split between co-products using

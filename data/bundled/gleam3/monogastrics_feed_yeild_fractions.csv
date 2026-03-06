@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: FAO 2022
+# SPDX-License-Identifier: CC-BY-4.0
+#
 # Reproduction of Table 3.6 in the GLEAM 3.0 model description (FAO 2022): Net yield equations, gross yields, FUE and MFA for each feed material for monogastric species
 number,code,type,Gross dry matter yields,Net yield equation,FUE,MFA
 1,SWILL,Swill and scavenging,NAa,NA,1,1

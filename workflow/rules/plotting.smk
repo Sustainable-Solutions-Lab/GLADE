@@ -610,7 +610,7 @@ rule plot_emissions_breakdown:
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",
         faostat_emissions="<processing>/{name}/faostat_emissions.csv",
-        gleam_emissions="data/curated/gleam_livestock_emissions.csv",
+        gleam_emissions="data/bundled/gleam3/livestock_emissions.csv",
         regions="<processing>/{name}/regions.geojson",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/emissions_breakdown.pdf",

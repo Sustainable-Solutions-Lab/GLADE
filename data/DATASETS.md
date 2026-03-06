@@ -243,7 +243,7 @@ Brief descriptions of key external datasets used by this project, with links and
 
 - Description: Country-level feed intake and animal production data from FAO's Global Livestock Environmental Assessment Model version 3.0. Provides total feed use (kg DM/year) by country, species (cattle, buffalo, sheep, goats, chicken, pigs), production system (grassland, mixed, feedlot, backyard, industrial, intermediate, layer, broiler), and feed category (grains, oil seed cakes, grass and leaves, crop residues, fodder crop, by-products, other edible, other non-edible). Production data provides corresponding animal product outputs (meat carcass weight, milk/egg weight) per country and system.
 - Source: Obtained directly from FAO upon request. The data are outputs of the GLEAM 3.0 model.
-- Version/format: Two CSV files bundled in `data/bundled/`: `GLEAM3_intakes.csv` (feed intake, 229 countries) and `GLEAM3_production.csv` (animal production, 229 countries).
+- Version/format: Two CSV files bundled in `data/bundled/gleam3/`: `intakes.csv` (feed intake, 229 countries) and `production.csv` (animal production, 229 countries).
 - Coverage: Global; reference year 2015. 229 countries, 6 animal species, 8 production systems, 8 feed categories.
 - License: Creative Commons Attribution 4.0 International (CC BY 4.0), with the additional FAO data terms requiring acknowledgement of FAO as the source and copyright holder, and that FAO's endorsement of users' views, products or services is not implied.
 - Citation: FAO. (2022). Global Livestock Environmental Assessment Model (GLEAM). Rome. https://www.fao.org/gleam/

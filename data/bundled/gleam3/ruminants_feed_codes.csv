@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: FAO 2022
+# SPDX-License-Identifier: CC-BY-4.0
+#
 # Reproduction of Table 3.1 in the GLEAM 3.0 model description (FAO 2022): List of feed materials for ruminant species
 number;code;type;description
 1;GRASSF;roughages;Any type of natural or cultivated fresh grass grazed or fed to the animals.

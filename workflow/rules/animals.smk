@@ -60,7 +60,7 @@ rule prepare_faostat_yields:
 rule prepare_gleam_feed_properties:
     input:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
-        gleam_mapping="data/curated/gleam_feed_mapping.csv",
+        gleam_mapping="data/curated/gleam/feed_mapping.csv",
     output:
         ruminant="<processing>/{name}/ruminant_feed_properties.csv",
         monogastric="<processing>/{name}/monogastric_feed_properties.csv",
@@ -103,8 +103,8 @@ rule categorize_feeds:
 
 rule compute_gleam3_me_requirements:
     input:
-        gleam3_intakes="data/bundled/GLEAM3_intakes.csv",
-        gleam3_production="data/bundled/GLEAM3_production.csv",
+        gleam3_intakes="data/bundled/gleam3/intakes.csv",
+        gleam3_production="data/bundled/gleam3/production.csv",
         ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
         monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
         wirsenius="data/curated/wirsenius_feed_energy_requirements.csv",
@@ -153,7 +153,8 @@ rule build_feed_to_animal_products:
 
 rule compute_gleam3_feed_fractions:
     input:
-        foods="data/curated/foods.csv",
+        feed_items_categories="data/bundled/gleam3/feed_items_categories.xlsx",
+        gleam_feed_mapping="data/curated/gleam/feed_mapping.csv",
         faostat_crop_production="<processing>/{name}/faostat_crop_production.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
@@ -176,8 +177,8 @@ rule compute_gleam3_feed_fractions:
 
 rule prepare_feed_baseline:
     input:
-        gleam3_intakes="data/bundled/GLEAM3_intakes.csv",
-        gleam3_production="data/bundled/GLEAM3_production.csv",
+        gleam3_intakes="data/bundled/gleam3/intakes.csv",
+        gleam3_production="data/bundled/gleam3/production.csv",
         gleam3_feed_fractions="<processing>/{name}/gleam3_feed_fractions.csv",
         me_requirements="<processing>/{name}/gleam3_me_requirements.csv",
         qcl_csv="data/downloads/faostat/QCL.csv",
@@ -233,7 +234,7 @@ rule calculate_manure_emissions:
         monogastric_feed_categories="<processing>/{name}/monogastric_feed_categories.csv",
         b0_data="data/curated/ipcc_manure_methane_producing_capacity.csv",
         mcf_data="data/curated/ipcc_manure_methane_conversion_factors.csv",
-        mms_fractions="data/curated/gleam_tables/manure_management_systems_fraction.csv",
+        mms_fractions="data/bundled/gleam3/manure_management_systems_fraction.csv",
         n2o_efs="data/curated/ipcc_manure_n2o_emission_factors.csv",
     output:
         "<processing>/{name}/manure_emission_factors.csv",
