@@ -354,6 +354,13 @@ animal_products:
       Backyard: [meat-pig]
       Intermediate: [meat-pig]
       Industrial: [meat-pig]
+  # For multi-product species (cattle, buffalo, chicken, sheep/goats),
+  # the Wirsenius scaling factor f splits total GLEAM3 feed between
+  # co-products. Countries with f far from the regional median likely
+  # reflect GLEAM3 data quality issues rather than real efficiency
+  # differences. This factor clamps f to [median/k, median*k] where k
+  # is the value below. Set to a large value (e.g. 100) to disable.
+  me_scaling_clamp_factor: 2.0
   # Ruminant net-to-metabolizable energy conversion efficiency factors
   # Used to convert net energy (NE) requirements to metabolizable energy (ME) requirements
   # Based on NRC (2000) typical values for mixed diets

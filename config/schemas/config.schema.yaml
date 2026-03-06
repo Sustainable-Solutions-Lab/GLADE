@@ -643,6 +643,7 @@ properties:
     required:
       - include
       - gleam3_system_product_map
+      - me_scaling_clamp_factor
       - net_to_metabolizable_energy_conversion
       - carcass_to_retail_meat
       - faostat_items
@@ -675,6 +676,10 @@ properties:
                   pattern: "^[a-z0-9-]+$"
                 description: "Model products produced by this (Animal, LPS) system"
         description: "GLEAM3 (Animal, LPS) → model product mapping"
+      me_scaling_clamp_factor:
+        type: number
+        exclusiveMinimum: 1
+        description: "Clamp Wirsenius scaling factors to [median/k, median*k] per region"
       net_to_metabolizable_energy_conversion:
         type: object
         required: [k_m, k_g, k_l]

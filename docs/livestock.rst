@@ -162,6 +162,8 @@ These properties are extracted from the GLEAM 3.0 supplement using ``data/curate
 
 Byproducts from food processing (with ``source_type=food``) are automatically excluded from human consumption and can only be used as animal feed.
 
+.. _feed-conversion-efficiencies:
+
 Feed Conversion Efficiencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -180,6 +182,17 @@ The script ``compute_gleam3_me_requirements.py`` derives metabolizable energy
 country, the total feed ME intake of a species is computed from GLEAM3 intake
 data (kg DM × ME per kg DM for each feed category), then divided among the
 species' products to obtain ME per kg product output.
+
+**Backyard "Other non-edible" correction**.  GLEAM3 reclassifies regular
+grains and crops (wheat, maize, barley, etc.) as "Other non-edible" in
+Backyard monogastric systems, because these feeds are locally sourced or
+scavenged rather than commercially purchased.  In non-Backyard systems, the
+same category contains only genuinely non-feed supplements (synthetic amino
+acids, fishmeal, limestone) plus swill.  The ME computation accounts for this
+LPS-dependent composition: Backyard "Other non-edible" uses the ``grain``
+category ME (since reclassified grains dominate ~93% of backyard non-edible
+intake globally), while non-Backyard "Other non-edible" uses swill ME from
+GLEAM Table S.3.4 (13.0 MJ/kg DM for chicken, 10.5 MJ/kg DM for pigs).
 
 **Multi-product splitting**.  Most animal species produce multiple model
 products simultaneously (e.g. cattle produce both dairy and meat).  The total
@@ -212,11 +225,24 @@ computed directly as total feed ME / total production.
 
 **Sheep/goat milk proxy**.  Sheep and goat milk (~3–4% of global production)
 is proxied through the cattle ``dairy`` product rather than modeled separately.
-For ME derivation, the cattle dairy ME is used as a proxy for sheep/goat milk
-ME: sheep/goat system feed ME is split by subtracting
-``milk_production × dairy_ME_proxy`` and assigning the residual to
-``meat-sheep``.  See the config comment on ``gleam3_system_product_map`` for
-the rationale.
+For ME derivation, the Wirsenius cattle dairy:meat ME ratio is used to split
+sheep/goat system feed between milk (folded into the ``dairy`` product) and
+``meat-sheep``, using the same scaling-factor approach as for cattle.  This
+replaces an earlier residual method that was numerically unstable for countries
+with extreme sheep milk:meat ratios.  See the config comment on
+``gleam3_system_product_map`` for the rationale.
+
+**Scaling-factor clamping**.  The factor :math:`f` measures how much a
+country's total feed intensity deviates from its Wirsenius regional average.
+Small countries with limited GLEAM3 data can produce extreme :math:`f` values
+that translate to unrealistic per-product ME (e.g. Montenegro at
+:math:`f = 0.24` would imply a dairy ME of 4.1 MJ/kg).  To guard against
+this, :math:`f` is clamped to the range
+:math:`[\text{median}/k,\; \text{median} \times k]` where the median is taken
+over countries in the same Wirsenius region and :math:`k` is the config
+parameter ``animal_products.me_scaling_clamp_factor`` (default 2.0).  The
+clamping applies to all multi-product species groups (cattle, buffalo, chicken,
+sheep/goats).
 
 **Fallback**.  Countries without sufficient GLEAM3 data for a species receive
 the production-weighted global average ME for that product.
@@ -441,10 +467,13 @@ categories using pre-computed fractions:
      - ``monogastric_low_quality``
      - **Yes**
 
-**Other non-edible** (~180 Mt DM, ~14% of monogastric feed) consists of
-synthetic amino acids, minerals, limestone, and fishmeal. The entire amount
-is marked as exogenous since these feeds have no endogenous crop-based
-production route.
+**Other non-edible** (~180 Mt DM, ~14% of monogastric feed).  In non-Backyard
+systems this consists of synthetic amino acids, minerals, limestone, fishmeal,
+and swill.  In Backyard systems, GLEAM3 additionally reclassifies locally
+sourced grains and crops into this category (see the backyard correction in
+:ref:`feed-conversion-efficiencies`).  The entire amount is marked as
+exogenous in the feed baseline since these feeds have no endogenous crop-based
+production route in the model.
 
 **Grass and leaves** maps 100% to ``ruminant_forage``. The grassland forage
 calibration mechanism (see :ref:`grassland-forage-calibration`) detects any

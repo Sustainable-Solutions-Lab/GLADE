@@ -114,6 +114,7 @@ rule compute_gleam3_me_requirements:
         net_to_me_conversion=config["animal_products"][
             "net_to_metabolizable_energy_conversion"
         ],
+        me_scaling_clamp_factor=config["animal_products"]["me_scaling_clamp_factor"],
     output:
         "<processing>/{name}/gleam3_me_requirements.csv",
     group:

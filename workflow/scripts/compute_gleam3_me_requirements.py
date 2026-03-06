@@ -14,6 +14,11 @@ guidance, with the absolute level set by GLEAM3.  Single-product species
 (pigs) are computed directly.  For sheep+goats, cattle dairy ME proxies
 the milk component; the residual gives meat-sheep ME.
 
+For monogastrics, the "Other non-edible" GLEAM3 category requires special
+handling: in Backyard systems GLEAM3 reclassifies regular grains into this
+category, so we assign grain-level ME; in other systems it is genuinely
+non-feed (swill, minerals, etc.) and receives swill ME.
+
 Countries with insufficient GLEAM3 data for a species receive the
 production-weighted global average for that product.
 
@@ -45,10 +50,28 @@ _MONOGASTRIC_FEED_ME_MAP = {
     "Grains": "grain",
     "Oil seed cakes": "protein",
     "Other edible": "grain",
-    "Other non-edible": None,  # exogenous -- excluded from ME
+    "Other non-edible": None,  # handled per-LPS; see _BACKYARD_NON_EDIBLE_ME
     "By-products": "grain",
     "Grass and leaves": "low_quality",
     "Crop residues": "low_quality",
+}
+
+# GLEAM3 classifies backyard monogastric feeds differently from other systems:
+# regular grains (wheat, maize, barley, millet, rice, sorghum), soy, and
+# pulses are reclassified as "Other non-edible" in Backyard systems because
+# they're locally sourced/scavenged rather than commercially purchased.
+# In non-Backyard systems, "Other non-edible" contains only genuinely
+# non-feed items (synthetic amino acids, fishmeal, limestone) plus swill.
+#
+# Since the intake data is aggregated to category level (no item breakdown),
+# we assign an ME proxy per LPS:
+#   - Backyard: use "grain" ME (grains dominate the reclassified items)
+#   - Non-Backyard: use swill ME from GLEAM Table S.3.4 (the only
+#     non-edible item with significant caloric content)
+_BACKYARD_NON_EDIBLE_ME = "grain"
+_NON_BACKYARD_SWILL_ME_MJ_PER_KG = {
+    "Chicken": 13.0,
+    "Pigs": 10.5,
 }
 
 
@@ -67,12 +90,19 @@ def _build_me_lookup(
 def _assign_feed_me(
     intakes: pd.DataFrame, me_lookup: dict[tuple[str, str], float]
 ) -> pd.DataFrame:
-    """Add feed_ME_MJ column: intake_kg x ME_per_kg_DM for each row."""
+    """Add feed_ME_MJ column: intake_kg x ME_per_kg_DM for each row.
+
+    For monogastric "Other non-edible", the ME assignment depends on LPS:
+    Backyard systems use grain ME (reclassified local grains dominate),
+    while other systems use swill ME from GLEAM Table S.3.4.
+    """
     is_ruminant = intakes["Animal"].isin(_RUMINANT_ANIMALS)
     atype = pd.Series("monogastric", index=intakes.index)
     atype[is_ruminant] = "ruminant"
 
-    def _me_for_row(animal_type: str, feed_category: str) -> float:
+    def _me_for_row(
+        animal_type: str, feed_category: str, lps: str, animal: str
+    ) -> float:
         feed_map = (
             _RUMINANT_FEED_ME_MAP
             if animal_type == "ruminant"
@@ -80,11 +110,20 @@ def _assign_feed_me(
         )
         model_cat = feed_map.get(feed_category)
         if model_cat is None:
+            if animal_type == "monogastric" and feed_category == "Other non-edible":
+                if lps == "Backyard":
+                    return me_lookup[(animal_type, _BACKYARD_NON_EDIBLE_ME)]
+                return _NON_BACKYARD_SWILL_ME_MJ_PER_KG.get(animal, 0.0)
             return 0.0
         return me_lookup[(animal_type, model_cat)]
 
     me_per_kg = pd.Series(
-        [_me_for_row(at, fc) for at, fc in zip(atype, intakes["feed_category"])],
+        [
+            _me_for_row(at, fc, lps, animal)
+            for at, fc, lps, animal in zip(
+                atype, intakes["feed_category"], intakes["LPS"], intakes["Animal"]
+            )
+        ],
         index=intakes.index,
     )
     intakes = intakes.copy()
@@ -153,10 +192,19 @@ def _compute_country_me(
     k_m: float,
     k_g: float,
     k_l: float,
-) -> dict[str, float | None]:
-    """Compute ME per product for one country.  Returns None for products
-    where data is insufficient."""
+) -> tuple[dict[str, float | None], dict[str, float | None]]:
+    """Compute ME per product for one country.
+
+    Returns (me_dict, f_dict) where me_dict maps product -> ME_MJ_per_kg
+    and f_dict maps species group -> scaling factor (for clamping).
+    Values are None where data is insufficient.
+
+    The scaling factor f = actual_feed_ME / wirsenius_implied_ME measures
+    how much the country's feed intensity deviates from the Wirsenius
+    regional expectation.  It is used for post-hoc regional clamping.
+    """
     out: dict[str, float | None] = {}
+    f_out: dict[str, float | None] = {}
 
     # --- Cattle (excluding Feedlots -- no production data) ---
     cattle_feed = _sum_feed_me(ci, ["Cattle"], exclude_lps=["Feedlots"])
@@ -173,9 +221,11 @@ def _compute_country_me(
     w_cattle_implied = w_dairy * cattle_milk + w_meat_cattle * cattle_meat
     if w_cattle_implied > 0 and cattle_feed > 0:
         f_cattle = cattle_feed / w_cattle_implied
+        f_out["cattle"] = f_cattle
         out["dairy"] = w_dairy * f_cattle
         out["meat-cattle"] = w_meat_cattle * f_cattle
     else:
+        f_out["cattle"] = None
         out["dairy"] = None
         out["meat-cattle"] = None
 
@@ -187,11 +237,13 @@ def _compute_country_me(
     w_buffalo_implied = w_dairy * buffalo_milk + w_meat_cattle * buffalo_meat
     if w_buffalo_implied > 0 and buffalo_feed > 0:
         f_buffalo = buffalo_feed / w_buffalo_implied
+        f_out["buffalo"] = f_buffalo
         out["dairy-buffalo"] = w_dairy * f_buffalo
     else:
+        f_out["buffalo"] = None
         out["dairy-buffalo"] = None
 
-    # --- Pigs (direct) ---
+    # --- Pigs (direct — no splitting, no f) ---
     pig_feed = _sum_feed_me(ci, ["Pigs"])
     pig_meat = _sum_production(cp, ["Pigs"], "Meat", "CarcassWeight")
     out["meat-pig"] = pig_feed / pig_meat if pig_meat > 0 and pig_feed > 0 else None
@@ -207,38 +259,125 @@ def _compute_country_me(
     w_chicken_implied = w_chicken * chicken_meat + w_eggs * chicken_eggs
     if w_chicken_implied > 0 and chicken_feed > 0:
         f_chicken = chicken_feed / w_chicken_implied
+        f_out["chicken"] = f_chicken
         out["meat-chicken"] = w_chicken * f_chicken
         out["eggs"] = w_eggs * f_chicken
     else:
+        f_out["chicken"] = None
         out["meat-chicken"] = None
         out["eggs"] = None
 
     # --- Sheep + Goats ---
+    # Use the same Wirsenius dairy:meat ME ratio to split sheep/goat feed
+    # between milk (proxied through cattle dairy) and meat-sheep.
+    # This is more stable than the previous residual method, which amplified
+    # errors for countries with extreme sheep milk:meat ratios (e.g. MDA 317:1).
     sg_feed = _sum_feed_me(ci, ["Sheep", "Goats"])
     sg_milk = _sum_production(cp, ["Sheep", "Goats"], "Milk", "Weight")
     sg_meat = _sum_production(cp, ["Sheep", "Goats"], "Meat", "CarcassWeight")
 
-    dairy_proxy = out.get("dairy")
-    if sg_meat > 0 and dairy_proxy is not None:
-        meat_me_residual = sg_feed - sg_milk * dairy_proxy
-        if meat_me_residual > 0:
-            out["meat-sheep"] = meat_me_residual / sg_meat
-        else:
-            total_prod = sg_meat + sg_milk
-            out["meat-sheep"] = sg_feed / total_prod if total_prod > 0 else None
-    elif sg_meat > 0 and sg_feed > 0:
-        # No dairy proxy available; use full system ME
-        total_prod = sg_meat + sg_milk
-        out["meat-sheep"] = sg_feed / total_prod if total_prod > 0 else None
+    w_sg_implied = w_dairy * sg_milk + w_meat_cattle * sg_meat
+    if w_sg_implied > 0 and sg_feed > 0:
+        f_sg = sg_feed / w_sg_implied
+        f_out["sheep_goat"] = f_sg
+        out["meat-sheep"] = w_meat_cattle * f_sg
     else:
+        f_out["sheep_goat"] = None
         out["meat-sheep"] = None
 
-    return out
+    return out, f_out
 
 
 def _has_valid_me(me_val: float | None) -> bool:
     """Return True for finite, strictly positive ME values."""
     return me_val is not None and pd.notna(me_val) and me_val > 0
+
+
+_SPECIES_PRODUCTS: dict[str, list[str]] = {
+    "cattle": ["dairy", "meat-cattle"],
+    "buffalo": ["dairy-buffalo"],
+    "chicken": ["meat-chicken", "eggs"],
+    "sheep_goat": ["meat-sheep"],
+}
+
+
+def _clamp_scaling_factors(
+    country_f: dict[str, dict[str, float | None]],
+    country_regions: dict[str, str | None],
+    clamp_factor: float,
+) -> dict[str, dict[str, float]]:
+    """Compute clamped scaling factors per country and species group.
+
+    For each Wirsenius region and species group, computes the median f
+    across countries with valid data.  Country f-values outside
+    [median / clamp_factor, median * clamp_factor] are clamped to the
+    nearest bound.
+
+    Returns {country: {species_group: clamped_f / original_f}} ratios
+    to apply as multiplicative corrections to the raw ME values.
+    """
+    import numpy as np
+
+    # Collect f values by (region, species_group)
+    region_f: dict[tuple[str, str], list[float]] = {}
+    for country, f_dict in country_f.items():
+        region = country_regions.get(country)
+        if region is None:
+            continue
+        for species, f_val in f_dict.items():
+            if f_val is not None and f_val > 0:
+                region_f.setdefault((region, species), []).append(f_val)
+
+    # Compute regional medians
+    region_median: dict[tuple[str, str], float] = {}
+    for key, vals in region_f.items():
+        region_median[key] = float(np.median(vals))
+
+    # Compute correction ratios
+    corrections: dict[str, dict[str, float]] = {}
+    n_clamped = 0
+    for country, f_dict in country_f.items():
+        corrections[country] = {}
+        region = country_regions.get(country)
+        for species, f_val in f_dict.items():
+            if f_val is None or region is None:
+                corrections[country][species] = 1.0
+                continue
+            med = region_median.get((region, species))
+            if med is None or med <= 0:
+                corrections[country][species] = 1.0
+                continue
+            f_lo = med / clamp_factor
+            f_hi = med * clamp_factor
+            if f_val < f_lo:
+                corrections[country][species] = f_lo / f_val
+                n_clamped += 1
+                logger.info(
+                    "  Clamped %s %s f=%.3f → %.3f (regional median=%.3f)",
+                    country,
+                    species,
+                    f_val,
+                    f_lo,
+                    med,
+                )
+            elif f_val > f_hi:
+                corrections[country][species] = f_hi / f_val
+                n_clamped += 1
+                logger.info(
+                    "  Clamped %s %s f=%.3f → %.3f (regional median=%.3f)",
+                    country,
+                    species,
+                    f_val,
+                    f_hi,
+                    med,
+                )
+            else:
+                corrections[country][species] = 1.0
+    if n_clamped:
+        logger.info(
+            "Clamped %d scaling factors (clamp_factor=%.1f)", n_clamped, clamp_factor
+        )
+    return corrections
 
 
 def compute_gleam3_me_requirements(
@@ -250,6 +389,7 @@ def compute_gleam3_me_requirements(
     country_region_file: str,
     countries: list[str],
     net_to_me_conversion: dict[str, float],
+    me_scaling_clamp_factor: float,
     output_file: str,
 ) -> None:
     # Load data
@@ -294,18 +434,30 @@ def compute_gleam3_me_requirements(
         "meat-sheep",
     ]
 
-    # Phase 1: compute per-country ME where GLEAM3 data is available
+    # Phase 1: compute per-country ME and scaling factors
     country_me: dict[str, dict[str, float | None]] = {}
+    country_f: dict[str, dict[str, float | None]] = {}
     for country in countries:
         ci = intakes[intakes["ISO3"] == country]
         cp = production[production["ISO3"] == country]
         region = c2r.get(country)
         if region is None:
             country_me[country] = dict.fromkeys(products)
+            country_f[country] = {}
             continue
-        country_me[country] = _compute_country_me(
-            ci, cp, wirsenius, region, k_m, k_g, k_l
-        )
+        me_dict, f_dict = _compute_country_me(ci, cp, wirsenius, region, k_m, k_g, k_l)
+        country_me[country] = me_dict
+        country_f[country] = f_dict
+
+    # Phase 1b: clamp scaling factors to within-region bounds
+    corrections = _clamp_scaling_factors(country_f, c2r, me_scaling_clamp_factor)
+    for country in countries:
+        for species, prods in _SPECIES_PRODUCTS.items():
+            corr = corrections.get(country, {}).get(species, 1.0)
+            if corr != 1.0:
+                for p in prods:
+                    if _has_valid_me(country_me[country].get(p)):
+                        country_me[country][p] *= corr
 
     # Phase 2: compute production-weighted global averages as fallback
     global_avg: dict[str, float] = {}
@@ -394,5 +546,6 @@ if __name__ == "__main__":
         country_region_file=snakemake.input.country_wirsenius_region,
         countries=list(snakemake.params.countries),
         net_to_me_conversion=dict(snakemake.params.net_to_me_conversion),
+        me_scaling_clamp_factor=float(snakemake.params.me_scaling_clamp_factor),
         output_file=snakemake.output[0],
     )
