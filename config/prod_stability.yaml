@@ -2,45 +2,27 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
+# Production Stability Sensitivity Analysis
+# ------------------------------------------
+# Sweeps the L1 production stability cost parameter to understand how
+# results depend on production stability strength. Two scenario groups:
+#   - l1_{cost}_base: GHG=0, YLL=0 (pure cost minimization + stability)
+#   - l1_{cost}_priced: representative GHG+YLL pricing (ghg=200, yll=5000)
+
 name: "prod_stability"
 scenarios:
-  # Production stability (L1 penalty) sensitivity analysis
-  # Two sets: with and without health/emissions pricing
-
+  # Baseline scenario for calibrating piecewise food utility blocks
   baseline:
     validation:
       enforce_baseline_diet: true
-    food_incentives:
+    food_utility_piecewise:
       enabled: false
-    health:
-      value_per_yll: 0
     emissions:
       ghg_price: 0
+    health:
+      value_per_yll: 0
 
   _generators:
-    # L1 cost sweep with health + emissions pricing (yll=5000, ghg=200)
-    - name: l1_{cost}_priced
-      parameters:
-        cost:
-          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
-          name_format: "lambda x: str(x).replace('.', 'p')"
-      template:
-        food_utility_piecewise:
-          enabled: true
-        validation:
-          production_stability:
-            enabled: true
-            penalty_mode: "l1"
-            l1_cost: "{cost}"
-        health:
-          enabled: true
-          value_per_yll: 5000
-        emissions:
-          ghg_price: 200
-        macronutrients:
-          cal:
-            equal: 2400
-
     # L1 cost sweep without health/emissions pricing (yll=0, ghg=0)
     - name: l1_{cost}_base
       parameters:
@@ -48,23 +30,58 @@ scenarios:
           values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
           name_format: "lambda x: str(x).replace('.', 'p')"
       template:
-        food_utility_piecewise:
-          enabled: true
+        validation:
+          production_stability:
+            enabled: true
+            penalty_mode: "l1"
+            l1_cost: "{cost}"
+        emissions:
+          ghg_price: 0
+        health:
+          value_per_yll: 0
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+
+    # L1 cost sweep with health + emissions pricing (yll=5000, ghg=200)
+    - name: l1_{cost}_priced
+      parameters:
+        cost:
+          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
+          name_format: "lambda x: str(x).replace('.', 'p')"
+      template:
         validation:
           production_stability:
             enabled: true
             penalty_mode: "l1"
             l1_cost: "{cost}"
         health:
-          value_per_yll: 0
+          value_per_yll: 5000
         emissions:
-          ghg_price: 0
+          ghg_price: 200
         macronutrients:
           cal:
-            equal: 2400
+            equal_to_baseline: true
+
+# Align with sensitivity.yaml
+planning_horizon: 2020
+baseline_year: 2020
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
 
 validation:
   use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.1
+
+health:
+  region_clusters: 15
+  intake_grid_points: 8
 
 plotting:
   comparison_scenarios: "all"
@@ -73,3 +90,20 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 2
+  mem_mb: 9000
+  runtime: 20
+
+remote_solve:
+  enabled: false
+  local_scenarios: ["baseline"]
+  host: "shr"
+  workdir: "~/food-opt-scratch"
+  pixi_env: "gurobi"
+  use_slurm: true
+  slurm_account: "sjdavis"
+  slurm_partition: "serc"
+  sync_workflow: true
+  sync_pixi_files: false
+  ssh_options: []
+  rsync_options: []
+  preflight_check: true
