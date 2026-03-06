@@ -24,6 +24,31 @@ import pypsa
 from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE, PJ_TO_KCAL
 from workflow.scripts.population import get_country_population
 
+_FEED_CATEGORY_LABELS = {
+    "ruminant_forage": "Grass & leaves",
+    "ruminant_roughage": "Crop residues",
+    "ruminant_grain": "Grains",
+    "ruminant_protein": "Oilseed cakes",
+    "monogastric_grain": "Grains",
+    "monogastric_low_quality": "By-products",
+    "monogastric_protein": "Oilseed cakes",
+}
+
+_PRODUCT_TO_ANIMAL = {
+    "meat-cattle": "Cattle",
+    "dairy": "Cattle",
+    "meat-pig": "Pigs",
+    "meat-chicken": "Chicken",
+    "eggs": "Chicken",
+    "meat-sheep": "Sheep",
+    "meat-goat": "Goats",
+    "meat-buffalo": "Buffalo",
+    "dairy-buffalo": "Buffalo",
+    "milk-sheep": "Sheep",
+    "milk-goat": "Goats",
+    "milk-buffalo": "Buffalo",
+}
+
 
 def _get_output_ports(n: pypsa.Network, carrier: str) -> list[str]:
     """Get list of output port indices for links with the given carrier.
@@ -610,6 +635,181 @@ def extract_food_consumption(n: pypsa.Network) -> pd.DataFrame:
                  carb_g_per_person_day, fat_g_per_person_day, cal_kcal_per_person_day
     """
     return _extract_consumption(n, groupby=["food", "country"], group_col="food")
+
+
+def extract_feed_by_category(n: pypsa.Network) -> pd.DataFrame:
+    """Extract total feed use grouped by feed category.
+
+    Reads ``p0`` (feed input) of ``animal_production`` links and maps raw
+    feed category names to human-readable labels.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: category, mt_dm
+    """
+    links = n.links.static
+    feed_links = links[
+        (links["carrier"] == "animal_production") & links["feed_category"].notna()
+    ]
+    if feed_links.empty:
+        return pd.DataFrame(columns=["category", "mt_dm"])
+
+    snapshot = n.snapshots[-1]
+    p0 = n.links.dynamic.p0.loc[snapshot]
+
+    result: dict[str, float] = {}
+    for link in feed_links.index:
+        flow = abs(float(p0.get(link, 0.0)))
+        if flow < 1e-12:
+            continue
+        raw = str(feed_links.at[link, "feed_category"])
+        category = _FEED_CATEGORY_LABELS.get(raw, raw.replace("_", " ").title())
+        result[category] = result.get(category, 0.0) + flow
+
+    rows = [{"category": cat, "mt_dm": val} for cat, val in result.items()]
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["category", "mt_dm"])
+
+
+def extract_feed_by_animal(n: pypsa.Network) -> pd.DataFrame:
+    """Extract total feed use grouped by animal type.
+
+    Reads ``p0`` (feed input) of ``animal_production`` links and maps product
+    names to animal type labels.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: animal, mt_dm
+    """
+    links = n.links.static
+    feed_links = links[
+        (links["carrier"] == "animal_production") & links["product"].notna()
+    ]
+    if feed_links.empty:
+        return pd.DataFrame(columns=["animal", "mt_dm"])
+
+    snapshot = n.snapshots[-1]
+    p0 = n.links.dynamic.p0.loc[snapshot]
+
+    result: dict[str, float] = {}
+    for link in feed_links.index:
+        flow = abs(float(p0.get(link, 0.0)))
+        if flow < 1e-12:
+            continue
+        product = str(feed_links.at[link, "product"])
+        animal = _PRODUCT_TO_ANIMAL.get(product, product.replace("_", " ").title())
+        result[animal] = result.get(animal, 0.0) + flow
+
+    rows = [{"animal": a, "mt_dm": val} for a, val in result.items()]
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["animal", "mt_dm"])
+
+
+def extract_luc_breakdown(
+    n: pypsa.Network,
+    country_to_continent: dict[str, str],
+) -> pd.DataFrame:
+    """Extract land-use-change breakdown by continent and land type.
+
+    For each LUC-related link, extracts both emissions (flow * efficiency2,
+    in MtCO2) and area (flow in Mha, signed: positive for expansion, negative
+    for sparing).
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Solved network.
+    country_to_continent : dict[str, str]
+        Mapping from ISO3 country code to continent name.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: groupby, category, emissions_mtco2, area_mha.
+        ``groupby`` is either "continent" or "land_type".
+    """
+    snapshot = n.snapshots[-1]
+    links = n.links.static
+    p0 = n.links.dynamic.p0.loc[snapshot]
+
+    # Build region -> country mapping from crop production links
+    crop = links[links["carrier"] == "crop_production"]
+    region_to_country: dict[str, str] = {}
+    for _, row in crop[["region", "country"]].drop_duplicates().iterrows():
+        if pd.notna(row["region"]) and pd.notna(row["country"]) and row["country"]:
+            region_to_country[str(row["region"])] = str(row["country"])
+
+    # (carrier, land_type_label, split_by_land_type, area_sign)
+    carrier_configs = [
+        ("land_conversion", "Cropland expansion", False, 1),
+        ("new_to_pasture", "Pasture expansion", False, 1),
+        ("spare_land", "Cropland sparing", False, -1),
+        ("spare_existing_grassland", None, True, -1),
+    ]
+
+    # Accumulators: {(groupby, category): {emissions_mtco2, area_mha}}
+    data: dict[tuple[str, str], dict[str, float]] = {}
+
+    def _add(groupby_val: str, category: str, emissions: float, area: float) -> None:
+        key = (groupby_val, category)
+        if key not in data:
+            data[key] = {"emissions_mtco2": 0.0, "area_mha": 0.0}
+        data[key]["emissions_mtco2"] += emissions
+        data[key]["area_mha"] += area
+
+    for carrier, base_label, split_by_land_type, area_sign in carrier_configs:
+        mask = links["carrier"] == carrier
+        carrier_links = links[mask]
+        if carrier_links.empty:
+            continue
+
+        for link in carrier_links.index:
+            flow = float(p0.get(link, 0.0))
+            if abs(flow) < 1e-12:
+                continue
+
+            eff2 = float(carrier_links.at[link, "efficiency2"])
+            emissions = flow * eff2
+            area = flow * area_sign
+
+            # Land type grouping
+            if split_by_land_type:
+                lt = carrier_links.at[link, "land_type"]
+                if pd.notna(lt) and lt == "marginal":
+                    type_label = "Grassland sparing (marginal)"
+                else:
+                    type_label = "Grassland sparing (convertible)"
+            else:
+                type_label = base_label
+            _add("land_type", type_label, emissions, area)
+
+            # Continent grouping
+            region = carrier_links.at[link, "region"]
+            if pd.isna(region):
+                continue
+            country = region_to_country.get(str(region))
+            if not country:
+                continue
+            continent = country_to_continent.get(country, "Other")
+            _add("continent", continent, emissions, area)
+
+    rows = []
+    for (groupby_val, category), vals in data.items():
+        rows.append(
+            {
+                "groupby": groupby_val,
+                "category": category,
+                "emissions_mtco2": vals["emissions_mtco2"],
+                "area_mha": vals["area_mha"],
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["groupby", "category", "emissions_mtco2", "area_mha"]
+        )
+
+    return pd.DataFrame(rows)
 
 
 def extract_food_group_consumption(n: pypsa.Network) -> pd.DataFrame:

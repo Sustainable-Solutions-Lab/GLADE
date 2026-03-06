@@ -77,15 +77,11 @@ def load_scenario_outputs(
         else:
             row["total_cost"] = np.nan
 
-        # Load net emissions
+        # Load net emissions (source-level breakdown; sum for total)
         ghg_path = scenario_dir / "net_emissions.csv"
         if ghg_path.exists():
             ghg_df = pd.read_csv(ghg_path)
-            total_row = ghg_df[ghg_df["gas"] == "total"]
-            if not total_row.empty:
-                row["ghg_emissions"] = total_row["net_mtco2eq"].iloc[0]
-            else:
-                row["ghg_emissions"] = np.nan
+            row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
         else:
             row["ghg_emissions"] = np.nan
 

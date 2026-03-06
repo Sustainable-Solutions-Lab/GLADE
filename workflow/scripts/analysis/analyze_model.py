@@ -38,9 +38,12 @@ from workflow.scripts.analysis.extract_objective_breakdown import (
 from workflow.scripts.analysis.extract_statistics import (
     extract_animal_production,
     extract_crop_production,
+    extract_feed_by_animal,
+    extract_feed_by_category,
     extract_food_consumption,
     extract_food_group_consumption,
     extract_land_use,
+    extract_luc_breakdown,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -58,10 +61,25 @@ def main() -> None:
     animal_production = extract_animal_production(n)
     food_consumption = extract_food_consumption(n)
     food_group_consumption = extract_food_group_consumption(n)
+    feed_by_category = extract_feed_by_category(n)
+    feed_by_animal = extract_feed_by_animal(n)
+
+    # --- LUC breakdown ---
+    logger.info("Extracting LUC breakdown...")
+    m49 = pd.read_csv(snakemake.input.m49_codes, sep=";", comment="#")
+    country_to_continent = {}
+    for _, row in m49.iterrows():
+        iso3 = row.get("ISO-alpha3 Code")
+        region = row.get("Region Name")
+        if pd.notna(iso3) and pd.notna(region) and str(iso3).strip():
+            country_to_continent[str(iso3).strip()] = str(region).strip()
+    luc_breakdown = extract_luc_breakdown(n, country_to_continent)
 
     # --- Net emissions ---
     logger.info("Extracting net emissions...")
-    net_emissions = extract_net_emissions(n)
+    ch4_gwp = float(snakemake.params.ch4_gwp)
+    n2o_gwp = float(snakemake.params.n2o_gwp)
+    net_emissions = extract_net_emissions(n, ch4_gwp, n2o_gwp)
 
     # --- Objective breakdown ---
     logger.info("Extracting objective breakdown...")
@@ -69,8 +87,6 @@ def main() -> None:
 
     # --- GHG attribution ---
     logger.info("Computing GHG attribution...")
-    ch4_gwp = float(snakemake.params.ch4_gwp)
-    n2o_gwp = float(snakemake.params.n2o_gwp)
     ghg_price = float(snakemake.params.ghg_price)
     food_groups = pd.read_csv(snakemake.input.food_groups)
     bus_intensities = compute_bus_intensities(n, ch4_gwp, n2o_gwp)
@@ -120,6 +136,9 @@ def main() -> None:
     ghg_attribution_totals.to_csv(snakemake.output.ghg_attribution_totals, index=False)
     health_marginals.to_csv(snakemake.output.health_marginals, index=False)
     health_totals.to_csv(snakemake.output.health_totals, index=False)
+    feed_by_category.to_csv(snakemake.output.feed_by_category, index=False)
+    feed_by_animal.to_csv(snakemake.output.feed_by_animal, index=False)
+    luc_breakdown.to_csv(snakemake.output.luc_breakdown, index=False)
 
     logger.info("Wrote all analysis outputs to %s", output_dir)
 

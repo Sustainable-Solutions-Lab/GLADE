@@ -32,6 +32,7 @@ rule analyze_model:
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",
         food_groups="data/curated/food_groups.csv",
+        m49_codes="data/curated/M49-codes.csv",
         risk_breakpoints="<processing>/{name}/health/scen-{scenario}/risk_breakpoints.csv",
         health_cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
         health_cause_log="<processing>/{name}/health/scen-{scenario}/cause_log_breakpoints.csv",
@@ -57,6 +58,9 @@ rule analyze_model:
         ghg_attribution_totals="<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv",
         health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.csv",
         health_totals="<results>/{name}/analysis/scen-{scenario}/health_totals.csv",
+        feed_by_category="<results>/{name}/analysis/scen-{scenario}/feed_by_category.csv",
+        feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.csv",
+        luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.csv",
     group:
         "model_core"
     resources:

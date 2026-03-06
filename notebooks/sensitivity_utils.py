@@ -1163,10 +1163,9 @@ def load_net_emissions_by_gas(
         df = pd.read_csv(csv_path)
         row = {}
         for gas in ["co2", "ch4", "n2o"]:
-            gas_row = df[df["gas"] == gas]
-            if not gas_row.empty:
-                # Convert MtCO2eq to GtCO2eq
-                row[GAS_DISPLAY[gas]] = gas_row["net_mtco2eq"].iloc[0] / 1000
+            gas_total = df.loc[df["gas"] == gas, "mtco2eq"].sum()
+            # Convert MtCO2eq to GtCO2eq
+            row[GAS_DISPLAY[gas]] = gas_total / 1000
         data[param_value] = row
 
     if not data:
@@ -1182,69 +1181,45 @@ def load_emissions_by_source(
     project_root: Path,
     config_name: str,
     param_name: str = "param_value",
-    ch4_gwp: float = CH4_GWP,
-    n2o_gwp: float = N2O_GWP,
-    cache_path: Path | None = None,
+    **_kwargs,
 ) -> dict[str, pd.DataFrame]:
     """Load per-source emissions breakdown for each gas across scenarios.
 
-    Uses extract_emissions_by_source from the plotting module to extract
-    detailed source-level breakdowns from solved networks.
+    Reads the source-level ``net_emissions.csv`` produced by ``analyze_model``
+    (columns: gas, source, mtco2eq).
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
         project_root: Path to project root directory
         config_name: Name of the config
         param_name: Name for the parameter (used as index name)
-        ch4_gwp: Global warming potential for CH4
-        n2o_gwp: Global warming potential for N2O
-        cache_path: Optional directory for caching results
 
     Returns:
         Dict mapping gas name (CO2, CH4, N2O) to DataFrames with param_value
         as index and emission sources as columns, in GtCO2eq.
-        Scenarios with missing network files are skipped.
     """
-    from workflow.scripts.plotting.plot_emissions_breakdown import (
-        extract_emissions_by_source,
-    )
+    results_dir = project_root / "results" / config_name
 
-    # Check cache
-    if cache_path is not None:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        network_paths = [f for _, _, f in scenarios if f.exists()]
-        all_cached = True
-        for gas in ["CO2", "CH4", "N2O"]:
-            gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
-            if not is_cache_valid(gas_cache, network_paths):
-                all_cached = False
-                break
-        if all_cached:
-            print(f"Loading emissions by source from cache: {cache_path}")
-            result = {}
-            for gas in ["CO2", "CH4", "N2O"]:
-                gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
-                df = pd.read_csv(gas_cache, index_col=param_name)
-                result[gas] = df
-            return result
-
-    print(f"Extracting emissions by source from {len(scenarios)} scenarios...")
     gas_data: dict[str, dict[float, dict[str, float]]] = {
         "CO2": {},
         "CH4": {},
         "N2O": {},
     }
 
-    for param_value, scenario_name, network_path in scenarios:
-        if not network_path.exists():
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+        )
+        if not csv_path.exists():
             continue
-        print(f"  Loading {scenario_name}...")
-        n = pypsa.Network(network_path)
-        emissions = extract_emissions_by_source(n, ch4_gwp, n2o_gwp)
-        for gas in ["CO2", "CH4", "N2O"]:
+
+        df = pd.read_csv(csv_path)
+        for gas in ["co2", "ch4", "n2o"]:
+            gas_rows = df[df["gas"] == gas]
+            gas_key = gas.upper()
             # Convert MtCO2eq to GtCO2eq
-            gas_data[gas][param_value] = {
-                src: val / 1000 for src, val in emissions.get(gas, {}).items()
+            gas_data[gas_key][param_value] = {
+                row["source"]: row["mtco2eq"] / 1000 for _, row in gas_rows.iterrows()
             }
 
     result = {}
@@ -1256,13 +1231,6 @@ def load_emissions_by_source(
         df.index.name = param_name
         df = df.sort_index()
         result[gas] = df
-
-    # Save cache
-    if cache_path is not None:
-        for gas in ["CO2", "CH4", "N2O"]:
-            gas_cache = cache_path / f"emissions_by_source_{gas}.csv"
-            result[gas].to_csv(gas_cache)
-        print(f"Saved emissions by source to cache: {cache_path}")
 
     return result
 
@@ -1276,8 +1244,8 @@ LUC_TYPE_DISPLAY = {
     "Cropland expansion": "Cropland expansion",
     "Pasture expansion": "Pasture expansion",
     "Cropland sparing": "Cropland sparing",
-    "Grassland sparing\n(convertible)": "Grassland sparing\n(convertible)",
-    "Grassland sparing\n(marginal)": "Grassland sparing\n(marginal)",
+    "Grassland sparing (convertible)": "Grassland sparing\n(convertible)",
+    "Grassland sparing (marginal)": "Grassland sparing\n(marginal)",
 }
 
 # Continent display order (roughly by LUC importance)
@@ -1290,109 +1258,6 @@ CONTINENT_ORDER = [
 ]
 
 
-def _load_country_to_continent(project_root: Path) -> dict[str, str]:
-    """Build ISO3 country code -> M49 continent (Region Name) mapping."""
-    m49_path = project_root / "data" / "curated" / "M49-codes.csv"
-    m49 = pd.read_csv(m49_path, sep=";", comment="#")
-    mapping = {}
-    for _, row in m49.iterrows():
-        iso3 = row.get("ISO-alpha3 Code")
-        region = row.get("Region Name")
-        if pd.notna(iso3) and pd.notna(region) and iso3.strip():
-            mapping[iso3.strip()] = region.strip()
-    return mapping
-
-
-def _build_region_to_country(n: pypsa.Network) -> dict[str, str]:
-    """Build region -> ISO3 country mapping from crop production links."""
-    links = n.links.static
-    crop = links[links["carrier"] == "crop_production"]
-    mapping = {}
-    for _, row in crop[["region", "country"]].drop_duplicates().iterrows():
-        if pd.notna(row["region"]) and pd.notna(row["country"]) and row["country"]:
-            mapping[str(row["region"])] = str(row["country"])
-    return mapping
-
-
-def _extract_luc_by_category(
-    n: pypsa.Network,
-    groupby: str,
-    project_root: Path,
-    quantity: str = "emissions",
-) -> dict[str, float]:
-    """Extract LUC data from solved network, grouped by category.
-
-    Args:
-        n: Solved PyPSA network
-        groupby: "continent" or "land_type"
-        project_root: Path to project root (for M49 codes)
-        quantity: "emissions" (MtCO2/yr via flow*eff2) or "area" (Mha,
-                  positive for expansion, negative for sparing)
-
-    Returns:
-        Dict mapping category name to value in MtCO2/yr or Mha.
-    """
-    snapshot = "now" if "now" in n.snapshots else n.snapshots[0]
-    links = n.links.static
-    p0 = n.links.dynamic.p0.loc[snapshot]
-
-    if groupby == "continent":
-        region_to_country = _build_region_to_country(n)
-        country_to_continent = _load_country_to_continent(project_root)
-
-    result: dict[str, float] = {}
-
-    # (carrier, label, split_by_land_type, area_sign)
-    # area_sign: +1 for expansion (land consumed), -1 for sparing (land freed)
-    carrier_configs = [
-        ("land_conversion", "Cropland expansion", None, 1),
-        ("new_to_pasture", "Pasture expansion", None, 1),
-        ("spare_land", "Cropland sparing", None, -1),
-        ("spare_existing_grassland", None, True, -1),
-    ]
-
-    for carrier, base_label, split_by_land_type, area_sign in carrier_configs:
-        mask = links["carrier"] == carrier
-        carrier_links = links[mask]
-        if carrier_links.empty:
-            continue
-
-        for link in carrier_links.index:
-            flow = float(p0.get(link, 0.0))
-            if abs(flow) < 1e-12:
-                continue
-
-            if quantity == "emissions":
-                eff2 = float(carrier_links.at[link, "efficiency2"])
-                value = flow * eff2  # MtCO2/yr
-            else:
-                value = flow * area_sign  # Mha (positive=expansion, negative=sparing)
-
-            if groupby == "continent":
-                region = carrier_links.at[link, "region"]
-                if pd.isna(region):
-                    continue
-                country = region_to_country.get(str(region))
-                if not country:
-                    continue
-                category = country_to_continent.get(country, "Other")
-            elif groupby == "land_type":
-                if split_by_land_type:
-                    lt = carrier_links.at[link, "land_type"]
-                    if pd.notna(lt) and lt == "marginal":
-                        category = "Grassland sparing\n(marginal)"
-                    else:
-                        category = "Grassland sparing\n(convertible)"
-                else:
-                    category = base_label
-            else:
-                raise ValueError(f"Unknown groupby: {groupby}")
-
-            result[category] = result.get(category, 0.0) + value
-
-    return result
-
-
 def load_luc_breakdown(
     scenarios: list[tuple[float, str, Path]],
     project_root: Path,
@@ -1400,9 +1265,12 @@ def load_luc_breakdown(
     param_name: str,
     groupby: str,
     quantity: str = "emissions",
-    cache_path: Path | None = None,
+    **_kwargs,
 ) -> pd.DataFrame:
-    """Load LUC breakdown across scenarios.
+    """Load LUC breakdown across scenarios from analysis CSVs.
+
+    Reads ``luc_breakdown.csv`` produced by ``analyze_model`` (columns:
+    groupby, category, emissions_mtco2, area_mha).
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
@@ -1411,50 +1279,41 @@ def load_luc_breakdown(
         param_name: Name for the parameter (used as index name)
         groupby: "continent" or "land_type"
         quantity: "emissions" (GtCO2) or "area" (Mha)
-        cache_path: Optional directory for caching results
 
     Returns:
         DataFrame with param_value as index and categories as columns.
         Units: GtCO2 for emissions, Mha for area.
     """
-    cache_file = None
-    cache_suffix = f"luc_{quantity}_by_{groupby}.csv"
-    if cache_path is not None:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_path / cache_suffix
-        network_paths = [f for _, _, f in scenarios if f.exists()]
-        if is_cache_valid(cache_file, network_paths):
-            print(f"Loading LUC {quantity} by {groupby} from cache: {cache_file}")
-            return pd.read_csv(cache_file, index_col=param_name)
+    results_dir = project_root / "results" / config_name
+    value_col = "emissions_mtco2" if quantity == "emissions" else "area_mha"
 
-    print(f"Extracting LUC {quantity} by {groupby} from {len(scenarios)} scenarios...")
     data: dict[float, dict[str, float]] = {}
 
-    for param_value, scenario_name, network_path in scenarios:
-        if not network_path.exists():
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            results_dir / "analysis" / f"scen-{scenario_name}" / "luc_breakdown.csv"
+        )
+        if not csv_path.exists():
             continue
-        print(f"  Loading {scenario_name}...")
-        n = pypsa.Network(network_path)
-        luc = _extract_luc_by_category(n, groupby, project_root, quantity=quantity)
+
+        df = pd.read_csv(csv_path)
+        rows = df[df["groupby"] == groupby]
         if quantity == "emissions":
             # Convert MtCO2 to GtCO2
-            data[param_value] = {cat: val / 1000 for cat, val in luc.items()}
+            data[param_value] = {
+                row["category"]: row[value_col] / 1000 for _, row in rows.iterrows()
+            }
         else:
-            # Already in Mha
-            data[param_value] = dict(luc)
+            data[param_value] = {
+                row["category"]: row[value_col] for _, row in rows.iterrows()
+            }
 
     if not data:
         return pd.DataFrame()
 
     df = pd.DataFrame(data).T.fillna(0)
     df.index.name = param_name
-    df = df.sort_index()
-
-    if cache_file is not None:
-        df.to_csv(cache_file)
-        print(f"Saved LUC {quantity} by {groupby} to cache: {cache_file}")
-
-    return df
+    return df.sort_index()
 
 
 # -----------------------------------------------------------------------------
@@ -1644,59 +1503,18 @@ def aggregate_crop_metrics_by_group(
     return y_group, p_group
 
 
-def _extract_feed_totals(
-    n: pypsa.Network, groupby: str = "feed_category"
-) -> dict[str, float]:
-    """Extract total feed use (Mt DM) from a solved network.
-
-    Args:
-        n: Solved PyPSA network
-        groupby: "feed_category" or "animal"
-
-    Returns:
-        Dict mapping category/animal name to Mt DM.
-    """
-    links = n.links.static
-    feed_links = links[
-        (links["carrier"] == "animal_production")
-        & links["product"].notna()
-        & links["feed_category"].notna()
-    ]
-    if feed_links.empty:
-        return {}
-
-    snapshot = "now" if "now" in n.snapshots else n.snapshots[0]
-    p0 = n.links.dynamic.p0.loc[snapshot]
-
-    result: dict[str, float] = {}
-    for link in feed_links.index:
-        flow = abs(float(p0.get(link, 0.0)))
-        if flow < 1e-12:
-            continue
-
-        if groupby == "feed_category":
-            raw = str(feed_links.at[link, "feed_category"])
-            category = FEED_CATEGORY_LABELS.get(raw, raw.replace("_", " ").title())
-        elif groupby == "animal":
-            product = str(feed_links.at[link, "product"])
-            category = PRODUCT_TO_ANIMAL.get(product, product.replace("_", " ").title())
-        else:
-            raise ValueError(f"Unknown groupby: {groupby}")
-
-        result[category] = result.get(category, 0.0) + flow
-
-    return result
-
-
 def load_feed_breakdown(
     scenarios: list[tuple[float, str, Path]],
     project_root: Path,
     config_name: str,
     param_name: str,
     groupby: str = "feed_category",
-    cache_path: Path | None = None,
+    **_kwargs,
 ) -> pd.DataFrame:
-    """Load feed use breakdown across scenarios.
+    """Load feed use breakdown across scenarios from analysis CSVs.
+
+    Reads ``feed_by_category.csv`` or ``feed_by_animal.csv`` produced by
+    ``analyze_model``.
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
@@ -1704,45 +1522,37 @@ def load_feed_breakdown(
         config_name: Name of the config
         param_name: Name for the parameter (used as index name)
         groupby: "feed_category" or "animal"
-        cache_path: Optional directory for caching results
 
     Returns:
         DataFrame with param_value as index and categories as columns, in Gt DM.
     """
-    cache_file = None
-    cache_suffix = f"feed_by_{groupby}.csv"
-    if cache_path is not None:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_path / cache_suffix
-        network_paths = [f for _, _, f in scenarios if f.exists()]
-        if is_cache_valid(cache_file, network_paths):
-            print(f"Loading feed by {groupby} from cache: {cache_file}")
-            return pd.read_csv(cache_file, index_col=param_name)
+    results_dir = project_root / "results" / config_name
+    if groupby == "feed_category":
+        csv_name = "feed_by_category.csv"
+        key_col = "category"
+    else:
+        csv_name = "feed_by_animal.csv"
+        key_col = "animal"
 
-    print(f"Extracting feed by {groupby} from {len(scenarios)} scenarios...")
     data: dict[float, dict[str, float]] = {}
 
-    for param_value, scenario_name, network_path in scenarios:
-        if not network_path.exists():
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = results_dir / "analysis" / f"scen-{scenario_name}" / csv_name
+        if not csv_path.exists():
             continue
-        print(f"  Loading {scenario_name}...")
-        n = pypsa.Network(network_path)
-        feed = _extract_feed_totals(n, groupby)
+
+        df = pd.read_csv(csv_path)
         # Convert Mt to Gt
-        data[param_value] = {cat: val / 1000 for cat, val in feed.items()}
+        data[param_value] = {
+            row[key_col]: row["mt_dm"] / 1000 for _, row in df.iterrows()
+        }
 
     if not data:
         return pd.DataFrame()
 
     df = pd.DataFrame(data).T.fillna(0)
     df.index.name = param_name
-    df = df.sort_index()
-
-    if cache_file is not None:
-        df.to_csv(cache_file)
-        print(f"Saved feed by {groupby} to cache: {cache_file}")
-
-    return df
+    return df.sort_index()
 
 
 def load_crop_yield_and_production(
@@ -1750,61 +1560,41 @@ def load_crop_yield_and_production(
     project_root: Path,
     config_name: str,
     param_name: str,
-    cache_path: Path | None = None,
     include_grassland: bool = False,
+    **_kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load crop-level average yield and production across scenarios.
 
-    For each scenario, this computes:
-    - production by crop (Mt)
-    - average yield by crop (Mt/Mha), using total production / total land use
+    Reads ``crop_production.csv`` and ``land_use.csv`` from the analysis
+    outputs and derives average yield per crop.
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
         project_root: Path to project root directory
         config_name: Name of the config
         param_name: Name for the parameter (used as index name)
-        cache_path: Optional directory for caching results
         include_grassland: Include grassland pseudo-crop when True
 
     Returns:
         Tuple of DataFrames (yield_df, production_df), each with param_value
         as index and crop names as columns. Units: Mt/Mha and Mt.
     """
-    from workflow.scripts.analysis.extract_statistics import (
-        extract_crop_production,
-        extract_land_use,
-    )
+    results_dir = project_root / "results" / config_name
 
-    yield_cache = None
-    production_cache = None
-    if cache_path is not None:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        yield_cache = cache_path / "crop_yield_mt_per_mha.csv"
-        production_cache = cache_path / "crop_production_mt.csv"
-        network_paths = [f for _, _, f in scenarios if f.exists()]
-        if is_cache_valid(yield_cache, network_paths) and is_cache_valid(
-            production_cache, network_paths
-        ):
-            print(f"Loading crop yield/production from cache: {cache_path}")
-            yield_df = pd.read_csv(yield_cache, index_col=param_name)
-            production_df = pd.read_csv(production_cache, index_col=param_name)
-            return yield_df, production_df
-
-    print(f"Extracting crop yield/production from {len(scenarios)} scenarios...")
     yield_data: dict[float, dict[str, float]] = {}
     production_data: dict[float, dict[str, float]] = {}
 
-    for param_value, scenario_name, network_path in scenarios:
-        if not network_path.exists():
+    for param_value, scenario_name, _ in scenarios:
+        analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
+        prod_path = analysis_dir / "crop_production.csv"
+        land_path = analysis_dir / "land_use.csv"
+        if not prod_path.exists() or not land_path.exists():
             continue
-        print(f"  Loading {scenario_name}...")
-        n = pypsa.Network(network_path)
 
-        production_df = extract_crop_production(n)
-        land_df = extract_land_use(n)
+        prod_df = pd.read_csv(prod_path)
+        land_df = pd.read_csv(land_path)
 
-        production = production_df.groupby("crop")["production_mt"].sum()
+        production = prod_df.groupby("crop")["production_mt"].sum()
         land = land_df.groupby("crop")["area_mha"].sum()
 
         if not include_grassland:
@@ -1838,11 +1628,6 @@ def load_crop_yield_and_production(
     crop_order = production_out.mean().sort_values(ascending=False).index
     production_out = production_out[crop_order]
     yield_out = yield_out.reindex(columns=crop_order, fill_value=0.0)
-
-    if yield_cache is not None and production_cache is not None:
-        yield_out.to_csv(yield_cache)
-        production_out.to_csv(production_cache)
-        print(f"Saved crop yield/production cache to: {cache_path}")
 
     return yield_out, production_out
 

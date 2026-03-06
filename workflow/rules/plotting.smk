@@ -608,14 +608,11 @@ rule plot_water_value_map:
 
 rule plot_emissions_breakdown:
     input:
-        network="<results>/{name}/solved/model_scen-{scenario}.nc",
+        net_emissions="<results>/{name}/analysis/scen-{scenario}/net_emissions.csv",
         faostat_emissions="<processing>/{name}/faostat_emissions.csv",
         gleam_emissions="data/bundled/gleam3/livestock_emissions.csv",
-        regions="<processing>/{name}/regions.geojson",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/emissions_breakdown.pdf",
-        csv="<results>/{name}/plots/scen-{scenario}/emissions_breakdown.csv",
-        choropleth_pdf="<results>/{name}/plots/scen-{scenario}/emissions_choropleth.pdf",
     params:
         ch4_gwp=lambda w: get_effective_config(w.scenario)["emissions"][
             "ch4_to_co2_factor"
@@ -627,7 +624,7 @@ rule plot_emissions_breakdown:
         "analysis_plot"
     resources:
         runtime="1m",
-        mem_mb=1200,
+        mem_mb=200,
     log:
         "<logs>/{name}/plot_emissions_breakdown_scen-{scenario}.log",
     benchmark:
