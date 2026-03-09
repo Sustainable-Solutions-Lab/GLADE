@@ -394,6 +394,11 @@ def _plot_food_slack(
     ax.set_ylabel("Mt")
     ax.set_title("Food slack by group (stacked by food)")
     ax.grid(axis="y", alpha=0.3)
+
+    # Make primary y-axis symmetric around zero
+    y1_min, y1_max = ax.get_ylim()
+    y1_abs = max(abs(y1_min), abs(y1_max))
+    ax.set_ylim(-y1_abs, y1_abs)
     if plot_df.empty:
         ax.text(
             0.5,
@@ -436,22 +441,13 @@ def _plot_food_slack(
         ymax = float(np.max(finite_ratio))
         y2_max = max(1.0, ymax * 1.15)
 
-    # Align secondary-axis zero with primary-axis zero while keeping
-    # secondary tick labels non-negative.
-    y1_min, y1_max = ax.get_ylim()
-    if y1_max <= y1_min:
-        y2_min = 0.0
-    else:
-        zero_frac = (0.0 - y1_min) / (y1_max - y1_min)
-        zero_frac = float(np.clip(zero_frac, 0.0, 1.0))
-        if zero_frac <= 0.0:
-            y2_min = 0.0
-        elif zero_frac >= 1.0:
-            y2_min = -y2_max
-        else:
-            y2_min = -zero_frac / (1.0 - zero_frac) * y2_max
-    ax2.set_ylim(y2_min, y2_max)
-    ax2.set_yticks(np.linspace(0.0, y2_max, 6))
+    # Symmetric secondary axis aligned with the symmetric primary axis.
+    # Only show ticks on the positive side (the ratio is non-negative).
+    ax2.set_ylim(-y2_max, y2_max)
+    locator = plt.MaxNLocator(nbins=5, steps=[1, 2, 5, 10])
+    locator.view_limits(0, y2_max)
+    ticks = [t for t in locator.tick_values(0, y2_max) if 0 <= t <= y2_max]
+    ax2.set_yticks(ticks)
 
     # Legend
     handles = [
