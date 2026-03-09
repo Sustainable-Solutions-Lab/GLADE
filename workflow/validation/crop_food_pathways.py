@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pandas as pd
-from pandera.pandas import Column, DataFrameSchema
+from pandera.pandas import Check, Column, DataFrameSchema
 from snakemake.logging import logger
 
 FOODS_SCHEMA = DataFrameSchema(
@@ -16,6 +16,12 @@ FOODS_SCHEMA = DataFrameSchema(
         "crop": Column(str, nullable=False, coerce=True),
         "food": Column(str, nullable=False, coerce=True),
         "factor": Column(float, nullable=False, coerce=True),
+        "mass_basis": Column(
+            str,
+            nullable=False,
+            coerce=True,
+            checks=Check.isin(["fresh", "dry"]),
+        ),
         "description": Column(str, nullable=False, coerce=True),
     },
     strict=True,
