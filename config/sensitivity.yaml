@@ -156,6 +156,9 @@ validation:
     l1_cost: 0.5
     # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
 
+land:
+  regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
+
 health:
   region_clusters: 15
   intake_grid_points: 8  # Number of grid knots over empirical RR range
