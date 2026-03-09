@@ -82,6 +82,67 @@ def _build_existing_grassland_supply_df(
     return supply_df
 
 
+def add_multi_cropping_land_correction(
+    n: pypsa.Network,
+    *,
+    land_use_cost_bnusd_per_mha: float,
+) -> None:
+    """Add generators on cropland buses to cover multi-cropping deficits.
+
+    When total harvested area exceeds physical cropland supply (due to
+    multiple crops per year on the same land), this adds non-extendable
+    generators sized to the deficit. This avoids forcing land conversion
+    or slack to accommodate what is really existing multi-cropped land.
+    """
+    crop_links = n.links.static[n.links.static["carrier"] == "crop_production"]
+    if crop_links.empty:
+        return
+
+    # Harvested area per cropland bus (bus0)
+    harvested = crop_links.groupby("bus0")["baseline_area_mha"].sum()
+
+    # Existing cropland supply per cropland bus (bus1 of land_use links)
+    land_use_links = n.links.static[n.links.static["carrier"] == "land_use"]
+    if land_use_links.empty:
+        return
+    supply = land_use_links.groupby("bus1")["p_nom"].sum()
+
+    # Compute deficit
+    common = harvested.index.intersection(supply.index)
+    deficit = (harvested.reindex(common) - supply.reindex(common)).clip(lower=0.0)
+    deficit = deficit[deficit > 1e-10]
+    if deficit.empty:
+        return
+
+    # Register carrier
+    if "multi_cropping_land_correction" not in n.carriers.static.index:
+        n.carriers.add("multi_cropping_land_correction", unit="Mha")
+
+    # Extract region/class/water from cropland bus metadata
+    bus_meta = n.buses.static.loc[deficit.index]
+    gen_names = "supply:multi_cropping_correction:" + deficit.index.str.removeprefix(
+        "land:cropland:"
+    )
+
+    n.generators.add(
+        gen_names,
+        bus=deficit.index,
+        carrier="multi_cropping_land_correction",
+        p_nom=deficit.values,
+        p_nom_extendable=False,
+        marginal_cost=land_use_cost_bnusd_per_mha,
+        region=bus_meta["region"].values,
+        resource_class=bus_meta["resource_class"].values,
+        water_supply=bus_meta["water_supply"].values,
+    )
+
+    logger.info(
+        "Added %d multi-cropping land correction generators (total %.2f Mha)",
+        len(deficit),
+        deficit.sum(),
+    )
+
+
 def add_land_components(
     n: pypsa.Network,
     total_land_area: pd.DataFrame,

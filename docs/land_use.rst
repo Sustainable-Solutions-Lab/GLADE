@@ -267,3 +267,27 @@ Validation runs that pin observed harvested area may encounter land-class mismat
 - Controlled by ``validation.land_slack: true``
 - Marginal cost set by ``land.slack_marginal_cost`` (USD per Mha)
 - Default ~5000 USD/ha ensures slack activates only as a last resort
+
+Multi-Cropping Land Correction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In many regions, the total harvested area (summed across all crops on a cropland bus) exceeds the physical cropland supply because multiple crops are grown on the same land per year (multi-cropping). Without correction, the model would need land slack or new land conversion to accommodate what is actually existing multi-cropped land.
+
+The ``add_multi_cropping_land_correction`` function in ``land.py`` adds non-extendable generators directly on deficit **cropland buses** after crop production links are built:
+
+1. Computes **harvested area** per cropland bus by summing ``baseline_area_mha`` across crop production links
+2. Computes **existing supply** per cropland bus from ``land_use`` link capacities
+3. Adds generators sized to ``max(harvested − supply, 0)`` on each deficit bus
+
+These generators:
+
+- Use carrier ``multi_cropping_land_correction`` (unit: Mha)
+- Are named ``supply:multi_cropping_correction:{region}_c{class}_{water}``
+- Have the same marginal cost as existing land use (no penalty)
+- Are non-extendable (the correction is sized exactly to the observed deficit)
+- Do not connect to emission buses (no LUC emissions)
+- Do not affect pasture pools (cropland buses only)
+
+This correction runs unconditionally in all model configurations.
+
+**Relationship to multi-cropping links.** The model also has explicit multi-cropping *links* (see :doc:`crop_production`) that let the optimizer allocate additional crop cycles on the same land within a single year. However, those links are disabled when ``production_stability`` is enabled or ``use_actual_production`` is true, because reliable baseline data on multi-cropping patterns is not available. In those modes, the land correction generators fill the role of accounting for the extra harvested area that multi-cropping creates—without them, the model would face an artificial ~55 Mha land deficit and require slack or new land conversion to remain feasible.

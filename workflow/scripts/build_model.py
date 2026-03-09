@@ -698,6 +698,11 @@ if __name__ == "__main__":
         per_tonne_cost_fraction=per_tonne_cost_fraction,
         min_yield_t_per_ha=min_crop_yield,
     )
+    land.add_multi_cropping_land_correction(
+        n,
+        land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
+    )
+
     # Multi-cropping is disabled when running with actual production
     enable_multiple_cropping = bool(snakemake.params.multiple_cropping) and (
         not use_actual_production
