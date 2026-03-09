@@ -58,6 +58,11 @@ mkdir -p "$CACHE_ROOT" "$TMP_ROOT"
 export XDG_CACHE_HOME="$CACHE_ROOT"
 export TMPDIR="$TMP_ROOT"
 
+# Snakemake's compact logger hides the terminal cursor; ensure it is restored
+# even if Snakemake is OOM-killed or crashes unexpectedly.
+restore_cursor() { printf '\e[?25h'; }
+trap restore_cursor EXIT
+
 # Parse environment, jobs, and slurm arguments
 PIXI_ENV=""
 USE_SLURM=false
@@ -119,10 +124,11 @@ if [ "$USE_SLURM" = true ]; then
   fi
   set -- --profile "$SLURM_PROFILE" "$@"
   if [ -n "$PIXI_ENV" ]; then
-    exec pixi run -e "$PIXI_ENV" snakemake "$@"
+    pixi run -e "$PIXI_ENV" snakemake "$@"
   else
-    exec pixi run snakemake "$@"
+    pixi run snakemake "$@"
   fi
+  exit $?
 fi
 
 # Build default resource limits (must be a single --resources flag; multiple flags overwrite).
@@ -139,17 +145,18 @@ fi
 
 if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet true >/dev/null 2>&1; then
   if [ -n "$PIXI_ENV" ]; then
-    exec systemd-run --user --scope -p MemoryMax="${MEM_MAX}" -p MemorySwapMax=0 \
+    systemd-run --user --scope -p MemoryMax="${MEM_MAX}" -p MemorySwapMax=0 \
       pixi run -e "$PIXI_ENV" snakemake "$@"
   else
-    exec systemd-run --user --scope -p MemoryMax="${MEM_MAX}" -p MemorySwapMax=0 \
+    systemd-run --user --scope -p MemoryMax="${MEM_MAX}" -p MemorySwapMax=0 \
       pixi run snakemake "$@"
   fi
+  exit $?
 fi
 
 echo "[tools/smk] systemd user scope unavailable; running without memory cap" >&2
 if [ -n "$PIXI_ENV" ]; then
-  exec pixi run -e "$PIXI_ENV" snakemake "$@"
+  pixi run -e "$PIXI_ENV" snakemake "$@"
 else
-  exec pixi run snakemake "$@"
+  pixi run snakemake "$@"
 fi
