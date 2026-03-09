@@ -204,13 +204,14 @@ emissions from spared land sequestration.
        results/{name}/analysis/scen-default/net_emissions.csv
 
 ``results/{name}/analysis/scen-{scenario}/net_emissions.csv``
-   Net GHG emissions per gas and total:
+   Net GHG emissions by gas and source category:
 
    .. csv-table::
       :header: Column, Type, Unit, Description
 
-      ``gas``, string, —, "Gas type (co2, ch4, n2o, total)"
-      ``net_mtco2eq``, float, MtCO2eq, "Net emissions in CO2 equivalents"
+      ``gas``, string, —, "Gas type (co2, ch4, n2o)"
+      ``source``, string, —, "Emission source category"
+      ``mtco2eq``, float, MtCO2eq, "Emissions in CO2 equivalents"
 
 Health Impacts
 --------------

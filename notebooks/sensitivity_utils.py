@@ -646,9 +646,8 @@ def load_net_emissions(
             )
 
         df = pd.read_csv(csv_path)
-        total_row = df[df["gas"] == "total"]
-        # Convert MtCO2eq to GtCO2eq
-        data[param_value] = total_row["net_mtco2eq"].iloc[0] / 1000
+        # Sum all sources across gases and convert MtCO2eq to GtCO2eq
+        data[param_value] = df["mtco2eq"].sum() / 1000
 
     result = pd.Series(data, name="net_ghg_gtco2eq")
     result.index.name = param_name
@@ -2531,7 +2530,7 @@ def load_grid_data_from_statistics(
         net_df = pd.read_csv(analysis_dir / "net_emissions.csv")
         health_df = pd.read_csv(analysis_dir / "health_totals.csv")
 
-        ghg_mtco2eq = net_df.loc[net_df["gas"] == "total", "net_mtco2eq"].iloc[0]
+        ghg_mtco2eq = net_df["mtco2eq"].sum()
 
         grid_data[(ghg_price, yll_value)] = {
             "crop_production": obj_df["crop_production"].iloc[0],
