@@ -4,11 +4,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """
-Prepare FAOSTAT supply data to supplement GDD dietary intake.
+Prepare FAOSTAT supply data to supplement or override GDD dietary intake.
 
-The Global Dietary Database (GDD) lacks data for certain food groups. This
-script reads supply data from a FAOSTAT FBS bulk CSV for:
+The Global Dietary Database (GDD) is structurally missing or can be
+substantially biased low for some commodity groups in validation settings.
+This script reads supply data from a FAOSTAT FBS bulk CSV for:
 - Dairy (milk, butter, cream - converted to milk equivalents)
+- Eggs
 - Poultry meat (converted to model retail-meat basis)
 - Vegetable oils
 
@@ -42,6 +44,7 @@ logger = logging.getLogger(__name__)
 # FAOSTAT Item Codes (FBS)
 FAO_ITEMS = {
     "poultry": [2734],  # Poultry Meat
+    "eggs": [2744],  # Eggs
     # Aggregate vegetable oils intake; used as group total that is later
     # distributed across modeled oil foods.
     "oil": [2914],  # Vegetable Oils
@@ -140,6 +143,10 @@ def main():
         poultry_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["poultry"])]
         # Convert FBS carcass-equivalent poultry mass to model retail-meat basis.
         supplies["poultry"] = poultry_rows["Value"].sum() * poultry_carcass_to_retail
+
+        # Eggs
+        egg_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["eggs"])]
+        supplies["eggs"] = egg_rows["Value"].sum()
 
         # Oil
         oil_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["oil"])]

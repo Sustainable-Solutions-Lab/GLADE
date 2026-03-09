@@ -64,10 +64,11 @@ rule prepare_faostat_fbs_items:
 
 
 rule prepare_faostat_gdd_supplements:
-    """Prepare FAOSTAT supply data to supplement GDD dietary intake.
+    """Prepare FAOSTAT supply data to supplement or override GDD dietary intake.
 
-    Reads dairy, poultry, and oil supply data from FAOSTAT FBS bulk CSV to
-    fill gaps in the Global Dietary Database (GDD).
+    Reads dairy, eggs, poultry, and oil supply data from FAOSTAT FBS bulk CSV
+    to fill gaps in the Global Dietary Database (GDD) or replace survey-based
+    values where FAOSTAT provides a more suitable validation anchor.
     """
     input:
         fbs_csv="data/downloads/faostat/FBS.parquet",

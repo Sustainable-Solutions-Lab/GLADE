@@ -102,7 +102,7 @@ The following food groups are populated from GDD variables:
      - Total processed meats
    * - ``eggs``
      - v12
-     - Eggs
+     - Eggs. Processed from GDD for reference, but the merged baseline diet currently overrides this group with FAOSTAT Food Balance Sheet supply for validation consistency.
    * - ``sugar``
      - v15, v35
      - Sugar-sweetened beverages and added sugars
@@ -130,6 +130,8 @@ The following food groups are populated from FAOSTAT Food Balance Sheets (FBS) b
      - Description & Source Items
    * - ``dairy``
      - **Total Milk Equivalent**. Aggregated from FAOSTAT items: Milk - Excluding Butter (2848), Butter/Ghee (2740), and Cream (2743). Butter and cream are converted to milk equivalents using FAO dairy commodity tree extraction rates (≈21.3× for butter/ghee, ≈6.7× for cream); milk-excl.-butter is taken as-is.
+   * - ``eggs``
+     - **Eggs** (2744).
    * - ``poultry``
      - **Poultry Meat** (2734).
    * - ``oil``
@@ -144,7 +146,7 @@ Data Processing
 The dietary data processing pipeline involves three stages:
 
 1. **Prepare GDD Data** (``workflow/scripts/prepare_gdd_dietary_intake.py``): Processes GDD survey data for most food groups.
-2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_gdd_supplements.py``): Fetches FAOSTAT supply data for dairy, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
+2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_gdd_supplements.py``): Fetches FAOSTAT supply data for dairy, eggs, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
 3. **Merge Sources** (``workflow/scripts/merge_dietary_sources.py``): Combines the datasets into a unified ``dietary_intake.csv``.
 
 The GDD processing step (Step 1) performs the following:
