@@ -39,7 +39,6 @@ def main():
     food_groups = snakemake.params["food_groups"]
     output_file = snakemake.output["diet"]
     stimulant_brewed_to_dry = {
-        "v17": snakemake.params["stimulant_brewed_to_dry"]["coffee"],
         "v18": snakemake.params["stimulant_brewed_to_dry"]["tea"],
     }
     ssb_sugar_g_per_100g = float(snakemake.params["ssb_sugar_g_per_100g"])
@@ -69,8 +68,10 @@ def main():
         "v15": "sugar",  # Sugar-sweetened beverages → refined sugar equivalent
         "v35": "sugar",  # Added sugars (g/day already reported)
         "v16": None,  # Fruit juices (excluded - not part of GBD fruit risk factor)
-        "v17": "stimulants",  # Coffee (brewed → dry weight conversion applied)
-        "v18": "stimulants",  # Tea (brewed → dry weight conversion applied)
+        "v17": None,  # Coffee — excluded: GDD v17 is unreliable for many countries
+        # (e.g. 42x overestimate for India vs FAOSTAT). coffee-green is sourced
+        # from FAOSTAT FBS via fbs_override_foods instead.
+        "v18": "tea-dried",  # Tea (brewed → dry weight conversion applied)
         # Note: We use v57 "Total Milk" for dairy, which aligns with the GBD dairy
         # risk factor definition and includes milk equivalents from all dairy products.
         # Individual components (v13 cheese, v14 yogurt) are not used separately
@@ -81,10 +82,15 @@ def main():
 
     # Filter to only food groups that are in the config
     # Multiple GDD variables may map to the same food group
+    # Per-food items (e.g. coffee-green, tea-dried) bypass the food group filter
+    # since they represent direct food-level values, not group aggregates.
+    DIRECT_FOOD_ITEMS = {"tea-dried"}
     requested_food_groups = set(food_groups)
     food_group_vars = {}
     for varcode, item in gdd_to_model_items.items():
-        if item is not None and item in requested_food_groups:
+        if item is not None and (
+            item in requested_food_groups or item in DIRECT_FOOD_ITEMS
+        ):
             if item not in food_group_vars:
                 food_group_vars[item] = []
             food_group_vars[item].append(varcode)
@@ -154,13 +160,12 @@ def main():
                     df_year["median"] = pd.to_numeric(
                         df_year["median"], errors="coerce"
                     ).fillna(0.0)
-            elif model_item == "stimulants":
-                brewed_to_dry = stimulant_brewed_to_dry.get(varcode)
-                if brewed_to_dry is not None:
-                    brewed_grams = pd.to_numeric(
-                        df_year["median"], errors="coerce"
-                    ).fillna(0.0)
-                    df_year["median"] = brewed_grams * brewed_to_dry
+            elif varcode in stimulant_brewed_to_dry:
+                brewed_to_dry = stimulant_brewed_to_dry[varcode]
+                brewed_grams = pd.to_numeric(df_year["median"], errors="coerce").fillna(
+                    0.0
+                )
+                df_year["median"] = brewed_grams * brewed_to_dry
 
             # Aggregate to country-age level (weighted mean across sex/urban/education strata)
             # GDD stratifies by age, sex, urban, education
@@ -260,8 +265,9 @@ def main():
             )
         if item == "sugar":
             return "g/day (refined sugar eq)"
-        else:
-            return "g/day (fresh wt)"  # Fresh/cooked "as consumed" weight
+        if item in DIRECT_FOOD_ITEMS:
+            return "g/day (dry wt)"  # Dry commodity weight (converted from brewed)
+        return "g/day (fresh wt)"  # Fresh/cooked "as consumed" weight
 
     result["unit"] = result["item"].apply(get_unit)
     result = result.rename(columns={"iso3": "country", "age_bucket": "age"})

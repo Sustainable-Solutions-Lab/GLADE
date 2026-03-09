@@ -106,9 +106,15 @@ The following food groups are populated from GDD variables:
    * - ``sugar``
      - v15, v35
      - Sugar-sweetened beverages and added sugars
-   * - ``stimulants``
-     - v17, v18
-     - Coffee and tea. GDD reports these in cups/day (brewed beverage); the script converts to **dry commodity weight** using configured factors (default: 14.4 g-dry/cup for coffee, 2.4 g-dry/cup for tea). Cocoa is not covered by GDD and enters only via FAOSTAT within-group shares.
+   * - ``coffee-green``
+     - *(none)*
+     - Not covered by GDD. GDD v17 data was found to be unreliable for many countries (e.g. India: 42× overestimate vs FAOSTAT). Sourced via FAOSTAT FBS override (``fbs_override_foods``).
+   * - ``tea-dried``
+     - v18
+     - Tea. GDD reports in cups/day (brewed beverage); the script converts to **dry commodity weight** using a configured factor (default: 2.4 g-dry/cup). Passed through as a direct per-food value, bypassing food group aggregation.
+   * - ``cocoa-powder``
+     - *(none)*
+     - Not covered by GDD. Sourced via FAOSTAT FBS override (``fbs_override_foods``).
 
 **Notes:**
 
@@ -290,9 +296,13 @@ This averaging applies to six food groups: ``fruits``, ``vegetables``,
 is missing for a particular country, the GDD value is used alone.
 
 For all other food groups (``dairy``, ``poultry``, ``oil``, ``grain``,
-``starchy_vegetable``, ``prc_meat``, ``eggs``, ``sugar``,
-``stimulants``), the GDD or FAOSTAT value from ``dietary_intake.csv``
-is used as-is.
+``starchy_vegetable``, ``prc_meat``, ``eggs``, ``sugar``),
+the GDD or FAOSTAT value from ``dietary_intake.csv`` is used as-is.
+
+For stimulants, only ``tea-dried`` uses GDD data directly (v18, converted from
+cups/day to dry weight). ``coffee-green`` and ``cocoa-powder`` are both sourced
+from FAOSTAT FBS via ``fbs_override_foods``. GDD v17 (coffee) was excluded
+because it overestimates consumption for many countries (e.g. 42× for India).
 
 The script also logs **cross-validation metrics** between GDD and GBD for the
 overlapping groups, reporting the median and range of the GDD/GBD ratio across

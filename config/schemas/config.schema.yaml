@@ -854,18 +854,14 @@ properties:
         description: "Age group for baseline diet (e.g., 'All ages')"
       stimulant_brewed_to_dry:
         type: object
-        required: [coffee, tea]
+        required: [tea]
         additionalProperties: false
         properties:
-          coffee:
-            type: number
-            minimum: 0
-            description: "GDD cups-to-dry-grams conversion factor for coffee"
           tea:
             type: number
             minimum: 0
-            description: "GDD cups-to-dry-grams conversion factor for tea"
-        description: "Conversion factors from GDD beverage intake (cups/day) to dry commodity weight (g/day)"
+            description: "GDD cups-to-dry-grams conversion factor for tea (v18)"
+        description: "Conversion factor from GDD beverage intake (cups/day) to dry commodity weight (g/day). Only tea is used; coffee is sourced from FAOSTAT FBS."
       fbs_override_foods:
         type: array
         uniqueItems: true

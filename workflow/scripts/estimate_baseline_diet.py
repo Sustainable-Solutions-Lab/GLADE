@@ -859,6 +859,57 @@ def _apply_millet_split(shares_df: pd.DataFrame) -> None:
             )
 
 
+def load_direct_food_items(
+    dietary_intake_path: str,
+    food_groups_df: pd.DataFrame,
+    baseline_age: str,
+) -> tuple[pd.DataFrame, set[str]]:
+    """Extract per-food items from dietary intake data.
+
+    Items in dietary_intake.csv whose name matches a food (not a food group)
+    are treated as direct per-food consumption values, bypassing the
+    group-total x within-group-share disaggregation.  This applies to foods
+    like coffee-green and tea-dried, where GDD provides per-food data directly.
+
+    Returns (direct_foods_df, direct_food_names) where direct_foods_df has
+    columns: country, food, food_group, consumption_g_per_day.
+    """
+    intake = pd.read_csv(dietary_intake_path)
+    intake = intake[intake["age"] == baseline_age].copy()
+
+    food_names = set(food_groups_df["food"])
+    group_names = set(food_groups_df["group"])
+    food_to_group = food_groups_df.set_index("food")["group"].to_dict()
+
+    # Items that are food names (not group names) are direct per-food values
+    direct_items = intake[
+        intake["item"].isin(food_names) & ~intake["item"].isin(group_names)
+    ]
+
+    if direct_items.empty:
+        return (
+            pd.DataFrame(
+                columns=["country", "food", "food_group", "consumption_g_per_day"]
+            ),
+            set(),
+        )
+
+    direct_food_names = set(direct_items["item"].unique())
+
+    result = direct_items.rename(
+        columns={"item": "food", "value": "consumption_g_per_day"}
+    )
+    result["food_group"] = result["food"].map(food_to_group)
+    result = result[["country", "food", "food_group", "consumption_g_per_day"]].copy()
+
+    logger.info(
+        "Direct per-food items from dietary intake: %s",
+        sorted(direct_food_names),
+    )
+
+    return result, direct_food_names
+
+
 def main():
     dietary_intake_path = snakemake.input.dietary_intake
     gbd_exposure_path = snakemake.input.gbd_exposure
@@ -909,6 +960,11 @@ def main():
         group_totals["food_group"].nunique(),
     )
 
+    # Step 1a: Extract direct per-food items (e.g. coffee-green, tea-dried)
+    direct_foods, direct_food_names = load_direct_food_items(
+        dietary_intake_path, food_groups_df, baseline_age
+    )
+
     # Step 2: Within-group food shares
     logger.info("Step 2: Building within-group food shares...")
     shares = build_within_group_shares(
@@ -922,6 +978,10 @@ def main():
         byproducts,
         carcass_to_retail_meat,
     )
+    # Exclude direct foods from shares — they don't participate in the
+    # group_total x share disaggregation.
+    if direct_food_names:
+        shares = shares[~shares["food"].isin(direct_food_names)]
     logger.info(
         "Food shares: %d countries, %d foods",
         shares["country"].nunique(),
@@ -946,6 +1006,29 @@ def main():
     result = baseline_diet[
         ["country", "food", "food_group", "consumption_g_per_day"]
     ].copy()
+
+    # Append direct per-food items
+    if not direct_foods.empty:
+        result = pd.concat([result, direct_foods], ignore_index=True)
+
+    # Insert placeholder rows for FBS override foods not yet in result
+    # (e.g. cocoa-powder when its group has no group-level total)
+    fg_map = food_groups_df.set_index("food")["group"].to_dict()
+    for food in fbs_override_foods:
+        if food not in result["food"].values:
+            food_group = fg_map.get(food)
+            if food_group is not None:
+                countries = result["country"].unique()
+                placeholders = pd.DataFrame(
+                    {
+                        "country": countries,
+                        "food": food,
+                        "food_group": food_group,
+                        "consumption_g_per_day": 0.0,
+                    }
+                )
+                result = pd.concat([result, placeholders], ignore_index=True)
+
     result = result.sort_values(["country", "food_group", "food"]).reset_index(
         drop=True
     )

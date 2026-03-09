@@ -497,16 +497,18 @@ diet:
   # FAOSTAT Food Balance Sheet supply data. This addresses cases where GDD
   # survey intake substantially underestimates actual consumption (e.g. yam
   # in West Africa).
-  # Conversion factors from GDD beverage intake (cups/day) to dry commodity
-  # weight (g/day). GDD reports coffee (v17) and tea (v18) in cups/day.
+  # Conversion factor from GDD beverage intake (cups/day) to dry commodity
+  # weight (g/day). Only tea (v18) is actively used; coffee-green is sourced
+  # from FAOSTAT FBS (fbs_override_foods) because GDD v17 data is unreliable
+  # for many countries (e.g. 42× overestimate for India vs FAOSTAT supply).
   # Factor = serving_size_g × dry_fraction_per_g_brewed
-  # Coffee: 240 g/cup × 0.06 g-dry/g-brewed = 14.4 g-dry/cup
   # Tea: 240 g/cup × 0.01 g-dry/g-brewed = 2.4 g-dry/cup
   stimulant_brewed_to_dry:
-    coffee: 14.4
     tea: 2.4
   fbs_override_foods:
   - yam
+  - cocoa-powder
+  - coffee-green
 
 # --- section: biomass ---
 biomass:
