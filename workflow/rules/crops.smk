@@ -102,15 +102,56 @@ rule build_crop_yields:
         "../scripts/build_crop_yields.py"
 
 
+_fdd_crops_in_config = set(config["fodder_decomposition"]["fdd_crops"]) & set(
+    config["crops"]
+)
+
+
+rule build_fdd_area_shares:
+    input:
+        eurostat_fodder="data/downloads/eurostat_fodder_production.csv",
+        regions="<processing>/{name}/regions.geojson",
+        yield_alfalfa=lambda w: gaez_path("yield", "r", "alfalfa"),
+        yield_silage_maize=lambda w: gaez_path("yield", "r", "silage-maize"),
+    params:
+        fdd_crops=config["fodder_decomposition"]["fdd_crops"],
+        suitability_blend_weight=config["fodder_decomposition"][
+            "suitability_blend_weight"
+        ],
+    output:
+        "<processing>/{name}/fdd_area_shares.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=1300,
+    log:
+        "<logs>/{name}/build_fdd_area_shares.log",
+    benchmark:
+        "<benchmarks>/{name}/build_fdd_area_shares.tsv"
+    script:
+        "../scripts/build_fdd_area_shares.py"
+
+
+def _harvested_area_inputs(w):
+    """Get inputs for build_harvested_area_gaez, including FDD shares when relevant."""
+    inputs = {
+        "harvested_area_raster": gaez_path("harvested_area", w.water_supply, w.crop),
+        "classes": f"<processing>/{w.name}/resource_classes.nc",
+        "regions": f"<processing>/{w.name}/regions.geojson",
+        "crop_mapping": "data/curated/gaez_crop_code_mapping.csv",
+        "faostat_production": f"<processing>/{w.name}/faostat_crop_production.csv",
+    }
+    if _fdd_crops_in_config:
+        inputs["fdd_shares"] = f"<processing>/{w.name}/fdd_area_shares.csv"
+    else:
+        inputs["fdd_shares"] = []
+    return inputs
+
+
 rule build_harvested_area_gaez:
     input:
-        harvested_area_raster=lambda w: gaez_path(
-            "harvested_area", w.water_supply, w.crop
-        ),
-        classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
-        crop_mapping="data/curated/gaez_crop_code_mapping.csv",
-        faostat_production="<processing>/{name}/faostat_crop_production.csv",
+        unpack(_harvested_area_inputs),
     params:
         non_food_crops=config["non_food_crops"],
     output:

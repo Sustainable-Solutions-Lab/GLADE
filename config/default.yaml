@@ -429,6 +429,14 @@ animal_products:
   - wetland-rice
   - wheat
 
+fodder_decomposition:
+  fdd_crops:
+    - alfalfa
+    - silage-maize
+  eurostat:
+    year_range: [2018, 2022]
+  suitability_blend_weight: 0.7
+
 grazing:
   enabled: true
   isimip_utilization_rate: 0.50 # Applied to ISIMIP yields in merge step

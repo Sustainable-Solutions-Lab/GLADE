@@ -849,6 +849,24 @@ rule download_forest_carbon_accumulation_1km:
         """
 
 
+rule retrieve_eurostat_fodder:
+    input:
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        baseline_year_range=config["fodder_decomposition"]["eurostat"]["year_range"],
+    output:
+        "data/downloads/eurostat_fodder_production.csv",
+    resources:
+        runtime="15m",
+        mem_mb=200,
+    log:
+        "<logs>/shared/retrieve_eurostat_fodder.log",
+    benchmark:
+        "<benchmarks>/shared/retrieve_eurostat_fodder.tsv"
+    script:
+        "../scripts/retrieve_eurostat_fodder.py"
+
+
 # Conditional rule: retrieve nutrition data from USDA if enabled in config
 if config["data"]["usda"]["retrieve_nutrition"]:
 

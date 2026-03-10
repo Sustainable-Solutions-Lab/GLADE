@@ -31,6 +31,7 @@ required:
   - macronutrients
   - byproducts
   - animal_products
+  - fodder_decomposition
   - grazing
   - food_groups
   - diet
@@ -752,6 +753,40 @@ properties:
           type: string
           pattern: "^[a-z0-9-]+$"
         description: "Crops that produce residues usable as animal feed"
+
+  fodder_decomposition:
+    type: object
+    required: [fdd_crops, eurostat, suitability_blend_weight]
+    additionalProperties: false
+    description: "Configuration for decomposing aggregate GAEZ FDD fodder area into individual crops"
+    properties:
+      fdd_crops:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        description: "Crops to decompose within the FDD module"
+      eurostat:
+        type: object
+        required: [year_range]
+        additionalProperties: false
+        properties:
+          year_range:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: integer
+              minimum: 2000
+              maximum: 2025
+            description: "Start and end year for Eurostat production averaging"
+      suitability_blend_weight:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: "Weight for blending country-specific suitability shares with global average"
 
   grazing:
     type: object

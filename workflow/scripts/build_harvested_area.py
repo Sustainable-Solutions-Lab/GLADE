@@ -229,12 +229,36 @@ def _extract_harvested_area(
     return combined
 
 
+def _shares_from_fdd(
+    fdd_shares_path: Path,
+    crop: str,
+) -> tuple[dict[str, float], float] | None:
+    """Load pre-computed FDD area shares for a crop, if available."""
+    if not fdd_shares_path.exists():
+        return None
+    fdd_df = pd.read_csv(fdd_shares_path)
+    fdd_df["country"] = fdd_df["country"].astype(str).str.upper()
+    crop_shares = fdd_df[fdd_df["crop"] == crop]
+    if crop_shares.empty:
+        return None
+    shares_lookup = dict(zip(crop_shares["country"], crop_shares["share"]))
+    fallback_share = float(crop_shares["share"].mean())
+    return shares_lookup, fallback_share
+
+
 if __name__ == "__main__":
     classes_nc = Path(snakemake.input.classes)  # type: ignore[name-defined]
     raster_path = Path(snakemake.input.harvested_area_raster)  # type: ignore[name-defined]
     regions_path = Path(snakemake.input.regions)  # type: ignore[name-defined]
     mapping_path = Path(snakemake.input.crop_mapping)  # type: ignore[name-defined]
     production_path = Path(snakemake.input.faostat_production)  # type: ignore[name-defined]
+    fdd_shares_raw = snakemake.input.get("fdd_shares")  # type: ignore[name-defined]
+    if isinstance(fdd_shares_raw, list):
+        fdd_shares_path = Path(fdd_shares_raw[0]) if fdd_shares_raw else Path("")
+    elif fdd_shares_raw:
+        fdd_shares_path = Path(fdd_shares_raw)
+    else:
+        fdd_shares_path = Path("")
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     crop = str(snakemake.wildcards.crop)  # type: ignore[name-defined]
 
@@ -253,15 +277,31 @@ if __name__ == "__main__":
     regions["country"] = regions["country"].astype(str).str.upper()
 
     mapping_df = _load_mapping(mapping_path)
-    production_df = pd.read_csv(production_path)
 
-    non_food_crops = set(getattr(snakemake.params, "non_food_crops", []))  # type: ignore[attr-defined]
-    shares_lookup, fallback_share = _shares_for_crop(
-        crop,
-        mapping_df,
-        production_df,
-        non_food_crops=non_food_crops,
-    )
+    # Check if this crop is in the FDD module and has pre-computed shares
+    row = mapping_df[mapping_df["crop_name"] == crop]
+    module_code = str(row.iloc[0]["res06_code"]).upper() if not row.empty else ""
+
+    fdd_result = None
+    if module_code == "FDD":
+        fdd_result = _shares_from_fdd(fdd_shares_path, crop)
+
+    if fdd_result is not None:
+        shares_lookup, fallback_share = fdd_result
+        logger.info(
+            "Using pre-computed FDD shares for '%s' (fallback=%.3f)",
+            crop,
+            fallback_share,
+        )
+    else:
+        production_df = pd.read_csv(production_path)
+        non_food_crops = set(getattr(snakemake.params, "non_food_crops", []))  # type: ignore[attr-defined]
+        shares_lookup, fallback_share = _shares_for_crop(
+            crop,
+            mapping_df,
+            production_df,
+            non_food_crops=non_food_crops,
+        )
 
     extracted = _extract_harvested_area(
         harvested_raw,
