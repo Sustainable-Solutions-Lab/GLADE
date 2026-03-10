@@ -734,83 +734,6 @@ def add_residue_feed_constraints(
     )
 
 
-def add_biofuel_demand_constraints(
-    n: pypsa.Network,
-    slack_cost: float,
-) -> None:
-    """Add minimum demand constraints on biofuel links.
-
-    For each biofuel link with a positive ``baseline_demand_mt``, adds a
-    ``>=`` constraint: ``Link-p >= baseline_demand_mt``. A slack variable
-    with penalty is added to ensure feasibility.
-    """
-    m = n.model
-    link_p = m.variables["Link-p"].sel(snapshot="now")
-    links_df = n.links.static
-
-    biofuel_links = links_df[links_df["carrier"] == "biofuel"]
-    if biofuel_links.empty:
-        logger.warning("No biofuel links found; skipping demand constraints")
-        return
-
-    if "baseline_demand_mt" not in biofuel_links.columns:
-        logger.warning("No baseline_demand_mt column on biofuel links; skipping")
-        return
-
-    # Filter to links with positive demand
-    demands = pd.to_numeric(biofuel_links["baseline_demand_mt"], errors="coerce")
-    has_demand = demands > 0
-    active = biofuel_links[has_demand]
-    active_demands = demands[has_demand]
-
-    if active.empty:
-        logger.info("No biofuel links with positive baseline demand")
-        return
-
-    link_names = list(active.index)
-    target_arr = xr.DataArray(
-        active_demands.values,
-        coords={"name": link_names},
-        dims="name",
-    )
-    biofuel_var = link_p.sel(name=link_names)
-
-    # Slack variable (allows under-producing if infeasible)
-    slack = m.add_variables(
-        lower=0,
-        coords=[link_names],
-        dims=["name"],
-        name="biofuel_slack",
-    )
-
-    # Constraint: biofuel_var + slack >= baseline_demand_mt
-    m.add_constraints(
-        biofuel_var + slack >= target_arr,
-        name="GlobalConstraint-biofuel_demand",
-    )
-
-    # Slack penalty in objective
-    m.objective += slack_cost * slack.sum()
-
-    # Register global constraints for dual extraction
-    gc_names = [f"biofuel_demand_{name}" for name in link_names]
-    n.global_constraints.add(
-        gc_names,
-        sense=">=",
-        constant=active_demands.values,
-        type="biofuel_demand",
-        country=active["country"].values,
-        crop=active["crop"].values,
-    )
-
-    logger.info(
-        "Added %d biofuel demand constraints (%.1f Mt total, slack cost=%.1f)",
-        len(link_names),
-        active_demands.sum(),
-        slack_cost,
-    )
-
-
 def add_within_group_ratio_constraints(
     n: pypsa.Network,
     ratios_df: pd.DataFrame,
@@ -1125,13 +1048,6 @@ def _run_solve() -> None:
     animal_growth_cap_cfg = snakemake.params.animal_growth_cap
     add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
 
-    # Add biofuel/industrial demand constraints
-    if bool(snakemake.params.enforce_biofuel_baseline):
-        biofuel_slack_cost = float(
-            snakemake.config["validation"]["slack_marginal_cost"]
-        )
-        add_biofuel_demand_constraints(n, biofuel_slack_cost)
-
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = snakemake.params.fix_within_group_ratios
     if ratio_cfg["enabled"] and not enforce_baseline:
@@ -1248,21 +1164,6 @@ def _run_solve() -> None:
                 )
         if production_slack:
             n.meta["production_stability_slack"] = production_slack
-
-        # Store biofuel slack cost for objective breakdown extraction
-        if "biofuel_slack" in n.model.variables:
-            biofuel_slack_sol = n.model.variables["biofuel_slack"].solution
-            biofuel_slack_total = float(biofuel_slack_sol.sum())
-            biofuel_slack_cost_val = float(
-                snakemake.config["validation"]["slack_marginal_cost"]
-            )
-            n.meta["biofuel_slack_cost"] = biofuel_slack_total * biofuel_slack_cost_val
-            if biofuel_slack_total > 1e-6:
-                logger.info(
-                    "Biofuel slack used: %.4f Mt total (cost: %.2f bnUSD)",
-                    biofuel_slack_total,
-                    n.meta["biofuel_slack_cost"],
-                )
 
         # Store food slack cost for objective breakdown extraction
         if "food_slack_pos" in n.model.variables:

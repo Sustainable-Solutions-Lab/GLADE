@@ -908,7 +908,7 @@ properties:
 
   biomass:
     type: object
-    required: [crops, marginal_values_usd_per_tonne, enforce_baseline_demand, enforce_fiber_demand]
+    required: [crops, marginal_values_usd_per_tonne, enforce_baseline_demand, biogas_crop_demand, enforce_fiber_demand]
     additionalProperties: false
     properties:
       crops:
@@ -924,7 +924,10 @@ properties:
         description: "Revenue in USD per tonne dry matter exported to energy sector"
       enforce_baseline_demand:
         type: boolean
-        description: "When true, enforce baseline biofuel/industrial demand from FAOSTAT FBS"
+        description: "When true, enforce baseline biofuel/industrial and biogas demand"
+      biogas_crop_demand:
+        type: [string, "null"]
+        description: "Path to CSV with biogas crop demand per country (Mt DM); null to disable"
       enforce_fiber_demand:
         type: boolean
         description: "When true, enforce baseline fiber demand (cotton lint) from FAOSTAT FBS"

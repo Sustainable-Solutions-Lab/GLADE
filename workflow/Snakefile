@@ -126,6 +126,8 @@ ALL_RULE_TARGETS = [
     "<results>/{name}/plots/scen-default/food_group_slack.csv",
     "<results>/{name}/plots/scen-default/slack_overview.pdf",
     "<results>/{name}/plots/scen-default/slack_overview.csv",
+    "<results>/{name}/plots/scen-default/feed_slack.pdf",
+    "<results>/{name}/plots/scen-default/feed_slack.csv",
     "<results>/{name}/plots/scen-default/water_balance.pdf",
     "<results>/{name}/plots/scen-default/water_balance.csv",
     "<results>/{name}/plots/scen-default/water_use_map.pdf",

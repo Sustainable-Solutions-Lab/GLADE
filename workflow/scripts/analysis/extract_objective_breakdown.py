@@ -227,12 +227,6 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     if food_slack_cost:
         total["Slack penalties"] = total.get("Slack penalties", 0.0) + food_slack_cost
 
-    biofuel_slack_cost = n.meta.get("biofuel_slack_cost", 0.0)
-    if biofuel_slack_cost:
-        total["Slack penalties"] = (
-            total.get("Slack penalties", 0.0) + biofuel_slack_cost
-        )
-
     # Production stability penalties (L1/quadratic) are linopy-level terms.
     stability_cost = n.meta.get("production_stability_cost", 0.0)
     if stability_cost:

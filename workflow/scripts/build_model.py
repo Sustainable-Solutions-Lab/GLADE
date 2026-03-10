@@ -494,7 +494,15 @@ if __name__ == "__main__":
     biofuel_baseline_df = None
     if enforce_biofuel_baseline:
         biofuel_baseline_df = read_csv(snakemake.input.biofuel_baseline)
+        biofuel_baseline_df["bus_type"] = "food"
         logger.info("Biofuel baseline: %d rows", len(biofuel_baseline_df))
+        if hasattr(snakemake.input, "biogas_demand"):
+            biogas_df = read_csv(snakemake.input.biogas_demand)
+            biogas_df["bus_type"] = "crop"
+            logger.info("Biogas crop demand: %d rows", len(biogas_df))
+            biofuel_baseline_df = pd.concat(
+                [biofuel_baseline_df, biogas_df], ignore_index=True
+            )
     enforce_fiber_demand = bool(biomass_cfg["enforce_fiber_demand"])
     fiber_baseline_df = None
     fiber_items: set[str] = set()
@@ -550,7 +558,7 @@ if __name__ == "__main__":
     biomass_byproducts = [b for b in byproduct_list if b not in fiber_items]
     biomass.add_biomass_byproduct_links(n, cfg_countries, biomass_byproducts)
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)
-    if enforce_biofuel_baseline:
+    if biofuel_baseline_df is not None:
         biomass.add_biofuel_links(n, biofuel_baseline_df)
     if enforce_fiber_demand:
         biomass.add_fiber_demand_infrastructure(n, fiber_baseline_df, cfg_countries)

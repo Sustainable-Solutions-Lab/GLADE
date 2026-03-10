@@ -125,15 +125,18 @@ def add_biofuel_links(
     n: pypsa.Network,
     biofuel_baseline: pd.DataFrame,
 ) -> None:
-    """Add biofuel/industrial demand links from food buses to biomass.
+    """Add biofuel/industrial demand links from food or crop buses to biomass.
 
-    All biofuel demand is routed via food buses. For grain/sugar crops,
+    Most biofuel demand is routed via food buses. For grain/sugar crops,
     the food processing pathways in foods.csv handle the crop→food
     conversion and byproduct generation; this function only creates the
     final food→biomass link. For oil crops the same pattern applies.
 
-    Each link stores its baseline demand in the ``baseline_demand_mt``
-    column for use by solve-time constraints.
+    Biogas crop demand (e.g. silage maize) is routed directly from crop
+    buses when the ``bus_type`` column is set to ``"crop"``.
+
+    Each link is fixed at its baseline demand level: ``p_nom`` is set to
+    the demand and ``p_min_pu = 1.0`` forces the flow to equal ``p_nom``.
     """
     carrier = "biofuel"
     if carrier not in n.carriers.static.index:
@@ -141,9 +144,13 @@ def add_biofuel_links(
 
     bus_index = n.buses.static.index
 
-    # Aggregate baseline demand by (source_item, crop, country)
+    # Ensure bus_type column exists (default "food" for backward compatibility)
+    if "bus_type" not in biofuel_baseline.columns:
+        biofuel_baseline = biofuel_baseline.assign(bus_type="food")
+
+    # Aggregate baseline demand by (source_item, crop, country, bus_type)
     grouped = biofuel_baseline.groupby(
-        ["source_item", "crop", "country"], as_index=False
+        ["source_item", "crop", "country", "bus_type"], as_index=False
     )["demand_mt"].sum()
 
     names = []
@@ -158,12 +165,13 @@ def add_biofuel_links(
         source_item = str(row["source_item"])
         crop = str(row["crop"])
         country = str(row["country"])
+        bus_type = str(row["bus_type"])
         demand = float(row["demand_mt"])
 
         if demand <= 0:
             continue
 
-        bus0 = f"food:{source_item}:{country}"
+        bus0 = f"{bus_type}:{source_item}:{country}"
         bus1 = f"biomass:{country}"
 
         if bus0 not in bus_index or bus1 not in bus_index:
@@ -184,16 +192,18 @@ def add_biofuel_links(
     if skipped:
         logger.info("Skipped %d biofuel links due to missing buses", skipped)
 
+    # Fix each link at its baseline demand: p_nom = demand, p_min_pu = 1.0
+    # forces p == p_nom == demand. No solve-time constraint needed.
     n.links.add(
         names,
         bus0=bus0s,
         bus1=bus1s,
         carrier=carrier,
         efficiency=1.0,
-        p_nom_extendable=True,
+        p_nom=demands,
+        p_min_pu=1.0,
         country=countries,
         crop=crops,
-        baseline_demand_mt=demands,
     )
 
     logger.info(

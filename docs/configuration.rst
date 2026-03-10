@@ -559,8 +559,63 @@ directly as feedstocks. The ``marginal_values_usd_per_tonne`` parameter
 (USD\ :sub:`2024` per tonne dry matter) sets the price received when biomass leaves the
 food system; set to 0 for free disposal.
 
-When ``enforce_baseline_demand`` is true, biofuel/industrial demand from FAOSTAT Food
-Balance Sheets is enforced via solve-time constraints with slack penalties.
+When ``enforce_baseline_demand`` is true, biofuel and biogas crop demand is fixed at
+baseline levels. Each biofuel link is created with ``p_nom`` equal to baseline demand
+and ``p_min_pu = 1.0``, forcing flow to match demand exactly. Two sources of demand
+are combined:
+
+- **Biofuel/industrial demand** from FAOSTAT Food Balance Sheets (``Other uses``
+  element), routed via food buses. This captures ethanol (maize grain, sugarcane) and
+  biodiesel (vegetable oils) demand.
+- **Biogas crop demand** from ``biogas_crop_demand`` (default:
+  ``data/curated/biogas_crop_demand.csv``), routed directly from crop buses. This
+  captures whole-crop silage maize diverted to anaerobic digestion for biogas
+  production. Set ``biogas_crop_demand`` to ``null`` to disable.
+
+.. _biogas-crop-demand-table:
+
+.. list-table:: Biogas crop demand (``data/curated/biogas_crop_demand.csv``)
+   :header-rows: 1
+   :widths: 10 15 10 50
+
+   * - Country
+     - Crop
+     - Demand (Mt DM)
+     - Source
+   * - DEU
+     - silage-maize
+     - 14.85
+     - FNR 2024: 900 kha biogas maize × ~47 t FM/ha × 35% DM [#fnr2024]_
+   * - ITA
+     - silage-maize
+     - 2.40
+     - ISAAC/CIB: ~125 kha biogas maize in Po Valley × ~55 t FM/ha [#isaac2023]_
+   * - AUT
+     - silage-maize
+     - 0.25
+     - Austrian Biomass Association: ~20 kha estimated [#aba2023]_
+   * - CZE
+     - silage-maize
+     - 0.42
+     - Czech Biogas Association: ~40 kha [#czba2023]_
+
+Countries with negligible or zero biogas crop demand are omitted (zero by default).
+Denmark banned crop-based biogas feedstock; France caps it at 15%; Poland, Netherlands,
+and Belgium use manure-dominant systems.
+
+.. rubric:: Footnotes
+
+.. [#fnr2024] Fachagentur Nachwachsende Rohstoffe (FNR), *Basisdaten Bioenergie
+   Deutschland 2024*. https://www.fnr.de/daten-und-fakten/bioenergie/biogas
+
+.. [#isaac2023] ISAAC/CIB, *Il Biogas in Italia — Censimento impianti 2023*.
+   https://www.consorziobiogas.it/
+
+.. [#aba2023] Österreichischer Biomasse-Verband, *Basisdaten Bioenergie Österreich
+   2023*. https://www.biomasseverband.at/
+
+.. [#czba2023] Česká bioplynová asociace (CzBA), *Biogas in the Czech Republic —
+   Annual Report 2023*. https://www.czba.cz/
 
 When ``enforce_fiber_demand`` is true, baseline fiber demand (cotton lint) is enforced
 via per-country fiber buses and fixed-capacity stores. Each country with positive

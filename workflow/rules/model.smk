@@ -55,11 +55,15 @@ def harvested_area_model_inputs(wildcards):
 
 
 def build_model_biofuel_baseline_input(wildcards):
-    """Conditionally include biofuel baseline data when enforce_baseline_demand is true."""
+    """Conditionally include biofuel baseline and biogas demand data."""
     eff = get_effective_config(wildcards.scenario)
+    inputs = {}
     if eff["biomass"]["enforce_baseline_demand"]:
-        return {"biofuel_baseline": "<processing>/{name}/biofuel_baseline.csv"}
-    return {}
+        inputs["biofuel_baseline"] = "<processing>/{name}/biofuel_baseline.csv"
+        biogas_path = eff["biomass"]["biogas_crop_demand"]
+        if biogas_path:
+            inputs["biogas_demand"] = biogas_path
+    return inputs
 
 
 def build_model_fiber_baseline_input(wildcards):
@@ -324,9 +328,6 @@ rule solve_model:
         fix_within_group_ratios=lambda w: get_effective_config(w.scenario)[
             "food_groups"
         ]["fix_within_group_ratios"],
-        enforce_biofuel_baseline=lambda w: get_effective_config(w.scenario)["biomass"][
-            "enforce_baseline_demand"
-        ],
         sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
         # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
