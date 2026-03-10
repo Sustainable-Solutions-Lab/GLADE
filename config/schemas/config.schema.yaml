@@ -756,7 +756,7 @@ properties:
 
   fodder_decomposition:
     type: object
-    required: [fdd_crops, eurostat, suitability_blend_weight]
+    required: [fdd_crops, eurostat, suitability_blend_weight, yield_corrections]
     additionalProperties: false
     description: "Configuration for decomposing aggregate GAEZ FDD fodder area into individual crops"
     properties:
@@ -770,23 +770,41 @@ properties:
         description: "Crops to decompose within the FDD module"
       eurostat:
         type: object
-        required: [year_range]
+        required: [averaging_years]
         additionalProperties: false
         properties:
-          year_range:
-            type: array
-            minItems: 2
-            maxItems: 2
-            items:
-              type: integer
-              minimum: 2000
-              maximum: 2025
-            description: "Start and end year for Eurostat production averaging"
+          averaging_years:
+            type: integer
+            minimum: 1
+            maximum: 20
+            description: "Number of years to average over, centered on baseline_year"
       suitability_blend_weight:
         type: number
         minimum: 0
         maximum: 1
         description: "Weight for blending country-specific suitability shares with global average"
+      yield_corrections:
+        type: object
+        required: [enabled, eurostat_moisture, floor, ceiling]
+        additionalProperties: false
+        description: "Per-country yield corrections for FDD crops based on Eurostat data"
+        properties:
+          enabled:
+            type: boolean
+            description: "Whether to apply Eurostat-based yield corrections to FDD crops"
+          eurostat_moisture:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: "EU standard humidity for green fodder (moisture fraction in fresh weight)"
+          floor:
+            type: number
+            minimum: 0
+            description: "Minimum allowed yield correction factor"
+          ceiling:
+            type: number
+            minimum: 0
+            description: "Maximum allowed yield correction factor"
 
   grazing:
     type: object

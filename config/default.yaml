@@ -434,8 +434,13 @@ fodder_decomposition:
     - alfalfa
     - silage-maize
   eurostat:
-    year_range: [2018, 2022]
+    averaging_years: 5
   suitability_blend_weight: 0.7
+  yield_corrections:
+    enabled: true
+    eurostat_moisture: 0.65
+    floor: 0.2
+    ceiling: 2.0
 
 grazing:
   enabled: true

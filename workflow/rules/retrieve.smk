@@ -853,7 +853,12 @@ rule retrieve_eurostat_fodder:
     input:
         m49_codes="data/curated/M49-codes.csv",
     params:
-        baseline_year_range=config["fodder_decomposition"]["eurostat"]["year_range"],
+        baseline_year_range=[
+            config["baseline_year"]
+            - config["fodder_decomposition"]["eurostat"]["averaging_years"] // 2,
+            config["baseline_year"]
+            + config["fodder_decomposition"]["eurostat"]["averaging_years"] // 2,
+        ],
     output:
         "data/downloads/eurostat_fodder_production.csv",
     resources:

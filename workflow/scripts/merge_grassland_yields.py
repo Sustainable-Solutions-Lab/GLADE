@@ -106,6 +106,20 @@ if __name__ == "__main__":
     )
     forage_overlap_crops: list[str] = list(snakemake.params.forage_overlap_crops)  # type: ignore[name-defined]
 
+    # Countries with Eurostat-based yield corrections are excluded from the
+    # forage overlap subtraction — Eurostat explicitly separates arable fodder
+    # from permanent grassland so there is no double-counting to correct.
+    fodder_corrections_path = snakemake.input.get("fodder_yield_corrections")  # type: ignore[name-defined]
+    overlap_excluded_countries: set[str] = set()
+    if fodder_corrections_path:
+        _corr_df = pd.read_csv(fodder_corrections_path)
+        if not _corr_df.empty:
+            overlap_excluded_countries = set(_corr_df["country"].unique())
+            print(
+                f"Excluding {len(overlap_excluded_countries)} countries with "
+                "Eurostat yield corrections from forage overlap subtraction"
+            )
+
     idx_cols = ["region", "resource_class"]
 
     luicube = pd.read_csv(luicube_path, comment="#").set_index(idx_cols).sort_index()
@@ -148,6 +162,10 @@ if __name__ == "__main__":
             overlap["target_grass_mt_dm"] / overlap["grass_mt_dm"],
             1.0,
         )
+        # Override: countries with Eurostat yield corrections keep factor=1.0
+        if overlap_excluded_countries:
+            excluded_mask = overlap.index.isin(overlap_excluded_countries)
+            overlap.loc[excluded_mask, "yield_factor"] = 1.0
 
         factor_by_region = (
             luicube.reset_index()["region"]

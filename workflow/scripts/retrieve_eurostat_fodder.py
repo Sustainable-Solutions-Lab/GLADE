@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """
-Retrieve fodder crop production data from Eurostat (apro_cpsh1 dataset).
+Retrieve fodder crop production and area data from Eurostat (apro_cpsh1 dataset).
 
-Fetches production data for:
+Fetches production and harvested area data for:
 - G0000: Total green fodder
 - G2100: Lucerne (alfalfa)
 - G3000: Green maize (silage maize)
@@ -13,7 +13,7 @@ Fetches production data for:
 Averages over a configurable year range and maps Eurostat 2-letter country
 codes to ISO3 using M49-codes.csv.
 
-Output: CSV with columns (country, crop_code, production_1000t)
+Output: CSV with columns (country, crop_code, production_1000t, area_1000ha)
 """
 
 import logging
@@ -71,14 +71,28 @@ EUROSTAT_GEO_CODES = [
 ]
 
 
-def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
-    """Fetch fodder production from Eurostat REST API (apro_cpsh1 dataset).
+def _fetch_eurostat_apro_cpsh1(
+    year_range: list[int], strucpro: str, value_column: str
+) -> pd.DataFrame:
+    """Fetch a single variable from the Eurostat apro_cpsh1 dataset.
 
-    Returns DataFrame with columns: geo, crop_code, year, production_1000t
+    Parameters
+    ----------
+    year_range : [start, end]
+    strucpro : Eurostat structural production code, e.g. ``"PR_HU_EU"``
+        (production in 1000 t) or ``"AR"`` (harvested area in 1000 ha).
+    value_column : Name for the value column in the returned DataFrame.
+
+    Returns
+    -------
+    DataFrame with columns: geo, crop_code, year, *value_column*
     """
     start_year, end_year = year_range
     logger.info(
-        "Fetching Eurostat apro_cpsh1 fodder data for %d-%d", start_year, end_year
+        "Fetching Eurostat apro_cpsh1 (%s) for %d-%d",
+        strucpro,
+        start_year,
+        end_year,
     )
 
     base_url = (
@@ -89,7 +103,7 @@ def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
         "crops": list(EUROSTAT_CROP_CODES.keys()),
         "geo": EUROSTAT_GEO_CODES,
         "time": [str(y) for y in range(start_year, end_year + 1)],
-        "strucpro": "PR_HU_EU",
+        "strucpro": strucpro,
     }
 
     response = requests.get(base_url, params=params, timeout=60)
@@ -98,7 +112,9 @@ def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
 
     values = data.get("value", {})
     if not values:
-        raise ValueError("No fodder production values found in Eurostat response")
+        raise ValueError(
+            f"No values found in Eurostat response for strucpro={strucpro}"
+        )
 
     # Parse dimension indices
     dims = data["dimension"]
@@ -134,19 +150,33 @@ def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
                 "geo": geo,
                 "crop_code": crop_code,
                 "year": int(year_str),
-                "production_1000t": float(value),
+                value_column: float(value),
             }
         )
 
     if not rows:
-        raise ValueError("No fodder production data parsed from Eurostat response")
+        raise ValueError(
+            f"No data parsed from Eurostat response for strucpro={strucpro}"
+        )
 
     return pd.DataFrame(rows)
 
 
+def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
+    """Fetch fodder production and area from Eurostat REST API (apro_cpsh1).
+
+    Returns DataFrame with columns: geo, crop_code, year, production_1000t, area_1000ha
+    """
+    prod = _fetch_eurostat_apro_cpsh1(year_range, "PR_HU_EU", "production_1000t")
+    area = _fetch_eurostat_apro_cpsh1(year_range, "AR", "area_1000ha")
+    merged = prod.merge(area, on=["geo", "crop_code", "year"], how="outer")
+    return merged
+
+
 def average_over_years(df: pd.DataFrame) -> pd.DataFrame:
-    """Average production over years per country-crop pair."""
-    return df.groupby(["geo", "crop_code"])["production_1000t"].mean().reset_index()
+    """Average production and area over years per country-crop pair."""
+    value_cols = [c for c in ("production_1000t", "area_1000ha") if c in df.columns]
+    return df.groupby(["geo", "crop_code"])[value_cols].mean().reset_index()
 
 
 def map_to_iso3(df: pd.DataFrame, m49_path: str) -> pd.DataFrame:
@@ -170,7 +200,11 @@ def map_to_iso3(df: pd.DataFrame, m49_path: str) -> pd.DataFrame:
         logger.warning("Could not map Eurostat geo codes to ISO3: %s", unmapped)
 
     df = df.dropna(subset=["country"])
-    return df[["country", "crop_code", "production_1000t"]]
+    out_cols = ["country", "crop_code"]
+    for col in ("production_1000t", "area_1000ha"):
+        if col in df.columns:
+            out_cols.append(col)
+    return df[out_cols]
 
 
 def main():

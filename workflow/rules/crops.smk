@@ -133,6 +133,60 @@ rule build_fdd_area_shares:
         "../scripts/build_fdd_area_shares.py"
 
 
+def _fodder_yield_correction_inputs(_wildcards):
+    """Get GAEZ yield and area files for all FDD crops (both water supplies)."""
+    irr_cfg = config["irrigation"]["irrigated_crops"]
+    if irr_cfg == "all":
+        irrigated_crops = set(config["crops"])
+    else:
+        irrigated_crops = set(irr_cfg)
+
+    inputs = {"regions": "<processing>/{name}/regions.geojson"}
+    for crop in config["fodder_decomposition"]["fdd_crops"]:
+        if crop not in config["crops"]:
+            continue
+        inputs[f"gaez_yield_{crop}_r"] = (
+            f"<processing>/{{name}}/crop_yields/{crop}_r.csv"
+        )
+        inputs[f"gaez_harvested_{crop}_r"] = (
+            f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
+        )
+        if crop in irrigated_crops:
+            inputs[f"gaez_yield_{crop}_i"] = (
+                f"<processing>/{{name}}/crop_yields/{crop}_i.csv"
+            )
+            inputs[f"gaez_harvested_{crop}_i"] = (
+                f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
+            )
+    return inputs
+
+
+rule build_fodder_yield_corrections:
+    input:
+        unpack(_fodder_yield_correction_inputs),
+        eurostat_fodder="data/downloads/eurostat_fodder_production.csv",
+    params:
+        fdd_crops=config["fodder_decomposition"]["fdd_crops"],
+        eurostat_moisture=config["fodder_decomposition"]["yield_corrections"][
+            "eurostat_moisture"
+        ],
+        floor=config["fodder_decomposition"]["yield_corrections"]["floor"],
+        ceiling=config["fodder_decomposition"]["yield_corrections"]["ceiling"],
+    output:
+        "<processing>/{name}/fodder_yield_corrections.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=300,
+    log:
+        "<logs>/{name}/build_fodder_yield_corrections.log",
+    benchmark:
+        "<benchmarks>/{name}/build_fodder_yield_corrections.tsv"
+    script:
+        "../scripts/build_fodder_yield_corrections.py"
+
+
 def _harvested_area_inputs(w):
     """Get inputs for build_harvested_area_gaez, including FDD shares when relevant."""
     inputs = {
@@ -308,6 +362,10 @@ def merge_grassland_inputs(wildcards):
         "isimip": f"<processing>/{wildcards.name}/isimip_grassland_yields.csv",
     }
     inputs.update(grassland_forage_overlap_inputs(wildcards))
+    if config["fodder_decomposition"]["yield_corrections"]["enabled"]:
+        inputs["fodder_yield_corrections"] = (
+            f"<processing>/{wildcards.name}/fodder_yield_corrections.csv"
+        )
     return inputs
 
 

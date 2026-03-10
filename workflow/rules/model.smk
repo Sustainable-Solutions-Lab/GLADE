@@ -90,12 +90,22 @@ def build_model_grassland_calibration_input(wildcards):
     return {}
 
 
+def build_model_fodder_yield_correction_input(wildcards):
+    """Conditionally include fodder yield correction CSV."""
+    if config["fodder_decomposition"]["yield_corrections"]["enabled"]:
+        return {
+            "fodder_yield_corrections": "<processing>/{name}/fodder_yield_corrections.csv"
+        }
+    return {}
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
         unpack(residue_yield_inputs),
         unpack(harvested_area_model_inputs),
         unpack(build_model_grassland_calibration_input),
+        unpack(build_model_fodder_yield_correction_input),
         unpack(build_model_biofuel_baseline_input),
         unpack(build_model_fiber_baseline_input),
         feed_baseline="<processing>/{name}/feed_baseline.csv",
