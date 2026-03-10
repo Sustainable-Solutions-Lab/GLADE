@@ -279,6 +279,30 @@ The same FADN dataset provides livestock production cost data for animal product
 
 **Usage**: Provides EU livestock production cost estimates, complementing USDA data. Costs are merged with USDA animal cost data via ``merge_animal_costs`` rule; when both sources have data for a product, values are averaged. Workflow: ``retrieve_fadn_animal_costs`` script -> ``processing/{name}/fadn_animal_costs.csv`` -> merged with USDA animal costs -> ``processing/{name}/animal_costs.csv``.
 
+Eurostat Crop Production Statistics (apro_cpsh1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: Eurostat (Statistical Office of the European Union)
+
+**Description**: Annual crop production statistics for EU and EFTA countries. This project uses the ``apro_cpsh1`` dataset to retrieve fodder crop production data for decomposing the aggregate GAEZ FDD (fodder) harvested area module into individual crops (alfalfa and silage maize).
+
+**Version**: Annual data; 5-year average (configurable, default 2018-2022)
+
+**Coverage**:
+  * Spatial: EU-27 + EFTA (CH, IS, LI, NO) + UK (historical)
+  * Temporal: 2000 onward
+  * Crop codes used: G0000 (total plants harvested green), G2100 (lucerne/alfalfa), G3000 (green maize)
+
+**Access**: https://ec.europa.eu/eurostat/databrowser/view/apro_cpsh1/default/table (Eurostat REST API)
+
+**License**: Eurostat copyright policy; free reuse with attribution (`Eurostat copyright <https://ec.europa.eu/eurostat/help/copyright-notice>`_)
+
+**Citation**: Eurostat. Crop production in EU standard humidity [apro_cpsh1]. https://ec.europa.eu/eurostat/databrowser/view/apro_cpsh1/
+
+**Retrieval**: Automatic via ``retrieve_eurostat_fodder`` Snakemake rule (Eurostat REST API, ``workflow/scripts/retrieve_eurostat_fodder.py``). Output: ``data/downloads/eurostat_fodder_production.csv``.
+
+**Usage**: Country-level production shares for splitting the GAEZ RES06 FDD harvested area between alfalfa (G2100/G0000) and silage maize (G3000/G0000). For non-EU/EFTA countries, GAEZ RES05 potential yield ratios are used as a suitability-based fallback. See ``workflow/scripts/build_fdd_area_shares.py``.
+
 Livestock Data
 --------------
 
@@ -789,6 +813,7 @@ Most datasets used in this project require attribution. Some disallow redistribu
 * **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
 * **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
+* **Eurostat copyright** (Eurostat apro_cpsh1): Free reuse with attribution
 * **Open access** (Huang et al. irrigation, UNSD SDG, IMF WEO): Free to use with attribution/citation
 * **GPL-3.0** (DIA Health Inputs): Copyleft; derived works must use same license
 
