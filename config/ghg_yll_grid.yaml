@@ -116,7 +116,7 @@ remote_solve:
   pixi_env: "gurobi"
   use_slurm: true
   slurm_account: "sjdavis"
-  slurm_partition: "serc"
+  slurm_partition: "owners"
   sync_workflow: true
   sync_pixi_files: false
   ssh_options: []

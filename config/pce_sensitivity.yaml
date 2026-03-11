@@ -168,19 +168,19 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 8
+  threads: 2
   mem_mb: 9000
   runtime: 20
 
 remote_solve:
-  enabled: true
+  enabled: false
   local_scenarios: ["baseline"]
   host: "shr"
   workdir: "~/food-opt-scratch"
   pixi_env: "gurobi"
   use_slurm: true
   slurm_account: "sjdavis"
-  slurm_partition: "serc"
+  slurm_partition: "owners"
   sync_workflow: true
   sync_pixi_files: false
   ssh_options: []
