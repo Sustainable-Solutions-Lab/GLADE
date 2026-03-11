@@ -2952,7 +2952,19 @@ def plot_contour(
 
     # Compute nice contour levels
     if contour_levels is None:
-        contour_levels = _nice_contour_levels(color_vmin, color_vmax, n_levels)
+        if vcenter is not None and color_vmin < vcenter < color_vmax:
+            # Generate separate levels for each side of vcenter so both sides
+            # get evenly spaced ticks (avoids the dominant side swallowing all levels)
+            n_neg = max(
+                2, int(n_levels * (vcenter - color_vmin) / (color_vmax - color_vmin))
+            )
+            n_pos = max(2, n_levels - n_neg)
+            levels_neg = _nice_contour_levels(color_vmin, vcenter, n_neg)
+            levels_pos = _nice_contour_levels(vcenter, color_vmax, n_pos)
+            # Remove duplicate vcenter if present in both
+            contour_levels = np.unique(np.concatenate([levels_neg, levels_pos]))
+        else:
+            contour_levels = _nice_contour_levels(color_vmin, color_vmax, n_levels)
 
     # Add contour lines at nice levels
     cs = ax.contour(
