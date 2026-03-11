@@ -1675,7 +1675,7 @@ def plot_stacked_emissions(
     # Extend x range to cover all tick positions (the "0" tick may differ
     # from the data zero position when only a subset of scenarios is solved)
     x_min = min(zero_pos, tick_min)
-    x_max = max(x_plot.max(), tick_max) * 1.1
+    x_max = max(x_plot.max(), tick_max)
     x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
 
     y_smooth = {}
@@ -2050,7 +2050,7 @@ def plot_stacked_sensitivity(
     x_plot = np.where(x_values == 0, zero_pos, x_values)
 
     tick_max = max(x_ticks) if x_ticks else 0
-    x_min, x_max = zero_pos, max(x_plot.max(), tick_max) * 1.1
+    x_min, x_max = zero_pos, max(x_plot.max(), tick_max)
     x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
 
     y_smooth = {}
@@ -2255,7 +2255,7 @@ def plot_objective_sensitivity(
     zero_pos = log_scale_zero_position(x_values)
     x_plot = np.where(x_values == 0, zero_pos, x_values)
     tick_max = max(x_ticks) if x_ticks else 0
-    x_min, x_max = zero_pos, max(x_plot.max(), tick_max) * 1.1
+    x_min, x_max = zero_pos, max(x_plot.max(), tick_max)
     x_smooth = np.logspace(np.log10(x_min), np.log10(x_max), 200)
 
     y_smooth = {}
