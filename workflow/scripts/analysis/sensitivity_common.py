@@ -71,7 +71,7 @@ def load_scenario_outputs(
 
         # Load objective breakdown for total cost
         obj_path = scenario_dir / "objective_breakdown.csv"
-        if obj_path.exists():
+        if obj_path.exists() and obj_path.stat().st_size > 0:
             obj_df = pd.read_csv(obj_path)
             row["total_cost"] = obj_df.iloc[0].sum()
         else:
@@ -79,15 +79,20 @@ def load_scenario_outputs(
 
         # Load net emissions (source-level breakdown; sum for total)
         ghg_path = scenario_dir / "net_emissions.csv"
-        if ghg_path.exists():
+        if ghg_path.exists() and ghg_path.stat().st_size > 0:
             ghg_df = pd.read_csv(ghg_path)
-            row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
+            if "mtco2eq" in ghg_df.columns:
+                row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
+            elif "net_mtco2eq" in ghg_df.columns:
+                row["ghg_emissions"] = ghg_df["net_mtco2eq"].sum()
+            else:
+                row["ghg_emissions"] = np.nan
         else:
             row["ghg_emissions"] = np.nan
 
         # Load land use totals
         land_path = scenario_dir / "land_use.csv"
-        if land_path.exists():
+        if land_path.exists() and land_path.stat().st_size > 0:
             land_df = pd.read_csv(land_path)
             if "area_mha" in land_df.columns:
                 row["land_use"] = land_df["area_mha"].sum()
@@ -98,7 +103,7 @@ def load_scenario_outputs(
 
         # Load health totals
         health_path = scenario_dir / "health_totals.csv"
-        if health_path.exists():
+        if health_path.exists() and health_path.stat().st_size > 0:
             health_df = pd.read_csv(health_path)
             if "yll_myll" in health_df.columns:
                 row["yll"] = health_df["yll_myll"].sum()

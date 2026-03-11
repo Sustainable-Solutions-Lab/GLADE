@@ -343,8 +343,22 @@ def run(snakemake) -> None:
     outputs_df = load_scenario_outputs(analysis_dir, scenario_names)
     logger.info("Loaded outputs for %d scenarios", len(outputs_df))
 
-    # Determine output columns to analyze
+    # Drop scenarios with failed solves (any NaN across all output columns)
     output_columns = ["total_cost", "ghg_emissions", "land_use", "yll"]
+    existing_output_cols = [c for c in output_columns if c in outputs_df.columns]
+    failed_mask = outputs_df[existing_output_cols].isna().any(axis=1)
+    n_failed = failed_mask.sum()
+    if n_failed > 0:
+        failed_scenarios = outputs_df.loc[failed_mask, "scenario"].tolist()
+        logger.warning(
+            "Dropping %d failed scenarios (empty outputs): %s",
+            n_failed,
+            failed_scenarios,
+        )
+        outputs_df = outputs_df[~failed_mask].reset_index(drop=True)
+        x_design = x_design[~failed_mask.values]
+
+    # Determine output columns to analyze
     available_columns = [
         c
         for c in output_columns

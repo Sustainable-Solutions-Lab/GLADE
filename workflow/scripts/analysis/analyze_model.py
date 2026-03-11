@@ -48,10 +48,39 @@ from workflow.scripts.analysis.extract_statistics import (
 from workflow.scripts.logging_config import setup_script_logging
 
 
+def _write_empty_outputs() -> None:
+    """Write empty CSV files for all declared outputs."""
+    for attr in dir(snakemake.output):
+        if attr.startswith("_"):
+            continue
+        path = getattr(snakemake.output, attr, None)
+        if isinstance(path, str) and path.endswith(".csv"):
+            p = Path(path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("")
+
+
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
 
-    n = pypsa.Network(snakemake.input.network)
+    try:
+        n = pypsa.Network(snakemake.input.network)
+    except (KeyError, Exception) as e:
+        logger.warning(
+            "Failed to load network (%s) — likely an unsolved model. "
+            "Writing empty outputs.",
+            e,
+        )
+        _write_empty_outputs()
+        return
+
+    if n.links.empty:
+        logger.warning(
+            "Network has no links — likely an unsolved model. " "Writing empty outputs."
+        )
+        _write_empty_outputs()
+        return
+
     logger.info("Loaded network with %d links", len(n.links))
 
     # --- Statistics ---
