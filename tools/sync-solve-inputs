@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Sync solve_model inputs for a config to a remote machine.
+#
+# Usage: tools/sync-solve-inputs [--tar] <config.yaml> <remote-host> <remote-workdir>
+#
+# Example:
+#   tools/sync-solve-inputs sensitivity.yaml my-cluster /cluster/work/food-opt
+#   tools/sync-solve-inputs --tar sensitivity.yaml my-cluster /cluster/work/food-opt
+
+set -euo pipefail
+
+USE_TAR=false
+if [[ "${1:-}" == "--tar" ]]; then
+    USE_TAR=true
+    shift
+fi
+
+if [[ $# -ne 3 ]]; then
+    echo "Usage: $0 [--tar] <config.yaml> <remote-host> <remote-workdir>" >&2
+    echo "  --tar         — use tar+ssh instead of rsync (faster for many small files)" >&2
+    echo "  config.yaml   — config file name under config/ (e.g. sensitivity.yaml)" >&2
+    echo "  remote-host   — SSH host or alias" >&2
+    echo "  remote-workdir — path to food-opt workdir on remote" >&2
+    exit 1
+fi
+
+CONFIG_FILE="config/$1"
+REMOTE_HOST="$2"
+REMOTE_WORKDIR="${3%/}"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Error: config file not found: $CONFIG_FILE" >&2
+    exit 1
+fi
+
+# Extract config name from the YAML file.
+CONFIG_NAME=$(python3 -c '
+import yaml, sys
+with open(sys.argv[1]) as f:
+    cfg = yaml.safe_load(f)
+name = cfg.get("name")
+if not name:
+    print("Error: config has no name key", file=sys.stderr)
+    sys.exit(1)
+print(name)
+' "$CONFIG_FILE")
+
+echo "Config: $CONFIG_FILE (name=$CONFIG_NAME)"
+echo "Remote: $REMOTE_HOST:$REMOTE_WORKDIR"
+echo
+
+# Collect directories/files to sync (relative to project root).
+SOURCES=()
+
+# Built models and processing outputs.
+SOURCES+=("results/${CONFIG_NAME}/build/")
+SOURCES+=("processing/${CONFIG_NAME}/")
+
+# Static data files used by solve_model.
+SOURCES+=("data/curated/M49-codes.csv")
+SOURCES+=("data/curated/food_groups.csv")
+SOURCES+=("data/curated/nutrition.csv")
+
+# Consumer value files (if they exist).
+if [[ -d "results/${CONFIG_NAME}/consumer_values" ]]; then
+    SOURCES+=("results/${CONFIG_NAME}/consumer_values/")
+fi
+
+# Check that the main directories exist.
+for src in "${SOURCES[@]}"; do
+    if [[ ! -e "$src" ]]; then
+        echo "Warning: $src does not exist, skipping" >&2
+    fi
+done
+
+# Filter to only existing paths.
+EXISTING_SOURCES=()
+for src in "${SOURCES[@]}"; do
+    if [[ -e "$src" ]]; then
+        EXISTING_SOURCES+=("$src")
+    fi
+done
+
+if [[ ${#EXISTING_SOURCES[@]} -eq 0 ]]; then
+    echo "Error: no source files found. Have you built the model?" >&2
+    exit 1
+fi
+
+echo "Syncing:"
+for src in "${EXISTING_SOURCES[@]}"; do
+    echo "  $src"
+done
+echo
+
+if $USE_TAR; then
+    # tar+ssh: much faster for many small files (no per-file overhead).
+    # pv gives overall progress if available, otherwise plain pipe.
+    set +e
+    TOTAL_BYTES=$(du -sb "${EXISTING_SOURCES[@]}" | awk '{s+=$1} END {print s}')
+    echo "Total: $(numfmt --to=iec "$TOTAL_BYTES")"
+    if command -v pv &>/dev/null; then
+        tar cf - "${EXISTING_SOURCES[@]}" \
+            | pv -s "$TOTAL_BYTES" \
+            | ssh "$REMOTE_HOST" "tar xf - -C '$REMOTE_WORKDIR'"
+    else
+        echo "(install pv for progress bar)"
+        tar cf - "${EXISTING_SOURCES[@]}" \
+            | ssh "$REMOTE_HOST" "tar xf - -C '$REMOTE_WORKDIR'"
+    fi
+    rc=${PIPESTATUS[-1]}
+    set -e
+    if [[ $rc -ne 0 ]]; then
+        echo "Error: ssh to $REMOTE_HOST failed (exit code $rc)" >&2
+        exit $rc
+    fi
+else
+    if ! rsync -aW --info=progress2 --relative \
+        "${EXISTING_SOURCES[@]}" \
+        "$REMOTE_HOST:$REMOTE_WORKDIR/"; then
+        echo "Error: rsync to $REMOTE_HOST failed" >&2
+        exit 1
+    fi
+fi
