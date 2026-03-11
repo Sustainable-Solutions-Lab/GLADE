@@ -20,6 +20,7 @@ existing file and handles the CANCELLED state.
 """
 
 import contextlib
+import fcntl
 from pathlib import Path
 import shlex
 import signal
@@ -35,7 +36,7 @@ from workflow.scripts.remote_solve_utils import (
     daemon_paths,
     generate_sbatch_script,
     is_daemon_running,
-    pull_artifact,
+    pull_artifacts,
     read_job_status_from_cache,
     read_remote_config,
     remote_path_shell_expr,
@@ -269,38 +270,28 @@ def _collect_remote_solve_inner() -> None:
                 )
                 time.sleep(_POLL_INTERVAL_SECONDS)
 
-        # Pull artifacts.
-        logger.info("Pulling solved network artifact")
-        pull_artifact(
-            host=host,
-            remote_workdir=remote_workdir,
-            rel_path=target_rel,
-            local_root=project_root,
-            rsync_options=rsync_options,
-            ssh_options=ssh_options,
-            logger=logger,
-            required=True,
-        )
-        pull_artifact(
-            host=host,
-            remote_workdir=remote_workdir,
-            rel_path=remote_solver_log_rel,
-            local_root=project_root,
-            rsync_options=rsync_options,
-            ssh_options=ssh_options,
-            logger=logger,
-            required=False,
-        )
-        pull_artifact(
-            host=host,
-            remote_workdir=remote_workdir,
-            rel_path=remote_solver_benchmark_rel,
-            local_root=project_root,
-            rsync_options=rsync_options,
-            ssh_options=ssh_options,
-            logger=logger,
-            required=False,
-        )
+        # Pull artifacts in a single rsync call, serialized across collect
+        # instances via file lock to avoid overwhelming the SSH connection
+        # when many jobs complete simultaneously (e.g. after a workflow restart).
+        pull_lock = jobid_dir / ".pull_artifacts.lock"
+        logger.info("Waiting for pull lock")
+        with open(pull_lock, "w") as lock_fd:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            logger.info("Pulling artifacts")
+            pull_artifacts(
+                host=host,
+                remote_workdir=remote_workdir,
+                rel_paths=[
+                    target_rel,
+                    remote_solver_log_rel,
+                    remote_solver_benchmark_rel,
+                ],
+                required_paths=[target_rel],
+                local_root=project_root,
+                rsync_options=rsync_options,
+                ssh_options=ssh_options,
+                logger=logger,
+            )
     except (KeyboardInterrupt, SystemExit):
         if not slurm_job_done:
             write_daemon_shutdown_marker(jobid_dir)

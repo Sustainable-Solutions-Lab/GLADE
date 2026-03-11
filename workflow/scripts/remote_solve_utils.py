@@ -208,7 +208,7 @@ def pull_artifact(
     command = [
         "rsync",
         "-az",
-        "--timeout=60",
+        "--timeout=180",
         *rsync_ssh_args(ssh_options),
         *rsync_options,
         remote_path,
@@ -216,7 +216,7 @@ def pull_artifact(
     ]
 
     def _run():
-        run_local_command(command, logger, timeout=120)
+        run_local_command(command, logger, timeout=300)
 
     try:
         _retry_command(
@@ -230,6 +230,60 @@ def pull_artifact(
         if required:
             raise
         logger.warning("Remote artifact missing (optional): %s", rel_path)
+
+
+def pull_artifacts(
+    *,
+    host: str,
+    remote_workdir: str,
+    rel_paths: list[str],
+    required_paths: list[str],
+    local_root: Path,
+    rsync_options: list[str],
+    ssh_options: list[str],
+    logger,
+) -> None:
+    """Pull multiple artifacts in a single rsync call, with timeout and retries.
+
+    Uses ``--relative`` with the ``/.`` trick to preserve directory structure
+    and ``--ignore-missing-args`` so optional artifacts don't cause failure.
+    After the transfer, verifies that all ``required_paths`` arrived.
+    """
+    # Ensure local parent directories exist.
+    for rel_path in rel_paths:
+        (local_root / rel_path).parent.mkdir(parents=True, exist_ok=True)
+
+    workdir = remote_workdir.rstrip("/")
+    remote_sources = [f"{host}:{workdir}/./{rel}" for rel in rel_paths]
+    command = [
+        "rsync",
+        "-azR",
+        "--timeout=180",
+        "--ignore-missing-args",
+        *rsync_ssh_args(ssh_options),
+        *rsync_options,
+        *remote_sources,
+        str(local_root) + "/",
+    ]
+
+    def _run():
+        run_local_command(command, logger, timeout=300)
+
+    _retry_command(
+        _run,
+        retries=3,
+        delay=5,
+        logger=logger,
+        description=f"pull {len(rel_paths)} artifacts",
+    )
+
+    # Verify required artifacts arrived.
+    for rel_path in required_paths:
+        local_path = local_root / rel_path
+        if not local_path.exists():
+            raise FileNotFoundError(
+                f"Required artifact missing after rsync: {local_path}"
+            )
 
 
 def generate_sbatch_script(
