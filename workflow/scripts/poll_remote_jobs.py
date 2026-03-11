@@ -144,7 +144,7 @@ def _batch_query(
                                 "terminal": True,
                                 "succeeded": True,
                             }
-                        elif state in _SLURM_FAILED_STATES:
+                        elif state.split()[0] in _SLURM_FAILED_STATES:
                             results[jid] = {
                                 "state": state,
                                 "terminal": True,
