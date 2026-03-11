@@ -394,6 +394,33 @@ switching is needed.
 - Do not introduce secrets, credentials, or hard-coded local paths.
 - Use only licensed datasets and dependencies already declared in `pixi.toml` unless explicitly instructed to add new ones.
 
+## Scratchpad
+
+A shared scratchpad lives at `.claude/scratchpad.md` for semi-ephemeral notes that help agents get up to speed quickly. Unlike AGENTS.md (authoritative, stable) this file captures working knowledge: gotchas, surprising behaviors, recent pitfalls, useful one-liners, etc.
+
+### Rules
+
+- **Read on start**: At the beginning of every session, read `.claude/scratchpad.md` if it exists.
+- **Update as you go**: Whenever you discover something non-obvious (a tricky API quirk, a data-quality issue, a Snakemake subtlety, a debugging trick), append or update the scratchpad.
+- **Keep it short**: Target ≤ 80 lines. When it grows too long, prune entries that are stale, already encoded in AGENTS.md, or no longer relevant. Prefer terse bullet points over prose.
+- **No secrets or paths**: Same rules as the rest of the repo — no credentials, no machine-specific absolute paths.
+- **Not version-controlled**: The file lives under `.claude/` which is gitignored. It is local working memory, not documentation.
+
+### Suggested format
+
+```markdown
+# Scratchpad
+
+## Gotchas
+- <one-liner about a surprising behavior>
+
+## Useful commands
+- <handy invocations worth remembering>
+
+## Current state / WIP context
+- <anything about the repo's current state that a fresh session should know>
+```
+
 ## Reminder
 
 Againt, always remember to use pixi to run snippets of python; do not run python directly or you won't be able to use any project dependencies.
