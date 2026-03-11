@@ -10,12 +10,14 @@ currently running job with its elapsed time.
 """
 
 import re
+import threading
 import time
 
 from rich.console import Console, Group
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.rule import Rule
+from rich.text import Text
 from snakemake_interface_logger_plugins.base import LogHandlerBase
 from snakemake_interface_logger_plugins.common import LogEvent
 
@@ -74,10 +76,17 @@ class LogHandler(LogHandlerBase):
         self._done = 0
         self._total = 0
 
+        # Log line buffer: accumulated between refreshes so that multiple
+        # rapid events only cause a single hide/show cycle of the live area.
+        self._pending_lines = []  # list of (text, style)
+        self._flush_timer = None
+        self._buffer_lock = threading.Lock()
+
     def _ensure_live(self):
         """Start the Live display on first real job (TTY only, non-dryrun)."""
         if self._live or self._dryrun or not self._console.is_terminal:
             return
+        self._flush_pending()
         if self._total > 0:
             self._rule = Rule(title=f"0/{self._total} (0%)")
         else:
@@ -87,31 +96,76 @@ class LogHandler(LogHandlerBase):
             console=self._console,
             transient=True,
             refresh_per_second=1,
+            get_renderable=self._get_renderable,
         )
         self._live.start()
 
+    def _get_renderable(self):
+        """Called by Live on each refresh — returns the status display."""
+        return Group(self._rule, self._progress)
+
     def _log(self, text, style=None):
-        """Print a log line above the live area (or directly if no live)."""
-        kwargs = {"style": style, "highlight": False, "markup": False}
+        """Buffer a log line and schedule a deferred flush.
+
+        When Live is active, lines are collected and flushed as a single
+        ``Group`` renderable after a short delay (50 ms).  This collapses
+        bursts of rapid events into one hide/show cycle of the live area.
+        When Live is not active, lines print immediately.
+        """
         if self._live and self._live.is_started:
-            self._live.console.print(text, **kwargs)
+            with self._buffer_lock:
+                self._pending_lines.append((text, style))
+            self._schedule_flush()
         else:
-            self._console.print(text, **kwargs)
+            self._console.print(text, style=style, highlight=False, markup=False)
+
+    def _schedule_flush(self):
+        """Schedule a flush 50 ms from now (reset on each new line)."""
+        if self._flush_timer is not None:
+            self._flush_timer.cancel()
+        self._flush_timer = threading.Timer(0.05, self._flush_pending)
+        self._flush_timer.daemon = True
+        self._flush_timer.start()
+
+    def _flush_pending(self):
+        """Write all buffered log lines to the console in one batch.
+
+        Combines all pending lines into a single ``Group`` renderable so
+        that ``Live.console.print()`` performs exactly one hide/show cycle
+        of the live area regardless of how many lines were buffered.
+        """
+        self._flush_timer = None
+        with self._buffer_lock:
+            if not self._pending_lines:
+                return
+            lines = self._pending_lines
+            self._pending_lines = []
+        parts = [Text(text, style=style) for text, style in lines]
+        console = (
+            self._live.console
+            if self._live and self._live.is_started
+            else self._console
+        )
+        console.print(Group(*parts), highlight=False, markup=False)
 
     def _update_rule(self):
-        """Rebuild the Rule title with current progress."""
+        """Update the Rule title in-place (no forced re-render)."""
         if self._total > 0:
             pct = self._done * 100 // self._total
-            self._rule = Rule(title=f"{self._done}/{self._total} ({pct}%)")
+            self._rule.title = f"{self._done}/{self._total} ({pct}%)"
         else:
-            self._rule = Rule()
-        if self._live and self._live.is_started:
-            self._live.update(Group(self._rule, self._progress))
+            self._rule.title = ""
 
     def _stop_live(self):
-        """Stop the live display if running."""
+        """Stop the live display if running, flushing any buffered lines."""
+        if self._flush_timer is not None:
+            self._flush_timer.cancel()
+            self._flush_timer = None
         if self._live and self._live.is_started:
+            self._flush_pending()
             self._live.stop()
+        elif self._pending_lines:
+            self._flush_pending()
 
     def filter(self, record):
         event = record.__dict__.get("event", None)
