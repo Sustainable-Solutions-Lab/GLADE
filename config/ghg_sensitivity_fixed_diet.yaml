@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# GHG Price Sensitivity with Fixed Baseline Diet
+# ------------------------------------------------
+# Varies GHG price while keeping food consumption fixed to baseline values.
+# Since diet is fixed, food utility is irrelevant and disabled, and no
+# baseline calibration scenario is needed.
+
+name: "ghg_sensitivity_fixed_diet"
+scenarios:
+  ghg_0:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  _generators:
+    - name: ghg_{ghg}
+      parameters:
+        ghg:
+          space: log
+          start: 10
+          stop: 500
+          num: 20
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: 0
+
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2020
+baseline_year: 2020
+
+# No food utility needed — diet is fixed
+food_utility_piecewise:
+  enabled: false
+
+# Fix diet to baseline
+validation:
+  use_actual_yields: true
+  enforce_baseline_diet: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.5
+
+water:
+  supply_scenario: "current_use"
+
+residues:
+  max_feed_fraction_by_region:
+    Asia: 0.70
+
+grazing:
+  isimip_utilization_rate: 0.60
+  forage_overlap_subtraction_alpha: 1.0
+
+land:
+  regional_limit: 1.0
+
+health:
+  enabled: false
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  mem_mb: 9000
+  runtime: 20
+
+remote_solve:
+  enabled: false
