@@ -27,6 +27,7 @@ scenarios:
   #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
   #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
   #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
+  #   - prod_stability_cost: 0.1-10 uniform (L1 penalty cost for production deviations)
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
 
@@ -170,7 +171,7 @@ solving:
   io_api: "direct"
   threads: 2
   mem_mb: 9000
-  runtime: 20
+  runtime: 30
 
 remote_solve:
   enabled: false

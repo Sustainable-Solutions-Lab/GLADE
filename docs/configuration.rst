@@ -372,21 +372,38 @@ animal product production can deviate from current (baseline) levels. This is us
 investigating what positive changes (e.g., improved health outcomes, reduced emissions)
 can be achieved with limited disruption to existing production patterns.
 
-When enabled, the solver applies per-(product, country) bounds of the form:
+Three penalty modes are available, selected via ``penalty_mode``:
 
-.. math::
+* **``hard``** (default): Inequality bounds. Per-(product, country) production is bounded by:
 
-   (1 - \delta) \times \text{baseline} \le \text{production} \le (1 + \delta) \times \text{baseline}
+  .. math::
 
-where :math:`\delta` is the ``max_relative_deviation`` parameter (e.g., 0.2 for ±20%).
+     (1 - \delta) \times \text{baseline} \le \text{production} \le (1 + \delta) \times \text{baseline}
+
+  where :math:`\delta` is the ``max_relative_deviation`` parameter (e.g., 0.2 for ±20%).
+
+* **``l1``**: Soft L1 (linear absolute-value) penalty on deviations from baseline production.
+  Each unit of absolute deviation incurs a cost of ``l1_cost`` (bn USD per Mha for
+  crops/grassland, or Mha-equivalent for animals). An L1 cost of approximately 1.0 is
+  roughly the lowest value that induces the model to replicate current production patterns.
+
+* **``quadratic``**: Soft quadratic penalty on deviations, with cost ``quadratic_cost``
+  (bn USD per deviation² unit).
+
+The ``deviation_type`` option (``absolute`` or ``relative``) controls whether deviations
+are measured in absolute units or relative to the baseline.
 
 **Configuration options**:
 
 * ``production_stability.enabled``: Master switch for the feature (default: ``false``)
-* ``production_stability.crops.enabled``: Apply bounds to crop production
-* ``production_stability.crops.max_relative_deviation``: Maximum relative deviation for crops (0-1)
-* ``production_stability.animals.enabled``: Apply bounds to animal product production
-* ``production_stability.animals.max_relative_deviation``: Maximum relative deviation for animal products (0-1)
+* ``production_stability.penalty_mode``: ``hard``, ``l1``, or ``quadratic`` (default: ``hard``)
+* ``production_stability.l1_cost``: L1 penalty cost (default: 1.0, only used when ``penalty_mode`` is ``l1``)
+* ``production_stability.quadratic_cost``: Quadratic penalty cost (default: 1.0, only used when ``penalty_mode`` is ``quadratic``)
+* ``production_stability.deviation_type``: ``absolute`` or ``relative`` (default: ``absolute``)
+* ``production_stability.crops.enabled``: Apply to crop production
+* ``production_stability.crops.max_relative_deviation``: Maximum relative deviation for crops (0-1, ``hard`` mode only)
+* ``production_stability.animals.enabled``: Apply to animal product production
+* ``production_stability.animals.max_relative_deviation``: Maximum relative deviation for animal products (0-1, ``hard`` mode only)
 
 **Behavior notes**:
 

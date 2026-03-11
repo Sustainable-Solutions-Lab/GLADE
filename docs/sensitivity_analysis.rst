@@ -603,6 +603,27 @@ Individual risk factor keys (e.g., ``whole_grains: 0.5``) remain supported and
 take precedence over group keys when both are specified. However, specifying
 both a group key and an individual key for the same risk factor raises an error.
 
+Production stability cost (``prod_stability_cost``: 0.1–10)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This parameter controls the L1 penalty cost applied to deviations of crop and
+animal product production from their current (baseline) levels. In the model's
+production stability mode (``penalty_mode: "l1"``), each unit of absolute
+deviation incurs a cost of ``l1_cost`` (bn USD per Mha for crops/grassland, or
+Mha-equivalent for animals). The penalty induces the optimizer to replicate
+current production patterns rather than radically restructuring the food system.
+
+The range spans an order of magnitude around the empirically calibrated value of
+~1.0. At an L1 cost of approximately 1.0, the model is roughly at the lowest
+cost level that induces replication of current production patterns in a
+sensitivity analysis focused on production stability. Below ~0.1 the penalty is
+too weak to prevent large production shifts; above ~10 the penalty dominates and
+the model is effectively locked to baseline production.
+
+**Distribution.** A ``uniform`` distribution is used because the range reflects
+a modelling choice (how strongly to penalise production deviations) rather than
+an empirically grounded uncertainty estimate.
+
 Policy slice parameters
 ~~~~~~~~~~~~~~~~~~~~~~~
 
