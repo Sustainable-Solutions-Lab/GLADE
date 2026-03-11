@@ -16,7 +16,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -156,11 +155,27 @@ def _plot(slack_df: pd.DataFrame, output_svg: str, output_png: str) -> None:
     ax.grid(axis="y", alpha=0.3)
     ax.set_xlim(-0.6, len(all_bases) - 0.4)
 
-    handles = [
-        Patch(facecolor="gray", alpha=1.0, label="Excess"),
-        Patch(facecolor="gray", alpha=0.45, label="Shortage"),
-    ]
-    ax.legend(handles=handles, fontsize=FONT_SIZES["legend"], loc="upper right")
+    # Direct text annotations at the far right instead of a legend
+    x_right = len(all_bases) - 0.5
+    y_pad = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.03
+    ax.text(
+        x_right,
+        y_pad,
+        "Excess",
+        ha="right",
+        va="bottom",
+        fontsize=FONT_SIZES["legend"],
+        color="#555555",
+    )
+    ax.text(
+        x_right,
+        -y_pad,
+        "Shortage",
+        ha="right",
+        va="top",
+        fontsize=FONT_SIZES["legend"],
+        color="#555555",
+    )
 
     save_doc_figure(fig, output_svg, format="svg")
     save_doc_figure(fig, output_png, format="png", dpi=300)

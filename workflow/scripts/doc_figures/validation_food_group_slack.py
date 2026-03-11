@@ -16,7 +16,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -134,11 +133,27 @@ def _plot_two_panel(
     ax_abs.grid(axis="y", alpha=0.3)
     ax_abs.set_xlim(-0.6, len(sorted_groups) - 0.4)
 
-    handles = [
-        Patch(facecolor="gray", alpha=1.0, label="Excess (above baseline)"),
-        Patch(facecolor="gray", alpha=0.45, label="Shortage (below baseline)"),
-    ]
-    ax_abs.legend(handles=handles, fontsize=FONT_SIZES["legend"], loc="upper right")
+    # Direct text annotations at the far right instead of a legend
+    x_right = len(sorted_groups) - 0.5
+    y_pad = (ax_abs.get_ylim()[1] - ax_abs.get_ylim()[0]) * 0.03
+    ax_abs.text(
+        x_right,
+        y_pad,
+        "Excess",
+        ha="right",
+        va="bottom",
+        fontsize=FONT_SIZES["legend"],
+        color="#555555",
+    )
+    ax_abs.text(
+        x_right,
+        -y_pad,
+        "Shortage",
+        ha="right",
+        va="top",
+        fontsize=FONT_SIZES["legend"],
+        color="#555555",
+    )
 
     # --- Bottom panel: relative deviation (line) ---
     rel_vals = rel_deviation.reindex(sorted_groups).values
