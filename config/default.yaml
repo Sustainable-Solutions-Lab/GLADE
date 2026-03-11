@@ -1152,37 +1152,38 @@ plotting:
   # Crop groups for map visualizations. Each group has a display name, a hex
   # color, and a list of member crops. Every crop listed under the top-level
   # `crops` key should belong to exactly one group (validated at startup).
+  # Colors sourced from ColorBrewer Dark2 and Paired palettes.
   crop_groups:
     Cereals:
-      color: "#C58E2D"
+      color: "#E6AB02"  # Dark2 #6
       crops: [wheat, dryland-rice, wetland-rice, maize, barley, oat, rye,
               sorghum, buckwheat, foxtail-millet, pearl-millet]
     Legumes:
-      color: "#999999"
+      color: "#666666"  # Dark2 #8
       crops: [soybean, dry-pea, chickpea, cowpea, gram, phaseolus-bean, pigeonpea]
     "Roots & tubers":
-      color: "#8C6D31"
+      color: "#A6761D"  # Dark2 #7
       crops: [white-potato, sweet-potato, cassava, yam]
     Vegetables:
-      color: "#1B9E77"
+      color: "#1B9E77"  # Dark2 #1
       crops: [tomato, carrot, onion, cabbage]
     Fruits:
-      color: "#D95F02"
+      color: "#D95F02"  # Dark2 #2
       crops: [banana, citrus, coconut]
     Oilseeds:
-      color: "#7570B3"
+      color: "#7570B3"  # Dark2 #3
       crops: [sunflower, rapeseed, groundnut, sesame, oil-palm, olive]
     "Sugar crops":
-      color: "#E7298A"
+      color: "#E7298A"  # Dark2 #4
       crops: [sugarcane, sugarbeet]
     Stimulants:
-      color: "#8B4513"
+      color: "#B15928"  # Paired #12
       crops: [cocoa, coffee, tea]
     "Fiber crops":
-      color: "#B8860B"
+      color: "#1F78B4"  # Paired #2
       crops: [cotton]
     "Feed crops":
-      color: "#66A61E"
+      color: "#66A61E"  # Dark2 #5
       crops: [alfalfa, silage-maize, biomass-sorghum, grassland]
 
   colors:
@@ -1231,20 +1232,21 @@ plotting:
       alfalfa: "#1ABC9C"
       'biomass-sorghum': "#16A085"
       grassland: "#7FB77E"
+    # Colors sourced from ColorBrewer Dark2, Set2, and Paired palettes.
     food_groups:
-      whole_grains: "#8C564B"
-      grain: "#C49C94"
-      fruits: "#E15759"
-      vegetables: "#59A14F"
-      legumes: "#B07AA1"
-      nuts_seeds: "#AA7C51"
-      starchy_vegetable: "#F28E2C"
-      oil: "#FFBE7D"
-      red_meat: "#D62728"
-      poultry: "#FF9896"
-      dairy: "#9EDAE5"
-      eggs: "#FFE377"
-      stimulants: "#8B4513"
+      whole_grains: "#E6AB02"  # Dark2 #6
+      grain: "#FFD92F"  # Set2 #6
+      fruits: "#FC8D62"  # Set2 #2
+      vegetables: "#66C2A5"  # Set2 #1
+      legumes: "#8DA0CB"  # Set2 #3
+      nuts_seeds: "#A6761D"  # Dark2 #7
+      starchy_vegetable: "#E78AC3"  # Set2 #4
+      oil: "#E5C494"  # Set2 #7
+      red_meat: "#E31A1C"  # Paired #6
+      poultry: "#FB9A99"  # Paired #5
+      dairy: "#A6CEE3"  # Paired #1
+      eggs: "#FDBF6F"  # Paired #7
+      stimulants: "#B15928"  # Paired #12
 
   fallback_cmaps:
     crops: "Set3"
