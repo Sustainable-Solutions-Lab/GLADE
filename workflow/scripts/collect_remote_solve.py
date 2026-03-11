@@ -31,11 +31,11 @@ import traceback
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.remote_solve_utils import (
     build_remote_smk_command,
-    check_ssh_master,
     config_snapshot_rel_path,
     daemon_paths,
     generate_sbatch_script,
     is_daemon_running,
+    pull_artifact,
     pull_artifacts,
     read_job_status_from_cache,
     read_remote_config,
@@ -205,10 +205,8 @@ def _collect_remote_solve_inner() -> None:
 
     try:
         if not slurm_job_done:
-            # Verify SSH master is healthy before starting long-lived polling.
-            check_ssh_master(host, ssh_options, logger)
-
             # Start the batch polling daemon (no-op if already running).
+            # The daemon checks SSH master health on startup.
             start_daemon_if_needed(cfg, jobid_dir, logger)
 
             # Track whether we've already re-submitted once in this

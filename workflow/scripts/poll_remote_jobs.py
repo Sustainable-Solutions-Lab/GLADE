@@ -212,6 +212,17 @@ def _main_inner(args, jobid_dir: Path, cache_file: Path, logger: logging.Logger)
         args.interval,
     )
 
+    # Verify SSH connectivity before entering the poll loop. If the
+    # ControlMaster is stale (e.g. after a network interruption), fail
+    # fast so the user can re-authenticate. Collect instances will
+    # restart the daemon on the next poll cycle.
+    rc, _ = _run_ssh(args.host, args.ssh_options, "true", logger)
+    if rc != 0:
+        raise RuntimeError(
+            f"SSH connection to {args.host} failed (rc={rc}). "
+            f"Run 'ssh {args.host}' manually to re-authenticate."
+        )
+
     empty_cycles = 0
     # Jobs already known to be in a terminal state; no need to re-query.
     terminal_cache: dict[str, dict] = {}
