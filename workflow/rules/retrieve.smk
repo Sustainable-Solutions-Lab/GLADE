@@ -613,6 +613,29 @@ rule download_grassland_yield_data:
         """
 
 
+rule retrieve_gdp_per_capita:
+    """Retrieve GDP per capita data from IMF World Economic Outlook API.
+
+    Missing data is imputed using UN M49 sub-regional means.
+    """
+    input:
+        m49="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        year=config["planning_horizon"],
+    output:
+        gdp="<processing>/{name}/gdp_per_capita.csv",
+    resources:
+        runtime="15m",
+        mem_mb=200,
+    log:
+        "<logs>/{name}/retrieve_gdp_per_capita.log",
+    benchmark:
+        "<benchmarks>/{name}/retrieve_gdp_per_capita.tsv"
+    script:
+        "../scripts/retrieve_gdp_per_capita.py"
+
+
 rule download_wpp_population:
     output:
         population="data/downloads/WPP_population.csv.gz",

@@ -575,7 +575,7 @@ IMF World Economic Outlook -- GDP per Capita
 **Access**: https://www.imf.org/external/datamapper/NGDPDPC@WEO (`API documentation <https://www.imf.org/external/datamapper/api/help>`_) |
 **License**: Free to use with attribution (`Terms of use <https://www.imf.org/en/about/copyright-and-terms#data>`_)
 
-GDP per capita estimates (current prices, USD) from the World Economic Outlook database (indicator ``NGDPDPC``). Retrieved automatically via the IMF DataMapper API (no API key required). Output: ``data/downloads/gdp_per_capita.csv``. Used by ``prepare_health_costs`` for multi-objective country clustering based on geography, GDP similarity, and population balance.
+GDP per capita estimates (current prices, USD) from the World Economic Outlook database (indicator ``NGDPDPC``). Retrieved automatically via the IMF DataMapper API (no API key required). Output: ``processing/{name}/gdp_per_capita.csv``. Used by ``prepare_health_costs`` for multi-objective country clustering based on geography, GDP similarity, and population balance.
 
 Health and Epidemiology Data
 -----------------------------
