@@ -17,8 +17,6 @@ scenarios:
   baseline:
     validation:
       enforce_baseline_diet: true
-      production_stability:
-        enabled: false
     food_utility_piecewise:
       enabled: false
     emissions:
@@ -34,14 +32,6 @@ scenarios:
     macronutrients:
       cal:
         equal_to_baseline: true
-    # food_groups:
-    #   fix_within_group_ratios:
-    #     enabled: true
-    # macronutrients:
-    #   protein:
-    #     min: 68.49
-    #   fat:
-    #     min: 56.13
 
   # =============================================================================
   # Generated Scenarios (full grid)
@@ -53,15 +43,15 @@ scenarios:
       parameters:
         ghg:
           space: log
-          start: 2
+          start: 5
           stop: 500
-          num: 8
+          num: 10
           round: true
         yll:
           space: log
           start: 50
           stop: 100000
-          num: 8
+          num: 10
           round: true
       template:
         emissions:
@@ -71,21 +61,14 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-        # food_groups:
-        #   fix_within_group_ratios:
-        #     enabled: true
-        # macronutrients:
-        #   protein:
-        #     min: 68.49
-        #   fat:
-        #     min: 56.13
+
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2020
+baseline_year: 2020
 
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true
-
-crop_costs:
-  per_tonne_cost_fraction: 0.9
 
 validation:
   use_actual_yields: true
@@ -93,8 +76,26 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.1
-    # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
+    l1_cost: 0.5
+
+water:
+  supply_scenario: "current_use"
+
+residues:
+  max_feed_fraction_by_region:
+    Asia: 0.70
+
+grazing:
+  # Slightly higher utilization rate matches grassland supply with feed demand
+  isimip_utilization_rate: 0.60
+  forage_overlap_subtraction_alpha: 1.0
+
+land:
+  regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
+
+health:
+  region_clusters: 15
+  intake_grid_points: 8  # Number of grid knots over empirical RR range
 
 # Compare all scenarios in plots
 plotting:
@@ -103,9 +104,9 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 2
-  mem_mb: 8000
-  runtime: 30
+  threads: 8
+  mem_mb: 9000
+  runtime: 20
 
 remote_solve:
   enabled: true

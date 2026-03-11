@@ -34,6 +34,7 @@ scenarios:
           production_stability:
             enabled: true
             penalty_mode: "l1"
+            deviation_type: "absolute"
             l1_cost: "{cost}"
         emissions:
           ghg_price: 0
@@ -44,24 +45,24 @@ scenarios:
             equal_to_baseline: true
 
     # L1 cost sweep with health + emissions pricing (yll=5000, ghg=200)
-    - name: l1_{cost}_priced
-      parameters:
-        cost:
-          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
-          name_format: "lambda x: str(x).replace('.', 'p')"
-      template:
-        validation:
-          production_stability:
-            enabled: true
-            penalty_mode: "l1"
-            l1_cost: "{cost}"
-        health:
-          value_per_yll: 5000
-        emissions:
-          ghg_price: 200
-        macronutrients:
-          cal:
-            equal_to_baseline: true
+    # - name: l1_{cost}_priced
+    #   parameters:
+    #     cost:
+    #       values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
+    #       name_format: "lambda x: str(x).replace('.', 'p')"
+    #   template:
+    #     validation:
+    #       production_stability:
+    #         enabled: true
+    #         penalty_mode: "l1"
+    #         l1_cost: "{cost}"
+    #     health:
+    #       value_per_yll: 5000
+    #     emissions:
+    #       ghg_price: 200
+    #     macronutrients:
+    #       cal:
+    #         equal_to_baseline: true
 
 # Align with sensitivity.yaml
 planning_horizon: 2020
@@ -73,11 +74,21 @@ food_utility_piecewise:
 
 validation:
   use_actual_yields: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
-    l1_cost: 0.1
+
+water:
+  supply_scenario: "current_use"
+
+residues:
+  max_feed_fraction_by_region:
+    Asia: 0.70
+
+grazing:
+  # Slightly higher utilization rate matches grassland supply with feed demand
+  isimip_utilization_rate: 0.60
+  forage_overlap_subtraction_alpha: 1.0
+
+land:
+  regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
 
 health:
   region_clusters: 15
