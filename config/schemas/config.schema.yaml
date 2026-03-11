@@ -1635,9 +1635,26 @@ properties:
 
   plotting:
     type: object
-    required: [colors, fallback_cmaps, comparison_scenarios]
+    required: [colors, fallback_cmaps, comparison_scenarios, crop_groups]
     additionalProperties: false
     properties:
+      crop_groups:
+        type: object
+        minProperties: 1
+        description: "Crop groupings for map visualizations. Keys are display names; each entry has a hex color and a list of member crops."
+        additionalProperties:
+          type: object
+          required: [color, crops]
+          additionalProperties: false
+          properties:
+            color:
+              type: string
+              pattern: "^#[0-9A-Fa-f]{6}$"
+            crops:
+              type: array
+              minItems: 1
+              items:
+                type: string
       comparison_scenarios:
         oneOf:
           - type: string

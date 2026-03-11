@@ -1148,6 +1148,43 @@ remote_solve:
 plotting:
   comparison_scenarios:
   - "scen-default"
+
+  # Crop groups for map visualizations. Each group has a display name, a hex
+  # color, and a list of member crops. Every crop listed under the top-level
+  # `crops` key should belong to exactly one group (validated at startup).
+  crop_groups:
+    Cereals:
+      color: "#C58E2D"
+      crops: [wheat, dryland-rice, wetland-rice, maize, barley, oat, rye,
+              sorghum, buckwheat, foxtail-millet, pearl-millet]
+    Legumes:
+      color: "#999999"
+      crops: [soybean, dry-pea, chickpea, cowpea, gram, phaseolus-bean, pigeonpea]
+    "Roots & tubers":
+      color: "#8C6D31"
+      crops: [white-potato, sweet-potato, cassava, yam]
+    Vegetables:
+      color: "#1B9E77"
+      crops: [tomato, carrot, onion, cabbage]
+    Fruits:
+      color: "#D95F02"
+      crops: [banana, citrus, coconut]
+    Oilseeds:
+      color: "#7570B3"
+      crops: [sunflower, rapeseed, groundnut, sesame, oil-palm, olive]
+    "Sugar crops":
+      color: "#E7298A"
+      crops: [sugarcane, sugarbeet]
+    Stimulants:
+      color: "#8B4513"
+      crops: [cocoa, coffee, tea]
+    "Fiber crops":
+      color: "#B8860B"
+      crops: [cotton]
+    "Feed crops":
+      color: "#66A61E"
+      crops: [alfalfa, silage-maize, biomass-sorghum, grassland]
+
   colors:
     crops:
       wheat: "#C58E2D"

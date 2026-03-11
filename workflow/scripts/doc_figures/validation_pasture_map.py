@@ -32,17 +32,14 @@ from workflow.scripts.doc_figures_config import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
-    CROP_TO_GROUP,
     _load_land_use_by_region_class_crop,
     _load_potential_area,
     _load_resource_classes,
     _setup_regions,
+    crop_groups_from_config,
 )
 
 logger = logging.getLogger(__name__)
-
-# Crops that belong to the pasture/grassland category
-PASTURE_CROPS = {crop for crop, group in CROP_TO_GROUP.items() if group == "Feed crops"}
 
 
 def _build_pasture_intensity_grid(
@@ -51,12 +48,13 @@ def _build_pasture_intensity_grid(
     region_grid,
     potential_area,
     region_name_to_id,
+    pasture_crops: set[str],
 ):
     """Build pixel-level pasture intensity grid.
 
     Returns intensity_grid (2D, 0-1) and total pasture area (ha).
     """
-    pasture = land_use_df[land_use_df["crop"].isin(PASTURE_CROPS)].copy()
+    pasture = land_use_df[land_use_df["crop"].isin(pasture_crops)].copy()
     intensity_grid = np.full(class_grid.shape, np.nan, dtype=np.float32)
     has_data = np.zeros(class_grid.shape, dtype=bool)
     total_area_ha = 0.0
@@ -273,6 +271,11 @@ def _plot(
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
+    crop_to_group, _crop_group_colors = crop_groups_from_config(
+        snakemake.config  # type: ignore[name-defined]
+    )
+    pasture_crops = {c for c, g in crop_to_group.items() if g == "Feed crops"}
+
     gdf = _setup_regions(snakemake.input.regions)  # type: ignore[name-defined]
     region_name_to_id = {region: idx for idx, region in enumerate(gdf["region"])}
 
@@ -293,6 +296,7 @@ def main() -> None:
         rc_data["region_grid"],
         potential_area,
         region_name_to_id,
+        pasture_crops,
     )
 
     _plot(

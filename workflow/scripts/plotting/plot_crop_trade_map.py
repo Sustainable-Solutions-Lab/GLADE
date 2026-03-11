@@ -33,13 +33,12 @@ from sklearn.cluster import KMeans
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
-    CROP_GROUP_COLORS,
-    CROP_TO_GROUP,
     _build_dominant_group_and_intensity_grids,
     _load_land_use_by_region_class_crop,
     _load_potential_area,
     _load_resource_classes,
     _setup_regions,
+    crop_groups_from_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,21 +53,16 @@ _LW_MIN, _LW_MAX = 1.0, 5.5
 # flows between the same hub pair do not overlap.
 _BEND_KM = 400
 
-# Colours for trade-flow arrows.  Crop groups reuse the production-map
-# palette where possible, but some warm tones (Cereals gold vs Roots &
-# tubers brown) are nearly identical as thin lines, so we override a few
-# with more saturated / distinct hues.
-TRADE_CATEGORY_COLORS = {
-    # Crop trade categories (from CROP_TO_GROUP)
+# Trade-flow arrow colour overrides.  Crop groups that need more saturated
+# or distinct colours for thin arrows get explicit hex values here;
+# everything else falls through to the config crop_group_colors.
+_TRADE_COLOR_OVERRIDES = {
     "Cereals": "#d4a017",  # saturated gold
-    "Legumes": CROP_GROUP_COLORS["Legumes"],
     "Roots & tubers": "#c44e52",  # muted red - distinct from gold
-    "Vegetables": CROP_GROUP_COLORS["Vegetables"],
-    "Fruits": CROP_GROUP_COLORS["Fruits"],
-    "Oilseeds": CROP_GROUP_COLORS["Oilseeds"],
-    "Sugar crops": CROP_GROUP_COLORS["Sugar crops"],
-    "Feed crops": CROP_GROUP_COLORS["Feed crops"],
-    # Food trade categories (by food group)
+}
+
+# Non-crop trade categories (food groups, feed) with fixed colours.
+_NON_CROP_TRADE_COLORS = {
     "Grain": "#C49C94",
     "Whole grains": "#8C564B",
     "Dairy": "#9EDAE5",
@@ -78,9 +72,18 @@ TRADE_CATEGORY_COLORS = {
     "Starchy vegetables": "#F28E2C",
     "Oil": "#FFBE7D",
     "Sugar": "#E377C2",
-    # Feed trade
-    "Animal feed": "#8c6d31",  # earthy brown
+    "Animal feed": "#8c6d31",
 }
+
+
+def _build_trade_category_colors(crop_group_colors: dict[str, str]) -> dict[str, str]:
+    """Build trade category colour mapping from crop group colours + overrides."""
+    colors = {}
+    for group, color in crop_group_colors.items():
+        colors[group] = _TRADE_COLOR_OVERRIDES.get(group, color)
+    colors.update(_NON_CROP_TRADE_COLORS)
+    return colors
+
 
 # Display names for internal food group identifiers.
 _FOOD_GROUP_DISPLAY = {
@@ -242,6 +245,7 @@ def _get_top_trade_flows(
     n: pypsa.Network,
     regions_gdf: gpd.GeoDataFrame,
     n_top: int,
+    crop_to_group: dict[str, str],
 ) -> pd.DataFrame:
     """Return the *n_top* largest hub-to-hub aggregated trade flows.
 
@@ -266,7 +270,7 @@ def _get_top_trade_flows(
             "trade_crop",
             "crop",
             "hub:crop:",
-            lambda item: CROP_TO_GROUP.get(item, "Other"),
+            lambda item: crop_to_group.get(item, "Other"),
         ),
         (
             "trade_food",
@@ -379,6 +383,8 @@ def _plot_map(
     extent: tuple,
     gdf: gpd.GeoDataFrame,
     trade_flows: pd.DataFrame,
+    crop_group_colors: dict[str, str],
+    trade_category_colors: dict[str, str],
     output_path: str,
     hub_regions: gpd.GeoDataFrame | None = None,
 ) -> None:
@@ -397,12 +403,12 @@ def _plot_map(
 
     # --- Base crop production layer (identical to plot_crop_production_map) ---
 
-    group_names = list(CROP_GROUP_COLORS.keys())
+    group_names = list(crop_group_colors.keys())
     h, w = dominant_group_grid.shape
     rgba = np.ones((h, w, 4), dtype=np.float32)
 
     for idx, gname in enumerate(group_names):
-        color = CROP_GROUP_COLORS[gname]
+        color = crop_group_colors[gname]
         if isinstance(color, str):
             color = mcolors.to_rgb(color)
         mask = dominant_group_grid == idx
@@ -499,7 +505,7 @@ def _plot_map(
 
         for _, row in trade_flows.iterrows():
             cat = row["category"]
-            color = TRADE_CATEGORY_COLORS.get(cat, "#888888")
+            color = trade_category_colors.get(cat, "#888888")
             color_rgb = mcolors.to_rgb(color) if isinstance(color, str) else color[:3]
 
             lw = _lw(row["flow_mt"])
@@ -594,7 +600,7 @@ def _plot_map(
         # Determine which categories are actually present
         active_cats = trade_flows["category"].unique()
         ordered = [
-            *CROP_GROUP_COLORS.keys(),
+            *crop_group_colors.keys(),
             *_FOOD_GROUP_DISPLAY.values(),
             "Animal feed",
         ]
@@ -603,7 +609,7 @@ def _plot_map(
         # Category colour entries
         cat_handles = []
         for cat in legend_cats:
-            c = TRADE_CATEGORY_COLORS.get(cat, "#888888")
+            c = trade_category_colors.get(cat, "#888888")
             if isinstance(c, str):
                 c = mcolors.to_rgb(c)
             cat_handles.append(
@@ -701,6 +707,11 @@ def main() -> None:
     network_path: str = snakemake.input.network  # type: ignore[name-defined]
     output_pdf: str = snakemake.output.pdf  # type: ignore[name-defined]
 
+    crop_to_group, crop_group_colors = crop_groups_from_config(
+        snakemake.config  # type: ignore[name-defined]
+    )
+    trade_category_colors = _build_trade_category_colors(crop_group_colors)
+
     gdf = _setup_regions(regions_path)
     region_name_to_id = {region: idx for idx, region in enumerate(gdf["region"])}
 
@@ -721,12 +732,14 @@ def main() -> None:
             rc_data["region_grid"],
             potential_area,
             region_name_to_id,
+            crop_to_group,
+            crop_group_colors,
         )
     )
 
     # Load solved network and extract trade flows
     n = pypsa.Network(network_path)
-    trade_flows = _get_top_trade_flows(n, gdf, N_TOP_FLOWS)
+    trade_flows = _get_top_trade_flows(n, gdf, N_TOP_FLOWS, crop_to_group)
     logger.info(
         "Selected %d trade flows (max %.1f Mt, min %.1f Mt)",
         len(trade_flows),
@@ -744,6 +757,8 @@ def main() -> None:
         rc_data["extent"],
         gdf,
         trade_flows,
+        crop_group_colors,
+        trade_category_colors,
         output_pdf,
         hub_regions=hub_regions,
     )

@@ -34,13 +34,12 @@ from workflow.scripts.doc_figures_config import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
-    CROP_GROUP_COLORS,
-    CROP_TO_GROUP,
     _build_dominant_group_and_intensity_grids,
     _load_land_use_by_region_class_crop,
     _load_potential_area,
     _load_resource_classes,
     _setup_regions,
+    crop_groups_from_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +51,8 @@ def _plot_frame(
     extent: tuple,
     gdf: gpd.GeoDataFrame,
     area_by_crop: pd.Series,
+    crop_to_group: dict[str, str],
+    crop_group_colors: dict[str, str],
     output_path: str,
     frame_label: str,
     bar_xmax_mha: float,
@@ -79,12 +80,12 @@ def _plot_frame(
     plate = ccrs.PlateCarree()
 
     # Build RGBA image from dominant group and intensity
-    group_names = list(CROP_GROUP_COLORS.keys())
+    group_names = list(crop_group_colors.keys())
     height, width = dominant_group_grid.shape
     rgba = np.ones((height, width, 4), dtype=np.float32)
 
     for idx, group_name in enumerate(group_names):
-        color = CROP_GROUP_COLORS[group_name]
+        color = crop_group_colors[group_name]
         if isinstance(color, str):
             color = mcolors.to_rgb(color)
         mask = dominant_group_grid == idx
@@ -170,8 +171,8 @@ def _plot_frame(
     # Aggregate area by crop group
     group_areas = {}
     for crop, area_ha in area_by_crop.items():
-        group = CROP_TO_GROUP.get(crop, "Other")
-        if group in CROP_GROUP_COLORS:
+        group = crop_to_group.get(crop, "Other")
+        if group in crop_group_colors:
             group_areas[group] = group_areas.get(group, 0.0) + area_ha
 
     # Sort by area descending
@@ -227,7 +228,7 @@ def _plot_frame(
 
         for i, (group_name, total_area) in enumerate(group_data):
             y = y_positions[i]
-            color = CROP_GROUP_COLORS[group_name]
+            color = crop_group_colors[group_name]
             if isinstance(color, str):
                 color = mcolors.to_rgb(color)
             area_mha = total_area / 1e6
@@ -306,6 +307,10 @@ def main() -> None:
     frame_label: str = snakemake.params.frame_label  # type: ignore[name-defined]
     bar_xmax_mha: float = snakemake.params.bar_xmax_mha  # type: ignore[name-defined]
 
+    crop_to_group, crop_group_colors = crop_groups_from_config(
+        snakemake.config  # type: ignore[name-defined]
+    )
+
     gdf = _setup_regions(regions_path)
     region_name_to_id = {region: idx for idx, region in enumerate(gdf["region"])}
 
@@ -323,6 +328,8 @@ def main() -> None:
                 rc_data["region_grid"],
                 potential_area,
                 region_name_to_id,
+                crop_to_group,
+                crop_group_colors,
             )
         )
         _plot_frame(
@@ -331,6 +338,8 @@ def main() -> None:
             rc_data["extent"],
             gdf,
             area_by_crop,
+            crop_to_group,
+            crop_group_colors,
             output_png,
             frame_label=frame_label,
             bar_xmax_mha=bar_xmax_mha,

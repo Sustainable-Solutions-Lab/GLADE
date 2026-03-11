@@ -14,6 +14,7 @@ from .config_schema import validate_config_schema
 from .consumer_values import validate_consumer_values
 from .country_regions import validate_country_regions
 from .crop_food_pathways import validate_crop_food_pathways
+from .crop_groups import validate_crop_groups
 from .food_groups import validate_food_groups
 from .gaez_crop_mapping import validate_gaez_crop_mapping
 from .health_map import validate_health_map
@@ -33,6 +34,7 @@ _CHECKS: dict[str, Validator] = {
     "country_regions": validate_country_regions,
     "food_groups": validate_food_groups,
     "crop_food_pathways": validate_crop_food_pathways,
+    "crop_groups": validate_crop_groups,
     "gaez_crop_mapping": validate_gaez_crop_mapping,
     "health_map": validate_health_map,
     "multi_cropping": validate_multi_cropping,

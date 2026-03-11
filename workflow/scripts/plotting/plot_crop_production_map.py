@@ -30,70 +30,28 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger(__name__)
 
 # Crop to group mapping for simplified visualization
-CROP_TO_GROUP = {
-    # Cereals (grains)
-    "wheat": "Cereals",
-    "dryland-rice": "Cereals",
-    "wetland-rice": "Cereals",
-    "maize": "Cereals",
-    "barley": "Cereals",
-    "oat": "Cereals",
-    "rye": "Cereals",
-    "sorghum": "Cereals",
-    "buckwheat": "Cereals",
-    "foxtail-millet": "Cereals",
-    "pearl-millet": "Cereals",
-    # Legumes
-    "soybean": "Legumes",
-    "dry-pea": "Legumes",
-    "chickpea": "Legumes",
-    "cowpea": "Legumes",
-    "gram": "Legumes",
-    "phaseolus-bean": "Legumes",
-    "pigeonpea": "Legumes",
-    # Roots & tubers
-    "white-potato": "Roots & tubers",
-    "sweet-potato": "Roots & tubers",
-    "cassava": "Roots & tubers",
-    "yam": "Roots & tubers",
-    # Vegetables
-    "tomato": "Vegetables",
-    "carrot": "Vegetables",
-    "onion": "Vegetables",
-    "cabbage": "Vegetables",
-    # Fruits
-    "banana": "Fruits",
-    "citrus": "Fruits",
-    "coconut": "Fruits",
-    # Oilseeds
-    "sunflower": "Oilseeds",
-    "rapeseed": "Oilseeds",
-    "groundnut": "Oilseeds",
-    "sesame": "Oilseeds",
-    "oil-palm": "Oilseeds",
-    "olive": "Oilseeds",
-    # Sugar crops
-    "sugarcane": "Sugar crops",
-    "sugarbeet": "Sugar crops",
-    # Feed/forage (non-food crops) and grassland
-    "alfalfa": "Feed crops",
-    "silage-maize": "Feed crops",
-    "biomass-sorghum": "Feed crops",
-    "grassland": "Feed crops",
-}
+# Groups to exclude from the map raster but still show in the bar chart.
+# Feed crops (pasture/forage) typically dominate land use and overwhelm
+# the map, so they are shown only in the bar chart.
+EXCLUDED_MAP_GROUPS = {"Feed crops"}
 
-# Colors for crop groups from Dark2 palette
-_DARK2 = plt.get_cmap("Dark2").colors
-CROP_GROUP_COLORS = {
-    "Cereals": _DARK2[5],  # gold/amber - wheat color
-    "Legumes": _DARK2[7],  # gray - peas, beans
-    "Roots & tubers": _DARK2[6],  # brown - earth/soil
-    "Vegetables": _DARK2[0],  # teal - fresh produce
-    "Fruits": _DARK2[1],  # orange - citrus
-    "Oilseeds": _DARK2[2],  # purple - distinct
-    "Sugar crops": _DARK2[3],  # pink - sweet
-    "Feed crops": _DARK2[4],  # green - grassland/animal feed
-}
+
+def crop_groups_from_config(
+    config: dict,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Build crop-to-group and group-color mappings from ``plotting.crop_groups``.
+
+    Returns:
+        crop_to_group: Mapping from crop name to group display name.
+        crop_group_colors: Ordered mapping from group display name to hex color.
+    """
+    crop_to_group: dict[str, str] = {}
+    crop_group_colors: dict[str, str] = {}
+    for group_name, group_def in config["plotting"]["crop_groups"].items():
+        crop_group_colors[group_name] = group_def["color"]
+        for crop in group_def["crops"]:
+            crop_to_group[crop] = group_name
+    return crop_to_group, crop_group_colors
 
 
 def _load_land_use_by_region_class_crop(csv_path: str) -> pd.DataFrame:
@@ -204,6 +162,9 @@ def _build_dominant_group_and_intensity_grids(
     region_grid: np.ndarray,
     potential_area: pd.Series,
     region_name_to_id: dict[str, int],
+    crop_to_group: dict[str, str],
+    crop_group_colors: dict[str, str],
+    excluded_map_groups: set[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, set[str]], pd.Series]:
     """Build pixel-level dominant crop group and intensity grids.
 
@@ -214,6 +175,11 @@ def _build_dominant_group_and_intensity_grids(
         potential_area: Series indexed by (region, resource_class) with potential
             cropland + grassland area in hectares
         region_name_to_id: Mapping from region names to integer IDs
+        crop_to_group: Mapping from crop name to group display name.
+        crop_group_colors: Ordered mapping from group display name to hex color.
+        excluded_map_groups: Groups to exclude from the map raster (dominant group
+            and intensity grids) but still include in crops_by_group and area_by_crop
+            for the bar chart.
 
     Returns:
         dominant_group_grid: 2D array of group indices (-1 for no data)
@@ -221,12 +187,15 @@ def _build_dominant_group_and_intensity_grids(
         crops_by_group: dict mapping group names to sets of crops present
         area_by_crop: Series with total area (ha) per crop
     """
+    if excluded_map_groups is None:
+        excluded_map_groups = set()
+
     # Initialize output grids
     intensity_grid = np.full(class_grid.shape, np.nan, dtype=np.float32)
     dominant_group_grid = np.full(class_grid.shape, -1, dtype=np.int8)
 
     # Build group name to index mapping
-    group_names = list(CROP_GROUP_COLORS.keys())
+    group_names = list(crop_group_colors.keys())
     group_to_idx = {name: idx for idx, name in enumerate(group_names)}
 
     # Track which crops appear in each group
@@ -240,20 +209,29 @@ def _build_dominant_group_and_intensity_grids(
         if total_used_ha <= 0:
             continue
 
-        # Find dominant crop by area
+        # Track crops present (all groups, including excluded)
         crop_areas = group_df.groupby("crop")["used_ha"].sum()
-        dominant_crop = crop_areas.idxmax()
-        dominant_group = CROP_TO_GROUP.get(dominant_crop, "Other")
-
-        # Track crops present
         for crop in crop_areas.index:
-            crop_group = CROP_TO_GROUP.get(crop, "Other")
+            crop_group = crop_to_group.get(crop, "Other")
             if crop_group in crops_by_group:
                 crops_by_group[crop_group].add(crop)
 
+        # For map grids, filter out excluded groups
+        map_crop_areas = {
+            crop: area
+            for crop, area in crop_areas.items()
+            if crop_to_group.get(crop, "Other") not in excluded_map_groups
+        }
+        if not map_crop_areas:
+            continue
+
+        map_used_ha = sum(map_crop_areas.values())
+        dominant_crop = max(map_crop_areas, key=map_crop_areas.get)
+        dominant_group = crop_to_group.get(dominant_crop, "Other")
+
         # Compute intensity using potential area (cropland + grassland)
         potential_ha = potential_area.get((region, int(rc)), 0.0)
-        intensity = min(total_used_ha / potential_ha, 1.0) if potential_ha > 0 else 0.0
+        intensity = min(map_used_ha / potential_ha, 1.0) if potential_ha > 0 else 0.0
 
         # Assign to pixels
         region_id = region_name_to_id.get(region)
@@ -262,7 +240,7 @@ def _build_dominant_group_and_intensity_grids(
             intensity_grid[mask] = intensity
             dominant_group_grid[mask] = group_to_idx[dominant_group]
 
-    # Compute total area by crop across all regions/classes
+    # Compute total area by crop across all regions/classes (all groups)
     area_by_crop = land_use_df.groupby("crop")["used_ha"].sum()
 
     return dominant_group_grid, intensity_grid, crops_by_group, area_by_crop
@@ -291,6 +269,8 @@ def _plot_gridcell_intensity(
     gdf: gpd.GeoDataFrame,
     crops_by_group: dict[str, set[str]],
     area_by_crop: pd.Series,
+    crop_to_group: dict[str, str],
+    crop_group_colors: dict[str, str],
     output_path: str,
     title: str = "Dominant Crop and Land Use Intensity",
 ) -> None:
@@ -303,6 +283,8 @@ def _plot_gridcell_intensity(
         gdf: GeoDataFrame with region boundaries
         crops_by_group: dict mapping group names to sets of crops present
         area_by_crop: Series with total area (ha) per crop
+        crop_to_group: Mapping from crop name to group display name.
+        crop_group_colors: Ordered mapping from group display name to hex color.
         output_path: Path to save PDF
         title: Figure title
     """
@@ -319,12 +301,12 @@ def _plot_gridcell_intensity(
     plate = ccrs.PlateCarree()
 
     # Build RGBA image from dominant group and intensity
-    group_names = list(CROP_GROUP_COLORS.keys())
+    group_names = list(crop_group_colors.keys())
     height, width = dominant_group_grid.shape
     rgba = np.ones((height, width, 4), dtype=np.float32)  # Start with white, alpha=1
 
     for idx, group_name in enumerate(group_names):
-        color = CROP_GROUP_COLORS[group_name]
+        color = crop_group_colors[group_name]
         # Convert to RGB if needed
         if isinstance(color, str):
             color = mcolors.to_rgb(color)
@@ -529,7 +511,7 @@ def _plot_gridcell_intensity(
 
         for i, (group_name, _total_area, crop_areas) in enumerate(group_data):
             y = y_positions[i]
-            base_color = CROP_GROUP_COLORS[group_name]
+            base_color = crop_group_colors[group_name]
             if isinstance(base_color, str):
                 base_color = mcolors.to_rgb(base_color)
 
@@ -709,6 +691,10 @@ def main() -> None:
     land_use_path: str = snakemake.input.land_use  # type: ignore[name-defined]
     output_pdf: str = snakemake.output.pdf  # type: ignore[name-defined]
 
+    crop_to_group, crop_group_colors = crop_groups_from_config(
+        snakemake.config  # type: ignore[name-defined]
+    )
+
     gdf = _setup_regions(regions_path)
     region_name_to_id = {region: idx for idx, region in enumerate(gdf["region"])}
 
@@ -726,6 +712,9 @@ def main() -> None:
                 rc_data["region_grid"],
                 potential_area,
                 region_name_to_id,
+                crop_to_group,
+                crop_group_colors,
+                excluded_map_groups=EXCLUDED_MAP_GROUPS,
             )
         )
         _plot_gridcell_intensity(
@@ -735,6 +724,8 @@ def main() -> None:
             gdf,
             crops_by_group,
             area_by_crop,
+            crop_to_group,
+            crop_group_colors,
             output_pdf,
             title="Dominant Crop and Land Use Intensity",
         )

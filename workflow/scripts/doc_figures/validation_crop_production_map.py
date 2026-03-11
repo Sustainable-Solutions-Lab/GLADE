@@ -34,12 +34,11 @@ from workflow.scripts.doc_figures_config import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
-    CROP_GROUP_COLORS,
-    CROP_TO_GROUP,
     _load_land_use_by_region_class_crop,
     _load_potential_area,
     _load_resource_classes,
     _setup_regions,
+    crop_groups_from_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +53,8 @@ def _build_grids_excluding_pasture(
     region_grid: np.ndarray,
     potential_area: pd.Series,
     region_name_to_id: dict[str, int],
+    crop_to_group: dict[str, str],
+    crop_group_colors: dict[str, str],
 ) -> tuple[np.ndarray, np.ndarray, pd.Series]:
     """Build pixel-level grids excluding pasture/feed crops.
 
@@ -63,7 +64,7 @@ def _build_grids_excluding_pasture(
     # Filter out excluded groups
     filtered = land_use_df[
         land_use_df["crop"]
-        .map(lambda c: CROP_TO_GROUP.get(c, "Other"))
+        .map(lambda c: crop_to_group.get(c, "Other"))
         .isin(EXCLUDED_GROUPS)
         .__invert__()
     ].copy()
@@ -71,7 +72,7 @@ def _build_grids_excluding_pasture(
     intensity_grid = np.full(class_grid.shape, np.nan, dtype=np.float32)
     dominant_group_grid = np.full(class_grid.shape, -1, dtype=np.int8)
 
-    group_names = [g for g in CROP_GROUP_COLORS if g not in EXCLUDED_GROUPS]
+    group_names = [g for g in crop_group_colors if g not in EXCLUDED_GROUPS]
     group_to_idx = {name: idx for idx, name in enumerate(group_names)}
 
     grouped = filtered.groupby(["region", "resource_class"])
@@ -83,7 +84,7 @@ def _build_grids_excluding_pasture(
 
         crop_areas = group_df.groupby("crop")["used_ha"].sum()
         dominant_crop = crop_areas.idxmax()
-        dominant_group = CROP_TO_GROUP.get(dominant_crop, "Other")
+        dominant_group = crop_to_group.get(dominant_crop, "Other")
 
         potential_ha = potential_area.get((region, int(rc)), 0.0)
         intensity = min(total_used_ha / potential_ha, 1.0) if potential_ha > 0 else 0.0
@@ -105,6 +106,8 @@ def _plot(
     extent: tuple,
     gdf: gpd.GeoDataFrame,
     area_by_crop: pd.Series,
+    crop_to_group: dict[str, str],
+    crop_group_colors: dict[str, str],
     output_svg: str,
     output_png: str,
 ) -> None:
@@ -118,12 +121,12 @@ def _plot(
     ax.set_global()
     plate = ccrs.PlateCarree()
 
-    group_names = [g for g in CROP_GROUP_COLORS if g not in EXCLUDED_GROUPS]
+    group_names = [g for g in crop_group_colors if g not in EXCLUDED_GROUPS]
     height, width = dominant_group_grid.shape
     rgba = np.ones((height, width, 4), dtype=np.float32)
 
     for idx, group_name in enumerate(group_names):
-        color = CROP_GROUP_COLORS[group_name]
+        color = crop_group_colors[group_name]
         if isinstance(color, str):
             color = mcolors.to_rgb(color)
         mask = dominant_group_grid == idx
@@ -203,8 +206,8 @@ def _plot(
     # Inset bar chart by crop group
     group_areas = {}
     for crop, area_ha in area_by_crop.items():
-        group = CROP_TO_GROUP.get(crop, "Other")
-        if group in CROP_GROUP_COLORS and group not in EXCLUDED_GROUPS:
+        group = crop_to_group.get(crop, "Other")
+        if group in crop_group_colors and group not in EXCLUDED_GROUPS:
             group_areas[group] = group_areas.get(group, 0.0) + area_ha
 
     group_data = sorted(
@@ -255,7 +258,7 @@ def _plot(
 
         for i, (group_name, total_area) in enumerate(group_data):
             y = y_positions[i]
-            color = CROP_GROUP_COLORS[group_name]
+            color = crop_group_colors[group_name]
             if isinstance(color, str):
                 color = mcolors.to_rgb(color)
             inset_ax.barh(
@@ -374,6 +377,10 @@ def _plot(
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
+    crop_to_group, crop_group_colors = crop_groups_from_config(
+        snakemake.config  # type: ignore[name-defined]
+    )
+
     gdf = _setup_regions(snakemake.input.regions)  # type: ignore[name-defined]
     region_name_to_id = {region: idx for idx, region in enumerate(gdf["region"])}
 
@@ -394,6 +401,8 @@ def main() -> None:
         rc_data["region_grid"],
         potential_area,
         region_name_to_id,
+        crop_to_group,
+        crop_group_colors,
     )
 
     _plot(
@@ -402,6 +411,8 @@ def main() -> None:
         rc_data["extent"],
         gdf,
         area_by_crop,
+        crop_to_group,
+        crop_group_colors,
         snakemake.output.svg,  # type: ignore[name-defined]
         snakemake.output.png,  # type: ignore[name-defined]
     )
