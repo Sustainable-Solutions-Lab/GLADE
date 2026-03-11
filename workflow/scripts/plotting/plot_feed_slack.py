@@ -180,10 +180,10 @@ def _plot_feed_slack(
 
     # Secondary axis: slack as % of baseline demand
     total_slack = slack["positive_mt"] + slack["negative_mt"]
-    ratio_pct = pd.Series(np.nan, index=cat_order, dtype=float)
-    pos_baseline = baseline > 0
-    ratio_pct.loc[pos_baseline] = (
-        total_slack.loc[pos_baseline] / baseline.loc[pos_baseline] * 100.0
+    ratio_pct = (
+        (total_slack / baseline.replace(0, np.nan) * 100.0)
+        .reindex(cat_order)
+        .astype(np.float64)
     )
 
     ax2 = ax.twinx()
