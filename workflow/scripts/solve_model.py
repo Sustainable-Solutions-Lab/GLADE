@@ -437,19 +437,6 @@ def _build_ratios_from_baseline(baseline_df: pd.DataFrame) -> pd.DataFrame:
     return df[["country", "food_group", "food", "ratio"]].copy()
 
 
-def _apply_solver_threads_option(
-    solver_options: dict, solver_name: str, threads: int
-) -> dict:
-    """Ensure the solver options include a threads override when configured."""
-
-    solver_key = solver_name.lower()
-    if solver_key == "gurobi":
-        solver_options["Threads"] = threads
-    elif solver_key == "highs":
-        solver_options["threads"] = threads
-
-    return solver_options
-
 
 def add_ghg_pricing_to_objective(n: pypsa.Network, ghg_price_usd_per_t: float) -> None:
     """Add GHG emissions pricing to the objective function.
@@ -914,12 +901,7 @@ def _run_solve() -> None:
         )
 
     solver_name = snakemake.params.solver
-    solver_threads = snakemake.params.solver_threads
-    solver_options = _apply_solver_threads_option(
-        dict(snakemake.params.solver_options),
-        solver_name,
-        solver_threads,
-    )
+    solver_options = dict(snakemake.params.solver_options)
     io_api = snakemake.params.io_api
     netcdf_config = snakemake.params.netcdf
 

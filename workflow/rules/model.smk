@@ -262,28 +262,43 @@ def get_solver_threads(cfg: dict) -> int:
     return int(cfg["solving"]["threads"])
 
 
-def solver_options_with_threads(cfg: dict) -> dict:
-    """Return solver options with a threads override applied when configured."""
+def solver_options_with_overrides(cfg: dict) -> dict:
+    """Return solver options with threads and time-limit overrides applied."""
 
     solver_name = cfg["solving"]["solver"]
     options = cfg["solving"].get(f"options_{solver_name}", {}) or {}
     threads = get_solver_threads(cfg)
+    time_limit = cfg["solving"]["time_limit"]
 
     options = dict(options)
     solver_key = solver_name.lower()
     if solver_key == "gurobi":
         options["Threads"] = threads
+        if time_limit is not None:
+            options["TimeLimit"] = time_limit * 60
     elif solver_key == "highs":
         options["threads"] = threads
+        if time_limit is not None:
+            options["time_limit"] = time_limit * 60
 
     return options
 
 
 def solve_model_runtime(wildcards, attempt: int) -> int:
-    """Scale solve runtime in minutes aggressively on retries (x5 per retry)."""
+    """Scale solve runtime in minutes aggressively on retries (x5 per retry).
 
-    base_runtime = get_effective_config(wildcards.scenario)["solving"]["runtime"]
-    return base_runtime * (5 ** (attempt - 1))
+    When a solver time_limit is configured, cap the escalated runtime at
+    time_limit + 10 minutes (overhead for model I/O and export) so retries
+    don't balloon far beyond the solver's own cutoff.
+    """
+
+    cfg = get_effective_config(wildcards.scenario)["solving"]
+    base_runtime = cfg["runtime"]
+    escalated = base_runtime * (5 ** (attempt - 1))
+    time_limit = cfg["time_limit"]
+    if time_limit is not None:
+        return min(escalated, time_limit + 10)
+    return escalated
 
 
 def solve_model_mem_mb(wildcards, attempt: int) -> int:
@@ -310,8 +325,7 @@ rule solve_model:
         ],
         ghg_price=lambda w: get_effective_config(w.scenario)["emissions"]["ghg_price"],
         solver=lambda w: get_effective_config(w.scenario)["solving"]["solver"],
-        solver_threads=lambda w: get_solver_threads(get_effective_config(w.scenario)),
-        solver_options=lambda w: solver_options_with_threads(
+        solver_options=lambda w: solver_options_with_overrides(
             get_effective_config(w.scenario)
         ),
         io_api=lambda w: get_effective_config(w.scenario)["solving"]["io_api"],

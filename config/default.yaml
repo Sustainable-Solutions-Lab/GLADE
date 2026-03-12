@@ -1125,6 +1125,7 @@ solving:
     solver: "choose"
     mip_rel_gap: 0.001  # align relative gap with gurobi setting
   export_for_tuning: false  # Export model to MPS before solving (for Gurobi parameter tuning)
+  time_limit: null  # Solver-internal time limit in minutes (null = no limit)
   runtime: 5  # Maximum solver runtime in minutes (used by SLURM)
   mem_mb: 6000  # Maximum solve_model memory in MB (used by SLURM)
 

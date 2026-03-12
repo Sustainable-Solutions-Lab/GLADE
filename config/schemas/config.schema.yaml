@@ -1517,7 +1517,7 @@ properties:
 
   solving:
     type: object
-    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs, runtime, mem_mb]
+    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs, time_limit, runtime, mem_mb]
     additionalProperties: false
     properties:
       solver:
@@ -1554,6 +1554,10 @@ properties:
       export_for_tuning:
         type: boolean
         description: "Export the fully-constructed model to MPS before solving (for Gurobi parameter tuning)"
+      time_limit:
+        type: ["integer", "null"]
+        minimum: 1
+        description: "Solver-internal time limit in minutes (null = no limit)"
       runtime:
         type: integer
         minimum: 1
