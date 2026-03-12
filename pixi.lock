@@ -387,7 +387,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/32/da/814faf51ea7784688e276f65fc3a5f0d6cb0514b503741f256ae3aff74d0/snakemake_executor_plugin_slurm_jobstep-0.4.0-py3-none-any.whl
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5c/2c/4422eb14884bb4955ce65819799ff6452dcd3aa5f8e158540a287877bbcf/snakemake_interface_executor_plugins-9.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
@@ -408,7 +409,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4d/63/6a44729fdc60eb255a7b156a84e7552290174a9bf151e3b6c18e83d6fbfa/yte-1.9.4-py3-none-any.whl
       - pypi: ./
       - pypi: ./tools/snakemake-logger-plugin-compact
-      - pypi: ./vendor/snakemake-executor-plugin-slurm
   dev:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -909,7 +909,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9f/e2/e5e8b804e5f4301d17b099f90d0356a62fa9ec030b1e0f98fcdf9c92ef56/snakefmt-0.11.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/32/da/814faf51ea7784688e276f65fc3a5f0d6cb0514b503741f256ae3aff74d0/snakemake_executor_plugin_slurm_jobstep-0.4.0-py3-none-any.whl
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5c/2c/4422eb14884bb4955ce65819799ff6452dcd3aa5f8e158540a287877bbcf/snakemake_interface_executor_plugins-9.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
@@ -930,7 +931,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4d/63/6a44729fdc60eb255a7b156a84e7552290174a9bf151e3b6c18e83d6fbfa/yte-1.9.4-py3-none-any.whl
       - pypi: ./
       - pypi: ./tools/snakemake-logger-plugin-compact
-      - pypi: ./vendor/snakemake-executor-plugin-slurm
   dev-gurobi:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -1432,7 +1432,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9f/e2/e5e8b804e5f4301d17b099f90d0356a62fa9ec030b1e0f98fcdf9c92ef56/snakefmt-0.11.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/32/da/814faf51ea7784688e276f65fc3a5f0d6cb0514b503741f256ae3aff74d0/snakemake_executor_plugin_slurm_jobstep-0.4.0-py3-none-any.whl
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5c/2c/4422eb14884bb4955ce65819799ff6452dcd3aa5f8e158540a287877bbcf/snakemake_interface_executor_plugins-9.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
@@ -1453,7 +1454,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4d/63/6a44729fdc60eb255a7b156a84e7552290174a9bf151e3b6c18e83d6fbfa/yte-1.9.4-py3-none-any.whl
       - pypi: ./
       - pypi: ./tools/snakemake-logger-plugin-compact
-      - pypi: ./vendor/snakemake-executor-plugin-slurm
   gurobi:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -1842,7 +1842,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/32/da/814faf51ea7784688e276f65fc3a5f0d6cb0514b503741f256ae3aff74d0/snakemake_executor_plugin_slurm_jobstep-0.4.0-py3-none-any.whl
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
+      - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5c/2c/4422eb14884bb4955ce65819799ff6452dcd3aa5f8e158540a287877bbcf/snakemake_interface_executor_plugins-9.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
@@ -1863,7 +1864,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/4d/63/6a44729fdc60eb255a7b156a84e7552290174a9bf151e3b6c18e83d6fbfa/yte-1.9.4-py3-none-any.whl
       - pypi: ./
       - pypi: ./tools/snakemake-logger-plugin-compact
-      - pypi: ./vendor/snakemake-executor-plugin-slurm
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -8063,10 +8063,9 @@ packages:
   - peppy ; extra == 'all'
   - pygments ; extra == 'all'
   requires_python: '>=3.11'
-- pypi: ./vendor/snakemake-executor-plugin-slurm
+- pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
   name: snakemake-executor-plugin-slurm
   version: 2.2.0
-  sha256: 9979f800679937fc0d1ed9b18eb79af0ca849f81927fd4ac8940fa95dddb166a
   requires_dist:
   - numpy>=1.26.4,<3
   - pandas>=2.2.3,<3.0.0
@@ -8075,10 +8074,9 @@ packages:
   - snakemake-interface-executor-plugins>=9.3.9,<10.0.0
   - throttler>=1.2.2,<2.0.0
   requires_python: '>=3.11,<4.0'
-- pypi: https://files.pythonhosted.org/packages/32/da/814faf51ea7784688e276f65fc3a5f0d6cb0514b503741f256ae3aff74d0/snakemake_executor_plugin_slurm_jobstep-0.4.0-py3-none-any.whl
+- pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
   name: snakemake-executor-plugin-slurm-jobstep
   version: 0.4.0
-  sha256: a2ef5a1beef5a3f49ca6183f38afd27b97eebf689a52cb276a2644d31fbad8dd
   requires_dist:
   - snakemake-interface-common>=1.17.4,<2.0.0
   - snakemake-interface-executor-plugins>=9.3.2,<10.0.0

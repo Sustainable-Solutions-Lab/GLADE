@@ -60,8 +60,9 @@ xgboost = ">=3.2.0,<4"
 [pypi-dependencies]
 # Workflow engine
 snakemake = ">=9.13.7, <10"
-# Vendored version with group job parallelism fix
-snakemake-executor-plugin-slurm = { path = "vendor/snakemake-executor-plugin-slurm", editable = true }
+# Custom forks of SLURM executor plugins with parallel group job dispatch
+snakemake-executor-plugin-slurm = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm.git", tag = "v2.2.0+food.opt" }
+snakemake-executor-plugin-slurm-jobstep = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git", tag = "v0.4.0+food.opt" }
 
 # Data retrieval (HTTP range-based ZIP extraction for LUIcube)
 remotezip = ">=0.12, <1"
