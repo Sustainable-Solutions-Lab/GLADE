@@ -77,9 +77,10 @@ rule prepare_life_table:
 rule prepare_health_costs:
     """Prepare health cost data for SOS2 linearization.
 
-    This rule is scenario-specific because the breakpoint tables (risk_breakpoints,
-    cause_log) depend on intake_grid_points and log_rr_points parameters which
-    can vary by scenario.
+    This rule is scenario-independent: grid resolution parameters
+    (intake_grid_points, log_rr_points) and clustering are config-level
+    settings. Scenario-specific adjustments (rr_quantiles, value_per_yll)
+    are applied downstream in build_model/solve_model.
     """
     input:
         regions="<processing>/{name}/regions.geojson",
@@ -91,25 +92,25 @@ rule prepare_health_costs:
         food_groups="data/curated/food_groups.csv",
         gdp="<processing>/{name}/gdp_per_capita.csv",
     params:
-        countries=lambda w: get_effective_config(w.scenario)["countries"],
-        health=lambda w: get_effective_config(w.scenario)["health"],
-        baseline_year=lambda w: get_effective_config(w.scenario)["baseline_year"],
+        countries=config["countries"],
+        health=config["health"],
+        baseline_year=config["baseline_year"],
     output:
-        risk_breakpoints="<processing>/{name}/health/scen-{scenario}/risk_breakpoints.csv",
-        cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
-        cause_log="<processing>/{name}/health/scen-{scenario}/cause_log_breakpoints.csv",
-        cluster_summary="<processing>/{name}/health/scen-{scenario}/cluster_summary.csv",
-        clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
-        cluster_risk_baseline="<processing>/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
-        derived_tmrel="<processing>/{name}/health/scen-{scenario}/derived_tmrel.csv",
+        risk_breakpoints="<processing>/{name}/health/risk_breakpoints.csv",
+        cluster_cause="<processing>/{name}/health/cluster_cause_baseline.csv",
+        cause_log="<processing>/{name}/health/cause_log_breakpoints.csv",
+        cluster_summary="<processing>/{name}/health/cluster_summary.csv",
+        clusters="<processing>/{name}/health/country_clusters.csv",
+        cluster_risk_baseline="<processing>/{name}/health/cluster_risk_baseline.csv",
+        derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=400,
     log:
-        "<logs>/{name}/prepare_health_costs_scen-{scenario}.log",
+        "<logs>/{name}/prepare_health_costs.log",
     benchmark:
-        "<benchmarks>/{name}/prepare_health_costs_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/prepare_health_costs.tsv"
     script:
         "../scripts/prepare_health_costs.py"

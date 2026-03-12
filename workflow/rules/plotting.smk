@@ -149,8 +149,8 @@ rule plot_objective_breakdown:
 
 rule plot_yll_global_by_cause:
     input:
-        cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
-        cluster_summary="<processing>/{name}/health/scen-{scenario}/cluster_summary.csv",
+        cluster_cause="<processing>/{name}/health/cluster_cause_baseline.csv",
+        cluster_summary="<processing>/{name}/health/cluster_summary.csv",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/yll_global_by_cause.pdf",
         csv="<results>/{name}/plots/scen-{scenario}/yll_global_by_cause.csv",
@@ -171,13 +171,13 @@ rule plot_health_impacts:
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",
         regions="<processing>/{name}/regions.geojson",
-        risk_breakpoints="<processing>/{name}/health/scen-{scenario}/risk_breakpoints.csv",
-        health_cluster_cause="<processing>/{name}/health/scen-{scenario}/cluster_cause_baseline.csv",
-        health_cause_log="<processing>/{name}/health/scen-{scenario}/cause_log_breakpoints.csv",
-        health_cluster_summary="<processing>/{name}/health/scen-{scenario}/cluster_summary.csv",
-        health_clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
-        health_cluster_risk_baseline="<processing>/{name}/health/scen-{scenario}/cluster_risk_baseline.csv",
-        derived_tmrel="<processing>/{name}/health/scen-{scenario}/derived_tmrel.csv",
+        risk_breakpoints="<processing>/{name}/health/risk_breakpoints.csv",
+        health_cluster_cause="<processing>/{name}/health/cluster_cause_baseline.csv",
+        health_cause_log="<processing>/{name}/health/cause_log_breakpoints.csv",
+        health_cluster_summary="<processing>/{name}/health/cluster_summary.csv",
+        health_clusters="<processing>/{name}/health/country_clusters.csv",
+        health_cluster_risk_baseline="<processing>/{name}/health/cluster_risk_baseline.csv",
+        derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
         population="<processing>/{name}/population.csv",
         food_groups="data/curated/food_groups.csv",
     params:
@@ -488,7 +488,7 @@ rule plot_food_consumption_map:
     input:
         food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
         population="<processing>/{name}/population.csv",
-        clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
+        clusters="<processing>/{name}/health/country_clusters.csv",
         regions="<processing>/{name}/regions.geojson",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/food_consumption_map.pdf",
@@ -512,7 +512,7 @@ rule plot_food_consumption_baseline_map:
     input:
         diet="<processing>/{name}/dietary_intake.csv",
         population="<processing>/{name}/population.csv",
-        clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
+        clusters="<processing>/{name}/health/country_clusters.csv",
         regions="<processing>/{name}/regions.geojson",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/food_consumption_baseline_map.pdf",
@@ -638,7 +638,7 @@ rule plot_consumption_balance:
         food_consumption="<results>/{name}/analysis/scen-{scenario}/food_consumption.csv",
         food_groups="data/curated/food_groups.csv",
         population="<processing>/{name}/population.csv",
-        clusters="<processing>/{name}/health/scen-{scenario}/country_clusters.csv",
+        clusters="<processing>/{name}/health/country_clusters.csv",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/consumption_balance.pdf",
     params:
