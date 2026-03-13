@@ -281,6 +281,18 @@ Output files:
       ``health_cluster``, int, —, "Health cluster identifier"
       ``yll_myll``, float, MYLL, "Total years of life lost in millions"
 
+``results/{name}/analysis/scen-{scenario}/health_attribution.csv``
+   YLL attributed to each risk factor by health cluster and disease cause,
+   using proportional allocation based on excess log-relative-risk:
+
+   .. csv-table::
+      :header: Column, Type, Unit, Description
+
+      ``health_cluster``, int, —, "Health cluster identifier"
+      ``cause``, string, —, "Disease cause (e.g. CHD, Stroke)"
+      ``food_group``, string, —, "Risk factor / food group"
+      ``yll_myll``, float, MYLL, "Attributed years of life lost in millions"
+
 Sample Results
 ~~~~~~~~~~~~~~
 

@@ -27,6 +27,7 @@ from workflow.scripts.analysis.extract_health_impacts import (
     add_monetary_value as add_health_monetary_value,
 )
 from workflow.scripts.analysis.extract_health_impacts import (
+    compute_health_attribution,
     compute_health_marginals,
     extract_yll_totals,
     load_health_data,
@@ -139,6 +140,7 @@ def main() -> None:
             "health_cause_log": snakemake.input.health_cause_log,
             "health_clusters": snakemake.input.health_clusters,
             "population": snakemake.input.population,
+            "derived_tmrel": snakemake.input.derived_tmrel,
         }
     )
     health_marginals = compute_health_marginals(
@@ -149,6 +151,9 @@ def main() -> None:
         ["country", "food_group"]
     ).reset_index(drop=True)
     health_totals = extract_yll_totals(n)
+    health_attribution = compute_health_attribution(
+        food_group_consumption, health_data, risk_factors, n
+    )
 
     # Write all outputs
     output_dir = Path(snakemake.output.crop_production).parent
@@ -165,6 +170,7 @@ def main() -> None:
     ghg_attribution_totals.to_csv(snakemake.output.ghg_attribution_totals, index=False)
     health_marginals.to_csv(snakemake.output.health_marginals, index=False)
     health_totals.to_csv(snakemake.output.health_totals, index=False)
+    health_attribution.to_csv(snakemake.output.health_attribution, index=False)
     feed_by_category.to_csv(snakemake.output.feed_by_category, index=False)
     feed_by_animal.to_csv(snakemake.output.feed_by_animal, index=False)
     luc_breakdown.to_csv(snakemake.output.luc_breakdown, index=False)

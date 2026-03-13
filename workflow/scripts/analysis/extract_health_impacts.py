@@ -40,6 +40,7 @@ class HealthData:
     cause_log_breakpoints: pd.DataFrame
     country_clusters: pd.DataFrame
     population: pd.DataFrame
+    tmrel: pd.DataFrame
 
 
 def load_health_data(inputs: dict) -> HealthData:
@@ -50,6 +51,7 @@ def load_health_data(inputs: dict) -> HealthData:
         cause_log_breakpoints=pd.read_csv(inputs["health_cause_log"]),
         country_clusters=pd.read_csv(inputs["health_clusters"]),
         population=pd.read_csv(inputs["population"]),
+        tmrel=pd.read_csv(inputs["derived_tmrel"]),
     )
 
 
@@ -389,3 +391,143 @@ def extract_yll_totals(n: pypsa.Network) -> pd.DataFrame:
     # Note: model stores are in million YLL, so no conversion needed
 
     return result.sort_values("health_cluster").reset_index(drop=True)
+
+
+def compute_health_attribution(
+    food_group_consumption: pd.DataFrame,
+    health_data: HealthData,
+    risk_factors: list[str],
+    n: pypsa.Network,
+) -> pd.DataFrame:
+    """Attribute YLL to each risk factor by health cluster and disease cause.
+
+    Uses proportional allocation based on excess log-relative-risk above the
+    theoretical minimum risk exposure level (TMREL).
+
+    Parameters
+    ----------
+    food_group_consumption : DataFrame
+        Columns: food_group, country, consumption_mt
+    health_data : HealthData
+        Health input data including TMREL values.
+    risk_factors : list[str]
+        Food groups that are health risk factors.
+    n : pypsa.Network
+        Solved network (used to read YLL store levels).
+
+    Returns
+    -------
+    DataFrame with columns: health_cluster, cause, food_group, yll_myll
+    """
+    cluster_lookup = get_country_cluster_lookup(health_data.country_clusters)
+    cluster_population = get_cluster_population(
+        health_data.country_clusters, health_data.population
+    )
+
+    # Build risk tables: risk_factor -> DataFrame(intake -> cause columns of log_rr)
+    risk_tables: dict[str, pd.DataFrame] = {}
+    for risk, group in health_data.risk_breakpoints.groupby("risk_factor"):
+        pivot = (
+            group.sort_values(["intake_g_per_day", "cause"])
+            .pivot_table(
+                index="intake_g_per_day",
+                columns="cause",
+                values="log_rr",
+                aggfunc="first",
+            )
+            .sort_index()
+        )
+        risk_tables[str(risk)] = pivot
+
+    # Build TMREL lookup: risk_factor -> g/day
+    tmrel_lookup = dict(
+        zip(health_data.tmrel["risk_factor"], health_data.tmrel["tmrel_g_per_day"])
+    )
+
+    # Precompute log(RR) at TMREL for each (risk_factor, cause)
+    log_rr_at_tmrel: dict[tuple[str, str], float] = {}
+    for rf, table in risk_tables.items():
+        tmrel_intake = tmrel_lookup.get(rf, 0.0)
+        xs = table.index.to_numpy(dtype=float)
+        for cause in table.columns:
+            ys = table[cause].to_numpy(dtype=float)
+            log_rr_at_tmrel[(rf, cause)] = float(np.interp(tmrel_intake, xs, ys))
+
+    # Cluster-cause baseline data
+    cluster_cause = health_data.cluster_cause.assign(
+        health_cluster=lambda df: df["health_cluster"].astype(int)
+    ).set_index(["health_cluster", "cause"])
+
+    # Compute current intake per (cluster, risk_factor)
+    intake_totals = compute_intake_by_cluster_risk(
+        food_group_consumption, risk_factors, cluster_lookup, cluster_population
+    )
+
+    # Compute current log(RR) per (cluster, risk_factor, cause)
+    log_rr_values: dict[tuple[int, str, str], float] = {}
+    for (cluster, rf), intake_g in intake_totals.items():
+        table = risk_tables.get(rf)
+        if table is None:
+            continue
+        xs = table.index.to_numpy(dtype=float)
+        for cause in table.columns:
+            ys = table[cause].to_numpy(dtype=float)
+            log_rr_values[(cluster, rf, cause)] = float(np.interp(intake_g, xs, ys))
+
+    # Attribute YLL to risk factors using proportional excess log(RR)
+    records = []
+
+    for cluster in cluster_population:
+        cluster_pop = cluster_population[cluster]
+        if cluster_pop <= 0:
+            continue
+
+        for cause in cluster_cause.index.get_level_values("cause").unique():
+            if (cluster, cause) not in cluster_cause.index:
+                continue
+
+            row = cluster_cause.loc[(cluster, cause)]
+            rr_ref = exp(float(row["log_rr_total_ref"]))
+            rr_baseline = exp(float(row["log_rr_total_baseline"]))
+            yll_rate_per_100k = float(row["yll_rate_per_100k"])
+            yll_total = (yll_rate_per_100k / PER_100K) * cluster_pop
+
+            if yll_total <= 0 or rr_baseline <= 0:
+                continue
+
+            # Compute excess log(RR) for each risk factor relative to TMREL
+            excess_contributions: dict[str, float] = {}
+            for rf in risk_factors:
+                log_rr_current = log_rr_values.get((cluster, rf, cause), 0.0)
+                log_rr_tmrel = log_rr_at_tmrel.get((rf, cause), 0.0)
+                excess = max(0.0, log_rr_current - log_rr_tmrel)
+                excess_contributions[rf] = excess
+
+            total_excess = sum(excess_contributions.values())
+            if total_excess <= 0:
+                continue
+
+            # Compute actual RR and YLL for this (cluster, cause)
+            log_rr_total = sum(
+                log_rr_values.get((cluster, rf, cause), 0.0) for rf in risk_factors
+            )
+            rr_total = exp(log_rr_total)
+            yll_myll = (rr_total - rr_ref) * (yll_total / rr_baseline) * 1e-6
+
+            if yll_myll <= 0:
+                continue
+
+            # Proportionally allocate to risk factors
+            for rf, excess in excess_contributions.items():
+                if excess > 0:
+                    weight = excess / total_excess
+                    records.append(
+                        {
+                            "health_cluster": cluster,
+                            "cause": cause,
+                            "food_group": rf,
+                            "yll_myll": weight * yll_myll,
+                        }
+                    )
+
+    return pd.DataFrame(records)

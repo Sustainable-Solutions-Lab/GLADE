@@ -33,6 +33,7 @@ The various output files are structured as follows::
     │       ├── net_emissions.csv       # Net GHG emissions by gas
     │       ├── health_marginals.csv    # Marginal health impacts by food group
     │       ├── health_totals.csv       # Total YLL by health cluster
+    │       ├── health_attribution.csv  # YLL attributed by cluster/cause/food group
     │       └── objective_breakdown.csv # Cost categories breakdown
     └── plots/
         └── scen-{scenario}/

@@ -38,6 +38,7 @@ rule analyze_model:
         health_cause_log="<processing>/{name}/health/cause_log_breakpoints.csv",
         health_clusters="<processing>/{name}/health/country_clusters.csv",
         population="<processing>/{name}/population.csv",
+        derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
     params:
         ghg_price=lambda w: get_effective_config(w.scenario)["emissions"]["ghg_price"],
         ch4_gwp=config["emissions"]["ch4_to_co2_factor"],
@@ -58,6 +59,7 @@ rule analyze_model:
         ghg_attribution_totals="<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv",
         health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.csv",
         health_totals="<results>/{name}/analysis/scen-{scenario}/health_totals.csv",
+        health_attribution="<results>/{name}/analysis/scen-{scenario}/health_attribution.csv",
         feed_by_category="<results>/{name}/analysis/scen-{scenario}/feed_by_category.csv",
         feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.csv",
         luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.csv",

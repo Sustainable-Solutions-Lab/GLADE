@@ -7,7 +7,6 @@ This module contains common functions used by yll_sensitivity, ghg_sensitivity,
 and combined_sensitivity notebooks.
 """
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 import re
 import sys
@@ -16,14 +15,11 @@ import matplotlib.pyplot as plt
 from matplotlib.transforms import blended_transform_factory
 import numpy as np
 import pandas as pd
-import pypsa
 import yaml
 
 # Import constants from workflow instead of redefining
 from workflow.scripts.constants import (
     DAYS_PER_YEAR,
-    GRAMS_PER_MEGATONNE,
-    PER_100K,
     PJ_TO_KCAL,
 )
 
@@ -750,344 +746,47 @@ def load_objective_from_statistics(
 
 
 # -----------------------------------------------------------------------------
-# Health cost attribution functions
+# Health cost attribution loader
 # -----------------------------------------------------------------------------
 
 
-def _load_health_tables(
-    processing_dir: Path,
-    scenario_name: str,
-    network: pypsa.Network | None = None,
-) -> tuple[dict, dict, pd.DataFrame, pd.DataFrame, dict]:
-    """Load health data tables from processing directory.
-
-    Args:
-        processing_dir: Path to processing directory
-        scenario_name: Name of the scenario (e.g., "yll_0", "ghg_0")
-        network: Optional network to get cluster population from embedded metadata
-
-    Returns:
-        Tuple of (cluster_lookup, cluster_population, risk_breakpoints,
-                  cluster_cause_baseline, tmrel_g_per_day)
-    """
-    health_dir = processing_dir / "health" / f"scen-{scenario_name}"
-
-    # Country to cluster mapping
-    country_clusters = pd.read_csv(health_dir / "country_clusters.csv")
-    cluster_lookup = dict(
-        zip(country_clusters["country_iso3"], country_clusters["health_cluster"])
-    )
-
-    # Get cluster population from network metadata if available
-    if network is not None:
-        pop_meta = network.meta.get("population")
-        if pop_meta is not None and "health_cluster" in pop_meta:
-            # Convert string keys to int (JSON serialization)
-            cluster_population = {
-                int(k): float(v) for k, v in pop_meta["health_cluster"].items()
-            }
-        else:
-            cluster_population = _load_cluster_population_fallback(
-                health_dir, cluster_lookup
-            )
-    else:
-        cluster_population = _load_cluster_population_fallback(
-            health_dir, cluster_lookup
-        )
-
-    # Risk breakpoints for log(RR) lookup
-    risk_breakpoints = pd.read_csv(health_dir / "risk_breakpoints.csv")
-
-    # Baseline YLL and RR data per (cluster, cause)
-    cluster_cause_baseline = pd.read_csv(health_dir / "cluster_cause_baseline.csv")
-
-    # TMREL values per risk factor
-    tmrel_df = pd.read_csv(health_dir / "derived_tmrel.csv")
-    tmrel_g_per_day = dict(zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"]))
-
-    return (
-        cluster_lookup,
-        cluster_population,
-        risk_breakpoints,
-        cluster_cause_baseline,
-        tmrel_g_per_day,
-    )
-
-
-def _load_cluster_population_fallback(
-    health_dir: Path, cluster_lookup: dict
-) -> dict[int, float]:
-    """Fallback: load cluster population from CSV files."""
-    cluster_summary = pd.read_csv(health_dir / "cluster_summary.csv")
-    return {
-        int(k): float(v)
-        for k, v in zip(
-            cluster_summary["health_cluster"], cluster_summary["population_persons"]
-        )
-    }
-
-
-def _interpolate_log_rr(
-    intake: float, breakpoints: pd.DataFrame, risk_factor: str, cause: str
-) -> float:
-    """Interpolate log(RR) from breakpoints for given intake.
-
-    Args:
-        intake: Intake in g/day
-        breakpoints: DataFrame with risk_factor, cause, intake_g_per_day, log_rr
-        risk_factor: Risk factor name
-        cause: Disease cause name
-
-    Returns:
-        Interpolated log(RR) value
-    """
-    mask = (breakpoints["risk_factor"] == risk_factor) & (breakpoints["cause"] == cause)
-    bp = breakpoints.loc[mask].sort_values("intake_g_per_day")
-
-    if bp.empty:
-        return 0.0
-
-    return float(np.interp(intake, bp["intake_g_per_day"], bp["log_rr"]))
-
-
-def _extract_health_by_risk_factor_worker(args):
-    """Worker function to extract health costs attributed to each risk factor.
-
-    Steps:
-    1. Load network and get food group store levels
-    2. Aggregate by cluster to get per-capita intakes (g/day)
-    3. Look up log(RR) for each (cluster, risk_factor, cause)
-    4. Compute excess log(RR) relative to TMREL for proper attribution
-    5. Proportionally allocate YLL based on excess log(RR)
-    6. Sum across clusters and causes, return by risk factor
-    """
-    (
-        network_path,
-        processing_dir,
-        scenario_name,
-        grams_per_mt,
-        days_per_year,
-    ) = args
-
-    # Load network first to access embedded population
-    n = pypsa.Network(network_path)
-
-    # Load health data tables (uses embedded cluster population from network)
-    (
-        cluster_lookup,
-        cluster_population,
-        risk_breakpoints,
-        cluster_cause_baseline,
-        tmrel_g_per_day,
-    ) = _load_health_tables(processing_dir, scenario_name, network=n)
-
-    # Get unique risk factors from breakpoints
-    risk_factors = risk_breakpoints["risk_factor"].unique().tolist()
-
-    # Build risk to causes mapping
-    risk_cause_map = {}
-    for rf in risk_factors:
-        rf_causes = (
-            risk_breakpoints.loc[risk_breakpoints["risk_factor"] == rf, "cause"]
-            .unique()
-            .tolist()
-        )
-        risk_cause_map[rf] = rf_causes
-
-    # Precompute log(RR) at TMREL for each (risk_factor, cause) pair
-    # This is the reference point for computing "excess" risk
-    log_rr_at_tmrel = {}  # (rf, cause) -> log_rr
-    for rf in risk_factors:
-        tmrel_intake = tmrel_g_per_day.get(rf, 0.0)
-        for cause in risk_cause_map.get(rf, []):
-            log_rr_tmrel = _interpolate_log_rr(
-                tmrel_intake, risk_breakpoints, rf, cause
-            )
-            log_rr_at_tmrel[(rf, cause)] = log_rr_tmrel
-
-    # Get snapshot (network already loaded above)
-    snapshot = n.snapshots[-1]
-
-    # Get store levels at the snapshot
-    if snapshot in n.stores.dynamic.e.index:
-        store_levels = n.stores.dynamic.e.loc[snapshot]
-    else:
-        store_levels = pd.Series(dtype=float)
-
-    # 1. Compute cluster intakes from food group stores
-    # Stores with carrier group_{risk_factor} hold consumption
-    cluster_intakes = {}  # (cluster, risk_factor) -> g/day per capita
-
-    for rf in risk_factors:
-        carrier = f"group_{rf}"
-        fg_stores = n.stores.static[n.stores.static["carrier"] == carrier]
-
-        if fg_stores.empty:
-            continue
-
-        for store_name in fg_stores.index:
-            level_mt = store_levels.get(store_name, 0.0)
-            if level_mt <= 0:
-                continue
-
-            country = fg_stores.at[store_name, "country"]
-            if pd.isna(country):
-                continue
-
-            cluster = cluster_lookup.get(country)
-            if cluster is None:
-                continue
-
-            key = (cluster, rf)
-            if key not in cluster_intakes:
-                cluster_intakes[key] = 0.0
-            cluster_intakes[key] += level_mt * grams_per_mt
-
-    # Convert to g/day per capita
-    for (cluster, rf), total_grams in list(cluster_intakes.items()):
-        pop = cluster_population.get(cluster, 0)
-        if pop > 0:
-            cluster_intakes[(cluster, rf)] = total_grams / (days_per_year * pop)
-        else:
-            cluster_intakes[(cluster, rf)] = 0.0
-
-    # 2. Look up log(RR) for each (cluster, risk_factor, cause)
-    log_rr_values = {}  # (cluster, rf, cause) -> log_rr
-
-    for (cluster, rf), intake in cluster_intakes.items():
-        for cause in risk_cause_map.get(rf, []):
-            log_rr = _interpolate_log_rr(intake, risk_breakpoints, rf, cause)
-            log_rr_values[(cluster, rf, cause)] = log_rr
-
-    # 3. Compute attributed YLL using proportional allocation based on EXCESS log(RR)
-    attributed_yll = {}  # rf -> MYLL
-
-    for cluster in cluster_population:
-        cluster_rows = cluster_cause_baseline[
-            cluster_cause_baseline["health_cluster"] == cluster
-        ]
-
-        for _, row in cluster_rows.iterrows():
-            cause = row["cause"]
-            rr_ref = np.exp(row["log_rr_total_ref"])
-            rr_baseline = np.exp(row["log_rr_total_baseline"])
-
-            # Reconstruct absolute YLL from rate using planning-year population
-            yll_rate_per_100k = row["yll_rate_per_100k"]
-            pop = cluster_population[cluster]
-            yll_total = (yll_rate_per_100k / PER_100K) * pop
-
-            # Compute EXCESS log(RR) for each risk factor relative to TMREL
-            # excess = log(RR(x)) - log(RR(tmrel))
-            # For protective foods at TMREL: excess ≈ 0 (no contribution)
-            # For protective foods below TMREL: excess > 0 (contributing to burden)
-            # For harmful foods (TMREL=0): excess = log(RR(x)) - 0 = log(RR(x))
-            excess_contributions = {}
-            for rf in risk_factors:
-                key = (cluster, rf, cause)
-                log_rr_current = log_rr_values.get(key, 0.0)
-                log_rr_tmrel = log_rr_at_tmrel.get((rf, cause), 0.0)
-                # Excess is how much worse than optimal; should be >= 0
-                excess = max(0.0, log_rr_current - log_rr_tmrel)
-                excess_contributions[rf] = excess
-
-            # Total excess log(RR) for weighting
-            total_excess = sum(excess_contributions.values())
-
-            if total_excess <= 0:
-                continue
-
-            # Compute actual RR and YLL for this (cluster, cause)
-            log_rr_total = sum(
-                log_rr_values.get((cluster, rf, cause), 0.0) for rf in risk_factors
-            )
-            rr_total = np.exp(log_rr_total)
-
-            # YLL = (RR - RR_ref) * (yll_total / RR_baseline) * 1e-6
-            # This matches the health module formula
-            yll_myll = (rr_total - rr_ref) * (yll_total / rr_baseline) * 1e-6
-
-            # Alternative: read actual YLL from health stores instead of recomputing.
-            # This gives totals that match the solver exactly, but the formula-based
-            # approach above is more transparent and matches the documented methodology.
-            # store_name = f"yll_{cause}_cluster{cluster:03d}"
-            # yll_myll = store_levels.get(store_name, 0.0)
-
-            # Skip if negligible or negative (shouldn't happen but be safe)
-            if yll_myll <= 0:
-                continue
-
-            # Proportionally allocate to risk factors based on excess log(RR)
-            for rf, excess in excess_contributions.items():
-                if excess > 0:
-                    weight = excess / total_excess
-                    if rf not in attributed_yll:
-                        attributed_yll[rf] = 0.0
-                    attributed_yll[rf] += weight * yll_myll
-
-    return pd.Series(attributed_yll, dtype=float)
-
-
-def extract_health_data(
+def load_health_attribution_from_analysis(
     scenarios: list[tuple[float, str, Path]],
-    processing_dir: Path,
-    cache_path: Path,
+    project_root: Path,
+    config_name: str,
     param_name: str = "param_value",
-    n_workers: int = 8,
 ) -> pd.DataFrame:
-    """Extract health cost attribution by risk factor for all scenarios.
+    """Load health attribution from pre-computed analysis CSVs.
+
+    Reads ``health_attribution.csv`` for each scenario and aggregates
+    by food_group (summing ``yll_myll`` across clusters and causes).
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
-        processing_dir: Path to processing directory (for health data)
-        cache_path: Path to cache file
-        param_name: Name for the parameter (used as index name)
-        n_workers: Number of parallel workers
+        project_root: Root of the project (e.g., ``Path("..")``)
+        config_name: Config name (e.g., ``"sensitivity"``)
+        param_name: Name for the parameter index column
 
     Returns:
-        DataFrame with param_value as index and risk_factors as columns (in MYLL)
+        DataFrame with param_value as index and food groups as columns (MYLL)
     """
-    network_paths = [f for _, _, f in scenarios]
-
-    if is_cache_valid(cache_path, network_paths):
-        print(f"Loading health data from cache: {cache_path}")
-        return pd.read_csv(cache_path, index_col=param_name)
-
-    print(f"Extracting health data using {n_workers} workers...")
-
-    worker_args = [
-        (
-            network_path,
-            processing_dir,
-            scenario_name,
-            GRAMS_PER_MEGATONNE,
-            DAYS_PER_YEAR,
+    results = {}
+    for param_value, scenario_name, _ in scenarios:
+        csv_path = (
+            project_root
+            / "results"
+            / config_name
+            / "analysis"
+            / f"scen-{scenario_name}"
+            / "health_attribution.csv"
         )
-        for _, scenario_name, network_path in scenarios
-    ]
-    param_values = [pv for pv, _, _ in scenarios]
+        df = pd.read_csv(csv_path)
+        by_fg = df.groupby("food_group")["yll_myll"].sum()
+        results[param_value] = by_fg
 
-    health_data = {}
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        futures = {
-            executor.submit(_extract_health_by_risk_factor_worker, args): pv
-            for args, pv in zip(worker_args, param_values)
-        }
-
-        for future in as_completed(futures):
-            param_value = futures[future]
-            health_data[param_value] = future.result()
-            print(f"  Loaded {param_name}={int(param_value)}")
-
-    df = pd.DataFrame(health_data).T.fillna(0)
-    df.index.name = param_name
-    df = df.sort_index()
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(cache_path)
-    print(f"Saved health data to cache: {cache_path}")
-
-    return df
+    out = pd.DataFrame(results).T.fillna(0)
+    out.index.name = param_name
+    return out.sort_index()
 
 
 # Gas display names with subscripts
@@ -1706,8 +1405,8 @@ def plot_stacked_emissions(
                 top,
                 color=colors.get(group, "#999999"),
                 alpha=0.8,
-                edgecolor="none",
-                linewidth=0,
+                edgecolor="white",
+                linewidth=0.5,
             )
 
         if np.any(y_neg < -1e-9):
@@ -1721,8 +1420,8 @@ def plot_stacked_emissions(
                 top,
                 color=colors.get(group, "#999999"),
                 alpha=0.8,
-                edgecolor="none",
-                linewidth=0,
+                edgecolor="white",
+                linewidth=0.5,
             )
 
     ax.axhline(0, color="black", linewidth=0.5)
@@ -2073,8 +1772,8 @@ def plot_stacked_sensitivity(
             label=group,
             color=colors[group],
             alpha=0.8,
-            edgecolor="none",
-            linewidth=0,
+            edgecolor="white",
+            linewidth=0.5,
         )
 
     # Add labels
@@ -2338,8 +2037,8 @@ def plot_objective_sensitivity(
                 label=cat,
                 color=split_colors[cat],
                 alpha=0.4,
-                edgecolor="none",
-                linewidth=0,
+                edgecolor="white",
+                linewidth=0.5,
                 hatch="///",
             )
         else:
@@ -2350,8 +2049,8 @@ def plot_objective_sensitivity(
                 label=cat,
                 color=split_colors[cat],
                 alpha=0.8,
-                edgecolor="none",
-                linewidth=0,
+                edgecolor="white",
+                linewidth=0.5,
             )
 
     for i, cat in enumerate(purely_neg_cats):
@@ -2364,8 +2063,8 @@ def plot_objective_sensitivity(
             label=cat,
             color=split_colors[cat],
             alpha=0.8,
-            edgecolor="none",
-            linewidth=0,
+            edgecolor="white",
+            linewidth=0.5,
         )
 
     label_fontsize = FONTSIZE_TICK_LABEL
