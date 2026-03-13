@@ -198,7 +198,7 @@ rule build_model:
     output:
         network="<results>/{name}/build/model_scen-{scenario}.nc",
     group:
-        "model_core"
+        "build_model"
     resources:
         runtime="1m",
         mem_mb=900,
@@ -358,8 +358,6 @@ rule solve_model:
     output:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",
     retries: 2
-    group:
-        "model_core"
     resources:
         runtime=solve_model_runtime,
         mem_mb=solve_model_mem_mb,

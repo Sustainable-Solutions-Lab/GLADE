@@ -64,7 +64,7 @@ rule analyze_model:
         feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.csv",
         luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.csv",
     group:
-        "model_core"
+        "analyze_model"
     resources:
         runtime="5m",
         mem_mb=1500,

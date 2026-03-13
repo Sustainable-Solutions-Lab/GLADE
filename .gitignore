@@ -20,6 +20,7 @@ vendor
 /.codex/
 /.claude/
 /.serena/
+/.batch/
 /.cache/
 /.tmp/
 docs/_static/figures/*
