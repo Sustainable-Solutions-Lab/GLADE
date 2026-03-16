@@ -394,6 +394,18 @@ switching is needed.
 - Do not introduce secrets, credentials, or hard-coded local paths.
 - Use only licensed datasets and dependencies already declared in `pixi.toml` unless explicitly instructed to add new ones.
 
+## Available Project Subagents
+
+Project-specific Claude subagents live in `.claude/agents/` and currently include:
+
+- `flow-auditor`: Trace data lineage, units, and missing-data handling across preparation, build, solve, and analysis.
+- `model-reviewer`: Review PyPSA and solve-time correctness, especially balances, signs, units, and slack semantics.
+- `docs-sync`: Detect and fix drift between implementation and documentation.
+- `results-sanity-checker`: Inspect solved outputs and analysis for plausibility and anomaly triage.
+- `test-gap-finder`: Identify the smallest high-value additions to test coverage.
+
+When a task clearly matches one of these roles, prefer delegating to the relevant subagent early.
+
 ## Scratchpad
 
 A shared scratchpad lives at `.claude/scratchpad.md` for semi-ephemeral notes that help agents get up to speed quickly. Unlike AGENTS.md (authoritative, stable) this file captures working knowledge: gotchas, surprising behaviors, recent pitfalls, useful one-liners, etc.
