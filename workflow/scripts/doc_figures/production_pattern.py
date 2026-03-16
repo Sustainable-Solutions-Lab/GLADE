@@ -34,6 +34,7 @@ from workflow.scripts.doc_figures_config import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.plot_crop_production_map import (
+    EXCLUDED_MAP_GROUPS,
     _build_dominant_group_and_intensity_grids,
     _load_land_use_by_region_class_crop,
     _load_potential_area,
@@ -172,7 +173,7 @@ def _plot_frame(
     group_areas = {}
     for crop, area_ha in area_by_crop.items():
         group = crop_to_group.get(crop, "Other")
-        if group in crop_group_colors:
+        if group in crop_group_colors and group not in EXCLUDED_MAP_GROUPS:
             group_areas[group] = group_areas.get(group, 0.0) + area_ha
 
     # Sort by area descending
@@ -330,6 +331,7 @@ def main() -> None:
                 region_name_to_id,
                 crop_to_group,
                 crop_group_colors,
+                excluded_map_groups=EXCLUDED_MAP_GROUPS,
             )
         )
         _plot_frame(
