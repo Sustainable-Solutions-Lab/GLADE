@@ -217,7 +217,11 @@ if _grassland_cal_cfg["generate"]:
         input:
             network=f"<results>/{name}/solved/model_scen-{_grassland_cal_scenario}.nc",
         output:
-            _grassland_cal_cfg["source"],
+            grassland_yield_correction=_grassland_cal_cfg["grassland_yield_correction"],
+            fodder_conversion_correction=_grassland_cal_cfg[
+                "fodder_conversion_correction"
+            ],
+            exogenous_forage=_grassland_cal_cfg["exogenous_forage"],
         resources:
             runtime="2m",
             mem_mb=4000,

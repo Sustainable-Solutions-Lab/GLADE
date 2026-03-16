@@ -33,51 +33,37 @@ scenarios:
       value_per_yll: 0
 
   # =============================================================================
-  # GHG Price Sensitivity (health value = 0)
-  # =============================================================================
-
-  ghg_0:
-    emissions:
-      ghg_price: 0
-    health:
-      value_per_yll: 0
-    macronutrients:
-      cal:
-        equal_to_baseline: true
-
-  # =============================================================================
-  # YLL Value Sensitivity (GHG price = 0)
-  # =============================================================================
-
-  yll_0:
-    emissions:
-      ghg_price: 0
-    health:
-      value_per_yll: 0
-    macronutrients:
-      cal:
-        equal_to_baseline: true
-
-  # =============================================================================
-  # Combined GHG+YLL Sensitivity (both vary together)
-  # =============================================================================
-
-  ghg_yll_0:
-    emissions:
-      ghg_price: 0
-    health:
-      value_per_yll: 0
-    macronutrients:
-      cal:
-        equal_to_baseline: true
-
-  # =============================================================================
   # Generated Scenarios
   # =============================================================================
+  # Each generator sweeps its primary parameter(s) × l1_cost (production
+  # stability penalty). The default l1_cost (0.5) produces the original
+  # scenario names; alternative values append a suffix (e.g. _l1_0p1).
 
   _generators:
-    # GHG price sensitivity: 1 to 500 USD/tCO2-eq (log-spaced, 10 points)
-    - name: ghg_{ghg}
+    # Zero-point scenarios for each sensitivity group × l1_cost
+    - name: "{prefix}{l1_cost}"
+      mode: grid
+      parameters:
+        prefix:
+          values: ["ghg_0", "yll_0", "ghg_yll_0"]
+        l1_cost:
+          values: [0.5, 0.1, 10]
+          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
+      template:
+        emissions:
+          ghg_price: 0
+        health:
+          value_per_yll: 0
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: "{l1_cost}"
+
+    # GHG price sensitivity: 5 to 500 USD/tCO2-eq (log-spaced, 10 points)
+    - name: "ghg_{ghg}{l1_cost}"
+      mode: grid
       parameters:
         ghg:
           space: log
@@ -85,6 +71,9 @@ scenarios:
           stop: 500
           num: 10
           round: true
+        l1_cost:
+          values: [0.5, 0.1, 10]
+          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
       template:
         emissions:
           ghg_price: "{ghg}"
@@ -93,9 +82,13 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: "{l1_cost}"
 
-    # YLL value sensitivity: 5 to 100000 USD/YLL (log-spaced, 10 points)
-    - name: yll_{yll}
+    # YLL value sensitivity: 50 to 100000 USD/YLL (log-spaced, 10 points)
+    - name: "yll_{yll}{l1_cost}"
+      mode: grid
       parameters:
         yll:
           space: log
@@ -103,6 +96,9 @@ scenarios:
           stop: 100000
           num: 10
           round: true
+        l1_cost:
+          values: [0.5, 0.1, 10]
+          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
       template:
         emissions:
           ghg_price: 0
@@ -111,8 +107,12 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: "{l1_cost}"
 
     # Combined sensitivity: both parameters vary together (log-spaced, 10 points each)
+    # Separate generators per l1_cost because ghg+yll must be zipped (not crossed).
     - name: ghg_yll_{ghg}
       mode: zip
       parameters:
@@ -136,6 +136,60 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+
+    - name: ghg_yll_{ghg}_l1_0p1
+      mode: zip
+      parameters:
+        ghg:
+          space: log
+          start: 5
+          stop: 500
+          num: 10
+          round: true
+        yll:
+          space: log
+          start: 50
+          stop: 100000
+          num: 10
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: "{yll}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 0.1
+
+    - name: ghg_yll_{ghg}_l1_10
+      mode: zip
+      parameters:
+        ghg:
+          space: log
+          start: 5
+          stop: 500
+          num: 10
+          round: true
+        yll:
+          space: log
+          start: 50
+          stop: 100000
+          num: 10
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: "{yll}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 10
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020
@@ -164,7 +218,6 @@ residues:
 grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
   isimip_utilization_rate: 0.60
-  forage_overlap_subtraction_alpha: 1.0
 
 land:
   regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
@@ -180,12 +233,12 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 2
+  threads: 8
   mem_mb: 9000
   runtime: 20
 
 remote_solve:
-  enabled: false
+  enabled: true
   local_scenarios: ["baseline"]
   host: "shr"
   workdir: "~/food-opt-scratch"

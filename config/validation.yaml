@@ -32,7 +32,6 @@ residues:
 grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
   isimip_utilization_rate: 0.60
-  forage_overlap_subtraction_alpha: 1.0
   grassland_forage_calibration:
     generate: true
     scenario: uncalibrated

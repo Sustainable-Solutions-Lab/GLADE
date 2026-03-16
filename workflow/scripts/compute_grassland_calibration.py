@@ -2,20 +2,23 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Compute grassland forage calibration from a solved model.
+"""Compute forage calibration from a solved model.
 
-Reads the solved network's forage slack to derive per-country grassland yield
-corrections and exogenous forage amounts.
+Reads the solved network's forage slack to derive per-country corrections
+for grassland area, fodder-to-forage conversion efficiency, and exogenous
+forage amounts.
 
-**Surplus countries** (negative slack > 0, i.e. grassland output exceeds demand):
-  yield_correction = max(0, grassland_output - surplus) / grassland_output
-  This scales grassland yields down so supply matches demand.
+**Surplus countries** (negative slack > 0, i.e. supply exceeds demand):
+  Surplus is attributed proportionally between grassland and fodder crops
+  based on their shares of total forage supply.  Both receive the same
+  correction factor: ``demand / total_supply``.
 
-**Deficit countries** (positive slack > 0, i.e. demand exceeds grassland supply):
+**Deficit countries** (positive slack > 0, i.e. demand exceeds supply):
   exogenous_forage_mt_dm = positive_slack
   This adds an external forage source to cover the shortfall.
 
-Output CSV: country, yield_correction, exogenous_forage_mt_dm
+Output: three separate CSVs for grassland area correction, fodder
+conversion correction, and exogenous forage supply.
 """
 
 import logging
@@ -137,16 +140,36 @@ def _aggregate_forage_bus_supply_and_demand(
 
 def compute_grassland_calibration(
     network_path: str,
-    output_path: str,
+    *,
+    grassland_yield_path: str,
+    fodder_conversion_path: str,
+    exogenous_forage_path: str,
 ) -> None:
-    """Compute and write grassland forage calibration.
+    """Compute and write forage calibration files.
+
+    Produces three separate CSVs:
+
+    1. **Grassland yield correction** — per-country factor to scale grassland
+       yield (efficiency on grassland_production links).
+    2. **Fodder conversion correction** — per-country factor to scale the
+       efficiency of forage-crop → ruminant_forage conversion links.
+    3. **Exogenous forage** — per-country Mt DM of external forage for
+       deficit countries where supply cannot meet demand.
+
+    Surplus is attributed **proportionally** between grassland and fodder
+    based on their shares of total supply: both get the same correction
+    factor ``demand / total_supply``.
 
     Parameters
     ----------
     network_path : str
         Path to solved PyPSA network (.nc).
-    output_path : str
-        Path for output calibration CSV.
+    grassland_yield_path : str
+        Output path for grassland yield correction CSV.
+    fodder_conversion_path : str
+        Output path for fodder conversion correction CSV.
+    exogenous_forage_path : str
+        Output path for exogenous forage CSV.
     """
     n = pypsa.Network(network_path)
 
@@ -154,9 +177,14 @@ def compute_grassland_calibration(
     grass_links = n.links.static[n.links.static["carrier"] == "grassland_production"]
     if grass_links.empty:
         logger.warning("No grassland_production links found; writing empty calibration")
-        pd.DataFrame(
-            columns=["country", "yield_correction", "exogenous_forage_mt_dm"]
-        ).to_csv(output_path, index=False)
+        for path in (
+            grassland_yield_path,
+            fodder_conversion_path,
+            exogenous_forage_path,
+        ):
+            with open(path, "w") as f:
+                f.write(SPDX_CSV_HEADER)
+            pd.DataFrame(columns=["country"]).to_csv(path, mode="a", index=False)
         return
 
     # Grassland dispatch is on bus0 (land, in Mha); forage output = dispatch * efficiency
@@ -173,13 +201,12 @@ def compute_grassland_calibration(
         _aggregate_forage_bus_supply_and_demand(n)
     )
 
-    # --- Negative slack (surplus): grassland output exceeds demand ---
+    # --- Negative slack (surplus): supply exceeds demand ---
     neg_slack_gens = n.generators.static[
         n.generators.static["carrier"] == "slack_negative_feed"
     ]
     surplus_by_country = pd.Series(dtype=float, name="surplus")
     if not neg_slack_gens.empty:
-        # Filter to ruminant_forage buses
         forage_mask = neg_slack_gens["bus"].str.startswith("feed:ruminant_forage:")
         neg_forage = neg_slack_gens[forage_mask]
         if not neg_forage.empty:
@@ -194,7 +221,7 @@ def compute_grassland_calibration(
             )
             surplus_by_country = surplus_by_country[surplus_by_country > 1e-10]
 
-    # --- Positive slack (deficit): demand exceeds grassland supply ---
+    # --- Positive slack (deficit): demand exceeds supply ---
     pos_slack_gens = n.generators.static[
         n.generators.static["carrier"] == "slack_positive_feed"
     ]
@@ -214,62 +241,75 @@ def compute_grassland_calibration(
             )
             deficit_by_country = deficit_by_country[deficit_by_country > 1e-10]
 
-    # --- Build calibration table ---
+    # --- Build calibration tables with proportional surplus attribution ---
     all_countries = sorted(
         set(grassland_by_country.index)
         | set(surplus_by_country.index)
         | set(deficit_by_country.index)
     )
-    rows = []
+    grass_rows = []
+    fodder_rows = []
+    exo_rows = []
     for country in all_countries:
         grass = grassland_by_country.get(country, 0.0)
         surplus = surplus_by_country.get(country, 0.0)
         deficit = deficit_by_country.get(country, 0.0)
-        non_grass_supply = non_grass_supply_by_country.get(country, 0.0)
-        demand = demand_by_country.get(country, 0.0)
+        non_grass = non_grass_supply_by_country.get(country, 0.0)
 
-        # Only reduce the portion of forage surplus that is attributable to
-        # grassland itself. If non-grass forage supply already overfills the
-        # bus, grassland should not be driven to zero by that unrelated surplus.
-        non_grass_surplus = max(0.0, non_grass_supply - demand)
-        grass_surplus = max(0.0, surplus - non_grass_surplus)
+        total_supply = grass + non_grass
 
-        if grass_surplus > 0 and grass > 1e-10:
-            yield_correction = max(0.0, grass - grass_surplus) / grass
+        # Proportional attribution: split surplus between grassland and
+        # fodder based on their shares of total supply.  Both sources
+        # receive the same correction factor = demand / total_supply.
+        if surplus > 0 and total_supply > 1e-10:
+            factor = max(0.0, (total_supply - surplus) / total_supply)
         else:
-            yield_correction = 1.0
+            factor = 1.0
 
-        exogenous = deficit if deficit > 0 else 0.0
-
-        rows.append(
+        grass_rows.append({"country": country, "yield_correction": round(factor, 6)})
+        fodder_rows.append(
+            {"country": country, "fodder_conversion_correction": round(factor, 6)}
+        )
+        exo_rows.append(
             {
                 "country": country,
-                "yield_correction": round(yield_correction, 6),
-                "exogenous_forage_mt_dm": round(exogenous, 6),
+                "exogenous_forage_mt_dm": round(deficit if deficit > 0 else 0.0, 6),
             }
         )
 
-    result = pd.DataFrame(rows)
+    grass_df = pd.DataFrame(grass_rows)
+    fodder_df = pd.DataFrame(fodder_rows)
+    exo_df = pd.DataFrame(exo_rows)
 
-    n_surplus = int((result["yield_correction"] < 1.0).sum())
-    n_deficit = int((result["exogenous_forage_mt_dm"] > 0).sum())
+    n_surplus = int((grass_df["yield_correction"] < 1.0).sum())
+    n_deficit = int((exo_df["exogenous_forage_mt_dm"] > 0).sum())
     total_surplus = surplus_by_country.sum() if not surplus_by_country.empty else 0.0
     total_deficit = deficit_by_country.sum() if not deficit_by_country.empty else 0.0
 
     logger.info(
-        "Grassland calibration: %d countries with yield correction "
-        "(%.1f Mt surplus removed), %d countries with exogenous forage "
-        "(%.1f Mt deficit covered)",
+        "Forage calibration: %d countries with yield/conversion correction "
+        "(%.1f Mt surplus), %d countries with exogenous forage "
+        "(%.1f Mt deficit)",
         n_surplus,
         total_surplus,
         n_deficit,
         total_deficit,
     )
 
-    with open(output_path, "w") as f:
-        f.write(SPDX_CSV_HEADER)
-        result.to_csv(f, index=False)
-    logger.info("Wrote %d calibration entries to %s", len(result), output_path)
+    for df, path in (
+        (grass_df, grassland_yield_path),
+        (fodder_df, fodder_conversion_path),
+        (exo_df, exogenous_forage_path),
+    ):
+        with open(path, "w") as f:
+            f.write(SPDX_CSV_HEADER)
+            df.to_csv(f, index=False)
+    logger.info(
+        "Wrote calibration to %s, %s, %s",
+        grassland_yield_path,
+        fodder_conversion_path,
+        exogenous_forage_path,
+    )
 
 
 if __name__ == "__main__":
@@ -279,5 +319,7 @@ if __name__ == "__main__":
 
     compute_grassland_calibration(
         network_path=snakemake.input.network,  # type: ignore[name-defined]
-        output_path=snakemake.output[0],  # type: ignore[name-defined]
+        grassland_yield_path=snakemake.output.grassland_yield_correction,  # type: ignore[name-defined]
+        fodder_conversion_path=snakemake.output.fodder_conversion_correction,  # type: ignore[name-defined]
+        exogenous_forage_path=snakemake.output.exogenous_forage,  # type: ignore[name-defined]
     )

@@ -320,6 +320,41 @@ rule extract_faostat_fbs:
         "../scripts/convert_faostat_to_parquet.py"
 
 
+rule download_faostat_rl:
+    output:
+        temp("data/downloads/faostat/RL.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/Inputs_LandUse_E_All_Data_(Normalized).zip",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_faostat_rl.log",
+    benchmark:
+        "<benchmarks>/shared/download_faostat_rl.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_rl:
+    input:
+        "data/downloads/faostat/RL.zip",
+    output:
+        "data/downloads/faostat/RL.parquet",
+    resources:
+        runtime="2m",
+        mem_mb=2500,
+    log:
+        "<logs>/shared/extract_faostat_rl.log",
+    benchmark:
+        "<benchmarks>/shared/extract_faostat_rl.tsv"
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
+
+
 rule download_faostat_gt:
     output:
         temp("data/downloads/faostat/GT.zip"),

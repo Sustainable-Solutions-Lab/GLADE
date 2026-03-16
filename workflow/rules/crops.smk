@@ -327,57 +327,35 @@ rule build_luicube_grassland_yields:
         "../scripts/build_luicube_grassland_yields.py"
 
 
-def grassland_forage_overlap_inputs(_wildcards):
-    """Inputs needed to estimate forage-crop supply overlap by country."""
-    irr_cfg = config["irrigation"]["irrigated_crops"]
-    if irr_cfg == "all":
-        irrigated_crops = set(config["crops"])
-    else:
-        irrigated_crops = set(irr_cfg)
-
-    inputs = {"regions": "<processing>/{name}/regions.geojson"}
-    for crop in config["grazing"]["forage_overlap_crops"]:
-        if crop not in config["crops"]:
-            continue
-        inputs[f"forage_yield_{crop}_r"] = (
-            f"<processing>/{{name}}/crop_yields/{crop}_r.csv"
-        )
-        inputs[f"forage_harvested_{crop}_r"] = (
-            f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
-        )
-        if crop in irrigated_crops:
-            inputs[f"forage_yield_{crop}_i"] = (
-                f"<processing>/{{name}}/crop_yields/{crop}_i.csv"
-            )
-            inputs[f"forage_harvested_{crop}_i"] = (
-                f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
-            )
-    return inputs
-
-
-def merge_grassland_inputs(wildcards):
-    """Get all inputs required for grassland yield merging."""
-    inputs = {
-        "luicube": f"<processing>/{wildcards.name}/luicube_grassland_yields.csv",
-        "isimip": f"<processing>/{wildcards.name}/isimip_grassland_yields.csv",
-    }
-    inputs.update(grassland_forage_overlap_inputs(wildcards))
-    if config["fodder_decomposition"]["yield_corrections"]["enabled"]:
-        inputs["fodder_yield_corrections"] = (
-            f"<processing>/{wildcards.name}/fodder_yield_corrections.csv"
-        )
-    return inputs
+rule prepare_faostat_pasture_area:
+    input:
+        rl_parquet="data/downloads/faostat/RL.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        baseline_year=config["baseline_year"],
+    output:
+        "<processing>/{name}/faostat_pasture_area.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2500,
+    log:
+        "<logs>/{name}/prepare_faostat_pasture_area.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_faostat_pasture_area.tsv"
+    script:
+        "../scripts/prepare_faostat_pasture_area.py"
 
 
 rule merge_grassland_yields:
     input:
-        unpack(merge_grassland_inputs),
+        luicube="<processing>/{name}/luicube_grassland_yields.csv",
+        isimip="<processing>/{name}/isimip_grassland_yields.csv",
+        regions="<processing>/{name}/regions.geojson",
     params:
         isimip_utilization_rate=config["grazing"]["isimip_utilization_rate"],
-        forage_overlap_subtraction_alpha=config["grazing"][
-            "forage_overlap_subtraction_alpha"
-        ],
-        forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
     output:
         "<processing>/{name}/grassland_yields.csv",
     group:

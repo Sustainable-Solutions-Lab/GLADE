@@ -94,6 +94,8 @@ validation:
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline: 0.00001  # Mt DM floor (scaled to Mha-eq internally). Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
+    land_conversion:
+      enabled: true  # Penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline
   animal_growth_cap:
     enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
     max_relative_increase: 0.1  # Maximum relative increase from baseline (0.1 = +10%)
@@ -445,7 +447,6 @@ fodder_decomposition:
 grazing:
   enabled: true
   isimip_utilization_rate: 0.50 # Applied to ISIMIP yields in merge step
-  forage_overlap_subtraction_alpha: 0.0 # Subtract alpha * modeled forage-crop supply from LUIcube grass supply by country
   forage_overlap_crops:
   - alfalfa
   - silage-maize
@@ -453,7 +454,9 @@ grazing:
   grassland_forage_calibration:
     enabled: true
     generate: false
-    source: "data/curated/grassland_forage_calibration.csv"
+    grassland_yield_correction: "data/curated/forage_calibration/grassland_yield_correction.csv"
+    fodder_conversion_correction: "data/curated/forage_calibration/fodder_conversion_correction.csv"
+    exogenous_forage: "data/curated/forage_calibration/exogenous_forage.csv"
     scenario: "default"
 
 # --- section: food_groups ---

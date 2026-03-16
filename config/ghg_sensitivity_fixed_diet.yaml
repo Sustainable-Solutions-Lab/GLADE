@@ -58,7 +58,6 @@ residues:
 
 grazing:
   isimip_utilization_rate: 0.60
-  forage_overlap_subtraction_alpha: 1.0
 
 land:
   regional_limit: 1.0

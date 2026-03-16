@@ -728,7 +728,12 @@ rule doc_fig_validation_feed_breakdown:
 rule doc_fig_validation_grassland_calibration:
     """Generate grassland forage calibration choropleth map."""
     input:
-        calibration=config["grazing"]["grassland_forage_calibration"]["source"],
+        calibration=config["grazing"]["grassland_forage_calibration"][
+            "grassland_yield_correction"
+        ],
+        exogenous_forage=config["grazing"]["grassland_forage_calibration"][
+            "exogenous_forage"
+        ],
         regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
         style=DOC_FIG_STYLE,
     output:

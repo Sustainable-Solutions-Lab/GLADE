@@ -142,6 +142,29 @@ BLS Consumer Price Index (CPI-U)
 
 Consumer Price Index for All Urban Consumers (CPI-U), U.S. city average, all items (series CUUR0000SA0). Used for inflation adjustment of cost data throughout the workflow. Annual CPI averages are computed from monthly values and stored in ``processing/shared/cpi_annual.csv`` for reuse across the workflow. Retrieved automatically via BLS Public Data API (``workflow/scripts/retrieve_cpi_data.py``). Base year is configured via ``currency_base_year`` in ``config/default.yaml`` (default: 2024).
 
+FAOSTAT Land Use (RL)
+~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: FAO Statistics Division
+
+**Description**: Country-level land use statistics, including permanent meadows and pastures area. Used to cap satellite-derived grassland area to match FAOSTAT ground-truth pasture extent.
+
+**Coverage**:
+  * Spatial: 245+ countries and territories
+  * Temporal: 1961 onward
+
+**Key variables**:
+  * Item Code 6655: "Land under permanent meadows and pastures"
+  * Element Code 5110: "Area" (in 1000 ha)
+
+**Access**: https://www.fao.org/faostat/en/ (Land Use domain)
+
+**License**: CC BY 4.0 + FAO database terms
+
+**Retrieval**: Downloaded as bulk CSV (``Inputs_LandUse_E_All_Data_(Normalized).zip``), converted to Parquet, and processed by ``workflow/scripts/prepare_faostat_pasture_area.py``.
+
+**Usage**: Provides per-country permanent pasture area used to scale down satellite grassland area in ``build_model.py``, replacing the previous forage overlap subtraction approach.
+
 FAOSTAT Food Balance Sheets (FBS)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

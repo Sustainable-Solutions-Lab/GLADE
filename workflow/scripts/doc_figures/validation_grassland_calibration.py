@@ -6,8 +6,8 @@
 """Generate grassland forage calibration map for documentation.
 
 Shows yield_correction by country as a choropleth with a one-sided colormap
-because calibration only scales yields downward (0.0 to 1.0). Countries with
-exogenous_forage_mt_dm > 0 are marked with hatching.
+because calibration only scales area downward (0.0 to 1.0). Countries with
+exogenous forage are marked with hatching.
 """
 
 import logging
@@ -37,6 +37,7 @@ def main() -> None:
     setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
     cal = pd.read_csv(snakemake.input.calibration, comment="#")  # type: ignore[name-defined]
+    exo = pd.read_csv(snakemake.input.exogenous_forage, comment="#")  # type: ignore[name-defined]
     regions = gpd.read_file(snakemake.input.regions)  # type: ignore[name-defined]
 
     if regions.crs is None:
@@ -46,8 +47,9 @@ def main() -> None:
 
     countries = regions.dissolve(by="country", as_index=False)
 
-    # Merge calibration data
+    # Merge calibration data from separate files
     countries = countries.merge(cal, left_on="country", right_on="country", how="left")
+    countries = countries.merge(exo, left_on="country", right_on="country", how="left")
 
     # Countries without calibration data: no grassland, leave as NaN
     has_cal = countries["yield_correction"].notna()
@@ -128,7 +130,7 @@ def main() -> None:
     ax.text(
         0.02,
         0.02,
-        f"{n_reduced} countries with reduced yields\n"
+        f"{n_reduced} countries with reduced yield\n"
         f"{n_exogenous} countries with exogenous forage (hatched)",
         transform=ax.transAxes,
         fontsize=FONT_SIZES["colorbar_tick"],

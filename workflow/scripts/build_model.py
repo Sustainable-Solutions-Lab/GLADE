@@ -72,8 +72,18 @@ if __name__ == "__main__":
     grassland_yield_multiplier = float(validation_cfg["grassland_yield_multiplier"])
 
     grassland_cal_cfg = snakemake.params.grazing["grassland_forage_calibration"]
-    grassland_cal_path = (
-        snakemake.input.get("grassland_calibration")
+    grassland_yield_cal_path = (
+        snakemake.input.get("grassland_yield_correction")
+        if grassland_cal_cfg["enabled"]
+        else None
+    )
+    fodder_cal_path = (
+        snakemake.input.get("fodder_conversion_correction")
+        if grassland_cal_cfg["enabled"]
+        else None
+    )
+    exogenous_forage_path = (
+        snakemake.input.get("exogenous_forage")
         if grassland_cal_cfg["enabled"]
         else None
     )
@@ -322,27 +332,6 @@ if __name__ == "__main__":
                 "Applied validation grassland yield multiplier: %.3f",
                 grassland_yield_multiplier,
             )
-        if grassland_cal_path:
-            grassland_cal = read_csv(grassland_cal_path)
-            gc_region = grassland_df.reset_index()
-            _r2c = regions_df.set_index("region")["country"]
-            gc_region["country"] = gc_region["region"].map(_r2c)
-            gc_merged = gc_region.merge(
-                grassland_cal[["country", "yield_correction"]],
-                on="country",
-                how="left",
-            )
-            gc_merged["yield_correction"] = gc_merged["yield_correction"].fillna(1.0)
-            grassland_df["yield"] = (
-                gc_merged.set_index(["region", "resource_class"])["yield_correction"]
-                * grassland_df["yield"]
-            ).values
-            n_corrected = int((gc_merged["yield_correction"] < 1.0).sum())
-            logger.info(
-                "Applied grassland yield corrections: %d/%d regions adjusted",
-                n_corrected,
-                len(gc_merged),
-            )
         current_grassland_area_df = read_csv(snakemake.input.current_grassland_area)
         if not current_grassland_area_df.empty:
             current_grassland_area_series = (
@@ -358,6 +347,51 @@ if __name__ == "__main__":
                 grazing_only_area_df.set_index(["region", "resource_class"])["area_ha"]
                 .astype(float)
                 .sort_index()
+            )
+
+        # Apply FAOSTAT pasture area cap: scale satellite grassland area
+        # down to match FAOSTAT "permanent meadows and pastures" per country.
+        # This replaces the old forage overlap subtraction with an external
+        # ground-truth area constraint.  The uniform per-country factor never
+        # increases area beyond the satellite estimate.
+        faostat_pasture = read_csv(snakemake.input.faostat_pasture_area)
+        if not faostat_pasture.empty and current_grassland_area_series is not None:
+            faostat_area_ha = faostat_pasture.set_index("country")["area_kha"] * 1000
+            _r2c = regions_df.set_index("region")["country"]
+            _area_df = current_grassland_area_df.copy()
+            _area_df["country"] = _area_df["region"].map(_r2c)
+            satellite_by_country = _area_df.groupby("country")["area_ha"].sum()
+            correction = (
+                (faostat_area_ha / satellite_by_country).clip(upper=1.0).fillna(1.0)
+            )
+            _area_df["factor"] = (
+                _area_df["country"].map(correction).fillna(1.0).to_numpy()
+            )
+            n_capped = int((_area_df["factor"] < 1.0).sum())
+            current_grassland_area_df["area_ha"] = (
+                current_grassland_area_df["area_ha"] * _area_df["factor"].values
+            )
+            current_grassland_area_series = (
+                current_grassland_area_df.set_index(["region", "resource_class"])[
+                    "area_ha"
+                ]
+                .astype(float)
+                .sort_index()
+            )
+            total_satellite = satellite_by_country.sum() / 1e6
+            total_faostat = (
+                faostat_area_ha.reindex(
+                    satellite_by_country.index, fill_value=0.0
+                ).sum()
+                / 1e6
+            )
+            logger.info(
+                "Applied FAOSTAT pasture area cap: %d/%d entries capped "
+                "(satellite %.1f Mha → FAOSTAT %.1f Mha)",
+                n_capped,
+                len(_area_df),
+                total_satellite,
+                total_faostat,
             )
 
         if current_grassland_area_series is not None:
@@ -777,6 +811,27 @@ if __name__ == "__main__":
             min_yield_t_per_ha=min_grassland_yield,
         )
 
+        # Apply grassland yield correction from forage calibration.
+        # This scales efficiency on grassland_production links per country,
+        # reducing production to match observed demand.
+        if grassland_yield_cal_path:
+            _yield_cal = read_csv(grassland_yield_cal_path)
+            _grass_links = n.links.static[
+                n.links.static["carrier"] == "grassland_production"
+            ]
+            if not _grass_links.empty and not _yield_cal.empty:
+                _cal_map = _yield_cal.set_index("country")["yield_correction"]
+                _corrections = (
+                    _grass_links["country"].map(_cal_map).fillna(1.0).to_numpy()
+                )
+                n.links.static.loc[_grass_links.index, "efficiency"] *= _corrections
+                n_adjusted = int((_corrections < 1.0).sum())
+                logger.info(
+                    "Applied grassland yield corrections: %d/%d links adjusted",
+                    n_adjusted,
+                    len(_grass_links),
+                )
+
     # Food conversion
     food.add_food_conversion_links(
         n,
@@ -862,10 +917,33 @@ if __name__ == "__main__":
         enforce_baseline_feed=enforce_baseline_feed,
     )
 
-    # Add exogenous forage from grassland calibration (deficit countries)
-    if grassland_cal_path:
-        grassland_cal = read_csv(grassland_cal_path)
-        exog = grassland_cal[grassland_cal["exogenous_forage_mt_dm"] > 0].copy()
+    # Apply fodder-to-forage conversion correction from calibration.
+    # This scales down the efficiency of feed_conversion links that route
+    # forage crops (alfalfa, silage-maize, biomass-sorghum) to ruminant_forage
+    # buses, accounting for proportional surplus attribution.
+    if fodder_cal_path:
+        _fodder_cal = read_csv(fodder_cal_path)
+        _forage_crops = snakemake.config["grazing"]["forage_overlap_crops"]
+        _fc_links = n.links.static[
+            (n.links.static["carrier"] == "feed_conversion")
+            & (n.links.static["feed_category"] == "ruminant_forage")
+            & (n.links.static["crop"].isin(_forage_crops))
+        ]
+        if not _fc_links.empty:
+            _cal_map = _fodder_cal.set_index("country")["fodder_conversion_correction"]
+            _corrections = _fc_links["country"].map(_cal_map).fillna(1.0).to_numpy()
+            n.links.static.loc[_fc_links.index, "efficiency"] *= _corrections
+            n_adjusted = int((_corrections < 1.0).sum())
+            logger.info(
+                "Applied fodder conversion corrections: %d/%d links adjusted",
+                n_adjusted,
+                len(_fc_links),
+            )
+
+    # Add exogenous forage from calibration (deficit countries)
+    if exogenous_forage_path:
+        _exo_cal = read_csv(exogenous_forage_path)
+        exog = _exo_cal[_exo_cal["exogenous_forage_mt_dm"] > 0].copy()
         if not exog.empty:
             exog_buses = "feed:ruminant_forage:" + exog["country"]
             bus_exists = exog_buses.isin(n.buses.static.index)

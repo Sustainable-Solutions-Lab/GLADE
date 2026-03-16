@@ -53,7 +53,7 @@ scenarios:
       method_options:
         n_mc_conditional: 4096
         cross_truncation: 0.8
-      samples: 2048
+      samples: 4096
       slice_parameters: [value_per_yll, ghg_price]
       parameters:
         yield_factor:
@@ -153,7 +153,6 @@ residues:
 grazing:
   # Slightly higher utilization rate matches grassland supply with feed demand
   isimip_utilization_rate: 0.60
-  forage_overlap_subtraction_alpha: 1.0
 
 land:
   regional_limit: 1.0 # fraction of each region's potential cropland that is made available.

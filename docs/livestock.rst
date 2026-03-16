@@ -589,39 +589,65 @@ grassland output and ruminant forage demand are the primary source.  The
 calibration pipeline uses a *validation solve* to diagnose these gaps via
 slack variables and compute corrections.
 
+Grassland Area Determination
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The model uses two independent corrections to determine grassland area and
+production:
+
+1. **Area**: FAOSTAT "permanent meadows and pastures" (Item 6655) provides
+   ground-truth pasture area per country.  Satellite-derived grassland area
+   (from ESA CCI / LUIcube) is scaled down uniformly per country to match
+   FAOSTAT, since satellite data systematically overestimates agricultural
+   pasture by including non-agricultural grassland (alpine meadows, CRP land,
+   ungrazed shrub-grassland).
+
+2. **Production balance**: A proportional forage calibration adjusts
+   grassland yield and fodder conversion efficiency to match supply to demand.
+
+The FAOSTAT area cap is applied in ``build_model.py`` before any downstream
+functions, so all components (generators, spare links, land budget) inherit
+the corrected area.
+
 Grassland Forage Calibration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Grassland forage calibration addresses mismatches between grassland output
-and ruminant forage demand.
-In some countries grassland yields exceed forage demand (surplus), while in
-others demand exceeds what grasslands can supply (deficit).
+Grassland forage calibration addresses remaining mismatches between forage
+supply (grassland + fodder crops) and ruminant forage demand after the
+FAOSTAT area cap.
 
 **Algorithm** (implemented in
 ``workflow/scripts/compute_grassland_calibration.py``):
 
-1. Solve the model with uncalibrated grassland parameters.
+1. Solve the model with uncalibrated parameters (FAOSTAT area cap applied,
+   but no yield/efficiency corrections).
 2. Per country, extract forage slack from ``feed:ruminant_forage:{country}``
-   buses:
+   buses and attribute surplus **proportionally** between grassland and
+   fodder crops based on their shares of total supply:
 
-   * **Negative slack** (surplus): grassland output exceeds forage demand.
-     Reduce effective yield:
-
-     .. math::
-
-        \text{yield_correction}_c = \frac{\max(0,\;
-            \text{output}_c - \text{surplus}_c)}{\text{output}_c}
-
-   * **Positive slack** (deficit): forage demand exceeds grassland output.
-     Supply the gap via an exogenous forage source:
+   * **Surplus countries** (supply > demand): Both grassland yield and
+     fodder conversion efficiency receive the same correction factor:
 
      .. math::
 
-        \text{exogenous_forage}_c = \text{deficit}_c
+        \text{factor}_c = \frac{\text{demand}_c}{\text{total\_supply}_c}
 
-3. ``yield_correction`` (in [0, 1]) scales grassland yields downward;
-   ``exogenous_forage_mt_dm`` adds an external forage supply for countries
-   where grassland alone cannot meet ruminant forage requirements.
+     This produces ``yield_correction`` (applied to grassland_production
+     link efficiencies) and ``fodder_conversion_correction`` (applied to
+     feed_conversion link efficiencies for forage crops).
+
+   * **Deficit countries** (demand > supply): An exogenous forage source
+     covers the shortfall:
+
+     .. math::
+
+        \text{exogenous\_forage}_c = \text{deficit}_c
+
+3. Three separate output files:
+
+   * ``grassland_yield_correction.csv`` — per-country factor [0, 1]
+   * ``fodder_conversion_correction.csv`` — per-country factor [0, 1]
+   * ``exogenous_forage.csv`` — per-country Mt DM
 
 **Configuration**:
 
@@ -629,10 +655,12 @@ others demand exceeds what grasslands can supply (deficit).
 
    grazing:
      grassland_forage_calibration:
-       enabled: true          # Apply pre-computed calibration
-       generate: false        # Set true to trigger generation from a solve
-       source: "data/curated/grassland_forage_calibration.csv"
-       scenario: "default"    # Scenario whose solved model is used
+       enabled: true
+       generate: false
+       grassland_yield_correction: "data/curated/forage_calibration/grassland_yield_correction.csv"
+       fodder_conversion_correction: "data/curated/forage_calibration/fodder_conversion_correction.csv"
+       exogenous_forage: "data/curated/forage_calibration/exogenous_forage.csv"
+       scenario: "default"
 
 The figure below shows the grassland calibration results.
 ``yield_correction`` is one-sided:
@@ -661,16 +689,16 @@ forage calibration:
 
 1. **Phase 1 — Uncalibrated solve**: The ``uncalibrated`` scenario sets
    ``grassland_forage_calibration.enabled: false``.  Building and solving
-   this scenario produces the uncalibrated model from which forage slack is
-   extracted.  ``compute_grassland_calibration`` writes yield corrections
-   and exogenous forage amounts to the configured ``source`` path (by
-   default ``data/curated/grassland_forage_calibration.csv``).
+   this scenario produces the uncalibrated model with the FAOSTAT area cap
+   but no yield/efficiency corrections.  ``compute_grassland_calibration``
+   writes yield corrections, fodder conversion corrections, and exogenous
+   forage amounts to the configured paths.
 
 2. **Phase 2 — Calibrated model**: All other scenarios (including
-   ``default``) apply the grassland forage calibration.
+   ``default``) apply all three calibration files.
 
-Pre-computed calibration files are stored under ``data/curated/`` so they
-can be reused across configurations without re-running the validation
+Pre-computed calibration files are stored under ``data/curated/forage_calibration/``
+so they can be reused across configurations without re-running the validation
 solve.  Set ``generate: true`` in the relevant configuration block to
 re-generate them (requires a full validation solve).
 

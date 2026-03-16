@@ -75,7 +75,7 @@ def build_model_fiber_baseline_input(wildcards):
 
 
 def build_model_grassland_calibration_input(wildcards):
-    """Conditionally include grassland forage calibration CSV."""
+    """Conditionally include grassland forage calibration CSVs."""
     cal_cfg = config["grazing"]["grassland_forage_calibration"]
     if cal_cfg["generate"]:
         if wildcards.scenario == cal_cfg["scenario"]:
@@ -84,9 +84,17 @@ def build_model_grassland_calibration_input(wildcards):
         eff = get_effective_config(wildcards.scenario)
         if not eff["grazing"]["grassland_forage_calibration"]["enabled"]:
             return {}
-        return {"grassland_calibration": cal_cfg["source"]}
+        return {
+            "grassland_yield_correction": cal_cfg["grassland_yield_correction"],
+            "fodder_conversion_correction": cal_cfg["fodder_conversion_correction"],
+            "exogenous_forage": cal_cfg["exogenous_forage"],
+        }
     elif cal_cfg["enabled"]:
-        return {"grassland_calibration": cal_cfg["source"]}
+        return {
+            "grassland_yield_correction": cal_cfg["grassland_yield_correction"],
+            "fodder_conversion_correction": cal_cfg["fodder_conversion_correction"],
+            "exogenous_forage": cal_cfg["exogenous_forage"],
+        }
     return {}
 
 
@@ -136,6 +144,7 @@ rule build_model:
         growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",
         blue_water_availability="<processing>/{name}/water/blue_water_availability.csv",
         luc_carbon_coefficients="<processing>/{name}/luc/luc_carbon_coefficients.csv",
+        faostat_pasture_area="<processing>/{name}/faostat_pasture_area.csv",
         current_grassland_area="<processing>/{name}/luc/current_grassland_area_by_class.csv",
         grazing_only_land="<processing>/{name}/land_grazing_only_by_class.csv",
         health_cluster_summary="<processing>/{name}/health/cluster_summary.csv",
