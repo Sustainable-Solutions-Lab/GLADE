@@ -437,7 +437,6 @@ def _build_ratios_from_baseline(baseline_df: pd.DataFrame) -> pd.DataFrame:
     return df[["country", "food_group", "food", "ratio"]].copy()
 
 
-
 def add_ghg_pricing_to_objective(n: pypsa.Network, ghg_price_usd_per_t: float) -> None:
     """Add GHG emissions pricing to the objective function.
 
@@ -1172,6 +1171,7 @@ def _run_solve() -> None:
             ("crop_stability_abs_dev", "l1_cost"),
             ("grassland_stability_abs_dev", "l1_cost"),
             ("animal_stability_abs_dev", "l1_cost"),
+            ("land_conversion_stability_abs_dev", "l1_cost"),
         ]:
             if var_name in n.model.variables:
                 sol = n.model.variables[var_name].solution
@@ -1181,6 +1181,7 @@ def _run_solve() -> None:
             ("crop_stability_dev", "quadratic_cost"),
             ("grassland_stability_dev", "quadratic_cost"),
             ("animal_stability_dev", "quadratic_cost"),
+            ("land_conversion_stability_dev", "quadratic_cost"),
         ]:
             if var_name in n.model.variables:
                 sol = n.model.variables[var_name].solution

@@ -96,7 +96,7 @@ def _sensitivity_generator(wildcards):
 
 
 def _sensitivity_scenario_names(wildcards):
-    """Return sensitivity scenario names matching the prefix in expansion order."""
+    """Return all sensitivity scenario names matching the prefix in expansion order."""
     prefix = wildcards.prefix
     all_scenarios = list_scenarios()
     matching = [s for s in all_scenarios if s.startswith(prefix)]
@@ -108,20 +108,53 @@ def _sensitivity_scenario_names(wildcards):
     return matching
 
 
-def _sensitivity_scenario_inputs(wildcards):
-    """Generate input files for all sensitivity-sampled scenarios."""
-    matching = _sensitivity_scenario_names(wildcards)
-    inputs = []
-    for scenario in matching:
-        inputs.extend(
-            [
-                f"<results>/{wildcards.name}/analysis/scen-{scenario}/objective_breakdown.csv",
-                f"<results>/{wildcards.name}/analysis/scen-{scenario}/net_emissions.csv",
-                f"<results>/{wildcards.name}/analysis/scen-{scenario}/land_use.csv",
-                f"<results>/{wildcards.name}/analysis/scen-{scenario}/health_totals.csv",
-            ]
+_ANALYSIS_CSVS = (
+    "objective_breakdown.csv",
+    "net_emissions.csv",
+    "land_use.csv",
+    "health_totals.csv",
+)
+
+
+def _available_sensitivity_scenarios(wildcards):
+    """Return sensitivity scenarios whose analysis directories exist on disk.
+
+    This allows the GSA rule to run with an incomplete set of solved
+    scenarios (e.g. when some solves failed or results were partially
+    copied back from a cluster).
+    """
+    from pathlib import Path
+
+    all_scenarios = _sensitivity_scenario_names(wildcards)
+    base = Path(f"results/{wildcards.name}/analysis")
+    available = [
+        s
+        for s in all_scenarios
+        if all((base / f"scen-{s}" / csv).exists() for csv in _ANALYSIS_CSVS)
+    ]
+    if not available:
+        raise ValueError(
+            f"No completed scenarios with prefix '{wildcards.prefix}' "
+            f"found in {base}"
         )
-    return inputs
+    n_total = len(all_scenarios)
+    n_avail = len(available)
+    if n_avail < n_total * 0.5:
+        print(
+            f"WARNING: Only {n_avail}/{n_total} sensitivity scenarios available "
+            f"({100*n_avail/ n_total:.0f}%). GSA results may be unreliable."
+        )
+    return available
+
+
+def _sensitivity_scenario_inputs(wildcards):
+    """Generate input files for sensitivity scenarios that completed successfully."""
+    available = _available_sensitivity_scenarios(wildcards)
+    return [
+        f"<results>/{wildcards.name}/analysis/scen-{s}/{csv}"
+        for s in available
+        for csv in _ANALYSIS_CSVS
+    ]
 
 
 def _sensitivity_slice_grid(wildcards):
@@ -164,7 +197,7 @@ rule compute_sobol_sensitivity:
     input:
         _sensitivity_scenario_inputs,
     params:
-        scenario_names=_sensitivity_scenario_names,
+        scenario_names=_available_sensitivity_scenarios,
         generator_spec=lambda w: _sensitivity_generator(w),
         slice_grid=_sensitivity_slice_grid,
     output:

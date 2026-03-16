@@ -393,13 +393,17 @@ def run(snakemake) -> None:
         len(slice_param_names),
     )
 
-    # Reconstruct design matrix
-    x_design = reconstruct_samples(generator_spec)
-    if x_design.shape[0] != len(scenario_names):
-        raise ValueError(
-            f"Sample count mismatch: generator produces {x_design.shape[0]} samples "
-            f"but found {len(scenario_names)} scenarios"
-        )
+    # Reconstruct full design matrix, then select rows for available scenarios.
+    x_design_full = reconstruct_samples(generator_spec)
+    prefix = generator_spec["name"].removesuffix("{sample_id}")
+    sample_indices = np.array([int(s.removeprefix(prefix)) for s in scenario_names])
+    x_design = x_design_full[sample_indices]
+    logger.info(
+        "Using %d/%d scenarios (%.0f%% available)",
+        len(scenario_names),
+        x_design_full.shape[0],
+        100 * len(scenario_names) / x_design_full.shape[0],
+    )
 
     # Load scenario outputs
     outputs_df = load_scenario_outputs(analysis_dir, scenario_names)

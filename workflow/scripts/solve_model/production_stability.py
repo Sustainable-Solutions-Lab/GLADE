@@ -22,6 +22,11 @@ is individually constrained to stay near its GLEAM feed-use baseline (stored as
 ``baseline_feed_use_mt_dm`` during model building). Feed use is constrained
 directly (no efficiency multiplication needed).
 
+Land conversion stability penalizes deviations from zero on links that route
+land between uses: cropland-to-pasture, new land conversion, and spare land.
+These links have zero baseline (no conversion in the reference year), so any
+flow incurs a stability cost.
+
 Hard constraints only apply to links with sufficiently positive baselines to
 avoid forcing zero-baseline links to stay exactly at zero production/feed use.
 Penalty modes (L1/quadratic) apply to all links so zero-baseline links also
@@ -36,6 +41,15 @@ import pypsa
 import xarray as xr
 
 logger = logging.getLogger(__name__)
+
+# Carriers representing land-use transitions (all have zero baseline).
+LAND_CONVERSION_CARRIERS = [
+    "land_conversion",
+    "existing_to_pasture",
+    "new_to_pasture",
+    "spare_land",
+    "spare_existing_grassland",
+]
 
 
 def add_production_stability_constraints(
@@ -199,6 +213,29 @@ def add_production_stability_constraints(
                 stability_cfg["quadratic_cost"],
                 animals_cfg["min_baseline"],
                 animal_scale,
+            )
+
+    # --- LAND CONVERSION ---
+    land_conversion_cfg = stability_cfg["land_conversion"]
+    if land_conversion_cfg["enabled"]:
+        if penalty_mode == "hard":
+            logger.warning(
+                "Hard mode is not supported for land conversion stability "
+                "(zero baselines would forbid all conversion); skipping"
+            )
+        elif penalty_mode == "l1":
+            _add_land_conversion_l1_penalty(
+                n,
+                link_p,
+                links_df,
+                stability_cfg["l1_cost"],
+            )
+        elif penalty_mode == "quadratic":
+            _add_land_conversion_quadratic_penalty(
+                n,
+                link_p,
+                links_df,
+                stability_cfg["quadratic_cost"],
             )
 
 
@@ -687,6 +724,91 @@ def _add_animal_quadratic_penalty(
         len(link_names),
         quadratic_cost,
         deviation_type,
+    )
+
+
+# ─── Land conversion: L1 penalty ────────────────────────────────────────────
+
+
+def _add_land_conversion_l1_penalty(
+    n: pypsa.Network,
+    link_p,
+    links_df: pd.DataFrame,
+    l1_cost: float,
+) -> None:
+    """Add L1 penalty on land conversion link flows (zero baseline).
+
+    Since baseline is zero and all flows are non-negative, the absolute
+    deviation equals the flow itself: ``|p - 0| = p``.
+    """
+    conv_links = links_df[links_df["carrier"].isin(LAND_CONVERSION_CARRIERS)]
+    if conv_links.empty:
+        logger.info("No land conversion links found; skipping stability")
+        return
+
+    m = n.model
+    link_names = conv_links.index
+    flow = link_p.sel(name=link_names)
+
+    abs_dev = m.add_variables(
+        lower=0,
+        coords=[link_names],
+        dims=["name"],
+        name="land_conversion_stability_abs_dev",
+    )
+
+    m.add_constraints(
+        abs_dev >= flow,
+        name="GlobalConstraint-land_conversion_stability_pos",
+    )
+    m.add_constraints(
+        abs_dev >= -flow,
+        name="GlobalConstraint-land_conversion_stability_neg",
+    )
+    m.objective += l1_cost * abs_dev.sum()
+
+    logger.info(
+        "Added %d per-link land conversion L1 stability penalties (cost=%.4f)",
+        len(link_names),
+        l1_cost,
+    )
+
+
+# ─── Land conversion: quadratic penalty ────────────────────────────────────
+
+
+def _add_land_conversion_quadratic_penalty(
+    n: pypsa.Network,
+    link_p,
+    links_df: pd.DataFrame,
+    quadratic_cost: float,
+) -> None:
+    """Add quadratic penalty on land conversion link flows (zero baseline)."""
+    conv_links = links_df[links_df["carrier"].isin(LAND_CONVERSION_CARRIERS)]
+    if conv_links.empty:
+        logger.info("No land conversion links found; skipping stability")
+        return
+
+    m = n.model
+    link_names = conv_links.index
+    flow = link_p.sel(name=link_names)
+
+    dev = m.add_variables(
+        coords=[link_names],
+        dims=["name"],
+        name="land_conversion_stability_dev",
+    )
+
+    m.add_constraints(
+        dev == flow,
+        name="GlobalConstraint-land_conversion_stability_dev",
+    )
+    m.objective += 0.5 * quadratic_cost * (dev * dev).sum()
+
+    logger.info(
+        "Added %d per-link land conversion quadratic stability penalties (cost=%.4f)",
+        len(link_names),
+        quadratic_cost,
     )
 
 
