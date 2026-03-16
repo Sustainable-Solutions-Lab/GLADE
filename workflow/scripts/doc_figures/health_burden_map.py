@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from workflow.scripts.constants import PER_100K
 from workflow.scripts.doc_figures_config import (
     FIGURE_WIDTH,
     FONT_SIZES,
@@ -48,10 +49,39 @@ def main(
     cause_df = pd.read_csv(cluster_cause_baseline_path)
     summary_df = pd.read_csv(cluster_summary_path)
 
-    # Sum diet-attributable YLL across all causes per cluster
-    burden = cause_df.groupby("health_cluster")["yll_base"].sum().reset_index()
-    burden = burden.merge(summary_df[["health_cluster", "population_persons"]])
-    burden["yll_per_100k"] = burden["yll_base"] / burden["population_persons"] * 100_000
+    required_cause_cols = {"health_cluster", "yll_attrib_rate_per_100k"}
+    missing_cause_cols = required_cause_cols - set(cause_df.columns)
+    if missing_cause_cols:
+        raise ValueError(
+            "cluster_cause_baseline is missing required columns: "
+            f"{sorted(missing_cause_cols)}"
+        )
+
+    required_summary_cols = {"health_cluster", "reference_population"}
+    missing_summary_cols = required_summary_cols - set(summary_df.columns)
+    if missing_summary_cols:
+        raise ValueError(
+            "cluster_summary is missing required columns: "
+            f"{sorted(missing_summary_cols)}"
+        )
+
+    # Reconstruct absolute YLL per cluster, then convert back to per-100k after
+    # aggregation across causes.
+    burden = cause_df.groupby("health_cluster", as_index=False)[
+        "yll_attrib_rate_per_100k"
+    ].sum()
+    burden = burden.merge(
+        summary_df[["health_cluster", "reference_population"]],
+        on="health_cluster",
+        how="left",
+        validate="one_to_one",
+    )
+    burden["yll_absolute"] = (
+        burden["yll_attrib_rate_per_100k"] / PER_100K * burden["reference_population"]
+    )
+    burden["yll_per_100k"] = (
+        burden["yll_absolute"] / burden["reference_population"] * PER_100K
+    )
 
     cluster_burden = dict(zip(burden["health_cluster"], burden["yll_per_100k"]))
 
@@ -77,7 +107,9 @@ def main(
 
     # Set up colormap with round breakpoints
     cmap = plt.colormaps["YlOrRd"]
-    bounds = np.arange(500, 5000, 500)
+    max_burden = burden["yll_per_100k"].max()
+    upper_bound = max(5000, int(np.ceil(max_burden / 500.0) * 500) + 500)
+    bounds = np.arange(500, upper_bound, 500)
     norm = BoundaryNorm(bounds, cmap.N)
 
     # Create figure
