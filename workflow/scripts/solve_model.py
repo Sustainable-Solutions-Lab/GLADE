@@ -851,6 +851,47 @@ def add_within_group_ratio_constraints(
     logger.info("Added %d within-group food ratio constraints", len(non_ref))
 
 
+def _apply_health_pricing(n: pypsa.Network, value_per_yll_usd: float) -> None:
+    """Set marginal_cost_storage on health (YLL) stores for this scenario."""
+    cost_per_myll = (
+        value_per_yll_usd * constants.USD_TO_BNUSD / constants.YLL_TO_MILLION_YLL
+    )
+    yll_mask = n.stores.static["carrier"].str.startswith("yll_")
+    if yll_mask.any():
+        n.stores.static.loc[yll_mask, "marginal_cost_storage"] = cost_per_myll
+
+
+def _apply_regional_limit_scaling(n: pypsa.Network, solve_limit: float) -> None:
+    """Rescale land supply generator capacities if scenario regional_limit differs."""
+    build_limit = n.meta.get("land_regional_limit")
+    if build_limit is None:
+        # Pre-migration network without the metadata key; skip silently.
+        return
+    if abs(solve_limit - build_limit) < 1e-12:
+        return
+
+    ratio = solve_limit / build_limit
+
+    # Scale all land supply generators (existing + new cropland and grassland)
+    land_carriers = {
+        "land_existing",
+        "land_new",
+        "land_existing_grassland",
+        "land_existing_grassland_convertible",
+        "land_existing_grassland_marginal",
+    }
+    mask = n.generators.static["carrier"].isin(land_carriers)
+    if mask.any():
+        n.generators.static.loc[mask, "p_nom"] *= ratio
+        logger.info(
+            "Scaled %d land generators p_nom by %.4f (regional_limit %.3f → %.3f)",
+            mask.sum(),
+            ratio,
+            build_limit,
+            solve_limit,
+        )
+
+
 def _run_solve() -> None:
     """Main solve logic, factored out for profiling."""
     global logger
@@ -863,10 +904,25 @@ def _run_solve() -> None:
 
     n = pypsa.Network(snakemake.input.network)
 
+    # Apply sensitivity adjustments (moved from build_model to allow shared builds)
+    sensitivity_cfg = snakemake.params.sensitivity
+    if sensitivity_cfg:
+        from workflow.scripts.solve_model.sensitivity import apply_sensitivity_factors
+
+        logger.info("Applying sensitivity adjustments...")
+        apply_sensitivity_factors(n, sensitivity_cfg)
+
+    # Rescale land supply generators if scenario regional_limit differs from build
+    _apply_regional_limit_scaling(n, snakemake.config["land"]["regional_limit"])
+
     # Add GHG pricing to the objective if enabled
     if snakemake.config["emissions"]["ghg_pricing_enabled"]:
         ghg_price = float(snakemake.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
+
+    # Update health store marginal costs to match scenario value_per_yll.
+    # The build uses the base config value; scenarios may override it.
+    _apply_health_pricing(n, float(snakemake.params.health_value_per_yll))
 
     incentives_enabled = bool(snakemake.config["food_incentives"]["enabled"])
     piecewise_utility_cfg = snakemake.params.food_utility_piecewise

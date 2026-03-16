@@ -190,15 +190,11 @@ Running Specific Stages
 
 **Build model only** (no solving)::
 
-    tools/smk -j4 --configfile config/my_scenario.yaml -- results/my_scenario/build/model_scen-default.nc
+    tools/smk -j4 --configfile config/my_scenario.yaml -- results/my_scenario/build/model.nc
 
 **Solve model**::
 
     tools/smk -j4 --configfile config/my_scenario.yaml -- results/my_scenario/solved/model_scen-default.nc
-
-**Build all scenarios (no solving)**::
-
-    tools/smk -j4 --configfile config/my_scenario.yaml -- build_all_scenarios
 
 **Solve all scenarios (no plots)**::
 

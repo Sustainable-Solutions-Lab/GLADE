@@ -20,7 +20,6 @@ scenarios:
     food_utility_piecewise:
       enabled: true
     health:
-      enabled: true
       value_per_yll: 5000
     emissions:
       ghg_price: 200
@@ -48,7 +47,6 @@ scenarios:
           decline_factor: "{decay}"
           n_blocks: "{blocks}"
         health:
-          enabled: true
           value_per_yll: 5000
         emissions:
           ghg_price: 200

@@ -26,13 +26,11 @@ from workflow.scripts.build_model import (
     land,
     nutrition,
     primary_resources,
-    sensitivity,
     trade,
     utils,
 )
 from workflow.scripts.constants import FEED_CATEGORIES, HA_PER_MHA, USD_TO_BNUSD
 from workflow.scripts.logging_config import setup_script_logging
-from workflow.scripts.snakemake_utils import apply_scenario_config
 
 if __name__ == "__main__":
     # Configure logging
@@ -55,8 +53,6 @@ if __name__ == "__main__":
             )
 
     logging.getLogger("pypsa.network.transform").addFilter(_CarrierUnitWarningFilter())
-    # Apply scenario config overrides based on wildcard
-    apply_scenario_config(snakemake.config, snakemake.wildcards.scenario)
 
     read_csv = functools.partial(pd.read_csv, comment="#")
 
@@ -1059,14 +1055,8 @@ if __name__ == "__main__":
     cluster_pop = pop_df.groupby("cluster")["population"].sum().to_dict()
     n.meta["population"]["health_cluster"] = cluster_pop
 
-    # ═══════════════════════════════════════════════════════════════
-    # SENSITIVITY ADJUSTMENTS
-    # ═══════════════════════════════════════════════════════════════
-
-    sensitivity_cfg = snakemake.params.sensitivity
-    if sensitivity_cfg:
-        logger.info("Applying sensitivity adjustments...")
-        sensitivity.apply_sensitivity_factors(n, sensitivity_cfg)
+    # Store build-time regional_limit in metadata so solve_model can rescale
+    n.meta["land_regional_limit"] = float(land_cfg["regional_limit"])
 
     # ═══════════════════════════════════════════════════════════════
     # EXPORT

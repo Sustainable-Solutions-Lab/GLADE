@@ -182,7 +182,6 @@ from . import (
     infrastructure,
     nutrition,
     primary_resources,
-    sensitivity,
     trade,
     utils,
 )
@@ -197,7 +196,6 @@ __all__ = [
     "infrastructure",
     "nutrition",
     "primary_resources",
-    "sensitivity",
     "trade",
     "utils",
 ]

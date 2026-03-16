@@ -211,8 +211,8 @@ tools/smk -j4 --configfile config/<name>.yaml
 # Run with specific environment
 tools/smk -e gurobi -j4 --configfile config/<name>.yaml
 
-# Build model only (for scenario "default")
-tools/smk -j4 --configfile config/<name>.yaml -- results/{config_name}/build/model_scen-default.nc
+# Build model only (scenario-independent, shared across all scenarios)
+tools/smk -j4 --configfile config/<name>.yaml -- results/{config_name}/build/model.nc
 
 # Solve model only (after build)
 tools/smk -j4 --configfile config/<name>.yaml -- results/{config_name}/solved/model_scen-default.nc
@@ -227,7 +227,7 @@ pixi run python <...>
 Notes:
 
 - Remember the double dash (--) before any target file, to separate flags from the target file.
-- **Scenario wildcard**: All model and plot targets include a `{scenario}` wildcard (e.g., `model_scen-default.nc`). Scenarios are defined in the `scenarios` key of each config file and apply configuration overrides. The default config provides only a `default` scenario; project-specific configs define their own.
+- **Scenario wildcard**: Solve, analysis, and plot targets include a `{scenario}` wildcard (e.g., `model_scen-default.nc`). The build step is scenario-independent (`build/model.nc`), and scenario overrides are applied at solve time. Scenarios must only override solve-time keys (see `SOLVE_TIME_CONFIG_PREFIXES` in `workflow/rules/common.smk`); structural keys must be set at the base config level.
 - Snakemake tracks code changes and will rerun affected rules; manual cleanup of workflow artefacts is unnecessary. You almost never have to use the `--forcerun` argument.
 - Prefer small, testable edits and validate by running the narrowest target that exercises your change.
 - `tools/smk` runs Snakemake in a systemd cgroup with a hard 10G cap and swap disabled by default; override with `SMK_MEM_MAX=12G tools/smk ...`. When `SMK_MEM_MAX` is set, it is also forwarded to Snakemake as a global `mem_mb` resource limit for scheduling. It also implements the `-e <environment>` flag to select the pixi environment.

@@ -99,7 +99,7 @@ rule doc_fig_intro_global_coverage:
 rule doc_fig_model_topology:
     """Generate high-level model topology diagram showing material flows."""
     input:
-        model=f"<results>/{DOC_FIG_NAME}/build/model_scen-default.nc",
+        model=f"<results>/{DOC_FIG_NAME}/build/model.nc",
     output:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",

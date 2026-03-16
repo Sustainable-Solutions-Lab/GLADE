@@ -9,13 +9,13 @@ import pandas as pd
 import pypsa
 import pytest
 
-from workflow.scripts.build_model.sensitivity import (
+from workflow.scripts.solve_model.health import _expand_rr_groups
+from workflow.scripts.solve_model.sensitivity import (
     _apply_cost_factors,
     _apply_crop_yield_factors,
     _apply_emission_factors,
     apply_sensitivity_factors,
 )
-from workflow.scripts.solve_model.health import _expand_rr_groups
 
 
 @pytest.fixture

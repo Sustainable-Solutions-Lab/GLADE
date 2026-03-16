@@ -78,7 +78,6 @@ include: "rules/documentation.smk"
 
 localrules:
     all,
-    build_all_scenarios,
     solve_all_scenarios,
     analyze_all_scenarios,
 
@@ -142,12 +141,6 @@ ALL_RULE_TARGETS = [
 ]
 
 # Solve all configured scenarios without triggering plotting targets.
-BUILD_ALL_SCENARIOS_TARGETS = [
-    f"<results>/{{name}}/build/model_scen-{scenario}.nc"
-    for scenario in list_scenarios()
-]
-
-# Solve all configured scenarios without triggering plotting targets.
 SOLVE_ALL_SCENARIOS_TARGETS = [
     f"<results>/{{name}}/solved/model_scen-{scenario}.nc"
     for scenario in list_scenarios()
@@ -183,11 +176,6 @@ for scenario_suffix in comparison_scenarios:
 rule all:
     input:
         expand(ALL_RULE_TARGETS, name=[name]),
-
-
-rule build_all_scenarios:
-    input:
-        expand(BUILD_ALL_SCENARIOS_TARGETS, name=[name]),
 
 
 rule solve_all_scenarios:

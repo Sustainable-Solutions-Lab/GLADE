@@ -56,11 +56,10 @@ def harvested_area_model_inputs(wildcards):
 
 def build_model_biofuel_baseline_input(wildcards):
     """Conditionally include biofuel baseline and biogas demand data."""
-    eff = get_effective_config(wildcards.scenario)
     inputs = {}
-    if eff["biomass"]["enforce_baseline_demand"]:
+    if config["biomass"]["enforce_baseline_demand"]:
         inputs["biofuel_baseline"] = "<processing>/{name}/biofuel_baseline.csv"
-        biogas_path = eff["biomass"]["biogas_crop_demand"]
+        biogas_path = config["biomass"]["biogas_crop_demand"]
         if biogas_path:
             inputs["biogas_demand"] = biogas_path
     return inputs
@@ -68,28 +67,24 @@ def build_model_biofuel_baseline_input(wildcards):
 
 def build_model_fiber_baseline_input(wildcards):
     """Conditionally include fiber baseline data when enforce_fiber_demand is true."""
-    eff = get_effective_config(wildcards.scenario)
-    if eff["biomass"]["enforce_fiber_demand"]:
+    if config["biomass"]["enforce_fiber_demand"]:
         return {"fiber_baseline": "<processing>/{name}/fiber_baseline.csv"}
     return {}
 
 
 def build_model_grassland_calibration_input(wildcards):
-    """Conditionally include grassland forage calibration CSVs."""
+    """Conditionally include grassland forage calibration CSVs.
+
+    When ``generate`` is true, calibration files are produced from a solved
+    model that depends on this build, so we must exclude them to avoid a DAG
+    cycle.  The calibration corrections are instead applied at solve time for
+    non-source scenarios.
+    """
     cal_cfg = config["grazing"]["grassland_forage_calibration"]
     if cal_cfg["generate"]:
-        if wildcards.scenario == cal_cfg["scenario"]:
-            return {}  # Source scenario: don't include its own calibration
-        # Check effective config to avoid circular DAG dependencies
-        eff = get_effective_config(wildcards.scenario)
-        if not eff["grazing"]["grassland_forage_calibration"]["enabled"]:
-            return {}
-        return {
-            "grassland_yield_correction": cal_cfg["grassland_yield_correction"],
-            "fodder_conversion_correction": cal_cfg["fodder_conversion_correction"],
-            "exogenous_forage": cal_cfg["exogenous_forage"],
-        }
-    elif cal_cfg["enabled"]:
+        # Calibration is generated from a solved model → skip to break cycle.
+        return {}
+    if cal_cfg["enabled"]:
         return {
             "grassland_yield_correction": cal_cfg["grassland_yield_correction"],
             "fodder_conversion_correction": cal_cfg["fodder_conversion_correction"],
@@ -163,58 +158,44 @@ rule build_model:
                 "land.py",
                 "nutrition.py",
                 "primary_resources.py",
-                "sensitivity.py",
                 "trade.py",
                 "utils.py",
             ],
         ),
         constants_script="workflow/scripts/constants.py",
     params:
-        crops=lambda w: get_effective_config(w.scenario)["crops"],
-        multiple_cropping=lambda w: get_effective_config(w.scenario)[
-            "multiple_cropping"
-        ],
-        countries=lambda w: get_effective_config(w.scenario)["countries"],
-        land=lambda w: get_effective_config(w.scenario)["land"],
-        fertilizer=lambda w: get_effective_config(w.scenario)["fertilizer"],
-        residues=lambda w: get_effective_config(w.scenario)["residues"],
-        biomass=lambda w: get_effective_config(w.scenario)["biomass"],
-        emissions=lambda w: get_effective_config(w.scenario)["emissions"],
-        food_groups=lambda w: get_effective_config(w.scenario)["food_groups"][
-            "included"
-        ],
-        food_group_constraints=lambda w: get_effective_config(w.scenario)[
-            "food_groups"
-        ]["constraints"],
-        food_group_max_per_capita=lambda w: get_effective_config(w.scenario)[
-            "food_groups"
-        ]["max_per_capita"],
-        macronutrients=lambda w: get_effective_config(w.scenario)["macronutrients"],
-        diet=lambda w: get_effective_config(w.scenario)["diet"],
-        byproducts=lambda w: get_effective_config(w.scenario)["byproducts"],
-        animal_products=lambda w: get_effective_config(w.scenario)["animal_products"],
-        trade=lambda w: get_effective_config(w.scenario)["trade"],
-        grazing=lambda w: get_effective_config(w.scenario)["grazing"],
-        baseline_year=lambda w: get_effective_config(w.scenario)["baseline_year"],
-        validation=lambda w: get_effective_config(w.scenario)["validation"],
-        production_stability=lambda w: get_effective_config(w.scenario)["validation"][
-            "production_stability"
-        ],
-        netcdf=lambda w: get_effective_config(w.scenario)["netcdf"],
-        sensitivity=lambda w: get_effective_config(w.scenario)["sensitivity"],
-        # Only used to force correct reruns when scenario definitions change.
-        scenario_hash=lambda w: scenario_override_hash(w.scenario),
+        crops=config["crops"],
+        multiple_cropping=config["multiple_cropping"],
+        countries=config["countries"],
+        land=config["land"],
+        fertilizer=config["fertilizer"],
+        residues=config["residues"],
+        biomass=config["biomass"],
+        emissions=config["emissions"],
+        food_groups=config["food_groups"]["included"],
+        food_group_constraints=config["food_groups"]["constraints"],
+        food_group_max_per_capita=config["food_groups"]["max_per_capita"],
+        macronutrients=config["macronutrients"],
+        diet=config["diet"],
+        byproducts=config["byproducts"],
+        animal_products=config["animal_products"],
+        trade=config["trade"],
+        grazing=config["grazing"],
+        baseline_year=config["baseline_year"],
+        validation=config["validation"],
+        production_stability=config["validation"]["production_stability"],
+        netcdf=config["netcdf"],
     output:
-        network="<results>/{name}/build/model_scen-{scenario}.nc",
+        network="<results>/{name}/build/model.nc",
     group:
         "build_model"
     resources:
         runtime="1m",
         mem_mb=900,
     log:
-        "<logs>/{name}/build_model_scen-{scenario}.log",
+        "<logs>/{name}/build_model.log",
     benchmark:
-        "<benchmarks>/{name}/build_model_scen-{scenario}.tsv"
+        "<benchmarks>/{name}/build_model.tsv"
     script:
         "../scripts/build_model.py"
 
@@ -222,7 +203,7 @@ rule build_model:
 def solve_model_inputs(w):
     """Get input files for solve_model rule."""
     inputs = {
-        "network": f"<results>/{w.name}/build/model_scen-{w.scenario}.nc",
+        "network": f"<results>/{w.name}/build/model.nc",
         "m49": "data/curated/M49-codes.csv",
         "health_risk_breakpoints": f"<processing>/{w.name}/health/risk_breakpoints.csv",
         "health_cluster_cause": f"<processing>/{w.name}/health/cluster_cause_baseline.csv",
