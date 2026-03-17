@@ -297,6 +297,30 @@ def extract_grid_scenarios(
     return scenarios
 
 
+def filter_scenarios_by_suffix(
+    scenarios: list[tuple[float, str, Path]],
+    suffix: str = "",
+) -> list[tuple[float, str, Path]]:
+    """Filter 3-tuple scenarios by production-stability suffix.
+
+    The default ``l1_cost`` uses no suffix, so ``suffix=""`` keeps only
+    scenarios without any ``_l1_`` tag.
+    """
+    if suffix == "":
+        return [(p, s, f) for p, s, f in scenarios if "_l1_" not in s]
+    return [(p, s, f) for p, s, f in scenarios if s.endswith(suffix)]
+
+
+def filter_combined_scenarios_by_suffix(
+    scenarios: list[tuple[float, float, str, Path]],
+    suffix: str = "",
+) -> list[tuple[float, float, str, Path]]:
+    """Filter 4-tuple combined scenarios by production-stability suffix."""
+    if suffix == "":
+        return [(g, y, s, f) for g, y, s, f in scenarios if "_l1_" not in s]
+    return [(g, y, s, f) for g, y, s, f in scenarios if s.endswith(suffix)]
+
+
 def get_log_ticks(
     values: list[float], include_zero: bool = True
 ) -> tuple[list[float], list[str]]:
@@ -641,7 +665,7 @@ def load_net_emissions(
                 f"Run the extract_net_emissions rule first."
             )
 
-        df = pd.read_csv(csv_path)
+        df = _load_net_emissions_csv(csv_path)
         # Sum all sources across gases and convert MtCO2eq to GtCO2eq
         data[param_value] = df["mtco2eq"].sum() / 1000
 
@@ -828,6 +852,22 @@ PRETTY_NAMES_EMISSIONS = {
 }
 
 
+def _load_net_emissions_csv(csv_path: Path) -> pd.DataFrame:
+    """Load ``net_emissions.csv`` using the exact analysis output schema."""
+    df = pd.read_csv(csv_path)
+    expected_cols = {"gas", "source", "mtco2eq"}
+    if set(df.columns) != expected_cols:
+        raise ValueError(
+            f"Expected columns {sorted(expected_cols)} in {csv_path}, "
+            f"got {list(df.columns)}"
+        )
+
+    normalized = df.copy()
+    normalized["gas"] = normalized["gas"].astype(str).str.lower()
+    normalized["mtco2eq"] = normalized["mtco2eq"].astype(float)
+    return normalized
+
+
 def load_net_emissions_by_gas(
     scenarios: list[tuple[float, str, Path]],
     project_root: Path,
@@ -858,7 +898,7 @@ def load_net_emissions_by_gas(
         if not csv_path.exists():
             continue
 
-        df = pd.read_csv(csv_path)
+        df = _load_net_emissions_csv(csv_path)
         row = {}
         for gas in ["co2", "ch4", "n2o"]:
             gas_total = df.loc[df["gas"] == gas, "mtco2eq"].sum()
@@ -911,7 +951,7 @@ def load_emissions_by_source(
         if not csv_path.exists():
             continue
 
-        df = pd.read_csv(csv_path)
+        df = _load_net_emissions_csv(csv_path)
         for gas in ["co2", "ch4", "n2o"]:
             gas_rows = df[df["gas"] == gas]
             gas_key = gas.upper()
@@ -2226,7 +2266,7 @@ def load_grid_data_from_statistics(
         analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
 
         obj_df = pd.read_csv(analysis_dir / "objective_breakdown.csv")
-        net_df = pd.read_csv(analysis_dir / "net_emissions.csv")
+        net_df = _load_net_emissions_csv(analysis_dir / "net_emissions.csv")
         health_df = pd.read_csv(analysis_dir / "health_totals.csv")
 
         ghg_mtco2eq = net_df["mtco2eq"].sum()

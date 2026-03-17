@@ -81,12 +81,7 @@ def load_scenario_outputs(
         ghg_path = scenario_dir / "net_emissions.csv"
         if ghg_path.exists() and ghg_path.stat().st_size > 0:
             ghg_df = pd.read_csv(ghg_path)
-            if "mtco2eq" in ghg_df.columns:
-                row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
-            elif "net_mtco2eq" in ghg_df.columns:
-                row["ghg_emissions"] = ghg_df["net_mtco2eq"].sum()
-            else:
-                row["ghg_emissions"] = np.nan
+            row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
         else:
             row["ghg_emissions"] = np.nan
 
