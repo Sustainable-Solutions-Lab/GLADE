@@ -128,8 +128,10 @@ def solve_emission_intensities(links_df: pd.DataFrame) -> dict[str, float]:
 
     This gives: (I - M) * rho = e, solved via sparse linear algebra.
     """
+    import warnings
+
     from scipy import sparse
-    from scipy.sparse.linalg import spsolve
+    from scipy.sparse.linalg import MatrixRankWarning, spsolve
 
     # Get unique buses and create integer indices
     all_buses = pd.concat([links_df["bus0"], links_df["bus1"]]).unique()
@@ -170,39 +172,24 @@ def solve_emission_intensities(links_df: pd.DataFrame) -> dict[str, float]:
     identity = sparse.eye(n_buses, format="csr")
     system_matrix = identity - adj_matrix
 
-    try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", MatrixRankWarning)
         rho = spsolve(system_matrix, e)
-    except Exception as ex:
-        logger.warning("Sparse solve failed: %s, falling back to iterative", ex)
-        rho = solve_iterative(adj_matrix, e, max_iter=50, tol=1e-9)
+
+    # Singular components (closed cycles with no emissions) produce NaN;
+    # their true intensity is zero since no emissions enter the cycle.
+    nan_count = np.count_nonzero(~np.isfinite(rho))
+    if nan_count:
+        logger.debug(
+            "GHG attribution: %d/%d buses in emission-free cycles (set to 0)",
+            nan_count,
+            n_buses,
+        )
+        rho = np.where(np.isfinite(rho), rho, 0.0)
 
     # Map back to bus names
     idx_to_bus = {i: bus for bus, i in bus_to_idx.items()}
     return {idx_to_bus[i]: float(rho[i]) for i in range(n_buses)}
-
-
-def solve_iterative(
-    adj_matrix: "sparse.csr_matrix",
-    e: np.ndarray,
-    max_iter: int = 50,
-    tol: float = 1e-9,
-) -> np.ndarray:
-    """Iterative solver for (I - M) * rho = e, i.e., rho = e + M @ rho."""
-    rho = e.copy()
-    for i in range(max_iter):
-        rho_new = e + adj_matrix @ rho
-        diff = np.abs(rho_new - rho).max()
-        rho = rho_new
-        if diff < tol:
-            logger.info("Iterative solver converged in %d iterations", i + 1)
-            break
-    else:
-        logger.warning(
-            "Iterative solver did not converge after %d iterations (diff=%.2e)",
-            max_iter,
-            diff,
-        )
-    return rho
 
 
 def join_intensities_to_consumption(

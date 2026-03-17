@@ -39,6 +39,16 @@ rule analyze_model:
         health_clusters="<processing>/{name}/health/country_clusters.csv",
         population="<processing>/{name}/population.csv",
         derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
+        analysis_scripts=expand(
+            "workflow/scripts/analysis/{script}",
+            script=[
+                "extract_statistics.py",
+                "extract_net_emissions.py",
+                "extract_objective_breakdown.py",
+                "extract_ghg_attribution.py",
+                "extract_health_impacts.py",
+            ],
+        ),
     params:
         ghg_price=lambda w: get_effective_config(w.scenario)["emissions"]["ghg_price"],
         ch4_gwp=config["emissions"]["ch4_to_co2_factor"],
