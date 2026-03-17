@@ -156,6 +156,7 @@ def add_land_components(
     land_use_cost_bnusd_per_mha: float,
     disable_new_cropland: bool = False,
     disable_new_pasture: bool = False,
+    disable_spared_cropland: bool = False,
     disable_spared_grassland: bool = False,
     existing_grassland_convertible_area: pd.Series | None = None,
     existing_grassland_marginal_area: pd.Series | None = None,
@@ -196,6 +197,9 @@ def add_land_components(
         If True, no new land can supply the cropland pool.
     disable_new_pasture : bool
         If True, no new land can supply the pasture pool.
+    disable_spared_cropland : bool
+        If True, existing cropland is not forced to route unused area to
+        spared-land sinks.
     disable_spared_grassland : bool
         If True, existing grassland cannot be allocated to spared-land sinks.
     existing_grassland_convertible_area : pd.Series | None
@@ -400,6 +404,7 @@ def add_land_components(
             carrier="land_existing_cropland",
             p_nom=existing_gen_df["existing_available_mha"],
             p_nom_extendable=False,
+            p_min_pu=0.0 if disable_spared_cropland else 1.0,
             marginal_cost=land_use_cost_bnusd_per_mha,
             region=existing_gen_df["region"],
             resource_class=existing_gen_df["resource_class"],
@@ -690,12 +695,16 @@ def add_land_components(
         )
 
         gen_df = grassland_supply.set_index("generator_name")
+        # When sparing is enabled, all existing grassland must be accounted
+        # for explicitly (routed to pasture or to the spared-land sink).
+        # When disabled, the generator is flexible (no spared sink exists).
         n.generators.add(
             gen_df.index,
             bus=gen_df["existing_bus"],
             carrier=gen_df["source_carrier"],
-            p_nom_extendable=True,
-            p_nom_max=gen_df["area_mha"],
+            p_nom=gen_df["area_mha"],
+            p_nom_extendable=False,
+            p_min_pu=0.0 if disable_spared_grassland else 1.0,
             marginal_cost=land_use_cost_bnusd_per_mha,
             region=gen_df["region"],
             resource_class=gen_df["resource_class"],

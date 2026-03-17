@@ -724,6 +724,7 @@ if __name__ == "__main__":
         land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
         disable_new_cropland=disable_new_cropland,
         disable_new_pasture=disable_new_pasture,
+        disable_spared_cropland=disable_spared_cropland,
         disable_spared_grassland=disable_spared_grassland,
         existing_grassland_convertible_area=convertible_grassland_area_series,
         existing_grassland_marginal_area=marginal_grassland_area_series,

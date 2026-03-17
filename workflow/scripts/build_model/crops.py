@@ -816,11 +816,10 @@ def add_spared_land_links(
 
     df["lef"] = merge_lef(df, lef_df, "spared_cropland", allow_missing=True)
 
-    df = df[(df["lef"] != 0.0) & (df["area_ha"] > 0)].copy()
-
-    if df.empty:
-        logger.info("No eligible spared land entries; skipping spared links")
-        return
+    # Add spared-land routes for all existing cropland buses, even where the
+    # spared-land LEF is zero. This keeps land accounting explicit: baseline
+    # land must flow either to production or to an explicit spared-land sink,
+    # rather than disappearing as unused generator capacity upstream.
 
     suffix = (
         df["region"]
