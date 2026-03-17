@@ -81,6 +81,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "food_groups.equal_by_country_source",
     "food_groups.max_per_capita",
     "biomass.marginal_values_usd_per_tonne",
+    "biomass.biofuel_demand_scale",
     "land.regional_limit",
     "sensitivity",
     "solving",

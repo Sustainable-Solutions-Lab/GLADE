@@ -892,6 +892,20 @@ def _apply_regional_limit_scaling(n: pypsa.Network, solve_limit: float) -> None:
         )
 
 
+def _apply_biofuel_demand_scaling(n: pypsa.Network, scale: float) -> None:
+    """Scale fixed biofuel demand links at solve time."""
+    biofuel_mask = n.links.static["carrier"] == "biofuel"
+    if not biofuel_mask.any():
+        return
+
+    n.links.static.loc[biofuel_mask, "p_nom"] *= scale
+    logger.info(
+        "Scaled %d biofuel links by %.4f",
+        biofuel_mask.sum(),
+        scale,
+    )
+
+
 def _run_solve() -> None:
     """Main solve logic, factored out for profiling."""
     global logger
@@ -914,6 +928,9 @@ def _run_solve() -> None:
 
     # Rescale land supply generators if scenario regional_limit differs from build
     _apply_regional_limit_scaling(n, snakemake.config["land"]["regional_limit"])
+    _apply_biofuel_demand_scaling(
+        n, float(snakemake.config["biomass"]["biofuel_demand_scale"])
+    )
 
     # Add GHG pricing to the objective if enabled
     if snakemake.config["emissions"]["ghg_pricing_enabled"]:

@@ -535,6 +535,7 @@ biomass:
   - biomass-sorghum
   marginal_values_usd_per_tonne: 0  # USD_2024 per tonne dry matter exported to the energy sector
   enforce_baseline_demand: true  # Enforce baseline biofuel/industrial and biogas demand
+  biofuel_demand_scale: 1.0  # Solve-time multiplier on enforced biofuel/industrial and biogas demand
   biogas_crop_demand: "data/curated/biogas_crop_demand.csv"  # Biogas crop demand (silage maize); null to disable
   enforce_fiber_demand: true  # Enforce baseline fiber demand (cotton lint) from FAOSTAT FBS
 
