@@ -496,19 +496,21 @@ if __name__ == "__main__":
     logger.debug("Food groups data:\n%s", food_groups.head())
     logger.debug("Nutrition data:\n%s", nutrition_data.head())
 
-    # Read USDA production costs (USD/ha in base year dollars)
+    # Read FAOSTAT-based crop production costs (USD/ha per crop, country)
     costs_df = read_csv(snakemake.input.costs)
     base_year = int(snakemake.config["currency_base_year"])
-    cost_per_year_column = f"cost_per_year_usd_{base_year}_per_ha"
-    cost_per_planting_column = f"cost_per_planting_usd_{base_year}_per_ha"
+    cost_col = f"cost_usd_{base_year}_per_ha"
+    crop_costs = costs_df.set_index(["crop", "country"])[cost_col].astype(float)
+    global_median_cost = costs_df.groupby("crop")[cost_col].median()
 
-    crop_costs_per_year = costs_df.set_index("crop")[cost_per_year_column].astype(float)
-    crop_costs_per_planting = costs_df.set_index("crop")[
-        cost_per_planting_column
-    ].astype(float)
-    per_tonne_cost_fraction = float(
-        snakemake.config["crop_costs"]["per_tonne_cost_fraction"]
-    )
+    # Optional calibration correction
+    cost_calibration = None
+    if hasattr(snakemake.input, "crop_cost_calibration"):
+        cal_df = read_csv(snakemake.input.crop_cost_calibration)
+        cost_calibration = cal_df.set_index(["crop", "country"])[
+            "correction_bnusd_per_mha"
+        ]
+        logger.info("Loaded crop cost calibration: %d entries", len(cost_calibration))
 
     # Read animal production costs (USD/Mt in base year dollars)
     animal_costs_df = read_csv(snakemake.input.animal_costs)
@@ -757,14 +759,14 @@ if __name__ == "__main__":
         yields_data,
         region_to_country,
         set(cfg_countries),
-        crop_costs_per_year,
-        crop_costs_per_planting,
+        crop_costs,
+        global_median_cost,
         fertilizer_n_rates,
         rice_methane_factor=rice_methane_factor,
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
         use_actual_production=use_actual_production,
-        per_tonne_cost_fraction=per_tonne_cost_fraction,
+        cost_calibration=cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
     )
     land.add_multi_cropping_land_correction(
@@ -784,11 +786,10 @@ if __name__ == "__main__":
             multi_cropping_cycle_df,
             region_to_country,
             set(cfg_countries),
-            crop_costs_per_year,
-            crop_costs_per_planting,
+            crop_costs,
+            global_median_cost,
             fertilizer_n_rates,
             residue_lookup,
-            per_tonne_cost_fraction=per_tonne_cost_fraction,
             min_yield_t_per_ha=min_crop_yield,
         )
     elif use_actual_production:

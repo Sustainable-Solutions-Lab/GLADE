@@ -55,43 +55,27 @@ GAEZ (Global Agro-Ecological Zones) v5
 
 **Usage**: Crop yield and suitability rasters feeding into production potential calculations
 
-USDA Cost and Returns Data
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+FAOSTAT Prices (PP)
+~~~~~~~~~~~~~~~~~~~~
 
-**Provider**: United States Department of Agriculture Economic Research Service (USDA ERS)
+**Provider**: FAO Statistics Division
 
-**Description**: Detailed production cost estimates (USD/acre) for major field crops in the United States, including operating costs and allocated overhead.
-
-**Version**: Individual crop CSV files; 10-year average (2015-2024)
+**Description**: Producer prices in USD per tonne for agricultural commodities, used together with FAOSTAT Production (QCL) yields to derive per-(crop, country) production cost estimates.
 
 **Coverage**:
-  * Spatial: U.S. total (national averages)
-  * Temporal: 1996-2024 (varies by crop)
-  * Crops: 9 major crops (corn/maize, wheat, rice, barley, oats, sorghum, soybeans, groundnut/peanuts, cotton)
+  * Spatial: 245+ countries and territories
+  * Temporal: 1991 onward
+  * Element 5532: Producer Price (USD/tonne)
 
-**Access**: https://www.ers.usda.gov/data-products/commodity-costs-and-returns/ (`Data catalog <https://catalog.data.gov/dataset/commodity-costs-and-returns>`_)
+**Access**: https://www.fao.org/faostat/en/#data/PP (bulk download)
 
-**License**: Creative Commons Attribution (CC BY)
+**License**: CC BY 4.0 + FAO database terms (`Terms of Use <https://www.fao.org/contact-us/terms/db-terms-of-use/en/>`_)
 
-**Citation**: U.S. Department of Agriculture, Economic Research Service. Commodity Costs and Returns. https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
+**Citation**: FAO. FAOSTAT Producer Prices. https://www.fao.org/faostat/en/
 
-**Retrieval**: Direct CSV download via ``workflow/scripts/retrieve_usda_costs.py``. The script implements robust retries (5 attempts with backoff) to handle server instability. URLs are listed in ``data/curated/usda_cost_sources.csv``.
-  * **Manual Fallback**: If automated retrieval fails, download the CSVs from the URLs listed in ``data/curated/usda_cost_sources.csv``.
+**Retrieval**: Bulk zip download via ``download_faostat_pp`` rule, converted to Parquet by ``extract_faostat_pp``. Output: ``data/downloads/faostat/PP.parquet``.
 
-**Usage**: Bottom-up mechanistic estimates of crop production costs per hectare. Costs are split into:
-
-* **Per-year costs** (annual fixed): Machinery depreciation, farm overhead, taxes/insurance
-* **Per-planting costs** (variable): Seed, chemicals, labor, fuel, repairs, custom services
-
-Costs explicitly **excluded** (modeled endogenously):
-
-* Fertilizer costs (nitrogen/phosphorus/potassium modeled separately)
-* Land opportunity costs (land allocation is optimized)
-* Irrigation water costs (water is a separate constraint)
-
-**Inflation adjustment**: All costs are inflation-adjusted to a configurable base year (default: 2024) using US CPI-U data from BLS. See :ref:`bls-cpi-data` for details.
-
-**Note**: USDA data is merged with EU FADN data (see :ref:`fadn-cost-data`) via the ``merge_crop_costs`` rule to provide comprehensive global coverage. For crops without direct cost data from either source, fallback mappings are applied via ``data/curated/crop_cost_fallbacks.yaml`` (e.g., other cereals use wheat costs, other legumes use soybean costs). When data is available from multiple sources, costs are averaged.
+**Usage**: Combined with QCL yields and a configurable ``non_endogenous_cost_share`` to produce per-(crop, country) crop production costs in ``prepare_faostat_crop_costs``. Prices are CPI-deflated to the configured base year before averaging. Crops without FAOSTAT price data use proxy mappings from ``data/curated/faostat_cost_proxies.yaml``. See :doc:`costs` for full methodology.
 
 USDA Livestock Cost Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -244,14 +228,13 @@ FADN -- Farm Accountancy Data Network (EU)
 
 **Provider**: European Commission DG Agriculture and Rural Development / LAMASUS project (Zenodo)
 
-**Description**: European Union farm-level accounting database providing economic and structural data for agricultural holdings. This project uses the LAMASUS-processed NUTS-level agricultural dataset, which aggregates FADN farm accounting data (crop outputs, production costs, areas) into standard results by country, year, and farm typology.
+**Description**: European Union farm-level accounting database providing economic and structural data for agricultural holdings. This project uses the LAMASUS-processed NUTS-level agricultural dataset for **livestock production costs** (crop costs are now sourced from FAOSTAT; see above).
 
 **Version**: LAMASUS v0.1 (2024); FADN Standard Results (SO classification, 2004-2020)
 
 **Coverage**:
   * Spatial: EU-27 member states
   * Temporal: 2004-2020 (this project uses 2015-2020 for consistency with USDA data)
-  * Crops: 10 categories (cereals, protein crops, potatoes, sugar beet, oilseeds, vegetables & flowers, fruit trees, citrus, wine & grapes, olives)
 
 **Access**: https://zenodo.org/records/10939892 (LAMASUS dataset); original FADN at https://agriculture.ec.europa.eu/data-and-analysis/farm-structures-and-economics/fsdn_en
 
@@ -261,30 +244,10 @@ FADN -- Farm Accountancy Data Network (EU)
 
 **Retrieval**: Automatic via ``download_fadn_data`` Snakemake rule (Zenodo direct download). Output files: ``data/downloads/fadn_nuts0_so.csv`` and ``data/downloads/fadn_variables.xlsx``.
 
-**Cost variables**:
-
-* **Crop-specific costs** (per-planting): Seeds and plants (SE285), crop protection (SE300), other crop-specific costs (SE305)
-* **Farm overhead costs** (per-year): Machinery & building costs (SE340), energy (SE345), contract work (SE350), depreciation (SE360), wages paid (SE370), interest paid (SE380)
-* **Explicitly EXCLUDED**: Fertilizer costs (SE295 - modeled endogenously), rent paid (SE375 - land opportunity cost modeled endogenously)
-
-**Cost allocation methodology**:
-
-1. **Allocation by Value**: Costs are allocated to crop categories proportionally by output value share.
-2. **Normalization by Specific Area**: Allocated costs are normalized using crop-specific area variables (e.g., SE035 for Cereals, SE046 for Vegetables, SE050 for Vineyards) rather than total farm area, ensuring intensive crops receive higher cost-per-hectare.
-3. **Group Aggregation**: Crops without specific area variables are grouped into "Other Field Crops" (SE041 area) for a representative group-average.
-
-**Currency and inflation adjustment**:
-
-1. EUR costs are inflation-adjusted to base year (default: 2024) using EU HICP
-2. Converted to USD using average EUR/USD exchange rate (1.10 for 2015-2024 period)
-3. USD values are further adjusted for US inflation using CPI-U to ensure consistency with USDA cost data
-
-**Usage**: Provides production cost estimates for EU agriculture, complementing USDA data with broader crop coverage (vegetables, fruits, etc.). Costs are merged with USDA data via ``merge_crop_costs`` rule; when both sources have data for a crop, values are averaged. Workflow: ``retrieve_fadn_costs`` script -> ``processing/{name}/fadn_costs.csv`` -> merged with USDA costs -> ``processing/{name}/crop_costs.csv``.
-
 FADN Livestock Costs
 ^^^^^^^^^^^^^^^^^^^^
 
-The same FADN dataset provides livestock production cost data for animal products:
+The FADN dataset provides livestock production cost data for animal products:
 
 **Coverage**: 4 livestock categories (dairy cattle, beef cattle, pigs, poultry)
 

@@ -102,6 +102,20 @@ def build_model_fodder_yield_correction_input(wildcards):
     return {}
 
 
+def build_model_crop_cost_calibration_input(wildcards):
+    """Conditionally include crop cost calibration CSV.
+
+    When ``generate`` is true, calibration is produced from a solved model
+    that depends on this build, so we exclude it to break the DAG cycle.
+    """
+    cal_cfg = config["crop_costs"]["calibration"]
+    if cal_cfg["generate"]:
+        return {}
+    if cal_cfg["enabled"]:
+        return {"crop_cost_calibration": cal_cfg["correction_csv"]}
+    return {}
+
+
 rule build_model:
     input:
         unpack(yield_inputs),
@@ -109,6 +123,7 @@ rule build_model:
         unpack(harvested_area_model_inputs),
         unpack(build_model_grassland_calibration_input),
         unpack(build_model_fodder_yield_correction_input),
+        unpack(build_model_crop_cost_calibration_input),
         unpack(build_model_biofuel_baseline_input),
         unpack(build_model_fiber_baseline_input),
         feed_baseline="<processing>/{name}/feed_baseline.csv",
@@ -132,7 +147,7 @@ rule build_model:
         population="<processing>/{name}/population.csv",
         baseline_diet="<processing>/{name}/dietary_intake.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
-        costs="<processing>/{name}/crop_costs.csv",
+        costs="<processing>/{name}/faostat_crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
         grassland_yields="<processing>/{name}/grassland_yields.csv",
         monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",

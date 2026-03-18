@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Crop Cost Calibration Configuration
+# ------------------------------------
+# Generates crop cost calibration corrections by:
+#   1. Solving a baseline scenario (enforce_baseline_diet, no stability)
+#      → extracts consumer values for piecewise food utility
+#   2. Solving a calibration scenario (piecewise utility + hard production
+#      stability at ±1%) → extracts duals as cost corrections
+#
+# Usage:
+#   tools/smk --configfile config/cost_calibration.yaml -- data/curated/crop_cost_calibration.csv
+
+name: "cost_calibration"
+
+scenarios:
+  # Step 1: Baseline solve to extract consumer values / utility blocks
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # Step 2: Calibration solve with tight production stability
+  calibration:
+    validation:
+      production_stability:
+        enabled: true
+        penalty_mode: "hard"
+        crops:
+          enabled: true
+          max_relative_deviation: 0.01
+          enable_slack: true
+        grassland:
+          enabled: false
+        animals:
+          enabled: false
+        land_conversion:
+          enabled: false
+    food_utility_piecewise:
+      enabled: true
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+planning_horizon: 2020
+baseline_year: 2020
+
+# Enable piecewise utility at base level (blocks get built from baseline)
+food_utility_piecewise:
+  enabled: true
+
+crop_costs:
+  calibration:
+    enabled: false     # Don't apply calibration (we're generating it)
+    generate: true     # Generate calibration from solved model
+    scenario: "calibration"
+    correction_csv: "data/curated/crop_cost_calibration.csv"
+
+validation:
+  use_actual_yields: true
+
+water:
+  supply_scenario: "current_use"
+
+health:
+  enabled: false
+
+solving:
+  solver: highs
+  io_api: "direct"
+  threads: 2
+  mem_mb: 9000
+  runtime: 20

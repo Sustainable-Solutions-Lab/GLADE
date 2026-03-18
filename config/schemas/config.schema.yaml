@@ -1451,83 +1451,42 @@ properties:
 
   crop_costs:
     type: object
-    required: [per_tonne_cost_fraction, fadn, usda]
+    required: [non_endogenous_cost_share, faostat, calibration]
     additionalProperties: false
     properties:
-      per_tonne_cost_fraction:
+      non_endogenous_cost_share:
         type: number
         minimum: 0
         maximum: 1
-        description: "Fraction of crop production costs applied per tonne (0 = all per-ha, 1 = all per-tonne)"
-      fadn:
+        description: "Fraction of revenue (price × yield) attributed to non-endogenous production costs"
+      faostat:
         type: object
-        required:
-          - per_year_costs
-          - per_planting_costs
-          - exclude_costs
-          - crop_groups
+        required: [price_element_code, yield_element_code]
         additionalProperties: false
         properties:
-          per_year_costs:
-            type: object
-            patternProperties:
-              "^SE[0-9]+$":
-                type: string
-          per_planting_costs:
-            type: object
-            patternProperties:
-              "^SE[0-9]+$":
-                type: string
-          exclude_costs:
-            type: object
-            patternProperties:
-              "^SE[0-9]+$":
-                type: string
-          crop_groups:
-            type: object
-            patternProperties:
-              "^[A-Za-z0-9 &]+$":
-                type: object
-                required: [outputs, area, crops]
-                additionalProperties: false
-                properties:
-                  outputs:
-                    type: array
-                    items:
-                      type: string
-                      pattern: "^SE[0-9]+$"
-                  area:
-                    type: string
-                    pattern: "^SE[0-9]+$"
-                  crops:
-                    type: array
-                    items:
-                      type: string
-                      pattern: "^SE[0-9]+$"
-      usda:
-        type: object
-        required:
-          - request_timeout_seconds
-          - per_year_costs
-          - per_planting_costs
-          - exclude_items
-        additionalProperties: false
-        properties:
-          request_timeout_seconds:
+          price_element_code:
             type: integer
-            minimum: 1
-          per_year_costs:
-            type: array
-            items:
-              type: string
-          per_planting_costs:
-            type: array
-            items:
-              type: string
-          exclude_items:
-            type: array
-            items:
-              type: string
+            description: "FAOSTAT element code for producer price (USD/tonne)"
+          yield_element_code:
+            type: integer
+            description: "FAOSTAT QCL element code for yield (hg/ha); 5412 for crops"
+      calibration:
+        type: object
+        required: [enabled, generate, scenario, correction_csv]
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Apply calibration correction to crop costs"
+          generate:
+            type: boolean
+            description: "Generate calibration from solved model (breaks DAG cycle)"
+          scenario:
+            type: string
+            description: "Scenario name used for calibration solve"
+          correction_csv:
+            type: string
+            description: "Path to calibration correction CSV"
 
   solving:
     type: object

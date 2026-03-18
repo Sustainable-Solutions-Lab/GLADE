@@ -114,74 +114,6 @@ rule download_fadn_data:
         """
 
 
-rule retrieve_usda_costs:
-    input:
-        sources="data/curated/usda_cost_sources.csv",
-        cpi="<processing>/shared/cpi_annual.csv",
-    params:
-        base_year=config["currency_base_year"],
-        cost_params=config["crop_costs"]["usda"],
-        averaging_period=config["costs"]["averaging_period"],
-    output:
-        costs="<processing>/{name}/usda_costs.csv",
-    resources:
-        runtime="15m",
-        mem_mb=200,
-    log:
-        "<logs>/{name}/retrieve_usda_costs.log",
-    benchmark:
-        "<benchmarks>/{name}/retrieve_usda_costs.tsv"
-    script:
-        "../scripts/retrieve_usda_costs.py"
-
-
-rule retrieve_fadn_costs:
-    input:
-        data="data/downloads/fadn_nuts0_so.csv",
-        mapping="data/curated/fadn_crop_mapping.yaml",
-        hicp="<processing>/shared/hicp_annual.csv",
-        ppp="<processing>/shared/ppp_eur_intl_dollar.csv",
-    params:
-        crops=config["crops"],
-        base_year=config["currency_base_year"],
-        cost_params=config["crop_costs"]["fadn"],
-        averaging_period=config["costs"]["averaging_period"],
-    output:
-        costs="<processing>/{name}/fadn_costs.csv",
-    resources:
-        runtime="15m",
-        mem_mb=200,
-    log:
-        "<logs>/{name}/retrieve_fadn_costs.log",
-    benchmark:
-        "<benchmarks>/{name}/retrieve_fadn_costs.tsv"
-    script:
-        "../scripts/retrieve_fadn_costs.py"
-
-
-rule merge_crop_costs:
-    input:
-        cost_sources=[
-            "<processing>/{name}/usda_costs.csv",
-            "<processing>/{name}/fadn_costs.csv",
-        ],
-        fallbacks="data/curated/crop_cost_fallbacks.yaml",
-    params:
-        crops=config["crops"],
-        base_year=config["currency_base_year"],
-    output:
-        costs="<processing>/{name}/crop_costs.csv",
-    resources:
-        runtime="5m",
-        mem_mb=200,
-    log:
-        "<logs>/{name}/merge_crop_costs.log",
-    benchmark:
-        "<benchmarks>/{name}/merge_crop_costs.tsv"
-    script:
-        "../scripts/merge_crop_costs.py"
-
-
 rule retrieve_usda_animal_costs:
     input:
         sources="data/curated/usda_animal_cost_sources.csv",
@@ -248,6 +180,41 @@ rule merge_animal_costs:
         "<benchmarks>/{name}/merge_animal_costs.tsv"
     script:
         "../scripts/merge_animal_costs.py"
+
+
+rule download_faostat_pp:
+    output:
+        temp("data/downloads/faostat/PP.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/Prices_E_All_Data_(Normalized).zip",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_faostat_pp.log",
+    benchmark:
+        "<benchmarks>/shared/download_faostat_pp.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_pp:
+    input:
+        "data/downloads/faostat/PP.zip",
+    output:
+        "data/downloads/faostat/PP.parquet",
+    resources:
+        runtime="2m",
+        mem_mb=2500,
+    log:
+        "<logs>/shared/extract_faostat_pp.log",
+    benchmark:
+        "<benchmarks>/shared/extract_faostat_pp.tsv"
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
 
 
 rule download_faostat_qcl:

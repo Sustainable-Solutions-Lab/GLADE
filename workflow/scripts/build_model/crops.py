@@ -28,15 +28,15 @@ def add_regional_crop_production_links(
     yields_data: dict,
     region_to_country: pd.Series,
     allowed_countries: set,
-    crop_costs_per_year: pd.Series,
-    crop_costs_per_planting: pd.Series,
+    crop_costs: pd.Series,
+    global_median_cost: pd.Series,
     fertilizer_n_rates: Mapping[str, float],
     rice_methane_factor: float,
     rainfed_wetland_rice_ch4_scaling_factor: float,
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     use_actual_production: bool = False,
     *,
-    per_tonne_cost_fraction: float = 0.9,
+    cost_calibration: pd.Series | None = None,
     min_yield_t_per_ha: float,
 ) -> None:
     """Add crop production links per region/resource class and water supply.
@@ -44,6 +44,15 @@ def add_regional_crop_production_links(
     Rainfed yields must be present for every crop; irrigated yields are used when
     provided by the preprocessing pipeline. Output links produce into the same
     crop bus per country; link names encode supply type (i/r) and resource class.
+
+    Parameters
+    ----------
+    crop_costs : pd.Series
+        MultiIndex (crop, country) → cost USD/ha in base year.
+    global_median_cost : pd.Series
+        Index crop → global median cost USD/ha (fallback).
+    cost_calibration : pd.Series | None
+        MultiIndex (crop, country) → correction in bnUSD/Mha (additive).
     """
     residue_lookup = residue_lookup or {}
 
@@ -57,17 +66,6 @@ def add_regional_crop_production_links(
     for crop in crop_list:
         fert_n_rate_kg_per_ha = float(fertilizer_n_rates.get(crop, 0.0))
 
-        cost_year = float(crop_costs_per_year.get(crop, float("nan")))
-        cost_planting = float(crop_costs_per_planting.get(crop, float("nan")))
-        if not np.isfinite(cost_year):
-            cost_year = 0.0
-        if not np.isfinite(cost_planting):
-            cost_planting = 0.0
-        if cost_year == 0.0 and cost_planting == 0.0:
-            logger.info(
-                "No USDA cost for crop '%s'; defaulting marginal_cost to 0", crop
-            )
-        base_cost = (cost_year + cost_planting) * 1e6 * constants.USD_TO_BNUSD
         fert_efficiency = (
             -fert_n_rate_kg_per_ha * 1e6 * constants.KG_TO_MEGATONNE
         )  # kg N/ha -> Mt N/Mha
@@ -182,7 +180,6 @@ def add_regional_crop_production_links(
             row_df["efficiency3"] = fert_efficiency
             row_df["bus4"] = ch4_bus
             row_df["efficiency4"] = ch4_eff
-            row_df["base_cost"] = base_cost
             row_df["harvested_area_ha"] = ha
             row_df["p_nom_max"] = (
                 pd.to_numeric(df["suitable_area"], errors="coerce").to_numpy(
@@ -211,42 +208,37 @@ def add_regional_crop_production_links(
     all_df = pd.concat(all_rows, axis=0)
     all_df.index = all_df.index.astype(str)
 
-    if per_tonne_cost_fraction > 0:
-        weighted_prod = (
-            (
-                all_df["efficiency"].astype(float)
-                * all_df["harvested_area_ha"].astype(float)
-            )
-            .groupby(all_df["crop"])
-            .sum()
-        )
-        weighted_area = (
-            all_df["harvested_area_ha"].astype(float).groupby(all_df["crop"]).sum()
-        )
-        avg_yield = weighted_prod / weighted_area
+    # Look up per-(crop, country) cost, falling back to global median
+    cost_keys = list(zip(all_df["crop"].astype(str), all_df["country"].astype(str)))
+    per_link_cost = pd.Series(
+        [crop_costs.get(k, global_median_cost.get(k[0], 0.0)) for k in cost_keys],
+        index=all_df.index,
+        dtype=float,
+    )
+    # Convert USD/ha to bnUSD/Mha
+    all_df["marginal_cost"] = per_link_cost * 1e6 * constants.USD_TO_BNUSD
 
-        invalid_avg = (~np.isfinite(avg_yield)) | (avg_yield <= 0)
-        if invalid_avg.any():
-            bad = avg_yield[invalid_avg].index.tolist()
-            preview = ", ".join(bad[:8])
-            logger.warning(
-                "Missing/non-positive harvested-area weighted yield for %d crops "
-                "(examples: %s); using neutral per-tonne multiplier for those crops",
-                len(bad),
-                preview,
-            )
-            avg_yield.loc[invalid_avg] = np.nan
-
-        yield_ratio = all_df["efficiency"].astype(float) / all_df["crop"].map(
-            avg_yield
-        ).astype(float)
-        yield_ratio = yield_ratio.replace([np.inf, -np.inf], np.nan).fillna(1.0)
-        multiplier = (1.0 - per_tonne_cost_fraction) + per_tonne_cost_fraction * (
-            yield_ratio
+    # Apply additive calibration correction if available
+    if cost_calibration is not None:
+        cal_values = pd.Series(
+            [cost_calibration.get(k, 0.0) for k in cost_keys],
+            index=all_df.index,
+            dtype=float,
         )
-        all_df["marginal_cost"] = all_df["base_cost"].astype(float) * multiplier
-    else:
-        all_df["marginal_cost"] = all_df["base_cost"].astype(float)
+        all_df["marginal_cost"] += cal_values
+        n_negative = int((all_df["marginal_cost"] < 0).sum())
+        if n_negative > 0:
+            all_df["marginal_cost"] = all_df["marginal_cost"].clip(lower=0.0)
+            logger.info(
+                "Clipped %d links with negative marginal_cost to zero",
+                n_negative,
+            )
+        n_calibrated = int((cal_values != 0.0).sum())
+        logger.info(
+            "Applied crop cost calibration: %d/%d links adjusted",
+            n_calibrated,
+            len(all_df),
+        )
 
     keys = list(
         zip(
@@ -316,12 +308,11 @@ def add_multi_cropping_links(
     cycle_yields: pd.DataFrame,
     region_to_country: pd.Series,
     allowed_countries: set[str],
-    crop_costs_per_year: Mapping[str, float],
-    crop_costs_per_planting: Mapping[str, float],
+    crop_costs: pd.Series,
+    global_median_cost: pd.Series,
     fertilizer_n_rates: Mapping[str, float],
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     *,
-    per_tonne_cost_fraction: float = 0.9,
     min_yield_t_per_ha: float,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow."""
@@ -410,20 +401,13 @@ def add_multi_cropping_links(
         )
         return
 
-    cost_year_series = pd.Series(
-        {str(k): float(v) for k, v in crop_costs_per_year.items()}
-    )
-    cost_planting_series = pd.Series(
-        {str(k): float(v) for k, v in crop_costs_per_planting.items()}
-    )
-    merged["cost_per_year"] = merged["crop"].map(cost_year_series).fillna(0.0)
-    merged["cost_per_planting"] = merged["crop"].map(cost_planting_series).fillna(0.0)
-
-    costs = merged.groupby(key_cols).agg(
-        total_cost_per_year=("cost_per_year", "sum"),
-        total_cost_per_planting=("cost_per_planting", "sum"),
-    )
-    base = base.join(costs)
+    # Look up per-(crop, country) cost and sum across crops in combination
+    merged["cost_usd_per_ha"] = [
+        crop_costs.get((c, cc), global_median_cost.get(c, 0.0))
+        for c, cc in zip(merged["crop"], merged["country"])
+    ]
+    cost_totals = merged.groupby(key_cols)["cost_usd_per_ha"].sum().rename("total_cost")
+    base = base.join(cost_totals)
 
     fert_series = pd.Series({str(k): float(v) for k, v in fertilizer_n_rates.items()})
     merged["fertilizer_rate"] = merged["crop"].map(fert_series).fillna(0.0)
@@ -432,40 +416,12 @@ def add_multi_cropping_links(
     )
     base = base.join(fertilizer_totals)
 
-    base[["total_cost_per_year", "total_cost_per_planting", "fertilizer_total"]] = base[
-        ["total_cost_per_year", "total_cost_per_planting", "fertilizer_total"]
+    base[["total_cost", "fertilizer_total"]] = base[
+        ["total_cost", "fertilizer_total"]
     ].fillna(0.0)
 
-    base["avg_cost_per_year"] = base["total_cost_per_year"] / base["crop_count"]
-    # Multiple-cropping marginal costs remain in bnUSD per Mha of area used.
-    base["marginal_cost"] = (
-        (base["avg_cost_per_year"] + base["total_cost_per_planting"])
-        * 1e6
-        * constants.USD_TO_BNUSD
-    )
-    if per_tonne_cost_fraction > 0:
-        combined_yield = (
-            merged.groupby(key_cols)["yield_t_per_ha"].sum().rename("combined_yield")
-        )
-        base = base.join(combined_yield)
-        avg_combined_yield = (
-            base["combined_yield"] * base["eligible_area_ha"]
-        ).groupby(level="combination").sum() / base["eligible_area_ha"].groupby(
-            level="combination"
-        ).sum()
-        if (avg_combined_yield <= 0).any():
-            bad = avg_combined_yield[avg_combined_yield <= 0].index.tolist()
-            raise ValueError(
-                "Average combined yield must be positive for mixed multi-crop costs; "
-                f"got non-positive values for combinations: {bad}"
-            )
-        base["avg_combined_yield"] = base.index.get_level_values("combination").map(
-            avg_combined_yield
-        )
-        multiplier = (1.0 - per_tonne_cost_fraction) + per_tonne_cost_fraction * (
-            base["combined_yield"] / base["avg_combined_yield"]
-        )
-        base["marginal_cost"] = base["marginal_cost"] * multiplier
+    # Multiple-cropping marginal costs: sum of per-country crop costs in bnUSD/Mha
+    base["marginal_cost"] = base["total_cost"] * 1e6 * constants.USD_TO_BNUSD
     base["p_nom_extendable"] = True
     base["p_nom_max"] = base["eligible_area_ha"] / 1e6
 

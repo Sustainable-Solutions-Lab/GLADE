@@ -10,6 +10,37 @@ and crop residue processing.
 """
 
 
+rule prepare_faostat_crop_costs:
+    input:
+        pp_parquet="data/downloads/faostat/PP.parquet",
+        qcl_parquet="data/downloads/faostat/QCL.parquet",
+        mapping="data/curated/faostat_crop_item_map.csv",
+        m49_codes="data/curated/M49-codes.csv",
+        cpi="<processing>/shared/cpi_annual.csv",
+        proxies="data/curated/faostat_cost_proxies.yaml",
+    params:
+        countries=config["countries"],
+        crops=config["crops"],
+        currency_base_year=config["currency_base_year"],
+        averaging_period=config["costs"]["averaging_period"],
+        non_endogenous_cost_share=config["crop_costs"]["non_endogenous_cost_share"],
+        price_element_code=config["crop_costs"]["faostat"]["price_element_code"],
+        yield_element_code=config["crop_costs"]["faostat"]["yield_element_code"],
+    output:
+        "<processing>/{name}/faostat_crop_costs.csv",
+    group:
+        "prep"
+    resources:
+        runtime="2m",
+        mem_mb=5000,
+    log:
+        "<logs>/{name}/prepare_faostat_crop_costs.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_faostat_crop_costs.tsv"
+    script:
+        "../scripts/prepare_faostat_crop_costs.py"
+
+
 rule prepare_faostat_crop_production:
     input:
         mapping="data/curated/faostat_crop_item_map.csv",
@@ -454,3 +485,24 @@ rule prepare_fiber_baseline:
         "<benchmarks>/{name}/prepare_fiber_baseline.tsv"
     script:
         "../scripts/prepare_fiber_baseline.py"
+
+
+if config["crop_costs"]["calibration"]["generate"]:
+
+    _cal_scenario = config["crop_costs"]["calibration"]["scenario"]
+    _cal_name = config.get("name", "default")
+
+    rule extract_crop_cost_calibration:
+        input:
+            network=f"<results>/{_cal_name}/solved/model_scen-{_cal_scenario}.nc",
+        output:
+            correction=config["crop_costs"]["calibration"]["correction_csv"],
+        resources:
+            runtime="2m",
+            mem_mb=2000,
+        log:
+            f"<logs>/{_cal_name}/extract_crop_cost_calibration.log",
+        benchmark:
+            f"<benchmarks>/{_cal_name}/extract_crop_cost_calibration.tsv"
+        script:
+            "../scripts/extract_crop_cost_calibration.py"

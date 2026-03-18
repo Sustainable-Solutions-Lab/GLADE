@@ -1042,67 +1042,15 @@ animal_costs:
       producing_animals: ["2313", "5318", "5313"]
 
 crop_costs:
-  per_tonne_cost_fraction: 0.9  # Fraction of crop costs applied per tonne produced (remainder per hectare)
-  fadn:
-    per_year_costs:
-      SE340: "Machinery & building current costs"
-      SE345: "Energy"
-      SE350: "Contract work"
-      SE360: "Depreciation"
-      SE370: "Wages paid"
-      SE380: "Interest paid"
-    per_planting_costs:
-      SE285: "Seeds and plants"
-      SE300: "Crop protection"
-      SE305: "Other crop specific costs"
-    exclude_costs:
-      SE295: "Fertilisers"
-      SE375: "Rent paid"
-    crop_groups:
-      Cereals:
-        outputs: ["SE140"]
-        area: "SE035"
-        crops: ["SE140"]
-      Vegetables:
-        outputs: ["SE170"]
-        area: "SE046"
-        crops: ["SE170"]
-      Wine:
-        outputs: ["SE185"]
-        area: "SE050"
-        crops: ["SE185"]
-      Olives:
-        outputs: ["SE190"]
-        area: "SE060"
-        crops: ["SE190"]
-      Fruit & Citrus:
-        outputs: ["SE175", "SE180"]
-        area: "SE055"
-        crops: ["SE175", "SE180"]
-      Other Field Crops:
-        outputs: ["SE145", "SE150", "SE155", "SE160", "SE165", "SE146", "SE200"]
-        area: "SE041"
-        crops: ["SE145", "SE150", "SE155", "SE160", "SE165"]
-
-  usda:
-    request_timeout_seconds: 120
-    per_year_costs:
-    - "Capital recovery of machinery and equipment"
-    - "General farm overhead"
-    - "Taxes and insurance"
-    per_planting_costs:
-    - "Chemicals"
-    - "Custom services"
-    - "Fuel, lube, and electricity"
-    - "Interest on operating capital"
-    - "Repairs"
-    - "Seed"
-    - "Hired labor"
-    - "Opportunity cost of unpaid labor"
-    exclude_items:
-    - "Fertilizer"
-    - "Opportunity cost of land"
-    - "Purchased irrigation water"
+  non_endogenous_cost_share: 0.5  # Fraction of revenue (price × yield) attributed to non-endogenous production costs
+  faostat:
+    price_element_code: 5532  # Producer Price (USD/tonne)
+    yield_element_code: 5412  # Yield (hg/ha)
+  calibration:
+    enabled: false      # Apply calibration correction to crop costs (enable after generating correction CSV)
+    generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
+    scenario: "calibration"  # Scenario name used for calibration solve
+    correction_csv: "data/curated/crop_cost_calibration.csv"  # Path to calibration correction CSV
 
 # --- section: solving ---
 solving:

@@ -213,43 +213,29 @@ The model constrains:
 Production Costs
 ----------------
 
-Crop production incurs economic costs that are included in the optimization objective. The model uses production cost estimates from USDA and FADN agricultural accounting systems, providing detailed cost breakdowns per hectare of planted area.
+Crop production incurs economic costs that are included in the optimization objective. Costs are derived from FAOSTAT producer prices and yields, scaled by a configurable non-endogenous cost share, producing per-(crop, country) estimates.
 
-Crop costs are applied as marginal costs on production links, accounting for both per-year costs (machinery, overhead) and per-planting costs (seeds, chemicals, labor). For multiple cropping systems, the model correctly allocates costs by averaging per-year expenses across crops while summing per-planting expenses.
+Crop costs are applied as marginal costs on production links. For multiple cropping systems, costs are summed across all crops in the combination.
 
 **Cost structure**:
 
-* **Included**: Labor, machinery, seeds, chemicals, energy, operating capital interest
+* **Included**: All non-endogenous production costs (approximated as a share of revenue)
 * **Excluded**: Fertilizer (modeled endogenously), land rent (opportunity cost in optimization), irrigation water (resource constraint)
 
 For comprehensive details on crop production cost data sources, processing methodology, and model application, see:
 
   * :doc:`costs` - Complete documentation of all production costs (crops, livestock, and grazing)
 
-The crop-specific sections include:
-
-  * **Data sources**: USDA and FADN crop cost data with coverage and time periods
-  * **Processing methodology**: Per-year vs. per-planting cost separation, inflation adjustment, fallback mappings
-  * **Multiple cropping economics**: How costs are allocated for sequential cropping on the same land
-  * **Model application**: How costs are applied as marginal costs on production links
-  * **Unit conversions**: Understanding the conversion from USD/ha to bnUSD/Mha for PyPSA
-
 **Quick reference** for crop cost workflow:
 
-* ``retrieve_usda_costs``: Processes USDA crop cost data (US)
-* ``retrieve_fadn_costs``: Processes FADN crop cost data (EU)
-* ``merge_crop_costs``: Combines sources and applies fallback mappings
-* Output: ``processing/{name}/crop_costs.csv`` with columns:
+* ``prepare_faostat_crop_costs``: Computes per-(crop, country) costs from FAOSTAT PP prices and QCL yields
+* Output: ``processing/{name}/faostat_crop_costs.csv`` with columns:
 
   * ``crop``: Crop name
-  * ``cost_per_year_usd_{base_year}_per_ha``: Annual recurring costs (USD/ha)
-  * ``cost_per_planting_usd_{base_year}_per_ha``: Per-planting costs (USD/ha)
-
-Changing this value will automatically:
-
-* Adjust CPI retrieval range
-* Inflate all cost data to the new base year
-* Update column names in output files (e.g., ``cost_usd_2025_per_ha``)
+  * ``country``: ISO3 country code
+  * ``cost_usd_{base_year}_per_ha``: Production cost estimate (USD/ha)
+  * ``n_years``: Number of years with valid data
+  * ``is_fallback``: Whether the value is a global median fallback
 
 Water Constraints
 -----------------

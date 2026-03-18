@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Proxy crop mappings for crops without FAOSTAT price data.
+# Maps model crop names to FAOSTAT-mapped crops from faostat_crop_item_map.csv.
+alfalfa: soybean
+biomass-sorghum: sorghum
+silage-maize: maize

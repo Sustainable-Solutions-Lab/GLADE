@@ -64,48 +64,43 @@ This separation ensures that costs are not double-counted while maintaining accu
 Data Sources
 ------------
 
-Production cost data is sourced from two major agricultural accounting systems, providing coverage for both US and European production systems.
+Crop Costs: FAOSTAT Producer Prices
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-USDA Economic Research Service (United States)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Coverage**:
-  * Crops: Major commodity crops (wheat, corn, soybeans, rice, cotton, etc.)
-  * Livestock: Dairy (milk), beef cattle (cow-calf), hogs (pork)
-
-**Data characteristics**:
-  * Time period: 2015-2024 (averaged across years)
-  * Units: USD per acre (crops) or USD per head (livestock)
-  * Spatial resolution: US national averages
-  * Cost structure: Detailed line-item breakdown by expense category
-
-**Sources**:
-  * `Commodity Costs and Returns <https://www.ers.usda.gov/data-products/commodity-costs-and-returns/>`_
-  * `Milk Cost of Production Estimates <https://www.ers.usda.gov/data-products/milk-cost-of-production-estimates/>`_
-
-**Workflow scripts**:
-  * ``workflow/scripts/retrieve_usda_costs.py``: Processes crop cost data
-  * ``workflow/scripts/retrieve_usda_animal_costs.py``: Processes livestock cost data
-
-FADN - Farm Accountancy Data Network (European Union)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Crop production costs are derived from FAOSTAT data, using producer prices as a revenue proxy scaled by a configurable cost share.
 
 **Coverage**:
-  * Crops: All major crop groups (cereals, oilseeds, vegetables, fruits, etc.)
-  * Livestock: All major animal production systems
+  * Spatial: Per-(crop, country) for all modeled countries
+  * Temporal: Configurable averaging period (default 2015-2022)
+  * Crops: All crops with FAOSTAT price and yield data; unmapped crops use proxy mappings from ``data/curated/faostat_cost_proxies.yaml``
 
 **Data characteristics**:
-  * Time period: 2004-2020 (averaged across years)
-  * Units: EUR per farm (allocated to crop/livestock categories)
-  * Spatial resolution: Country-level data for all EU member states
-  * Cost structure: Farm-level accounting data allocated by output value share
+  * Prices from the FAOSTAT Prices (PP) domain (element 5532: Producer Price USD/tonne)
+  * Yields from the FAOSTAT Production (QCL) domain (element 5412: Yield hg/ha)
+  * CPI-deflated to the configured base year before averaging
 
 **Source**:
-  * `FADN Public Database <https://agridata.ec.europa.eu/extensions/FADNPublicDatabase/FADNPublicDatabase.html>`_
+  * `FAOSTAT Prices <https://www.fao.org/faostat/en/#data/PP>`_
+  * `FAOSTAT Production <https://www.fao.org/faostat/en/#data/QCL>`_
 
-**Workflow scripts**:
-  * ``workflow/scripts/retrieve_fadn_costs.py``: Processes crop cost data
-  * ``workflow/scripts/retrieve_fadn_animal_costs.py``: Processes livestock cost data
+**Workflow script**: ``workflow/scripts/prepare_faostat_crop_costs.py``
+
+Livestock Costs: USDA and FADN
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Livestock production costs are sourced from two agricultural accounting systems.
+
+**USDA Economic Research Service (United States)**:
+  * Coverage: Dairy (milk), beef cattle (cow-calf), hogs (pork)
+  * Time period: 2015-2024 (averaged across years)
+  * Units: USD per acre or USD per head
+  * Workflow script: ``workflow/scripts/retrieve_usda_animal_costs.py``
+
+**FADN - Farm Accountancy Data Network (European Union)**:
+  * Coverage: All major animal production systems
+  * Time period: 2004-2020 (averaged across years)
+  * Units: EUR per farm (allocated to livestock categories)
+  * Workflow script: ``workflow/scripts/retrieve_fadn_animal_costs.py``
 
 Cost Processing Methodology
 ----------------------------
@@ -115,82 +110,41 @@ The cost data undergoes several processing steps to ensure consistency and accur
 Crop Costs
 ~~~~~~~~~~
 
-Crop production costs are processed separately for USDA and FADN sources, then merged to produce global cost estimates.
+Crop production costs are derived from FAOSTAT producer prices and yields, providing per-(crop, country) cost estimates.
 
-USDA Crop Cost Processing
-^^^^^^^^^^^^^^^^^^^^^^^^^
+**Script**: ``workflow/scripts/prepare_faostat_crop_costs.py``
 
-**Script**: ``workflow/scripts/retrieve_usda_costs.py``
+The cost model uses revenue per hectare as a proxy for total production cost, scaled by a configurable share:
 
-1. **Download and Parse**: Fetch CSV files from USDA ERS database for each crop
-2. **Filter Cost Categories**:
+.. math::
 
-   * **Per-year costs**: Operating costs allocated across the growing season (labor, energy, machinery use)
-   * **Per-planting costs**: One-time costs per planting cycle (seeds, pesticides, planting operations)
-   * **Excluded**: Fertilizer costs (modeled endogenously), land costs/rent
+   \text{cost\_usd\_per\_ha} = \text{price (USD/t)} \times \text{yield (t/ha)} \times \text{non\_endogenous\_cost\_share}
 
-3. **Temporal Aggregation**: Average costs across configured years (typically 2015-2024)
-4. **Inflation Adjustment**: Convert all costs to base year USD using CPI indices
-5. **Unit Conversion**: Convert from USD/acre to USD/hectare (× 2.471)
-6. **Output**: ``processing/{name}/usda_costs.csv`` with columns:
+Processing steps:
+
+1. **Load FAOSTAT bulk data**: Producer prices from the PP domain (element 5532) and yields from the QCL domain (element 5412)
+2. **Map crops to FAOSTAT items**: Using ``data/curated/faostat_crop_item_map.csv``; crops without a direct mapping use proxy crops defined in ``data/curated/faostat_cost_proxies.yaml`` (e.g., alfalfa uses soybean prices, biomass-sorghum uses sorghum)
+3. **CPI deflation**: Prices are deflated to the configured base year using US CPI-U data
+4. **Merge price and yield**: For each (crop, country, year), compute revenue per hectare = price × yield
+5. **Temporal averaging**: Average revenue per hectare across the configured period (default 2015-2022)
+6. **Apply cost share**: Multiply by ``non_endogenous_cost_share`` (default 0.5) to obtain the cost estimate
+7. **Fill gaps**: Missing (crop, country) pairs receive the global median cost for that crop as fallback
+8. **Output**: ``processing/{name}/faostat_crop_costs.csv`` with columns:
 
    * ``crop``: Crop name
-   * ``cost_per_year_usd_{base_year}_per_ha``: Annual recurring costs (USD/ha)
-   * ``cost_per_planting_usd_{base_year}_per_ha``: Per-planting costs (USD/ha)
+   * ``country``: ISO3 country code
+   * ``cost_usd_{base_year}_per_ha``: Production cost estimate (USD/ha)
+   * ``n_years``: Number of years with valid price-yield data
+   * ``is_fallback``: Whether the value is a global median fallback
 
-FADN Crop Cost Processing
-^^^^^^^^^^^^^^^^^^^^^^^^^
+Calibration Correction
+^^^^^^^^^^^^^^^^^^^^^^
 
-**Script**: ``workflow/scripts/retrieve_fadn_costs.py``
+An optional additive calibration correction can adjust crop costs based on production stability duals from a solved model. When enabled, the correction shifts marginal costs to better reflect observed production patterns.
 
-FADN data requires more complex processing due to its farm-level aggregation:
-
-1. **Load Farm-Level Data**: Read FADN database with farm accounting variables (SE codes)
-2. **Cost Allocation by Output Value**:
-
-   * Calculate total farm output value (SE131)
-   * For each crop group, sum output values from relevant SE codes
-   * Allocate farm-level costs proportionally to each crop group's share of total output
-   * This approach correctly captures economic intensity: high-value crops receive higher allocated costs
-
-3. **Cost Categories**:
-
-   * **Per-year costs**: Total farm costs (labor, energy, depreciation, etc.) allocated by output share
-   * **Per-planting costs**: Currently set to zero (not separately tracked in FADN)
-   * **Excluded**: Feed costs, fertilizer costs, rent
-
-4. **Calculate Cost per Hectare**:
-
-   .. math::
-
-      \text{Cost per ha} = \frac{\text{Allocated Cost (EUR)}}{\text{Crop Group Area (ha)}}
-
-5. **Currency and Inflation Adjustment**:
-
-   * Inflate to base year EUR using HICP (Harmonized Index of Consumer Prices)
-   * Convert to international dollars using PPP (Purchasing Power Parity) rates
-   * This produces costs comparable across countries with different price levels
-
-6. **Temporal and Spatial Aggregation**: Average across countries and years for each FADN crop category
-7. **Crop Mapping**: Map FADN categories to model crop names using ``data/curated/fadn_crop_mapping.yaml``
-8. **Output**: ``processing/{name}/fadn_costs.csv`` with same column structure as USDA
-
-Merging Crop Costs
-^^^^^^^^^^^^^^^^^^
-
-**Script**: ``workflow/scripts/merge_crop_costs.py``
-
-The merging process combines USDA and FADN cost estimates:
-
-1. **Load Multiple Sources**: Read cost CSVs from both USDA and FADN processing
-2. **Average Across Sources**: For crops with data from multiple sources, compute the mean cost
-3. **Apply Fallback Mappings**: For crops without direct cost data, use costs from similar crops:
-
-   * Defined in ``data/curated/crop_cost_fallbacks.yaml``
-   * Example: Rye → Wheat costs, Silage-maize → Maize costs
-
-4. **Default to Zero**: Crops without data or fallbacks receive zero costs (with warnings logged)
-5. **Output**: ``processing/{name}/crop_costs.csv`` containing cost data for all configured crops
+* **Correction file**: ``data/curated/crop_cost_calibration.csv`` (per crop-country adjustments in bnUSD/Mha)
+* **Application**: Added to marginal costs after the base cost lookup; may produce negative marginal costs (subsidy effect)
+* **Configuration**: Controlled by ``crop_costs.calibration`` section (disabled by default)
 
 Livestock Costs
 ~~~~~~~~~~~~~~~
@@ -346,7 +300,7 @@ Production costs are applied as marginal costs on PyPSA network links, affecting
 Crop Production Costs
 ~~~~~~~~~~~~~~~~~~~~~
 
-**Implementation**: ``workflow/scripts/build_model/crops.py`` (lines 155-202)
+**Implementation**: ``workflow/scripts/build_model/crops.py``
 
 Crop costs are applied to production links that convert land into crop output:
 
@@ -361,28 +315,28 @@ For single-season crops:
 
 .. code-block:: python
 
-   # Total cost per hectare (USD/ha)
-   cost_per_ha = cost_per_year + cost_per_planting
+   # Look up per-(crop, country) cost from FAOSTAT-derived data
+   cost_per_ha = crop_costs.get((crop, country), global_median_cost.get(crop, 0.0))
 
-   # Convert to bnUSD per Mha (PyPSA units)
+   # Convert USD/ha to bnUSD/Mha (PyPSA units)
    marginal_cost = cost_per_ha * 1e6 * USD_TO_BNUSD
+
+   # Optional: add calibration correction (bnUSD/Mha, additive)
+   marginal_cost += cost_calibration.get((crop, country), 0.0)
 
 For multi-cropping systems (multiple crops per year on the same land):
 
 .. code-block:: python
 
-   # Average per-year cost across crops in the cycle
-   avg_cost_per_year = total_per_year_costs / n_crops
+   # Sum per-(crop, country) costs across all crops in the combination
+   total_cost = sum(crop_costs.get((c, country), median) for c in crops_in_cycle)
 
-   # Total per-planting cost (sum across all crops)
-   total_per_planting = sum(cost_per_planting for each crop)
-
-   # Combined marginal cost
-   marginal_cost = (avg_cost_per_year + total_per_planting) * 1e6 * USD_TO_BNUSD
+   # Convert to bnUSD/Mha
+   marginal_cost = total_cost * 1e6 * USD_TO_BNUSD
 
 **Interpretation**:
   * The marginal cost represents the economic cost of using one Mha of land for crop production
-  * Higher-cost crops will be penalized in the objective function relative to lower-cost alternatives
+  * Costs vary by country, reflecting local price and yield conditions
   * The optimization balances production costs against other objectives (nutrition, emissions, etc.)
 
 Livestock Production Costs
@@ -484,18 +438,22 @@ Configuration
 
 Cost-related configuration parameters are specified in ``config/default.yaml``:
 
-**Data retrieval**:
+**Crop costs**:
 
 .. code-block:: yaml
 
-   data:
-     base_year: 2020  # Base year for all monetary values
+   crop_costs:
+     non_endogenous_cost_share: 0.5  # Fraction of revenue attributed to non-endogenous costs
+     faostat:
+       price_element_code: 5532  # Producer Price (USD/tonne)
+       yield_element_code: 5412  # Yield (hg/ha)
+     calibration:
+       enabled: false       # Apply calibration correction
+       generate: false      # Generate calibration from solved model
+       scenario: "calibration"
+       correction_csv: "data/curated/crop_cost_calibration.csv"
 
-   cost_data:
-     usda_years: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
-     fadn_years: [2015, 2016, 2017, 2018, 2019, 2020]
-
-**Fallback mappings**:
+**Animal cost fallback mappings**:
 
 .. code-block:: yaml
 

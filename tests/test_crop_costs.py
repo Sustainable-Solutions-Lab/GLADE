@@ -12,7 +12,7 @@ from workflow.scripts.build_model.crops import add_regional_crop_production_link
 
 
 def test_silage_maize_cost_not_zero_with_zero_harvested_area():
-    """Per-tonne cost mixing must preserve explicit source-stage crop costs."""
+    """Per-(crop, country) cost lookup must produce non-zero marginal cost."""
     n = pypsa.Network()
     n.buses.add(
         [
@@ -33,19 +33,24 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
         }
     ).set_index(["region", "resource_class"])
 
+    # Cost = 1000 USD/ha → 1000 * 1e6 * 1e-9 = 1.0 bnUSD/Mha
+    crop_costs = pd.Series(
+        {("silage-maize", "USA"): 1000.0},
+    )
+    global_median_cost = pd.Series({"silage-maize": 1000.0})
+
     add_regional_crop_production_links(
         n=n,
         crop_list=["silage-maize"],
         yields_data={"silage-maize_yield_r": yields},
         region_to_country=pd.Series({"regionA": "USA"}),
         allowed_countries={"USA"},
-        crop_costs_per_year=pd.Series({"silage-maize": 600.0}),
-        crop_costs_per_planting=pd.Series({"silage-maize": 400.0}),
+        crop_costs=crop_costs,
+        global_median_cost=global_median_cost,
         fertilizer_n_rates={},
         rice_methane_factor=0.0,
         rainfed_wetland_rice_ch4_scaling_factor=1.0,
         use_actual_production=False,
-        per_tonne_cost_fraction=0.9,
         min_yield_t_per_ha=0.01,
     )
 
