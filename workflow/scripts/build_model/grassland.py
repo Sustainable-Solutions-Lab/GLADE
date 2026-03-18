@@ -95,6 +95,7 @@ def add_grassland_feed_links(
     fix_current_production: bool = False,
     *,
     min_yield_t_per_ha: float,
+    cost_calibration: pd.Series | None = None,
 ) -> None:
     """Add links supplying ruminant feed directly from rainfed land.
 
@@ -123,6 +124,9 @@ def add_grassland_feed_links(
     fix_current_production : bool, optional
         If True and ``use_actual_production`` is enabled, force grassland links
         to dispatch at their observed area (instead of only capping them).
+    cost_calibration : pd.Series | None, optional
+        Additive cost corrections indexed by country (bnUSD/Mha). Applied
+        after base cost computation. If None, no calibration is applied.
     """
     # Add grassland_production carrier
     if "grassland_production" not in n.carriers.static.index:
@@ -221,6 +225,20 @@ def add_grassland_feed_links(
     cost_per_mha_bnusd = (
         marginal_cost * efficiencies * MEGATONNE_TO_TONNE * USD_TO_BNUSD
     )
+
+    # Apply cost calibration corrections (additive, per country, in bnUSD/Mha)
+    if cost_calibration is not None:
+        cal_adj = work["country"].map(cost_calibration).fillna(0.0).to_numpy()
+        cost_before = cost_per_mha_bnusd.copy()
+        cost_per_mha_bnusd = np.maximum(cost_per_mha_bnusd + cal_adj, 0.0)
+        n_clipped = int((cost_before + cal_adj < 0).sum())
+        n_adjusted = int((cal_adj != 0).sum())
+        logger.info(
+            "Applied grassland cost calibration: %d/%d links adjusted, %d clipped to 0",
+            n_adjusted,
+            len(work),
+            n_clipped,
+        )
 
     # Compute baseline production from observed grazing area * yield.
     # This is used by production stability constraints regardless of

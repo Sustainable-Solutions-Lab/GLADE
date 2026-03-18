@@ -29,6 +29,5 @@ solving:
   runtime: 10
   mem_mb: 6000
 
-crop_costs:
-  calibration:
-    enabled: false
+cost_calibration:
+  enabled: false

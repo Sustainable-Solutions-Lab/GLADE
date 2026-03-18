@@ -142,9 +142,9 @@ Calibration Correction
 
 An optional additive calibration correction can adjust crop costs based on production stability duals from a solved model. When enabled, the correction shifts marginal costs to better reflect observed production patterns.
 
-* **Correction file**: ``data/curated/crop_cost_calibration.csv`` (per crop-country adjustments in bnUSD/Mha)
-* **Application**: Added to marginal costs after the base cost lookup; may produce negative marginal costs (subsidy effect)
-* **Configuration**: Controlled by ``crop_costs.calibration`` section (disabled by default)
+* **Correction files**: ``data/curated/calibration/crop_cost.csv``, ``grassland_cost.csv``, ``animal_cost.csv``
+* **Application**: Additive corrections to marginal costs; clipped to zero (no negative costs)
+* **Configuration**: Controlled by top-level ``cost_calibration`` section (disabled by default)
 
 Livestock Costs
 ~~~~~~~~~~~~~~~
@@ -447,11 +447,13 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
      faostat:
        price_element_code: 5532  # Producer Price (USD/tonne)
        yield_element_code: 5412  # Yield (hg/ha)
-     calibration:
-       enabled: false       # Apply calibration correction
-       generate: false      # Generate calibration from solved model
-       scenario: "calibration"
-       correction_csv: "data/curated/crop_cost_calibration.csv"
+   cost_calibration:
+     enabled: false       # Apply calibration corrections
+     generate: false      # Generate calibration from solved model
+     scenario: "calibration"
+     crop_correction_csv: "data/curated/calibration/crop_cost.csv"
+     grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
+     animal_correction_csv: "data/curated/calibration/animal_cost.csv"
 
 **Animal cost fallback mappings**:
 

@@ -2,16 +2,17 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Crop Cost Calibration Configuration
-# ------------------------------------
-# Generates crop cost calibration corrections by:
+# Cost Calibration Configuration
+# -------------------------------
+# Generates production cost calibration corrections for crops, grassland,
+# and animals by:
 #   1. Solving a baseline scenario (enforce_baseline_diet, no stability)
 #      → extracts consumer values for piecewise food utility
 #   2. Solving a calibration scenario (piecewise utility + hard production
 #      stability at ±1%) → extracts duals as cost corrections
 #
 # Usage:
-#   tools/smk --configfile config/cost_calibration.yaml -- data/curated/crop_cost_calibration.csv
+#   tools/smk --configfile config/cost_calibration.yaml -- data/curated/calibration/crop_cost.csv data/curated/calibration/grassland_cost.csv data/curated/calibration/animal_cost.csv
 
 name: "cost_calibration"
 
@@ -38,9 +39,13 @@ scenarios:
           max_relative_deviation: 0.01
           enable_slack: true
         grassland:
-          enabled: false
+          enabled: true
+          max_relative_deviation: 0.01
+          enable_slack: true
         animals:
-          enabled: false
+          enabled: true
+          max_relative_deviation: 0.01
+          enable_slack: true
         land_conversion:
           enabled: false
     food_utility_piecewise:
@@ -57,12 +62,10 @@ baseline_year: 2020
 food_utility_piecewise:
   enabled: true
 
-crop_costs:
-  calibration:
-    enabled: false     # Don't apply calibration (we're generating it)
-    generate: true     # Generate calibration from solved model
-    scenario: "calibration"
-    correction_csv: "data/curated/crop_cost_calibration.csv"
+cost_calibration:
+  enabled: false     # Don't apply calibration (we're generating it)
+  generate: true     # Generate calibration from solved model
+  scenario: "calibration"
 
 validation:
   use_actual_yields: true

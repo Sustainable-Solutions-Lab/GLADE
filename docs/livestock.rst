@@ -657,9 +657,9 @@ FAOSTAT area cap.
      grassland_forage_calibration:
        enabled: true
        generate: false
-       grassland_yield_correction: "data/curated/forage_calibration/grassland_yield_correction.csv"
-       fodder_conversion_correction: "data/curated/forage_calibration/fodder_conversion_correction.csv"
-       exogenous_forage: "data/curated/forage_calibration/exogenous_forage.csv"
+       grassland_yield_correction: "data/curated/calibration/grassland_yield.csv"
+       fodder_conversion_correction: "data/curated/calibration/fodder_conversion.csv"
+       exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
        scenario: "default"
 
 The figure below shows the grassland calibration results.
@@ -697,7 +697,7 @@ forage calibration:
 2. **Phase 2 — Calibrated model**: All other scenarios (including
    ``default``) apply all three calibration files.
 
-Pre-computed calibration files are stored under ``data/curated/forage_calibration/``
+Pre-computed calibration files are stored under ``data/curated/calibration/``
 so they can be reused across configurations without re-running the validation
 solve.  Set ``generate: true`` in the relevant configuration block to
 re-generate them (requires a full validation solve).
@@ -957,7 +957,7 @@ Rules are listed in pipeline order.  All rules are defined in
 
 **compute_grassland_calibration**
   * **Input**: Solved network (uncalibrated scenario)
-  * **Output**: ``data/curated/grassland_forage_calibration.csv``
+  * **Output**: ``data/curated/calibration/grassland_yield.csv``, ``fodder_conversion.csv``, ``exogenous_forage.csv``
   * **Script**: ``workflow/scripts/compute_grassland_calibration.py``
 
 All ``processing/`` outputs are prefixed with ``{name}/`` (the config name).

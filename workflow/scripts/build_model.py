@@ -503,14 +503,36 @@ if __name__ == "__main__":
     crop_costs = costs_df.set_index(["crop", "country"])[cost_col].astype(float)
     global_median_cost = costs_df.groupby("crop")[cost_col].median()
 
-    # Optional calibration correction
-    cost_calibration = None
+    # Optional cost calibration corrections (crops, grassland, animals)
+    crop_cost_calibration = None
+    grassland_cost_calibration = None
+    animal_cost_calibration = None
     if hasattr(snakemake.input, "crop_cost_calibration"):
         cal_df = read_csv(snakemake.input.crop_cost_calibration)
-        cost_calibration = cal_df.set_index(["crop", "country"])[
+        crop_cost_calibration = cal_df.set_index(["crop", "country"])[
             "correction_bnusd_per_mha"
         ]
-        logger.info("Loaded crop cost calibration: %d entries", len(cost_calibration))
+        logger.info(
+            "Loaded crop cost calibration: %d entries", len(crop_cost_calibration)
+        )
+    if hasattr(snakemake.input, "grassland_cost_calibration"):
+        cal_df = read_csv(snakemake.input.grassland_cost_calibration)
+        grassland_cost_calibration = cal_df.set_index("country")[
+            "correction_bnusd_per_mha"
+        ]
+        logger.info(
+            "Loaded grassland cost calibration: %d entries",
+            len(grassland_cost_calibration),
+        )
+    if hasattr(snakemake.input, "animal_cost_calibration"):
+        cal_df = read_csv(snakemake.input.animal_cost_calibration)
+        animal_cost_calibration = cal_df.set_index(["product", "country"])[
+            "correction_bnusd_per_mt"
+        ]
+        logger.info(
+            "Loaded animal cost calibration: %d entries",
+            len(animal_cost_calibration),
+        )
 
     # Read animal production costs (USD/Mt in base year dollars)
     animal_costs_df = read_csv(snakemake.input.animal_costs)
@@ -766,7 +788,7 @@ if __name__ == "__main__":
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
         use_actual_production=use_actual_production,
-        cost_calibration=cost_calibration,
+        cost_calibration=crop_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
     )
     land.add_multi_cropping_land_correction(
@@ -807,6 +829,7 @@ if __name__ == "__main__":
             use_actual_production=use_actual_production,
             fix_current_production=use_actual_production,
             min_yield_t_per_ha=min_grassland_yield,
+            cost_calibration=grassland_cost_calibration,
         )
 
         # Apply grassland yield correction from forage calibration.
@@ -906,6 +929,7 @@ if __name__ == "__main__":
         animal_costs_per_mt,
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
+        cost_calibration=animal_cost_calibration,
     )
 
     # Add exogenous feed generators (leaves/browse, swill)

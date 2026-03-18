@@ -120,7 +120,7 @@ optimal_taxes:
 
 # --- section: land ---
 land:
-  regional_limit: 0.7 # fraction of each region's potential cropland that is made available.
+  regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
   land_use_cost_usd_per_ha: 0.0 # Small optional per-hectare land-use cost to regularize land allocation (set >0 to activate)
   conversion_cost_forest_usd_per_ha: 8000 # Overnight investment cost for converting forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
   conversion_cost_nonforest_usd_per_ha: 2000 # Overnight investment cost for converting non-forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
@@ -138,7 +138,7 @@ water:
   #                  Represents sustainable water extraction limits.
   # - "current_use": Huang et al. (2018) gridded irrigation water withdrawals
   #                  Represents actual/current agricultural water use, useful for validation.
-  supply_scenario: sustainable
+  supply_scenario: "current_use"
   # Reference year for Huang irrigation data (only used when supply_scenario is "current_use")
   huang_reference_year: 2010
 
@@ -154,7 +154,8 @@ fertilizer:
 # --- section: residues ---
 residues:
   max_feed_fraction: 0.30 # Maximum fraction of residues that can be removed for animal feed (remainder must be incorporated into soil)
-  max_feed_fraction_by_region: {} # Overrides by ISO3 country code or M49 region/sub-region name (country overrides sub-region overrides region)
+  max_feed_fraction_by_region: # Overrides by ISO3 country code or M49 region/sub-region name (country overrides sub-region overrides region)
+    Asia: 0.70 # Asia uses a lot of crop residues for feeding; setting this higher helps livestock feed balancing in the model
 
 # --- section: emissions ---
 emissions:
@@ -446,7 +447,7 @@ fodder_decomposition:
 
 grazing:
   enabled: true
-  isimip_utilization_rate: 0.50 # Applied to ISIMIP yields in merge step
+  isimip_utilization_rate: 0.60 # Applied to ISIMIP yields in merge step
   forage_overlap_crops:
   - alfalfa
   - silage-maize
@@ -454,9 +455,9 @@ grazing:
   grassland_forage_calibration:
     enabled: true
     generate: false
-    grassland_yield_correction: "data/curated/forage_calibration/grassland_yield_correction.csv"
-    fodder_conversion_correction: "data/curated/forage_calibration/fodder_conversion_correction.csv"
-    exogenous_forage: "data/curated/forage_calibration/exogenous_forage.csv"
+    grassland_yield_correction: "data/curated/calibration/grassland_yield.csv"
+    fodder_conversion_correction: "data/curated/calibration/fodder_conversion.csv"
+    exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
     scenario: "default"
 
 # --- section: food_groups ---
@@ -1042,15 +1043,22 @@ animal_costs:
       producing_animals: ["2313", "5318", "5313"]
 
 crop_costs:
-  non_endogenous_cost_share: 0.5  # Fraction of revenue (price × yield) attributed to non-endogenous production costs
+  non_endogenous_cost_share: 0.7  # Fraction of revenue (price * yield) attributed to non-endogenous production costs
   faostat:
     price_element_code: 5532  # Producer Price (USD/tonne)
     yield_element_code: 5412  # Yield (hg/ha)
-  calibration:
-    enabled: false      # Apply calibration correction to crop costs (enable after generating correction CSV)
-    generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
-    scenario: "calibration"  # Scenario name used for calibration solve
-    correction_csv: "data/curated/crop_cost_calibration.csv"  # Path to calibration correction CSV
+
+# --- section: cost_calibration ---
+# Unified cost calibration corrections extracted from production stability duals.
+# Covers crops, grassland, and animals. When enabled, additive cost corrections
+# are applied at build time to align model costs with revealed preferences.
+cost_calibration:
+  enabled: true       # Apply calibration corrections to production costs
+  generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
+  scenario: "calibration"  # Scenario name used for calibration solve
+  crop_correction_csv: "data/curated/calibration/crop_cost.csv"
+  grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
+  animal_correction_csv: "data/curated/calibration/animal_cost.csv"
 
 # --- section: solving ---
 solving:

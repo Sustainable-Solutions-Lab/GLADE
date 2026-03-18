@@ -45,6 +45,7 @@ required:
   - costs
   - animal_costs
   - crop_costs
+  - cost_calibration
   - solving
   - remote_solve
   - plotting
@@ -1451,7 +1452,7 @@ properties:
 
   crop_costs:
     type: object
-    required: [non_endogenous_cost_share, faostat, calibration]
+    required: [non_endogenous_cost_share, faostat]
     additionalProperties: false
     properties:
       non_endogenous_cost_share:
@@ -1470,23 +1471,30 @@ properties:
           yield_element_code:
             type: integer
             description: "FAOSTAT QCL element code for yield (hg/ha); 5412 for crops"
-      calibration:
-        type: object
-        required: [enabled, generate, scenario, correction_csv]
-        additionalProperties: false
-        properties:
-          enabled:
-            type: boolean
-            description: "Apply calibration correction to crop costs"
-          generate:
-            type: boolean
-            description: "Generate calibration from solved model (breaks DAG cycle)"
-          scenario:
-            type: string
-            description: "Scenario name used for calibration solve"
-          correction_csv:
-            type: string
-            description: "Path to calibration correction CSV"
+
+  cost_calibration:
+    type: object
+    required: [enabled, generate, scenario, crop_correction_csv, grassland_correction_csv, animal_correction_csv]
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        description: "Apply calibration corrections to production costs"
+      generate:
+        type: boolean
+        description: "Generate calibration from solved model (breaks DAG cycle)"
+      scenario:
+        type: string
+        description: "Scenario name used for calibration solve"
+      crop_correction_csv:
+        type: string
+        description: "Path to crop cost calibration correction CSV"
+      grassland_correction_csv:
+        type: string
+        description: "Path to grassland cost calibration correction CSV"
+      animal_correction_csv:
+        type: string
+        description: "Path to animal cost calibration correction CSV"
 
   solving:
     type: object

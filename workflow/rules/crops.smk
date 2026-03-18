@@ -487,22 +487,24 @@ rule prepare_fiber_baseline:
         "../scripts/prepare_fiber_baseline.py"
 
 
-if config["crop_costs"]["calibration"]["generate"]:
+if config["cost_calibration"]["generate"]:
 
-    _cal_scenario = config["crop_costs"]["calibration"]["scenario"]
+    _cal_scenario = config["cost_calibration"]["scenario"]
     _cal_name = config.get("name", "default")
 
-    rule extract_crop_cost_calibration:
+    rule extract_cost_calibration:
         input:
             network=f"<results>/{_cal_name}/solved/model_scen-{_cal_scenario}.nc",
         output:
-            correction=config["crop_costs"]["calibration"]["correction_csv"],
+            crop_correction=config["cost_calibration"]["crop_correction_csv"],
+            grassland_correction=config["cost_calibration"]["grassland_correction_csv"],
+            animal_correction=config["cost_calibration"]["animal_correction_csv"],
         resources:
             runtime="2m",
             mem_mb=2000,
         log:
-            f"<logs>/{_cal_name}/extract_crop_cost_calibration.log",
+            f"<logs>/{_cal_name}/extract_cost_calibration.log",
         benchmark:
-            f"<benchmarks>/{_cal_name}/extract_crop_cost_calibration.tsv"
+            f"<benchmarks>/{_cal_name}/extract_cost_calibration.tsv"
         script:
-            "../scripts/extract_crop_cost_calibration.py"
+            "../scripts/extract_cost_calibration.py"

@@ -205,6 +205,7 @@ def add_feed_to_animal_product_links(
     animal_costs: pd.Series | None = None,
     feed_baseline: pd.DataFrame | None = None,
     enforce_baseline_feed: bool = False,
+    cost_calibration: pd.Series | None = None,
 ) -> None:
     """Add links that convert feed pools into animal products with emissions and manure N.
 
@@ -261,6 +262,10 @@ def add_feed_to_animal_product_links(
         Animal product costs indexed by product (USD per Mt product).
         If provided, converted to cost per Mt feed via efficiency.
         If None, marginal_cost defaults to 0.
+    cost_calibration : pd.Series | None, optional
+        Additive cost corrections with MultiIndex (product, country) in
+        bnUSD/Mt-feed. Applied after base cost computation. If None, no
+        calibration is applied.
     """
 
     # Add animal_production carrier
@@ -451,6 +456,23 @@ def add_feed_to_animal_product_links(
         )
     else:
         df["marginal_cost"] = 0.0
+
+    # Apply cost calibration corrections (additive, per (product, country), in bnUSD/Mt-feed)
+    if cost_calibration is not None:
+        cal_idx = pd.MultiIndex.from_arrays(
+            [df["product"], df["country"]], names=["product", "country"]
+        )
+        cal_adj = cost_calibration.reindex(cal_idx, fill_value=0.0).to_numpy()
+        cost_before = df["marginal_cost"].to_numpy().copy()
+        df["marginal_cost"] = np.maximum(df["marginal_cost"] + cal_adj, 0.0)
+        n_clipped = int((cost_before + cal_adj < 0).sum())
+        n_adjusted = int((cal_adj != 0).sum())
+        logger.info(
+            "Applied animal cost calibration: %d/%d links adjusted, %d clipped to 0",
+            n_adjusted,
+            len(df),
+            n_clipped,
+        )
 
     # Calculate FLW-adjusted efficiency
     df["group"] = df["product"].map(food_to_group)
