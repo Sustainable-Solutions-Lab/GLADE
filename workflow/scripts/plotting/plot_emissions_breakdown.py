@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 def load_emissions_csv(path: Path) -> dict[str, dict[str, float]]:
     """Load emissions CSV (gas, source, mtco2eq) into nested dict."""
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, comment="#")
+    # Normalise column name from GLEAM reference files
+    df.columns = [c.replace("emissions_mtco2eq", "mtco2eq") for c in df.columns]
     expected_cols = {"gas", "source", "mtco2eq"}
     if set(df.columns) != expected_cols:
         raise ValueError(
