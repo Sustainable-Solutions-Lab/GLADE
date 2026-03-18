@@ -4,6 +4,7 @@
 
 import contextlib
 import ctypes
+import functools
 import gc
 import logging
 
@@ -906,6 +907,95 @@ def _apply_biofuel_demand_scaling(n: pypsa.Network, scale: float) -> None:
     )
 
 
+def _apply_forage_calibration(
+    n: pypsa.Network,
+    forage_overlap_crops: list[str],
+    enforce_baseline_feed: bool,
+) -> None:
+    """Apply grassland forage calibration corrections at solve time.
+
+    Reads three calibration CSVs from snakemake inputs:
+    - grassland_yield_correction: per-country yield multipliers for grassland links
+    - fodder_conversion_correction: per-country efficiency multipliers for forage crop links
+    - exogenous_forage: per-country exogenous forage supply (Mt DM) for deficit countries
+    """
+    read_csv = functools.partial(pd.read_csv, comment="#")
+
+    # 1. Grassland yield correction
+    yield_cal = read_csv(snakemake.input.grassland_yield_correction)
+    grass_links = n.links.static[n.links.static["carrier"] == "grassland_production"]
+    if not grass_links.empty and not yield_cal.empty:
+        cal_map = yield_cal.set_index("country")["yield_correction"]
+        corrections = grass_links["country"].map(cal_map).fillna(1.0).to_numpy()
+        n.links.static.loc[grass_links.index, "efficiency"] *= corrections
+        n_adjusted = int((corrections < 1.0).sum())
+        logger.info(
+            "Applied grassland yield corrections: %d/%d links adjusted",
+            n_adjusted,
+            len(grass_links),
+        )
+
+    # 2. Fodder-to-forage conversion correction
+    fodder_cal = read_csv(snakemake.input.fodder_conversion_correction)
+    fc_links = n.links.static[
+        (n.links.static["carrier"] == "feed_conversion")
+        & (n.links.static["feed_category"] == "ruminant_forage")
+        & (n.links.static["crop"].isin(forage_overlap_crops))
+    ]
+    if not fc_links.empty:
+        cal_map = fodder_cal.set_index("country")["fodder_conversion_correction"]
+        corrections = fc_links["country"].map(cal_map).fillna(1.0).to_numpy()
+        n.links.static.loc[fc_links.index, "efficiency"] *= corrections
+        n_adjusted = int((corrections < 1.0).sum())
+        logger.info(
+            "Applied fodder conversion corrections: %d/%d links adjusted",
+            n_adjusted,
+            len(fc_links),
+        )
+
+    # 3. Exogenous forage generators for deficit countries
+    exo_cal = read_csv(snakemake.input.exogenous_forage)
+    exog = exo_cal[exo_cal["exogenous_forage_mt_dm"] > 0].copy()
+    if not exog.empty:
+        exog_buses = "feed:ruminant_forage:" + exog["country"]
+        bus_exists = exog_buses.isin(n.buses.static.index)
+        exog = exog[bus_exists.values]
+        exog_buses = exog_buses[bus_exists.values]
+        if not exog.empty:
+            if "exogenous_forage_cal" not in n.carriers.static.index:
+                n.carriers.add("exogenous_forage_cal", unit="Mt")
+            gen_names = pd.Index(
+                "supply:exogenous_forage:" + exog["country"].values,
+                dtype="object",
+            )
+            if enforce_baseline_feed:
+                n.generators.add(
+                    gen_names,
+                    bus=exog_buses.values,
+                    carrier="exogenous_forage_cal",
+                    p_nom=exog["exogenous_forage_mt_dm"].values,
+                    p_nom_extendable=False,
+                    p_min_pu=1.0,
+                    p_max_pu=1.0,
+                    country=exog["country"].values,
+                )
+            else:
+                n.generators.add(
+                    gen_names,
+                    bus=exog_buses.values,
+                    carrier="exogenous_forage_cal",
+                    p_nom_extendable=True,
+                    p_nom_max=exog["exogenous_forage_mt_dm"].values,
+                    marginal_cost=0.0,
+                    country=exog["country"].values,
+                )
+            logger.info(
+                "Added %d exogenous forage generators (%.1f Mt DM total)",
+                len(gen_names),
+                exog["exogenous_forage_mt_dm"].sum(),
+            )
+
+
 def _run_solve() -> None:
     """Main solve logic, factored out for profiling."""
     global logger
@@ -925,6 +1015,15 @@ def _run_solve() -> None:
 
         logger.info("Applying sensitivity adjustments...")
         apply_sensitivity_factors(n, sensitivity_cfg)
+
+    # Apply grassland forage calibration if enabled for this scenario
+    if snakemake.params.forage_calibration_enabled:
+        logger.info("Applying grassland forage calibration...")
+        _apply_forage_calibration(
+            n,
+            forage_overlap_crops=snakemake.params.forage_overlap_crops,
+            enforce_baseline_feed=snakemake.params.enforce_baseline_feed,
+        )
 
     # Rescale land supply generators if scenario regional_limit differs from build
     _apply_regional_limit_scaling(n, snakemake.config["land"]["regional_limit"])

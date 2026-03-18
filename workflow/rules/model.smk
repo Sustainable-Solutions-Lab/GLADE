@@ -73,23 +73,11 @@ def build_model_fiber_baseline_input(wildcards):
 
 
 def build_model_grassland_calibration_input(wildcards):
-    """Conditionally include grassland forage calibration CSVs.
+    """Grassland forage calibration is now applied at solve time.
 
-    When ``generate`` is true, calibration files are produced from a solved
-    model that depends on this build, so we must exclude them to avoid a DAG
-    cycle.  The calibration corrections are instead applied at solve time for
-    non-source scenarios.
+    This stub remains to avoid breaking unpack() calls in build_model inputs
+    while the transition settles.
     """
-    cal_cfg = config["grazing"]["grassland_forage_calibration"]
-    if cal_cfg["generate"]:
-        # Calibration is generated from a solved model → skip to break cycle.
-        return {}
-    if cal_cfg["enabled"]:
-        return {
-            "grassland_yield_correction": cal_cfg["grassland_yield_correction"],
-            "fodder_conversion_correction": cal_cfg["fodder_conversion_correction"],
-            "exogenous_forage": cal_cfg["exogenous_forage"],
-        }
     return {}
 
 
@@ -262,6 +250,16 @@ def solve_model_inputs(w):
     ):
         inputs["nutrition"] = "data/curated/nutrition.csv"
 
+    # Grassland forage calibration: include CSVs when enabled for this scenario.
+    # When generate=true, the calibration CSVs are produced from the source
+    # scenario's solve, so non-source scenarios depend on them via the DAG.
+    # The source scenario has enabled=false and skips this block.
+    cal_cfg = eff_cfg["grazing"]["grassland_forage_calibration"]
+    if cal_cfg["enabled"]:
+        inputs["grassland_yield_correction"] = cal_cfg["grassland_yield_correction"]
+        inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
+        inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
+
     return inputs
 
 
@@ -362,6 +360,11 @@ rule solve_model:
             "food_groups"
         ]["fix_within_group_ratios"],
         sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
+        forage_calibration_enabled=lambda w: get_effective_config(w.scenario)[
+            "grazing"
+        ]["grassland_forage_calibration"]["enabled"],
+        forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
+        enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
         # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:

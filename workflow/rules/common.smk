@@ -83,6 +83,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "biomass.marginal_values_usd_per_tonne",
     "biomass.biofuel_demand_scale",
     "land.regional_limit",
+    "grazing.grassland_forage_calibration.enabled",
     "sensitivity",
     "solving",
     "plotting",

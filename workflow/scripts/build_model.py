@@ -67,22 +67,8 @@ if __name__ == "__main__":
     )  # Already in bn USD
     grassland_yield_multiplier = float(validation_cfg["grassland_yield_multiplier"])
 
-    grassland_cal_cfg = snakemake.params.grazing["grassland_forage_calibration"]
-    grassland_yield_cal_path = (
-        snakemake.input.get("grassland_yield_correction")
-        if grassland_cal_cfg["enabled"]
-        else None
-    )
-    fodder_cal_path = (
-        snakemake.input.get("fodder_conversion_correction")
-        if grassland_cal_cfg["enabled"]
-        else None
-    )
-    exogenous_forage_path = (
-        snakemake.input.get("exogenous_forage")
-        if grassland_cal_cfg["enabled"]
-        else None
-    )
+    # Grassland forage calibration is applied at solve time (not build time)
+    # to allow calibrated and uncalibrated scenarios to share a single build.
 
     # ═══════════════════════════════════════════════════════════════
     # DATA LOADING
@@ -832,27 +818,6 @@ if __name__ == "__main__":
             cost_calibration=grassland_cost_calibration,
         )
 
-        # Apply grassland yield correction from forage calibration.
-        # This scales efficiency on grassland_production links per country,
-        # reducing production to match observed demand.
-        if grassland_yield_cal_path:
-            _yield_cal = read_csv(grassland_yield_cal_path)
-            _grass_links = n.links.static[
-                n.links.static["carrier"] == "grassland_production"
-            ]
-            if not _grass_links.empty and not _yield_cal.empty:
-                _cal_map = _yield_cal.set_index("country")["yield_correction"]
-                _corrections = (
-                    _grass_links["country"].map(_cal_map).fillna(1.0).to_numpy()
-                )
-                n.links.static.loc[_grass_links.index, "efficiency"] *= _corrections
-                n_adjusted = int((_corrections < 1.0).sum())
-                logger.info(
-                    "Applied grassland yield corrections: %d/%d links adjusted",
-                    n_adjusted,
-                    len(_grass_links),
-                )
-
     # Food conversion
     food.add_food_conversion_links(
         n,
@@ -938,72 +903,6 @@ if __name__ == "__main__":
         feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
     )
-
-    # Apply fodder-to-forage conversion correction from calibration.
-    # This scales down the efficiency of feed_conversion links that route
-    # forage crops (alfalfa, silage-maize, biomass-sorghum) to ruminant_forage
-    # buses, accounting for proportional surplus attribution.
-    if fodder_cal_path:
-        _fodder_cal = read_csv(fodder_cal_path)
-        _forage_crops = snakemake.config["grazing"]["forage_overlap_crops"]
-        _fc_links = n.links.static[
-            (n.links.static["carrier"] == "feed_conversion")
-            & (n.links.static["feed_category"] == "ruminant_forage")
-            & (n.links.static["crop"].isin(_forage_crops))
-        ]
-        if not _fc_links.empty:
-            _cal_map = _fodder_cal.set_index("country")["fodder_conversion_correction"]
-            _corrections = _fc_links["country"].map(_cal_map).fillna(1.0).to_numpy()
-            n.links.static.loc[_fc_links.index, "efficiency"] *= _corrections
-            n_adjusted = int((_corrections < 1.0).sum())
-            logger.info(
-                "Applied fodder conversion corrections: %d/%d links adjusted",
-                n_adjusted,
-                len(_fc_links),
-            )
-
-    # Add exogenous forage from calibration (deficit countries)
-    if exogenous_forage_path:
-        _exo_cal = read_csv(exogenous_forage_path)
-        exog = _exo_cal[_exo_cal["exogenous_forage_mt_dm"] > 0].copy()
-        if not exog.empty:
-            exog_buses = "feed:ruminant_forage:" + exog["country"]
-            bus_exists = exog_buses.isin(n.buses.static.index)
-            exog = exog[bus_exists.values]
-            exog_buses = exog_buses[bus_exists.values]
-            if not exog.empty:
-                if "exogenous_forage_cal" not in n.carriers.static.index:
-                    n.carriers.add("exogenous_forage_cal", unit="Mt")
-                gen_names = pd.Index(
-                    "supply:exogenous_forage:" + exog["country"].values,
-                    dtype="object",
-                )
-                if enforce_baseline_feed:
-                    n.generators.add(
-                        gen_names,
-                        bus=exog_buses.values,
-                        carrier="exogenous_forage_cal",
-                        p_nom=exog["exogenous_forage_mt_dm"].values,
-                        p_nom_extendable=False,
-                        p_min_pu=1.0,
-                        p_max_pu=1.0,
-                        country=exog["country"].values,
-                    )
-                else:
-                    n.generators.add(
-                        gen_names,
-                        bus=exog_buses.values,
-                        carrier="exogenous_forage_cal",
-                        p_nom_extendable=True,
-                        p_nom_max=exog["exogenous_forage_mt_dm"].values,
-                        marginal_cost=0.0,
-                        country=exog["country"].values,
-                    )
-                logger.info(
-                    "Added %d exogenous forage generators (%.1f Mt DM total)",
-                    len(gen_names),
-                    exog["exogenous_forage_mt_dm"].sum(),
-                )
 
     # Add feed slack generators for validation mode feasibility
     if use_actual_production or enforce_baseline_feed:
