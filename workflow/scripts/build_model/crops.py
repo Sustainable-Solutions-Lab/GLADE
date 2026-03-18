@@ -22,6 +22,59 @@ from .utils import merge_lef
 logger = logging.getLogger(__name__)
 
 
+def _redistribute_excess_baseline(df: pd.DataFrame) -> pd.Series:
+    """Cap baseline_area_mha at p_nom_max, redistributing excess within each crop x country.
+
+    When FAOSTAT harvested area disaggregated to a region exceeds the land
+    available there (p_nom_max), the excess is proportionally redistributed
+    to other links of the same crop x country that still have spare capacity.
+    This preserves national totals as far as capacity allows.
+    """
+    baseline = df["baseline_area_mha"].copy()
+    cap = df["p_nom_max"]
+
+    excess_mask = baseline > cap
+    if not excess_mask.any():
+        return baseline
+
+    # Cap over-allocated links
+    excess = (baseline - cap).clip(lower=0)
+    baseline = baseline.clip(upper=cap)
+
+    # Redistribute per crop x country group
+    group_keys = df["crop"].astype(str) + ":" + df["country"].astype(str)
+    total_excess_before = float(excess.sum())
+    unplaced = 0.0
+
+    for _key, idx in baseline.groupby(group_keys).groups.items():
+        group_excess = float(excess.loc[idx].sum())
+        if group_excess <= 0:
+            continue
+
+        spare = (cap.loc[idx] - baseline.loc[idx]).clip(lower=0)
+        total_spare = float(spare.sum())
+        if total_spare <= 0:
+            unplaced += group_excess
+            continue
+
+        # Distribute proportionally to spare capacity
+        allocated = min(group_excess, total_spare)
+        baseline.loc[idx] += spare / total_spare * allocated
+        if group_excess > total_spare:
+            unplaced += group_excess - total_spare
+
+    # Final safety clip (numerical precision)
+    baseline = baseline.clip(upper=cap)
+
+    logger.info(
+        "Baseline redistribution: capped %.1f Mha excess, "
+        "%.1f Mha unplaceable (no spare capacity in same crop x country)",
+        total_excess_before,
+        unplaced,
+    )
+    return baseline
+
+
 def add_regional_crop_production_links(
     n: pypsa.Network,
     crop_list: list,
@@ -207,6 +260,11 @@ def add_regional_crop_production_links(
 
     all_df = pd.concat(all_rows, axis=0)
     all_df.index = all_df.index.astype(str)
+
+    # Cap baseline_area_mha at p_nom_max and redistribute excess to other
+    # links of the same crop x country so that national totals are preserved
+    # while respecting per-link land availability.
+    all_df["baseline_area_mha"] = _redistribute_excess_baseline(all_df)
 
     # Look up per-(crop, country) cost, falling back to global median
     cost_keys = list(zip(all_df["crop"].astype(str), all_df["country"].astype(str)))
