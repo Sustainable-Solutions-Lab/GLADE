@@ -18,10 +18,10 @@ scenarios:
   # to extract consumer values (dual variables) for piecewise food utility
   # calibration.
   #
-  # The four trade-friction scenarios sweep trade costs from 0.25x to 100x the
-  # baseline values. They use piecewise food utility (derived from the baseline
-  # solve) to induce realistic demand, keeping the model as a pure LP for fast
-  # solves.
+  # The GHG price scenarios sweep carbon prices from $0 to $500/tCO2-eq for the
+  # landing-page production pattern GIF, showing how land use shifts under
+  # increasing carbon pricing. All use piecewise food utility and l1 production
+  # stability, matching the sensitivity analysis setup.
 
   default: {}
 
@@ -29,133 +29,63 @@ scenarios:
     # Fixed consumption to extract consumer values (dual variables)
     validation:
       enforce_baseline_diet: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
-
-  # --- Trade friction scenarios for landing-page GIF ---
-  # Each multiplies every cost_per_km and default_trade_cost_per_km by the
-  # stated factor. All use piecewise food utility for demand incentives.
-
-  free_trade:
     food_utility_piecewise:
-      enabled: true
+      enabled: false
     food_groups:
       fix_within_group_ratios:
         enabled: true
-    validation:
-      production_stability:
-        enabled: true
-        penalty_mode: "l1"
-    trade:
-      crop_default_trade_cost_per_km: 0.0025
-      crop_trade_cost_categories:
-        bulk_dry_goods:
-          cost_per_km: 0.0015
-        bulky_fresh:
-          cost_per_km: 0.0035
-        perishable_high_value:
-          cost_per_km: 0.0055
-      food_default_trade_cost_per_km: 0.00525
-      food_trade_cost_categories:
-        chilled_meat:
-          cost_per_km: 0.007
-        dairy_and_eggs:
-          cost_per_km: 0.006
-      feed_default_trade_cost_per_km: 0.003
-      feed_trade_cost_categories:
-        grain_protein:
-          cost_per_km: 0.0015
-        forage:
-          cost_per_km: 0.003
-        bulky_low_quality:
-          cost_per_km: 0.004
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
 
-  default_trade:
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
-    validation:
-      production_stability:
-        enabled: true
-        penalty_mode: "l1"
+  # --- GHG price scenarios for landing-page GIF ---
+  # Round numbers on a roughly log scale from $0 to $500/tCO2-eq.
+  ghg_0: &ghg_base
+    food_utility_piecewise: {enabled: true}
+    macronutrients: {cal: {equal_to_baseline: true}}
+    health: {value_per_yll: 0}
+    emissions: {ghg_price: 0}
 
-  costly_trade:
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
-    validation:
-      production_stability:
-        enabled: true
-        penalty_mode: "l1"
-    trade:
-      crop_default_trade_cost_per_km: 0.04
-      crop_trade_cost_categories:
-        bulk_dry_goods:
-          cost_per_km: 0.024
-        bulky_fresh:
-          cost_per_km: 0.056
-        perishable_high_value:
-          cost_per_km: 0.088
-      food_default_trade_cost_per_km: 0.084
-      food_trade_cost_categories:
-        chilled_meat:
-          cost_per_km: 0.112
-        dairy_and_eggs:
-          cost_per_km: 0.096
-      feed_default_trade_cost_per_km: 0.048
-      feed_trade_cost_categories:
-        grain_protein:
-          cost_per_km: 0.024
-        forage:
-          cost_per_km: 0.048
-        bulky_low_quality:
-          cost_per_km: 0.064
+  ghg_10:
+    <<: *ghg_base
+    emissions: {ghg_price: 10}
 
-  autarky:
-    food_utility_piecewise:
-      enabled: true
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
-    validation:
-      production_stability:
-        enabled: true
-        penalty_mode: "l1"
-    trade:
-      crop_default_trade_cost_per_km: 1.0
-      crop_trade_cost_categories:
-        bulk_dry_goods:
-          cost_per_km: 0.6
-        bulky_fresh:
-          cost_per_km: 1.4
-        perishable_high_value:
-          cost_per_km: 2.2
-      food_default_trade_cost_per_km: 2.1
-      food_trade_cost_categories:
-        chilled_meat:
-          cost_per_km: 2.8
-        dairy_and_eggs:
-          cost_per_km: 2.4
-      feed_default_trade_cost_per_km: 1.2
-      feed_trade_cost_categories:
-        grain_protein:
-          cost_per_km: 0.6
-        forage:
-          cost_per_km: 1.2
-        bulky_low_quality:
-          cost_per_km: 1.6
+  ghg_50:
+    <<: *ghg_base
+    emissions: {ghg_price: 50}
 
-# Disable health and GHG pricing globally for all doc figure scenarios
+  ghg_200:
+    <<: *ghg_base
+    emissions: {ghg_price: 200}
+
+  ghg_500:
+    <<: *ghg_base
+    emissions: {ghg_price: 500}
+
+planning_horizon: 2020
+baseline_year: 2020
+
+# Enable piecewise utility at base level (blocks get built from baseline)
+food_utility_piecewise:
+  enabled: true
+
+cost_calibration:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.5
+
+water:
+  supply_scenario: "current_use"
+
 health:
   enabled: false
-
-emissions:
-  ghg_pricing_enabled: false
 
 solving:
   solver: "gurobi"

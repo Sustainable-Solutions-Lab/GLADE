@@ -8,10 +8,10 @@
 A global food systems optimization model that explores trade-offs between environmental sustainability and nutritional outcomes using linear programming.
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/production_pattern.gif
-   :alt: Animated map showing how optimal crop production patterns shift as trade friction increases from free trade to near-autarky.
+   :alt: Animated map showing how optimal crop production patterns shift as carbon prices increase from $0 to $500 per tonne CO2-equivalent.
    :width: 100%
 
-   Dominant crop group and land-use intensity under increasing trade friction. The animation sweeps from nearly free trade (0.25× baseline transport costs) through the baseline (1×) and costly trade (4×) to near-autarky (100×). As trade becomes more expensive, production disperses from comparative-advantage regions toward local self-sufficiency, and total land use rises.
+   Dominant crop group, land-use intensity, and livestock protein output under increasing carbon pricing. The animation sweeps from no carbon price ($0/tCO\ :sub:`2`-eq) through moderate ($50) and high ($200) to very high ($500). Circles show animal-product protein output per country (area proportional to Mt protein); colour indicates feed conversion ratio (green = efficient, red = inefficient). As carbon prices rise, cropland contracts and livestock production concentrates in more efficient systems.
 
 ----
 

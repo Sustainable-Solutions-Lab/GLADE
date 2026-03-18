@@ -46,6 +46,107 @@ from workflow.scripts.plotting.plot_crop_production_map import (
 logger = logging.getLogger(__name__)
 
 
+def _overlay_livestock(
+    ax,
+    gdf: gpd.GeoDataFrame,
+    animal_df: pd.DataFrame,
+    plate,
+) -> None:
+    """Overlay livestock production dots sized by output and colored by FCR.
+
+    Args:
+        ax: Cartopy GeoAxes to draw on.
+        gdf: GeoDataFrame with region geometries (must have 'country' column).
+        animal_df: DataFrame with columns: country, total_product, fcr.
+        plate: PlateCarree CRS for coordinate transforms.
+    """
+    from matplotlib.colors import Normalize
+
+    # Country centroids (dissolve regions to countries, then centroid)
+    countries = gdf.dissolve(by="country", as_index=False)
+    countries_proj = countries.to_crs("+proj=cea")
+    centroids_proj = countries_proj.geometry.centroid
+    centroids_ll = centroids_proj.to_crs(4326)
+    countries["lon"] = centroids_ll.x
+    countries["lat"] = centroids_ll.y
+
+    merged = countries.merge(animal_df, on="country", how="inner")
+    merged = merged[merged["total_product"] > 0.5]  # Skip tiny producers
+
+    # Size scaling: scatter 's' is marker area (points²), so s ∝ value
+    # gives visually correct area-proportional circles.
+    # Use fixed reference so legend is stable across GIF frames.
+    max_size = 150.0  # points² for the reference value
+    max_val = 15.0  # Mt protein reference (legend top)
+    sizes = merged["total_protein"].values / max_val * max_size
+
+    # FCR colormap: low FCR (efficient) = green, high FCR = red/orange
+    fcr_vals = merged["fcr"].values
+    fcr_norm = Normalize(vmin=2, vmax=12, clip=True)
+    cmap = plt.colormaps["RdYlGn_r"]
+
+    ax.scatter(
+        merged["lon"].values,
+        merged["lat"].values,
+        s=sizes,
+        c=fcr_vals,
+        cmap=cmap,
+        norm=fcr_norm,
+        transform=plate,
+        edgecolors="white",
+        linewidths=0.4,
+        alpha=0.8,
+        zorder=4,
+    )
+
+    # --- Compact graduated-circle legend in the Pacific ---
+    legend_vals = [1, 5, 15]  # Mt protein
+    legend_sizes = [v / max_val * max_size for v in legend_vals]
+
+    leg_x = 0.92
+    leg_y_base = 0.52
+    leg_dy = 0.055
+
+    for i, (val, sz) in enumerate(zip(legend_vals, legend_sizes)):
+        y = leg_y_base + i * leg_dy
+        ax.scatter(
+            leg_x,
+            y,
+            s=sz,
+            c="#aaaaaa",
+            edgecolors="white",
+            linewidths=0.4,
+            transform=ax.transAxes,
+            zorder=5,
+            alpha=0.8,
+        )
+        ax.text(
+            leg_x + 0.035,
+            y,
+            f"{val}",
+            transform=ax.transAxes,
+            fontsize=FONT_SIZES["annotation"] - 1,
+            va="center",
+            ha="left",
+            color="#555555",
+            zorder=5,
+        )
+
+    # Legend title
+    ax.text(
+        leg_x + 0.01,
+        leg_y_base + len(legend_vals) * leg_dy + 0.01,
+        "Protein (Mt)",
+        transform=ax.transAxes,
+        fontsize=FONT_SIZES["annotation"] - 1,
+        va="bottom",
+        ha="center",
+        color="#555555",
+        fontweight="bold",
+        zorder=5,
+    )
+
+
 def _plot_frame(
     dominant_group_grid: np.ndarray,
     intensity_grid: np.ndarray,
@@ -57,6 +158,7 @@ def _plot_frame(
     output_path: str,
     frame_label: str,
     bar_xmax_mha: float,
+    animal_by_country: pd.DataFrame | None = None,
 ) -> None:
     """Plot a single production-pattern frame (map + simplified bar chart).
 
@@ -265,6 +367,10 @@ def _plot_frame(
             spine.set_linewidth(0.5)
             spine.set_color("#cccccc")
 
+    # --- Livestock production overlay ---
+    if animal_by_country is not None and not animal_by_country.empty:
+        _overlay_livestock(ax, gdf, animal_by_country, plate)
+
     # Unmodeled-regions annotation
     fig.text(
         map_pos.x1,
@@ -304,6 +410,7 @@ def main() -> None:
     land_area_by_class_path: str = snakemake.input.land_area_by_class  # type: ignore[name-defined]
     land_grazing_only_path: str = snakemake.input.land_grazing_only  # type: ignore[name-defined]
     land_use_path: str = snakemake.input.land_use  # type: ignore[name-defined]
+    network_path: str = snakemake.input.network  # type: ignore[name-defined]
     output_png: str = snakemake.output.png  # type: ignore[name-defined]
     frame_label: str = snakemake.params.frame_label  # type: ignore[name-defined]
     bar_xmax_mha: float = snakemake.params.bar_xmax_mha  # type: ignore[name-defined]
@@ -320,6 +427,46 @@ def main() -> None:
         land_area_by_class_path, land_grazing_only_path
     )
     land_use_by_rc_crop = _load_land_use_by_region_class_crop(land_use_path)
+
+    # Load animal production data from solved network
+    import pypsa
+
+    n = pypsa.Network(str(network_path))
+    animal_links = n.links.static[n.links.static["carrier"] == "animal_production"]
+    p0 = n.links.dynamic["p0"]
+    if not animal_links.empty:
+        # Load protein fractions (g protein / 100g product → fraction)
+        nutrition = pd.read_csv("data/curated/nutrition.csv")
+        protein_frac = (
+            nutrition[nutrition["nutrient"] == "protein"]
+            .set_index("food")["value"]
+            .astype(float)
+            / 100.0
+        )
+
+        feed_mt = p0.iloc[0][animal_links.index].values
+        product_mt = feed_mt * animal_links["efficiency"].astype(float).values
+        products = animal_links["product"].values
+        protein_mt = product_mt * np.array([protein_frac.get(p, 0.0) for p in products])
+        adf = pd.DataFrame(
+            {
+                "country": animal_links["country"].values,
+                "feed_mt": feed_mt,
+                "product_mt": product_mt,
+                "protein_mt": protein_mt,
+            }
+        )
+        animal_by_country = adf.groupby("country").agg(
+            total_product=("product_mt", "sum"),
+            total_protein=("protein_mt", "sum"),
+            total_feed=("feed_mt", "sum"),
+        )
+        animal_by_country["fcr"] = animal_by_country["total_feed"] / animal_by_country[
+            "total_product"
+        ].where(animal_by_country["total_product"] > 0, 1)
+        animal_by_country = animal_by_country.reset_index()
+    else:
+        animal_by_country = None
 
     if not land_use_by_rc_crop.empty:
         dominant_group_grid, intensity_grid, _crops_by_group, area_by_crop = (
@@ -345,6 +492,7 @@ def main() -> None:
             output_png,
             frame_label=frame_label,
             bar_xmax_mha=bar_xmax_mha,
+            animal_by_country=animal_by_country,
         )
     else:
         logger.warning("No land use data; skipping frame generation")

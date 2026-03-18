@@ -62,6 +62,9 @@ DOC_FIGURES = [
     # Current diets figures
     "baseline_diet_by_region",
     "baseline_diet_by_food",
+    # Cost figures
+    "costs_crop_cost_map",
+    "costs_crop_cost_distribution",
 ]
 
 # Validation figures use the doc_validation config (separate from doc_figures)
@@ -752,34 +755,87 @@ rule doc_fig_validation_grassland_calibration:
         "../scripts/doc_figures/validation_grassland_calibration.py"
 
 
-# --- Trade friction production pattern GIF ---
+# --- GHG price sensitivity production pattern GIF ---
+#
+# Shows how crop production patterns shift as carbon prices increase.
+# Scenarios are defined in docs/config/doc_figures.yaml.
 
-TRADE_SCENARIOS = ["free_trade", "default_trade", "costly_trade", "autarky"]
+GHG_PRICE_SCENARIOS = ["ghg_0", "ghg_10", "ghg_50", "ghg_200", "ghg_500"]
 
-TRADE_SCENARIO_LABELS = {
-    "free_trade": "Free trade (0.25\u00d7 trade costs)",
-    "default_trade": "Baseline trade (1\u00d7 trade costs)",
-    "costly_trade": "Costly trade (4\u00d7 trade costs)",
-    "autarky": "Near-autarky (100\u00d7 trade costs)",
+GHG_PRICE_LABELS = {
+    "ghg_0": "No carbon price ($0/tCO\u2082-eq)",
+    "ghg_10": "Low carbon price ($10/tCO\u2082-eq)",
+    "ghg_50": "Moderate carbon price ($50/tCO\u2082-eq)",
+    "ghg_200": "High carbon price ($200/tCO\u2082-eq)",
+    "ghg_500": "Very high carbon price ($500/tCO\u2082-eq)",
 }
+
+
+rule doc_fig_costs_crop_cost_map:
+    """Generate choropleth map of median crop costs per country."""
+    input:
+        costs=f"<processing>/{DOC_FIG_NAME}/faostat_crop_costs.csv",
+        regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
+        style=DOC_FIG_STYLE,
+    params:
+        base_year=config["currency_base_year"],
+    output:
+        svg="docs/_static/figures/costs_crop_cost_map.svg",
+        png="docs/_static/figures/costs_crop_cost_map.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_costs_crop_cost_map.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_costs_crop_cost_map.tsv"
+    script:
+        "../scripts/doc_figures/costs_crop_cost_map.py"
+
+
+rule doc_fig_costs_crop_cost_distribution:
+    """Generate boxen plot of crop cost distributions across countries."""
+    input:
+        costs=f"<processing>/{DOC_FIG_NAME}/faostat_crop_costs.csv",
+        style=DOC_FIG_STYLE,
+    params:
+        base_year=config["currency_base_year"],
+    output:
+        svg="docs/_static/figures/costs_crop_cost_distribution.svg",
+        png="docs/_static/figures/costs_crop_cost_distribution.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/doc_fig_costs_crop_cost_distribution.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_costs_crop_cost_distribution.tsv"
+    script:
+        "../scripts/doc_figures/costs_crop_cost_distribution.py"
+
 
 # Fixed bar-chart x-axis scale (Mha) shared across all frames for comparability.
 PRODUCTION_PATTERN_BAR_XMAX = 400
 
 
 rule doc_fig_production_pattern_frame:
-    """Generate one production-pattern PNG frame for a trade scenario."""
+    """Generate one production-pattern PNG frame for a GHG price scenario."""
     input:
         regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
         resource_classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
         land_area_by_class=f"<processing>/{DOC_FIG_NAME}/land_area_by_class.csv",
         land_grazing_only=f"<processing>/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
-        land_use=f"<results>/{DOC_FIG_NAME}/analysis/scen-{{trade_scenario}}/land_use.csv",
+        land_use=f"<results>/{DOC_FIG_NAME}/analysis/scen-{{ghg_scenario}}/land_use.csv",
+        network=f"<results>/{DOC_FIG_NAME}/solved/model_scen-{{ghg_scenario}}.nc",
         style=DOC_FIG_STYLE,
     output:
-        png="docs/_static/figures/production_pattern_{trade_scenario}.png",
+        png="docs/_static/figures/production_pattern_{ghg_scenario}.png",
     params:
-        frame_label=lambda w: TRADE_SCENARIO_LABELS[w.trade_scenario],
+        frame_label=lambda w: GHG_PRICE_LABELS[w.ghg_scenario],
         bar_xmax_mha=PRODUCTION_PATTERN_BAR_XMAX,
     group:
         "analysis_plot"
@@ -787,19 +843,19 @@ rule doc_fig_production_pattern_frame:
         runtime="10m",
         mem_mb=2000,
     log:
-        "<logs>/shared/doc_fig_production_pattern_{trade_scenario}.log",
+        "<logs>/shared/doc_fig_production_pattern_{ghg_scenario}.log",
     benchmark:
-        "<benchmarks>/shared/doc_fig_production_pattern_{trade_scenario}.tsv"
+        "<benchmarks>/shared/doc_fig_production_pattern_{ghg_scenario}.tsv"
     script:
         "../scripts/doc_figures/production_pattern.py"
 
 
 rule doc_fig_production_pattern_gif:
-    """Collate trade-friction frames into an animated GIF."""
+    """Collate GHG price sensitivity frames into an animated GIF."""
     input:
         frames=expand(
-            "docs/_static/figures/production_pattern_{ts}.png",
-            ts=TRADE_SCENARIOS,
+            "docs/_static/figures/production_pattern_{gs}.png",
+            gs=GHG_PRICE_SCENARIOS,
         ),
     output:
         gif="docs/_static/figures/production_pattern.gif",
@@ -827,8 +883,8 @@ rule build_docs:
         # Production pattern GIF (landing page)
         "docs/_static/figures/production_pattern.gif",
         expand(
-            "docs/_static/figures/production_pattern_{ts}.png",
-            ts=TRADE_SCENARIOS,
+            "docs/_static/figures/production_pattern_{gs}.png",
+            gs=GHG_PRICE_SCENARIOS,
         ),
         # Documentation source files
         "docs/conf.py",

@@ -118,7 +118,9 @@ The cost model uses revenue per hectare as a proxy for total production cost, sc
 
 .. math::
 
-   \text{cost\_usd\_per\_ha} = \text{price (USD/t)} \times \text{yield (t/ha)} \times \text{non\_endogenous\_cost\_share}
+   C_{\mathrm{ha}} = P \times Y \times f_{\mathrm{non\text{-}endog}}
+
+where :math:`P` is the producer price (USD/t), :math:`Y` is yield (t/ha), and :math:`f_{\mathrm{non\text{-}endog}}` is the non-endogenous cost share (default 0.7).
 
 Processing steps:
 
@@ -137,14 +139,34 @@ Processing steps:
    * ``n_years``: Number of years with valid price-yield data
    * ``is_fallback``: Whether the value is a global median fallback
 
+The resulting cost estimates vary substantially across crops and countries, reflecting differences in local prices, yields, and agricultural productivity.  The map below shows the median cost per country (across all crops), while the distribution plot reveals the cross-country spread for each crop individually.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/costs_crop_cost_map.png
+   :width: 100%
+   :alt: World map of median crop production costs per country
+
+   Median crop production cost across all crops per country (USD/ha, log scale).
+   Higher costs in Europe and North America reflect higher input prices and labour costs;
+   lower costs in Sub-Saharan Africa and South Asia reflect lower price levels.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/costs_crop_cost_distribution.png
+   :width: 100%
+   :alt: Distribution of crop production costs across countries for each crop
+
+   Cross-country cost distributions per crop (USD/ha, log scale).
+   Boxen (letter-value) plots show the full distributional shape; crops are grouped
+   by category.  Vegetables and fruits have the highest and most variable costs,
+   while cereals and legumes cluster at lower levels.
+
 Calibration Correction
 ^^^^^^^^^^^^^^^^^^^^^^
 
-An optional additive calibration correction can adjust crop costs based on production stability duals from a solved model. When enabled, the correction shifts marginal costs to better reflect observed production patterns.
+An optional additive calibration correction adjusts production costs for crops, grassland, and animals based on shadow prices from a model solved with tight production stability constraints.  When the model is forced to reproduce observed production levels (±1%), the dual variables on those constraints reveal how much each production link's cost would need to change to make the observed allocation cost-optimal.  These duals are extracted as additive corrections and applied at build time.
 
 * **Correction files**: ``data/curated/calibration/crop_cost.csv``, ``grassland_cost.csv``, ``animal_cost.csv``
 * **Application**: Additive corrections to marginal costs; clipped to zero (no negative costs)
 * **Configuration**: Controlled by top-level ``cost_calibration`` section (disabled by default)
+* **Generation**: ``tools/smk --configfile config/cost_calibration.yaml -- data/curated/calibration/crop_cost.csv data/curated/calibration/grassland_cost.csv data/curated/calibration/animal_cost.csv``
 
 Livestock Costs
 ~~~~~~~~~~~~~~~
