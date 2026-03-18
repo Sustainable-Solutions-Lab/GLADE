@@ -10,10 +10,6 @@
 name: "doc_validation"
 scenarios:
   default: {}
-  uncalibrated:
-    grazing:
-      grassland_forage_calibration:
-        enabled: false
 
 planning_horizon: 2020
 
@@ -36,9 +32,6 @@ residues:
 
 grazing:
   isimip_utilization_rate: 0.60
-  grassland_forage_calibration:
-    generate: true
-    scenario: uncalibrated
 
 land:
   regional_limit: 1.
