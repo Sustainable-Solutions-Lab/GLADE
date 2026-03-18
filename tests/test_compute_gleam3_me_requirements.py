@@ -20,6 +20,7 @@ def test_assign_feed_me_maps_ruminant_grass_and_leaves_to_forage() -> None:
             "Animal": ["Cattle"],
             "feed_category": ["Grass and leaves"],
             "DM.intake": [2.0],
+            "LPS": ["Mixed"],
         }
     )
     me_lookup = {("ruminant", "forage"): 9.5}
@@ -50,6 +51,8 @@ def test_compute_country_me_uses_fallback_for_zero_buffalo_feed() -> None:
         }
     )
 
-    result = _compute_country_me(ci, cp, wirsenius, "SSA", k_m=1.0, k_g=1.0, k_l=1.0)
+    me_dict, _f_dict = _compute_country_me(
+        ci, cp, wirsenius, "SSA", k_m=1.0, k_g=1.0, k_l=1.0
+    )
 
-    assert result["dairy-buffalo"] is None
+    assert me_dict["dairy-buffalo"] is None
