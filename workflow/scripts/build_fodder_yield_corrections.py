@@ -220,9 +220,14 @@ if __name__ == "__main__":
                 )
 
         corrections = pd.DataFrame(results)
-        corrections = corrections.sort_values(["country", "crop"]).reset_index(
-            drop=True
-        )
+        if corrections.empty:
+            corrections = pd.DataFrame(
+                columns=["country", "crop", "yield_correction_factor"]
+            )
+        else:
+            corrections = corrections.sort_values(["country", "crop"]).reset_index(
+                drop=True
+            )
         corrections.to_csv(out_path, index=False)
         logger.info(
             "Wrote %d fodder yield corrections to %s", len(corrections), out_path
