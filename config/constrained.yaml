@@ -10,82 +10,22 @@ scenarios:
   # from near-baseline production toward unconstrained optimization.
   # The final scenario disables production stability entirely.
 
-  ps_000:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.00
-        animals:
-          enabled: true
-          max_relative_deviation: 0.00
-
-  ps_005:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.05
-        animals:
-          enabled: true
-          max_relative_deviation: 0.05
-
-  ps_010:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.10
-        animals:
-          enabled: true
-          max_relative_deviation: 0.10
-
-  ps_020:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.20
-        animals:
-          enabled: true
-          max_relative_deviation: 0.20
-
-  ps_040:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.40
-        animals:
-          enabled: true
-          max_relative_deviation: 0.40
-
-  ps_080:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 0.80
-        animals:
-          enabled: true
-          max_relative_deviation: 0.80
-
-  ps_100:
-    validation:
-      production_stability:
-        enabled: true
-        crops:
-          enabled: true
-          max_relative_deviation: 1.00
-        animals:
-          enabled: true
-          max_relative_deviation: 1.00
+  _generators:
+    - name: ps_{deviation}
+      parameters:
+        deviation:
+          values: [0.00, 0.05, 0.10, 0.20, 0.40, 0.80, 1.00]
+          name_format: "lambda x: f'{int(x*100):03d}'"
+      template:
+        validation:
+          production_stability:
+            enabled: true
+            crops:
+              enabled: true
+              max_relative_deviation: "{deviation}"
+            animals:
+              enabled: true
+              max_relative_deviation: "{deviation}"
 
   ps_unconstrained:
     validation:

@@ -36,10 +36,10 @@ scenarios:
     - name: util_d{decay}_b{blocks}
       mode: grid
       parameters:
-        decay:
+        decay: &decay_param
           values: [0.5, 0.7, 0.9]
           name_format: "lambda x: str(x).replace('.', '')"
-        blocks:
+        blocks: &blocks_param
           values: [2, 4, 8]
       template:
         food_utility_piecewise:
@@ -58,11 +58,8 @@ scenarios:
     - name: util_d{decay}_b{blocks}_base
       mode: grid
       parameters:
-        decay:
-          values: [0.5, 0.7, 0.9]
-          name_format: "lambda x: str(x).replace('.', '')"
-        blocks:
-          values: [2, 4, 8]
+        decay: *decay_param
+        blocks: *blocks_param
       template:
         food_utility_piecewise:
           enabled: true

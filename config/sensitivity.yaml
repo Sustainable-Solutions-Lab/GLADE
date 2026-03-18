@@ -46,7 +46,7 @@ scenarios:
       parameters:
         prefix:
           values: ["ghg_0", "yll_0", "ghg_yll_0"]
-        l1_cost:
+        l1_cost: &l1_cost_param
           values: [0.5, 0.1, 10]
           name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
       template:
@@ -61,19 +61,17 @@ scenarios:
           production_stability:
             l1_cost: "{l1_cost}"
 
-    # GHG price sensitivity: 5 to 500 USD/tCO2-eq (log-spaced, 10 points)
+    # GHG price sensitivity: 5 to 500 USD/tCO2-eq (log-spaced)
     - name: "ghg_{ghg}{l1_cost}"
       mode: grid
       parameters:
-        ghg:
+        ghg: &ghg_range
           space: log
           start: 5
           stop: 500
-          num: 10
+          num: &num_points 10
           round: true
-        l1_cost:
-          values: [0.5, 0.1, 10]
-          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
+        l1_cost: *l1_cost_param
       template:
         emissions:
           ghg_price: "{ghg}"
@@ -86,19 +84,17 @@ scenarios:
           production_stability:
             l1_cost: "{l1_cost}"
 
-    # YLL value sensitivity: 50 to 100000 USD/YLL (log-spaced, 10 points)
+    # YLL value sensitivity: 50 to 100000 USD/YLL (log-spaced)
     - name: "yll_{yll}{l1_cost}"
       mode: grid
       parameters:
-        yll:
+        yll: &yll_range
           space: log
           start: 50
           stop: 100000
-          num: 10
+          num: *num_points
           round: true
-        l1_cost:
-          values: [0.5, 0.1, 10]
-          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
+        l1_cost: *l1_cost_param
       template:
         emissions:
           ghg_price: 0
@@ -111,23 +107,13 @@ scenarios:
           production_stability:
             l1_cost: "{l1_cost}"
 
-    # Combined sensitivity: both parameters vary together (log-spaced, 10 points each)
+    # Combined sensitivity: both parameters vary together (log-spaced)
     # Separate generators per l1_cost because ghg+yll must be zipped (not crossed).
     - name: ghg_yll_{ghg}
       mode: zip
       parameters:
-        ghg:
-          space: log
-          start: 5
-          stop: 500
-          num: 10
-          round: true
-        yll:
-          space: log
-          start: 50
-          stop: 100000
-          num: 10
-          round: true
+        ghg: *ghg_range
+        yll: *yll_range
       template:
         emissions:
           ghg_price: "{ghg}"
@@ -140,18 +126,8 @@ scenarios:
     - name: ghg_yll_{ghg}_l1_0p1
       mode: zip
       parameters:
-        ghg:
-          space: log
-          start: 5
-          stop: 500
-          num: 10
-          round: true
-        yll:
-          space: log
-          start: 50
-          stop: 100000
-          num: 10
-          round: true
+        ghg: *ghg_range
+        yll: *yll_range
       template:
         emissions:
           ghg_price: "{ghg}"
@@ -167,18 +143,8 @@ scenarios:
     - name: ghg_yll_{ghg}_l1_10
       mode: zip
       parameters:
-        ghg:
-          space: log
-          start: 5
-          stop: 500
-          num: 10
-          round: true
-        yll:
-          space: log
-          start: 50
-          stop: 100000
-          num: 10
-          round: true
+        ghg: *ghg_range
+        yll: *yll_range
       template:
         emissions:
           ghg_price: "{ghg}"
