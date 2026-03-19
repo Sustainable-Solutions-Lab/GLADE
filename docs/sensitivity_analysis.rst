@@ -603,8 +603,8 @@ Individual risk factor keys (e.g., ``whole_grains: 0.5``) remain supported and
 take precedence over group keys when both are specified. However, specifying
 both a group key and an individual key for the same risk factor raises an error.
 
-Production stability cost (``prod_stability_cost``: 0.1–10)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Production stability cost (``prod_stability_cost``: 0.05–0.5, slice parameter)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This parameter controls the L1 penalty cost applied to deviations of crop and
 animal product production from their current (baseline) levels. In the model's
@@ -613,16 +613,22 @@ deviation incurs a cost of ``l1_cost`` (bn USD per Mha for crops/grassland, or
 Mha-equivalent for animals). The penalty induces the optimizer to replicate
 current production patterns rather than radically restructuring the food system.
 
-The range spans an order of magnitude around the empirically calibrated value of
-~1.0. At an L1 cost of approximately 1.0, the model is roughly at the lowest
-cost level that induces replication of current production patterns in a
-sensitivity analysis focused on production stability. Below ~0.1 the penalty is
-too weak to prevent large production shifts; above ~10 the penalty dominates and
-the model is effectively locked to baseline production.
+The range 0.05–0.5 spans the behavioural transition zone: below ~0.05 the
+penalty is too weak to prevent large production shifts; by ~0.5 deviations have
+largely flattened to a residual floor. The central calibrated value of 0.22
+pushes cropland deviation to approximately 5%.
 
 **Distribution.** A ``uniform`` distribution is used because the range reflects
 a modelling choice (how strongly to penalise production deviations) rather than
 an empirically grounded uncertainty estimate.
+
+**Slice parameter.** Because the production stability cost is a structural
+modelling choice rather than an empirical uncertainty, it is designated as a
+**slice parameter** alongside the policy axes. This separates the effect of the
+modeller's regularisation choice from the variance attributable to physical
+parameter uncertainties. Conditional Sobol indices are reported at specific L1
+cost values (0.05, 0.22, 0.5), showing how sensitivity structure shifts with
+regularisation strength.
 
 Policy slice parameters
 ~~~~~~~~~~~~~~~~~~~~~~~

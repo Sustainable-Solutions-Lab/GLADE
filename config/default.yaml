@@ -77,7 +77,7 @@ validation:
     enabled: false
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
-    l1_cost: 1.0  # bn USD per Mha deviation (crops/grassland) or Mha-equivalent (animals)
+    l1_cost: 0.22  # bn USD per Mha deviation (crops/grassland) or Mha-equivalent (animals)
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
       enabled: true

@@ -27,7 +27,7 @@ scenarios:
   #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
   #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
   #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
-  #   - prod_stability_cost: 0.1-10 uniform (L1 penalty cost for production deviations)
+  #   - prod_stability_cost: 0.05-0.5 uniform (L1 penalty cost, slice parameter)
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
 
@@ -54,7 +54,12 @@ scenarios:
         n_mc_conditional: 4096
         cross_truncation: 0.8
       samples: 4096
-      slice_parameters: [value_per_yll, ghg_price]
+      slice_parameters: [value_per_yll, ghg_price, prod_stability_cost]
+      l1_plot_values: [0.05, 0.22, 0.5]
+      parameter_groups:
+        "Emission factors": [ch4_factor, n2o_factor, luc_factor]
+        "Agricultural": [yield_factor, flw_factor, fcr_factor]
+        "Health risk": [rr_protective, rr_harmful]
       parameters:
         yield_factor:
           lower: 0.8
@@ -99,8 +104,8 @@ scenarios:
           upper: 20000
           bounds: [0, null]
         prod_stability_cost:
-          lower: 0.1
-          upper: 10
+          lower: 0.05
+          upper: 0.5
           bounds: [0, null]
         ghg_price:
           lower: 0
@@ -141,7 +146,7 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.5
+    l1_cost: 0.22
 
 water:
   supply_scenario: "current_use"

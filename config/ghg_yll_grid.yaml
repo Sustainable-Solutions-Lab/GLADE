@@ -76,7 +76,7 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.5
+    l1_cost: 0.22
 
 water:
   supply_scenario: "current_use"

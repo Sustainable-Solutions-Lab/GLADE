@@ -397,7 +397,7 @@ are measured in absolute units or relative to the baseline.
 
 * ``production_stability.enabled``: Master switch for the feature (default: ``false``)
 * ``production_stability.penalty_mode``: ``hard``, ``l1``, or ``quadratic`` (default: ``hard``)
-* ``production_stability.l1_cost``: L1 penalty cost (default: 1.0, only used when ``penalty_mode`` is ``l1``)
+* ``production_stability.l1_cost``: L1 penalty cost (default: 0.22, only used when ``penalty_mode`` is ``l1``)
 * ``production_stability.quadratic_cost``: Quadratic penalty cost (default: 1.0, only used when ``penalty_mode`` is ``quadratic``)
 * ``production_stability.deviation_type``: ``absolute`` or ``relative`` (default: ``absolute``)
 * ``production_stability.crops.enabled``: Apply to crop production

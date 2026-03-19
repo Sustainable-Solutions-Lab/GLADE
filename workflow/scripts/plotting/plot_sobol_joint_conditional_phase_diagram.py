@@ -28,6 +28,7 @@ OUTPUT_LABELS = {
 }
 X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
+L1_COLUMN = "prod_stability_cost"
 
 
 def _validation_quality(error: float) -> str:
@@ -106,6 +107,7 @@ def main() -> None:
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
+    l1_value = getattr(snakemake.params, "l1_value", None)
 
     if not input_csv.exists():
         raise FileNotFoundError(f"Missing conditional joint indices file: {input_csv}")
@@ -118,6 +120,13 @@ def main() -> None:
         raise ValueError(f"Conditional joint indices file is empty: {input_csv}")
     if validation_df.empty:
         raise ValueError(f"Validation file is empty: {validation_csv}")
+
+    # Filter to specific L1 cost value if requested
+    if l1_value is not None and L1_COLUMN in df.columns:
+        nearest = df[L1_COLUMN].unique()
+        target = min(nearest, key=lambda v: abs(v - l1_value))
+        df = df[df[L1_COLUMN] == target].copy()
+        logger.info("Filtered to %s = %s (requested %s)", L1_COLUMN, target, l1_value)
 
     required_columns = {"output", "parameter", X_COLUMN, Y_COLUMN, metric_column}
     missing = required_columns - set(df.columns)
@@ -203,7 +212,10 @@ def main() -> None:
         frameon=False,
         title="Dominant factor",
     )
-    fig.suptitle("Dominant non-slice sensitivity factor across policy space", y=1.02)
+    l1_suffix = f" (L1 cost = {l1_value})" if l1_value is not None else ""
+    fig.suptitle(
+        f"Dominant non-slice sensitivity factor across policy space{l1_suffix}", y=1.02
+    )
     fig.text(
         0.01,
         0.01,

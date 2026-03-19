@@ -36,8 +36,8 @@ scenarios:
   # Generated Scenarios
   # =============================================================================
   # Each generator sweeps its primary parameter(s) × l1_cost (production
-  # stability penalty). The default l1_cost (0.5) produces the original
-  # scenario names; alternative values append a suffix (e.g. _l1_0p1).
+  # stability penalty). The default l1_cost (0.22) produces the original
+  # scenario names; alternative values append a suffix (e.g. _l1_0p05).
 
   _generators:
     # Zero-point scenarios for each sensitivity group × l1_cost
@@ -47,8 +47,8 @@ scenarios:
         prefix:
           values: ["ghg_0", "yll_0", "ghg_yll_0"]
         l1_cost: &l1_cost_param
-          values: [0.5, 0.1, 10]
-          name_format: "lambda x: '' if x == 0.5 else '_l1_' + str(x).replace('.', 'p')"
+          values: [0.22, 0.05, 0.5]
+          name_format: "lambda x: '' if x == 0.22 else '_l1_' + str(x).replace('.', 'p')"
       template:
         emissions:
           ghg_price: 0
@@ -123,7 +123,7 @@ scenarios:
           cal:
             equal_to_baseline: true
 
-    - name: ghg_yll_{ghg}_l1_0p1
+    - name: ghg_yll_{ghg}_l1_0p05
       mode: zip
       parameters:
         ghg: *ghg_range
@@ -138,9 +138,9 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 0.1
+            l1_cost: 0.05
 
-    - name: ghg_yll_{ghg}_l1_10
+    - name: ghg_yll_{ghg}_l1_0p5
       mode: zip
       parameters:
         ghg: *ghg_range
@@ -155,7 +155,7 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 10
+            l1_cost: 0.5
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020
@@ -171,8 +171,7 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.5
-    # Absolute deviation with l1_cost=0.01-0.1 also quite viable performance-wise
+    l1_cost: 0.22
 
 health:
   region_clusters: 15

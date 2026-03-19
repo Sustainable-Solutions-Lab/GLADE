@@ -25,6 +25,7 @@ OUTPUT_LABELS = {
 }
 X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
+L1_COLUMN = "prod_stability_cost"
 
 
 def _validation_quality(error: float) -> str:
@@ -104,6 +105,7 @@ def main() -> None:
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
     parameter = str(snakemake.wildcards.parameter)  # type: ignore[attr-defined]
+    l1_value = getattr(snakemake.params, "l1_value", None)
 
     if parameter not in allowed_parameters:
         raise ValueError(
@@ -120,6 +122,14 @@ def main() -> None:
         raise ValueError(f"Conditional joint indices file is empty: {input_csv}")
     if validation_df.empty:
         raise ValueError(f"Validation file is empty: {validation_csv}")
+
+    # Filter to specific L1 cost value if requested
+    if l1_value is not None and L1_COLUMN in df.columns:
+        nearest = df[L1_COLUMN].unique()
+        target = min(nearest, key=lambda v: abs(v - l1_value))
+        df = df[df[L1_COLUMN] == target].copy()
+        logger.info("Filtered to %s = %s (requested %s)", L1_COLUMN, target, l1_value)
+
     required_columns = {"output", "parameter", X_COLUMN, Y_COLUMN, metric_column}
     missing = required_columns - set(df.columns)
     if missing:
@@ -198,8 +208,9 @@ def main() -> None:
         cbar = fig.colorbar(mesh, ax=axes.ravel().tolist(), shrink=0.9, pad=0.02)
         cbar.set_label("Conditional first-order Sobol share (S1)")
 
+    l1_suffix = f" (L1 cost = {l1_value})" if l1_value is not None else ""
     fig.suptitle(
-        f"Conditional sensitivity surface for '{parameter}'",
+        f"Conditional sensitivity surface for '{parameter}'{l1_suffix}",
         y=1.02,
     )
     fig.text(
