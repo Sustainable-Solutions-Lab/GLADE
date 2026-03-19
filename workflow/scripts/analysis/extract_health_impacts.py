@@ -150,8 +150,17 @@ def compute_health_marginals(
 ) -> pd.DataFrame:
     """Compute marginal YLL per Mt consumed, by food group and country.
 
-    Computes the derivative of the piecewise linear dose-response curve
-    at the current intake level, then converts to per-Mt units.
+    For each (cluster, cause), the solver's YLL store level is:
+
+        e_{c,d}(x) = (RR_d(x) - RR_d^ref) * (YLL_{c,d} / RR_d^base) * 1e-6
+
+    where RR_d(x) = prod_r RR_{r,d}(x_r). Taking the derivative w.r.t.
+    intake of risk factor r:
+
+        d(e)/d(x_r) = (YLL_{c,d} / RR_d^base) * RR_d(x) * d(log RR_{r,d})/d(x_r) * 1e-6
+
+    This function evaluates that derivative at current intake levels,
+    sums across causes, and converts to YLL per Mt.
 
     Returns DataFrame with columns: country, food_group, yll_per_mt
     """
@@ -176,12 +185,6 @@ def compute_health_marginals(
         )
         risk_tables[str(risk)] = pivot
 
-    # Build cause log breakpoint tables
-    cause_tables = {
-        str(cause): df.sort_values("log_rr_total")
-        for cause, df in health_data.cause_log_breakpoints.groupby("cause")
-    }
-
     # Cluster-cause baseline data
     cluster_cause = health_data.cluster_cause.assign(
         health_cluster=lambda df: df["health_cluster"].astype(int)
@@ -192,23 +195,33 @@ def compute_health_marginals(
         food_group_consumption, risk_factors, cluster_lookup, cluster_population
     )
 
-    # Compute marginal YLL per g/day for each (cluster, risk_factor)
-    # Iterate over all clusters and risks, not just those with non-zero intake
-    marginal_yll_per_g: dict[tuple[int, str], float] = {}
-
+    # Precompute current log(RR) for every (cluster, risk_factor, cause)
+    # so we can sum across risk factors to get the total RR per (cluster, cause)
+    log_rr_current: dict[tuple[int, str, str], float] = {}
     all_clusters = set(cluster_population.keys())
-    all_risks = set(risk_tables.keys())
 
     for cluster in all_clusters:
-        cluster_pop = cluster_population[cluster]
+        for rf, table in risk_tables.items():
+            intake_g = intake_totals.get((cluster, rf), 0.0)
+            xs = table.index.to_numpy(dtype=float)
+            for cause in table.columns:
+                ys = table[cause].to_numpy(dtype=float)
+                log_rr_current[(cluster, rf, cause)] = float(
+                    np.interp(intake_g, xs, ys)
+                )
+
+    # Compute marginal YLL per g/day for each (cluster, risk_factor)
+    marginal_yll_per_g: dict[tuple[int, str], float] = {}
+
+    for cluster in all_clusters:
+        cluster_pop = cluster_population.get(cluster, 0.0)
         if cluster_pop <= 0:
             continue
 
-        for risk in all_risks:
+        for risk in risk_tables:
             intake_g = intake_totals.get((cluster, risk), 0.0)
             risk_table = risk_tables[risk]
 
-            # Sum marginal YLL across all causes
             total_marginal = 0.0
 
             for cause in risk_table.columns:
@@ -217,14 +230,14 @@ def compute_health_marginals(
 
                 row = cluster_cause.loc[(cluster, cause)]
 
-                # Reconstruct absolute YLL from rate using planning-year population
-                yll_attrib_rate = float(row["yll_attrib_rate_per_100k"])
-                yll_base = (yll_attrib_rate / PER_100K) * cluster_pop
+                # Use total YLL rate (not attributable), matching solver
+                yll_rate = float(row["yll_rate_per_100k"])
+                yll_total = (yll_rate / PER_100K) * cluster_pop
 
-                log_rr_ref = float(row["log_rr_total_ref"])
-                rr_ref = exp(log_rr_ref)
+                # Divide by RR at baseline (not at TMREL), matching solver
+                rr_baseline = exp(float(row["log_rr_total_baseline"]))
 
-                if yll_base <= 0 or rr_ref <= 0:
+                if yll_total <= 0 or rr_baseline <= 0:
                     continue
 
                 # Get breakpoints for this (risk, cause)
@@ -234,33 +247,24 @@ def compute_health_marginals(
                 if len(xs) < 2:
                     continue
 
-                # Find current segment and compute slope
+                # Slope of log(RR_r) w.r.t. intake for this risk factor
                 d_log_rr = compute_piecewise_slope(xs, ys, intake_g)
 
-                # Compute total log(RR) to get current RR
-                log_rr = float(np.interp(intake_g, xs, ys))
+                # Total RR across ALL risk factors for this cause
+                log_rr_total = sum(
+                    log_rr_current.get((cluster, rf, cause), 0.0) for rf in risk_tables
+                )
+                rr_total = exp(log_rr_total)
 
-                # Get cause breakpoints for RR interpolation
-                cause_bp = cause_tables.get(cause)
-                if cause_bp is None or cause_bp.empty:
-                    # Approximate: use exp(log_rr) directly
-                    rr = exp(log_rr)
-                else:
-                    log_points = cause_bp["log_rr_total"].to_numpy(dtype=float)
-                    rr_points = cause_bp["rr_total"].to_numpy(dtype=float)
-                    rr = float(np.interp(log_rr, log_points, rr_points))
-
-                # Chain rule: d(YLL)/d(intake) = d(YLL)/d(RR) * d(RR)/d(log_RR) * d(log_RR)/d(intake)
-                # d(YLL)/d(RR) = yll_base / rr_ref
-                # d(RR)/d(log_RR) = RR (derivative of exp)
-                marginal_yll = (yll_base / rr_ref) * rr * d_log_rr
+                # Chain rule:
+                # d(YLL)/d(intake_r) = (YLL_total / RR_base) * RR_total * d(log RR_r)/d(intake_r)
+                marginal_yll = (yll_total / rr_baseline) * rr_total * d_log_rr
 
                 total_marginal += marginal_yll
 
             marginal_yll_per_g[(cluster, risk)] = total_marginal
 
     # Convert to per-country, per-food_group output
-    # For each country, aggregate food group consumption and compute marginal
     records = []
 
     for country, cluster in cluster_lookup.items():
@@ -272,11 +276,7 @@ def compute_health_marginals(
             marginal_g = marginal_yll_per_g.get((cluster, risk), 0.0)
 
             # Convert from YLL per (g/capita/day) to YLL per Mt
-            # 1 Mt = 1e12 g, 1 year = 365 days
-            # marginal_g is YLL per (g/capita/day) for the whole cluster
-            # We want YLL per Mt consumed (affecting cluster health)
             # Consumption of 1 Mt affects cluster intake by 1e12 / (365 * cluster_pop)
-            # So marginal per Mt = marginal_g * 1e12 / (365 * cluster_pop)
             intake_per_mt = GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
             yll_per_mt = marginal_g * intake_per_mt
 
