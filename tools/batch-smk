@@ -213,6 +213,11 @@ def main():
         "--mem",
         help="SLURM memory (e.g., 40G), overrides computed default",
     )
+    parser.add_argument(
+        "-e",
+        "--environment",
+        help="Pixi environment to use (e.g., gurobi), passed to tools/smk -e",
+    )
     parser.add_argument("--partition", help="SLURM partition")
     parser.add_argument("--account", help="SLURM account")
     parser.add_argument(
@@ -307,6 +312,7 @@ def main():
 
     sbatch_directives = "\n".join(sbatch_lines)
     extra_smk_str = (" ".join(extra_smk_args) + " ") if extra_smk_args else ""
+    env_flag = f"-e {args.environment} " if args.environment else ""
 
     if inline_analysis:
         # Fused rule: target a representative analysis parquet per scenario.
@@ -325,6 +331,7 @@ set -euo pipefail
 MANIFEST="{manifest_path}"
 BATCH_SIZE={args.batch_size}
 PARALLEL={args.parallel}
+CORES={cpus}
 CONFIG="{configfile}"
 NAME="{name}"
 ELEMENT_MEM_MB={element_mem_mb}
@@ -352,7 +359,7 @@ cd "{PROJECT_ROOT}"
 # --keep-going: failures don't kill siblings
 # --nolock: safe because array elements target disjoint scenarios
 # --allowed-rules: only run {allowed_rule}, never upstream rules
-tools/smk -j${{PARALLEL}} --keep-going --nolock \\
+tools/smk {env_flag}-j${{CORES}} --keep-going --nolock \\
     --allowed-rules {allowed_rule} \\
     --configfile "$CONFIG" \\
     --resources mem_mb=${{ELEMENT_MEM_MB}} \\
