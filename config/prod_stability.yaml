@@ -22,13 +22,29 @@ scenarios:
     health:
       value_per_yll: 0
 
+  # Zero stability cost (no penalty, pure cost minimization)
+  l1_0_base:
+    validation:
+      production_stability:
+        enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
   _generators:
     # L1 cost sweep without health/emissions pricing (yll=0, ghg=0)
     - name: l1_{cost}_base
       parameters:
         cost:
-          values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
-          name_format: "lambda x: str(x).replace('.', 'p')"
+          space: log
+          start: 0.05
+          stop: 1
+          num: 6
+          name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
       template:
         validation:
           production_stability:

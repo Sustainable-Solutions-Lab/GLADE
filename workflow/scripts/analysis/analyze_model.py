@@ -15,6 +15,9 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 
+from workflow.scripts.analysis.extract_baseline_deviation import (
+    extract_baseline_deviation,
+)
 from workflow.scripts.analysis.extract_ghg_attribution import (
     add_monetary_value as add_ghg_monetary_value,
 )
@@ -93,6 +96,10 @@ def main() -> None:
     food_group_consumption = extract_food_group_consumption(n)
     feed_by_category = extract_feed_by_category(n)
     feed_by_animal = extract_feed_by_animal(n)
+
+    # --- Baseline deviation ---
+    logger.info("Extracting baseline deviation...")
+    baseline_deviation = extract_baseline_deviation(n)
 
     # --- LUC breakdown ---
     logger.info("Extracting LUC breakdown...")
@@ -174,6 +181,7 @@ def main() -> None:
     feed_by_category.to_csv(snakemake.output.feed_by_category, index=False)
     feed_by_animal.to_csv(snakemake.output.feed_by_animal, index=False)
     luc_breakdown.to_csv(snakemake.output.luc_breakdown, index=False)
+    baseline_deviation.to_csv(snakemake.output.baseline_deviation, index=False)
 
     logger.info("Wrote all analysis outputs to %s", output_dir)
 

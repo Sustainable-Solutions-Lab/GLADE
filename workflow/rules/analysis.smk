@@ -47,6 +47,7 @@ rule analyze_model:
                 "extract_objective_breakdown.py",
                 "extract_ghg_attribution.py",
                 "extract_health_impacts.py",
+                "extract_baseline_deviation.py",
             ],
         ),
     params:
@@ -73,6 +74,7 @@ rule analyze_model:
         feed_by_category="<results>/{name}/analysis/scen-{scenario}/feed_by_category.csv",
         feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.csv",
         luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.csv",
+        baseline_deviation="<results>/{name}/analysis/scen-{scenario}/baseline_deviation.csv",
     group:
         "analyze_model"
     resources:
