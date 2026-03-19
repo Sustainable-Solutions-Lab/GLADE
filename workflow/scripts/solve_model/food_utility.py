@@ -12,7 +12,7 @@ import xarray as xr
 
 logger = logging.getLogger(__name__)
 
-FOOD_UTILITY_COEFFS: dict[int, xr.DataArray] = {}
+FOOD_UTILITY_COEFFS: dict[int, tuple[xr.DataArray, xr.DataArray]] = {}
 
 
 def _prepare_piecewise_utility_rows(
@@ -263,7 +263,16 @@ def add_piecewise_food_utility(
         name="GlobalConstraint-food_utility_piecewise_balance",
     )
     m.objective += -(utilities * block_flow).sum()
-    FOOD_UTILITY_COEFFS[id(m)] = utilities
+
+    # Continue the utility schedule into overflow to prevent the solver from
+    # bypassing blocks.  Without this, overflow has zero utility, which is
+    # more attractive than any negative-utility block — causing the solver to
+    # route all consumption of negative-mu foods through overflow and
+    # effectively ignoring the piecewise schedule.
+    overflow_utilities = utilities.isel(block_id=-1)
+    m.objective += -(overflow_utilities * overflow).sum()
+
+    FOOD_UTILITY_COEFFS[id(m)] = (utilities, overflow_utilities)
 
     block_counts = rows.groupby("name")["block_id"].max()
     n.meta["food_utility_piecewise"] = {
@@ -287,14 +296,21 @@ def pop_piecewise_food_utility_value(n: pypsa.Network) -> float:
     if m is None:
         return 0.0
 
-    coeffs = FOOD_UTILITY_COEFFS.pop(id(m), None)
-    if coeffs is None:
+    cached = FOOD_UTILITY_COEFFS.pop(id(m), None)
+    if cached is None:
         return 0.0
+    block_coeffs, overflow_coeffs = cached
     if "food_utility_block_flow" not in m.variables:
         return 0.0
 
-    solution = m.variables["food_utility_block_flow"].solution
-    if solution is None:
+    block_sol = m.variables["food_utility_block_flow"].solution
+    if block_sol is None:
         return 0.0
 
-    return float((coeffs * solution).sum().item())
+    total = float((block_coeffs * block_sol).sum().item())
+
+    overflow_sol = m.variables["food_utility_overflow_flow"].solution
+    if overflow_sol is not None:
+        total += float((overflow_coeffs * overflow_sol).sum().item())
+
+    return total
