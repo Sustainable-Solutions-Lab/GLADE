@@ -187,7 +187,6 @@ remote_solve:
   use_slurm: true
   slurm_account: "sjdavis"
   slurm_partition: "owners"
-  sync_workflow: true
   sync_pixi_files: false
   ssh_options: []
   rsync_options: []

@@ -1099,7 +1099,7 @@ remote_solve:
   use_slurm: false  # Set true when remote solves should be submitted via --slurm
   slurm_account: ""  # SLURM account for remote job submission
   slurm_partition: ""  # SLURM partition for remote compute jobs
-  sync_workflow: true  # Sync workflow/ and config/ code before remote solve
+  sync_workflow: false  # Sync workflow/ and config/ code before remote solve (may dirty remote git state)
   sync_pixi_files: false  # Sync pixi.toml and pixi.lock to remote workdir
   ssh_options: []  # Extra ssh CLI args, e.g. ["-o", "ControlMaster=auto"]
   rsync_options: []  # Extra rsync CLI args

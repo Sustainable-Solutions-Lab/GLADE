@@ -4,8 +4,8 @@
 
 """Submit a remote solve_model job via SSH + optional SLURM.
 
-Depends on sync_remote_workspace having already synced workflow code and the
-config snapshot. This script only syncs scenario-specific inputs, generates
+Depends on sync_remote_workspace having already synced the config snapshot
+(and optionally workflow code). This script syncs scenario-specific inputs, generates
 an sbatch script, and submits it. The SLURM job ID (or "direct") is written
 to the output .jobid file for the collect phase.
 """
