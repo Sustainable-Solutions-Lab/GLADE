@@ -10,18 +10,10 @@ from affine import Affine
 import geopandas as gpd
 import numpy as np
 from osgeo import gdal, osr
-
-gdal.UseExceptions()
-osr.UseExceptions()
-
 import pandas as pd
 import pytest
 from shapely.geometry import box
 import xarray as xr
-
-_srs = osr.SpatialReference()
-_srs.ImportFromEPSG(4326)
-WGS84_WKT = _srs.ExportToWkt()
 
 from workflow.scripts.build_luc_carbon_coefficients import (
     CO2_PER_C,
@@ -31,6 +23,13 @@ from workflow.scripts.build_luc_carbon_coefficients import (
     _zone_index,
     _zone_parameters,
 )
+
+gdal.UseExceptions()
+osr.UseExceptions()
+
+_srs = osr.SpatialReference()
+_srs.ImportFromEPSG(4326)
+WGS84_WKT = _srs.ExportToWkt()
 
 # ---------------------------------------------------------------------------
 # Tests: CO2_PER_C constant
