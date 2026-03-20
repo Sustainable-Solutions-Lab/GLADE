@@ -80,6 +80,7 @@ localrules:
     all,
     solve_all_scenarios,
     analyze_all_scenarios,
+    sobol_plots,
 
 
 wildcard_constraints:

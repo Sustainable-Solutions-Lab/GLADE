@@ -84,6 +84,53 @@ def _sobol_parameter_groups():
 sobol_parameter_groups = _sobol_parameter_groups()
 
 
+def _sobol_sensitivity_prefix():
+    """Return the scenario name prefix for the sensitivity generator, or None."""
+    generator = _sobol_sensitivity_generator()
+    if generator is None:
+        return None
+    # Extract prefix from name pattern like "pce_{sample_id}" -> "pce_"
+    name_pattern = generator["name"]
+    return name_pattern.split("{")[0]
+
+
+def _sobol_plot_targets():
+    """Build all Sobol sensitivity plot targets for the collection rule."""
+    prefix = _sobol_sensitivity_prefix()
+    if prefix is None:
+        return []
+
+    targets = [
+        # Base conditional plots
+        f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
+        f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
+        # Phase diagram
+        f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
+    ]
+    # Per-parameter contour surfaces
+    for param in _sobol_non_slice_parameters():
+        targets.append(
+            f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}.pdf"
+        )
+    # L1-conditioned variants
+    for l1 in _sobol_l1_plot_values():
+        targets += [
+            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}_l1_{l1}.pdf",
+            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}_l1_{l1}.pdf",
+            f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}_l1_{l1}.pdf",
+            f"<results>/{{name}}/plots/sobol_grouped_s1_vs_value_per_yll_{prefix}_l1_{l1}.pdf",
+            f"<results>/{{name}}/plots/sobol_grouped_s1_vs_ghg_price_{prefix}_l1_{l1}.pdf",
+        ]
+        for param in _sobol_non_slice_parameters():
+            targets.append(
+                f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}_l1_{l1}.pdf"
+            )
+    return targets
+
+
+SOBOL_PLOT_TARGETS = _sobol_plot_targets()
+
+
 def _gaez_actual_yield_raster_path(crop_name: str, water_supply: str) -> str:
     # Wrap helper to provide clearer error message for plotting context.
     try:
@@ -806,6 +853,14 @@ rule plot_sobol_joint_conditional_phase_diagram:
 # These rules produce the same plots as above but conditioned on specific
 # prod_stability_cost (L1) values, using the joint conditional CSV.
 
+# Resolve ambiguity: the _at_l1 rules have an l1_value wildcard that the base
+# rules could match via an overly greedy {prefix} (e.g., "pce__l1_0.05").
+
+
+ruleorder: plot_sobol_conditional_sensitivity_at_l1 > plot_sobol_conditional_sensitivity
+ruleorder: plot_sobol_joint_conditional_contour_at_l1 > plot_sobol_joint_conditional_contour
+ruleorder: plot_sobol_joint_conditional_phase_diagram_at_l1 > plot_sobol_joint_conditional_phase_diagram
+
 
 rule plot_sobol_conditional_sensitivity_at_l1:
     """Plot stacked conditional Sobol shares at a fixed L1 cost."""
@@ -910,3 +965,9 @@ rule plot_sobol_grouped_sensitivity_at_l1:
         "<benchmarks>/{name}/plot_sobol_grouped_sensitivity_at_l1_{prefix}_{l1_value}.tsv"
     script:
         "../scripts/plotting/plot_sobol_grouped_sensitivity_at_l1.py"
+
+
+rule sobol_plots:
+    """Generate all Sobol sensitivity analysis plots."""
+    input:
+        expand(SOBOL_PLOT_TARGETS, name=[name]),
