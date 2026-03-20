@@ -7,6 +7,7 @@
 import importlib.util
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "notebooks" / "sensitivity_utils.py"
@@ -28,15 +29,25 @@ def project_root(tmp_path: Path) -> Path:
 
 def test_load_net_emissions_by_gas_reads_analysis_schema(project_root: Path) -> None:
     """By-gas loader should read the exact analysis schema."""
-    csv_path = (
-        project_root / "results" / "demo" / "analysis" / "scen-s1" / "net_emissions.csv"
+    pq_path = (
+        project_root
+        / "results"
+        / "demo"
+        / "analysis"
+        / "scen-s1"
+        / "net_emissions.parquet"
     )
-    csv_path.write_text(
-        "gas,source,mtco2eq\n"
-        "co2,Land Use Change,1000\n"
-        "ch4,Enteric fermentation,500\n"
-        "n2o,Synthetic fertilizer application,250\n"
-    )
+    pd.DataFrame(
+        {
+            "gas": ["co2", "ch4", "n2o"],
+            "source": [
+                "Land Use Change",
+                "Enteric fermentation",
+                "Synthetic fertilizer application",
+            ],
+            "mtco2eq": [1000.0, 500.0, 250.0],
+        }
+    ).to_parquet(pq_path)
 
     scenarios = [(10.0, "s1", Path("unused.nc"))]
     result = sensitivity_utils.load_net_emissions_by_gas(
@@ -51,15 +62,25 @@ def test_load_net_emissions_by_gas_reads_analysis_schema(project_root: Path) -> 
 
 def test_load_emissions_by_source_rejects_wrong_schema(project_root: Path) -> None:
     """Per-source loader should fail fast on non-analysis schemas."""
-    csv_path = (
-        project_root / "results" / "demo" / "analysis" / "scen-s2" / "net_emissions.csv"
+    pq_path = (
+        project_root
+        / "results"
+        / "demo"
+        / "analysis"
+        / "scen-s2"
+        / "net_emissions.parquet"
     )
-    csv_path.write_text(
-        "gas,source,net_mtco2eq\n"
-        "co2,Land Use Change,2000\n"
-        "co2,Carbon sequestration,-500\n"
-        "ch4,Enteric fermentation,750\n"
-    )
+    pd.DataFrame(
+        {
+            "gas": ["co2", "co2", "ch4"],
+            "source": [
+                "Land Use Change",
+                "Carbon sequestration",
+                "Enteric fermentation",
+            ],
+            "net_mtco2eq": [2000.0, -500.0, 750.0],
+        }
+    ).to_parquet(pq_path)
 
     scenarios = [(20.0, "s2", Path("unused.nc"))]
     with pytest.raises(ValueError, match="Expected columns"):

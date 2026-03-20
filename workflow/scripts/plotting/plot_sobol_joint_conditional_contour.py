@@ -99,8 +99,8 @@ def main() -> None:
         raise RuntimeError("This script must be run from Snakemake") from exc
 
     logger = setup_script_logging(snakemake.log[0])
-    input_csv = Path(snakemake.input.conditional_joint_indices)  # type: ignore[attr-defined]
-    validation_csv = Path(snakemake.input.validation)  # type: ignore[attr-defined]
+    input_path = Path(snakemake.input.conditional_joint_indices)  # type: ignore[attr-defined]
+    validation_path = Path(snakemake.input.validation)  # type: ignore[attr-defined]
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
@@ -111,17 +111,17 @@ def main() -> None:
         raise ValueError(
             f"Parameter '{parameter}' is not in non-slice parameter set: {allowed_parameters}"
         )
-    if not input_csv.exists():
-        raise FileNotFoundError(f"Missing conditional joint indices file: {input_csv}")
-    if not validation_csv.exists():
-        raise FileNotFoundError(f"Missing validation file: {validation_csv}")
+    if not input_path.exists():
+        raise FileNotFoundError(f"Missing conditional joint indices file: {input_path}")
+    if not validation_path.exists():
+        raise FileNotFoundError(f"Missing validation file: {validation_path}")
 
-    df = pd.read_csv(input_csv)
-    validation_df = pd.read_csv(validation_csv)
+    df = pd.read_parquet(input_path)
+    validation_df = pd.read_parquet(validation_path)
     if df.empty:
-        raise ValueError(f"Conditional joint indices file is empty: {input_csv}")
+        raise ValueError(f"Conditional joint indices file is empty: {input_path}")
     if validation_df.empty:
-        raise ValueError(f"Validation file is empty: {validation_csv}")
+        raise ValueError(f"Validation file is empty: {validation_path}")
 
     # Filter to specific L1 cost value if requested
     if l1_value is not None and L1_COLUMN in df.columns:

@@ -30,7 +30,7 @@ def _load_global_consumption(
     tuple[pd.Series, pd.Series]
         (mass_g_per_person_day, calories_kcal_per_person_day) indexed by food_group
     """
-    df = pd.read_csv(food_group_consumption_path)
+    df = pd.read_parquet(food_group_consumption_path)
     pop_df = pd.read_csv(population_path)
 
     if df.empty:

@@ -500,8 +500,8 @@ rule doc_fig_workflow_rulegraph:
 rule doc_fig_analysis_ghg_health:
     """Generate GHG and health impact bar charts for documentation."""
     input:
-        ghg_intensity=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/ghg_attribution.csv",
-        health_marginals=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.csv",
+        ghg_intensity=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/ghg_attribution.parquet",
+        health_marginals=f"<results>/{DOC_FIG_NAME}/analysis/scen-default/health_marginals.parquet",
         style=DOC_FIG_STYLE,
     output:
         ghg_svg="docs/_static/figures/analysis_marginal_ghg.svg",
@@ -618,7 +618,7 @@ rule doc_fig_baseline_diet_by_food:
 rule doc_fig_validation_crop_production:
     """Generate validation crop production map (excluding pasture)."""
     input:
-        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.csv",
+        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.parquet",
         regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
         resource_classes=f"<processing>/{DOC_VAL_NAME}/resource_classes.nc",
         land_area_by_class=f"<processing>/{DOC_VAL_NAME}/land_area_by_class.csv",
@@ -643,7 +643,7 @@ rule doc_fig_validation_crop_production:
 rule doc_fig_validation_pasture:
     """Generate validation pasture/grassland intensity map."""
     input:
-        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.csv",
+        land_use=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/land_use.parquet",
         regions=f"<processing>/{DOC_VAL_NAME}/regions.geojson",
         resource_classes=f"<processing>/{DOC_VAL_NAME}/resource_classes.nc",
         land_area_by_class=f"<processing>/{DOC_VAL_NAME}/land_area_by_class.csv",
@@ -829,7 +829,7 @@ rule doc_fig_production_pattern_frame:
         resource_classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
         land_area_by_class=f"<processing>/{DOC_FIG_NAME}/land_area_by_class.csv",
         land_grazing_only=f"<processing>/{DOC_FIG_NAME}/land_grazing_only_by_class.csv",
-        land_use=f"<results>/{DOC_FIG_NAME}/analysis/scen-{{ghg_scenario}}/land_use.csv",
+        land_use=f"<results>/{DOC_FIG_NAME}/analysis/scen-{{ghg_scenario}}/land_use.parquet",
         network=f"<results>/{DOC_FIG_NAME}/solved/model_scen-{{ghg_scenario}}.nc",
         style=DOC_FIG_STYLE,
     output:

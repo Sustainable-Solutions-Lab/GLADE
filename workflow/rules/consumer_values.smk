@@ -69,10 +69,10 @@ def consumer_values_comparison_inputs(wildcards):
     inputs = {}
     for scen in CV_SCENARIOS:
         inputs[f"consumption_{scen}"] = (
-            f"<results>/{wildcards.name}/analysis/scen-{scen}/food_group_consumption.csv"
+            f"<results>/{wildcards.name}/analysis/scen-{scen}/food_group_consumption.parquet"
         )
         inputs[f"breakdown_{scen}"] = (
-            f"<results>/{wildcards.name}/analysis/scen-{scen}/objective_breakdown.csv"
+            f"<results>/{wildcards.name}/analysis/scen-{scen}/objective_breakdown.parquet"
         )
     return inputs
 

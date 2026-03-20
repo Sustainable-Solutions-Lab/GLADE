@@ -153,11 +153,13 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
         categories = categories.where(
             categories.notna(),
             other=carriers.map(
-                lambda c: "Health burden"
-                if c.startswith("yll_")
-                else "Consumer values"
-                if c.startswith("group_")
-                else None
+                lambda c: (
+                    "Health burden"
+                    if c.startswith("yll_")
+                    else "Consumer values"
+                    if c.startswith("group_")
+                    else None
+                )
             ),
         )
         unmapped = categories.isna()

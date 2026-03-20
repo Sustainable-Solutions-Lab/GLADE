@@ -195,11 +195,11 @@ if __name__ == "__main__":
     logger = setup_script_logging(snakemake.log[0])
 
     # Load GHG intensity data (at food level)
-    ghg_df = pd.read_csv(snakemake.input.ghg_intensity)
+    ghg_df = pd.read_parquet(snakemake.input.ghg_intensity)
     logger.info("Loaded %d rows from GHG intensity", len(ghg_df))
 
     # Load health marginals data (at food_group level)
-    health_df = pd.read_csv(snakemake.input.health_marginals)
+    health_df = pd.read_parquet(snakemake.input.health_marginals)
     logger.info("Loaded %d rows from health marginals", len(health_df))
 
     # Compute global GHG averages (aggregates food to food_group)

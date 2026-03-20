@@ -121,7 +121,7 @@ def main() -> None:
     ax.text(
         0.02,
         0.02,
-        f"Global median: ${global_median:,.0f}/ha\n" f"Data: FAOSTAT producer prices",
+        f"Global median: ${global_median:,.0f}/ha\nData: FAOSTAT producer prices",
         transform=ax.transAxes,
         fontsize=FONT_SIZES["colorbar_tick"],
         verticalalignment="bottom",

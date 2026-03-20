@@ -553,21 +553,21 @@ def run(snakemake) -> None:
                     row.update(slice_value_map)
                     conditional_joint_rows.append(row)
 
-    # Write output CSVs
+    # Write output files
     global_df = pd.DataFrame(global_rows)
     global_path = Path(snakemake.output.global_indices)
     global_path.parent.mkdir(parents=True, exist_ok=True)
-    global_df.to_csv(global_path, index=False)
+    global_df.to_parquet(global_path)
     logger.info("Wrote global indices to %s", global_path)
 
     conditional_df = pd.DataFrame(conditional_rows)
     conditional_path = Path(snakemake.output.conditional_indices)
-    conditional_df.to_csv(conditional_path, index=False)
+    conditional_df.to_parquet(conditional_path)
     logger.info("Wrote conditional indices to %s", conditional_path)
 
     conditional_joint_df = pd.DataFrame(conditional_joint_rows)
     conditional_joint_path = Path(snakemake.output.conditional_joint_indices)
-    conditional_joint_df.to_csv(conditional_joint_path, index=False)
+    conditional_joint_df.to_parquet(conditional_joint_path)
     logger.info(
         "Wrote joint conditional indices to %s",
         conditional_joint_path,
@@ -575,7 +575,7 @@ def run(snakemake) -> None:
 
     validation_df = pd.DataFrame(validation_rows)
     validation_path = Path(snakemake.output.validation)
-    validation_df.to_csv(validation_path, index=False)
+    validation_df.to_parquet(validation_path)
     logger.info("Wrote validation metrics to %s", validation_path)
 
 

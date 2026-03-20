@@ -68,7 +68,7 @@ def _load_consumption_by_cluster(
 
     Returns DataFrame with columns: cluster, group, food, value_g_person_day
     """
-    food_df = pd.read_csv(food_consumption_path)
+    food_df = pd.read_parquet(food_consumption_path)
     food_groups_df = pd.read_csv(food_groups_path)
     food_to_group = food_groups_df.set_index("food")["group"].to_dict()
 

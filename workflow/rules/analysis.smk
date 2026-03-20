@@ -59,22 +59,22 @@ rule analyze_model:
         ],
         health_risk_factors=config["health"]["risk_factors"],
     output:
-        crop_production="<results>/{name}/analysis/scen-{scenario}/crop_production.csv",
-        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.csv",
-        animal_production="<results>/{name}/analysis/scen-{scenario}/animal_production.csv",
-        food_consumption="<results>/{name}/analysis/scen-{scenario}/food_consumption.csv",
-        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
-        net_emissions="<results>/{name}/analysis/scen-{scenario}/net_emissions.csv",
-        objective_breakdown="<results>/{name}/analysis/scen-{scenario}/objective_breakdown.csv",
-        ghg_attribution="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.csv",
-        ghg_attribution_totals="<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv",
-        health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.csv",
-        health_totals="<results>/{name}/analysis/scen-{scenario}/health_totals.csv",
-        health_attribution="<results>/{name}/analysis/scen-{scenario}/health_attribution.csv",
-        feed_by_category="<results>/{name}/analysis/scen-{scenario}/feed_by_category.csv",
-        feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.csv",
-        luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.csv",
-        baseline_deviation="<results>/{name}/analysis/scen-{scenario}/baseline_deviation.csv",
+        crop_production="<results>/{name}/analysis/scen-{scenario}/crop_production.parquet",
+        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.parquet",
+        animal_production="<results>/{name}/analysis/scen-{scenario}/animal_production.parquet",
+        food_consumption="<results>/{name}/analysis/scen-{scenario}/food_consumption.parquet",
+        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.parquet",
+        net_emissions="<results>/{name}/analysis/scen-{scenario}/net_emissions.parquet",
+        objective_breakdown="<results>/{name}/analysis/scen-{scenario}/objective_breakdown.parquet",
+        ghg_attribution="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.parquet",
+        ghg_attribution_totals="<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.parquet",
+        health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.parquet",
+        health_totals="<results>/{name}/analysis/scen-{scenario}/health_totals.parquet",
+        health_attribution="<results>/{name}/analysis/scen-{scenario}/health_attribution.parquet",
+        feed_by_category="<results>/{name}/analysis/scen-{scenario}/feed_by_category.parquet",
+        feed_by_animal="<results>/{name}/analysis/scen-{scenario}/feed_by_animal.parquet",
+        luc_breakdown="<results>/{name}/analysis/scen-{scenario}/luc_breakdown.parquet",
+        baseline_deviation="<results>/{name}/analysis/scen-{scenario}/baseline_deviation.parquet",
     group:
         "analyze_model"
     resources:
@@ -120,11 +120,11 @@ def _sensitivity_scenario_names(wildcards):
     return matching
 
 
-_ANALYSIS_CSVS = (
-    "objective_breakdown.csv",
-    "net_emissions.csv",
-    "land_use.csv",
-    "health_totals.csv",
+_ANALYSIS_FILES = (
+    "objective_breakdown.parquet",
+    "net_emissions.parquet",
+    "land_use.parquet",
+    "health_totals.parquet",
 )
 
 
@@ -142,7 +142,7 @@ def _available_sensitivity_scenarios(wildcards):
     available = [
         s
         for s in all_scenarios
-        if all((base / f"scen-{s}" / csv).exists() for csv in _ANALYSIS_CSVS)
+        if all((base / f"scen-{s}" / f).exists() for f in _ANALYSIS_FILES)
     ]
     if not available:
         raise ValueError(
@@ -151,7 +151,9 @@ def _available_sensitivity_scenarios(wildcards):
         )
     n_total = len(all_scenarios)
     n_avail = len(available)
-    if n_avail < n_total * 0.5:
+    if n_avail < n_total:
+        print(f"INFO: {n_avail}/{n_total} sensitivity scenarios available")
+    elif n_avail < n_total * 0.5:
         print(
             f"WARNING: Only {n_avail}/{n_total} sensitivity scenarios available "
             f"({100*n_avail/ n_total:.0f}%). GSA results may be unreliable."
@@ -163,9 +165,9 @@ def _sensitivity_scenario_inputs(wildcards):
     """Generate input files for sensitivity scenarios that completed successfully."""
     available = _available_sensitivity_scenarios(wildcards)
     return [
-        f"<results>/{wildcards.name}/analysis/scen-{s}/{csv}"
+        f"<results>/{wildcards.name}/analysis/scen-{s}/{f}"
         for s in available
-        for csv in _ANALYSIS_CSVS
+        for f in _ANALYSIS_FILES
     ]
 
 
@@ -201,7 +203,7 @@ rule compute_sobol_sensitivity:
 
     To use, ensure your scenarios file has a generator with mode: sensitivity,
     then run:
-        tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/sobol_global_indices_{prefix}.csv
+        tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/sobol_global_indices_{prefix}.parquet
 
     The {prefix} wildcard matches the scenario name prefix (e.g., "pce_" for
     scenarios pce_0, pce_1, ...).
@@ -213,10 +215,10 @@ rule compute_sobol_sensitivity:
         generator_spec=lambda w: _sensitivity_generator(w),
         slice_grid=_sensitivity_slice_grid,
     output:
-        global_indices="<results>/{name}/analysis/sobol_global_indices_{prefix}.csv",
-        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.csv",
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        global_indices="<results>/{name}/analysis/sobol_global_indices_{prefix}.parquet",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.parquet",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     group:
         "analysis_plot"
     resources:

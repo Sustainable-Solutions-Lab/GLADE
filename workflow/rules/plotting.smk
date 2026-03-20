@@ -208,7 +208,7 @@ rule plot_resource_classes_map:
 rule plot_objective_breakdown:
     """Plot objective function breakdown from pre-computed analysis."""
     input:
-        objective_breakdown="<results>/{name}/analysis/scen-{scenario}/objective_breakdown.csv",
+        objective_breakdown="<results>/{name}/analysis/scen-{scenario}/objective_breakdown.parquet",
     output:
         breakdown_pdf="<results>/{name}/plots/scen-{scenario}/objective_breakdown.pdf",
         breakdown_csv="<results>/{name}/plots/scen-{scenario}/objective_breakdown.csv",
@@ -303,7 +303,7 @@ rule plot_relative_risk_curves:
 
 rule plot_crop_production_map:
     input:
-        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.csv",
+        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.parquet",
         regions="<processing>/{name}/regions.geojson",
         resource_classes="<processing>/{name}/resource_classes.nc",
         land_area_by_class="<processing>/{name}/land_area_by_class.csv",
@@ -325,7 +325,7 @@ rule plot_crop_production_map:
 
 rule plot_crop_trade_map:
     input:
-        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.csv",
+        land_use="<results>/{name}/analysis/scen-{scenario}/land_use.parquet",
         regions="<processing>/{name}/regions.geojson",
         resource_classes="<processing>/{name}/resource_classes.nc",
         land_area_by_class="<processing>/{name}/land_area_by_class.csv",
@@ -486,7 +486,7 @@ rule plot_water_use_map:
 
 rule plot_food_consumption:
     input:
-        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
+        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.parquet",
         population="<processing>/{name}/population.csv",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/food_consumption.pdf",
@@ -507,7 +507,7 @@ rule plot_food_consumption:
 
 def food_consumption_comparison_inputs(wildcards):
     return [
-        f"<results>/{wildcards.name}/analysis/{suffix}/food_group_consumption.csv"
+        f"<results>/{wildcards.name}/analysis/{suffix}/food_group_consumption.parquet"
         for suffix in comparison_scenarios
     ]
 
@@ -564,7 +564,7 @@ rule plot_system_cost_comparison:
 
 rule plot_food_consumption_map:
     input:
-        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.csv",
+        food_group_consumption="<results>/{name}/analysis/scen-{scenario}/food_group_consumption.parquet",
         population="<processing>/{name}/population.csv",
         clusters="<processing>/{name}/health/country_clusters.csv",
         regions="<processing>/{name}/regions.geojson",
@@ -686,7 +686,7 @@ rule plot_water_value_map:
 
 rule plot_emissions_breakdown:
     input:
-        net_emissions="<results>/{name}/analysis/scen-{scenario}/net_emissions.csv",
+        net_emissions="<results>/{name}/analysis/scen-{scenario}/net_emissions.parquet",
         faostat_emissions="<processing>/{name}/faostat_emissions.csv",
         gleam_emissions="data/bundled/gleam3/livestock_emissions.csv",
     output:
@@ -713,7 +713,7 @@ rule plot_emissions_breakdown:
 
 rule plot_consumption_balance:
     input:
-        food_consumption="<results>/{name}/analysis/scen-{scenario}/food_consumption.csv",
+        food_consumption="<results>/{name}/analysis/scen-{scenario}/food_consumption.parquet",
         food_groups="data/curated/food_groups.csv",
         population="<processing>/{name}/population.csv",
         clusters="<processing>/{name}/health/country_clusters.csv",
@@ -737,8 +737,8 @@ rule plot_consumption_balance:
 rule plot_ghg_health_global:
     """Plot consumption-weighted global average GHG and YLL by food group."""
     input:
-        ghg_intensity="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.csv",
-        health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.csv",
+        ghg_intensity="<results>/{name}/analysis/scen-{scenario}/ghg_attribution.parquet",
+        health_marginals="<results>/{name}/analysis/scen-{scenario}/health_marginals.parquet",
     output:
         ghg_pdf="<results>/{name}/plots/scen-{scenario}/marginal_ghg_global.pdf",
         yll_pdf="<results>/{name}/plots/scen-{scenario}/marginal_yll_global.pdf",
@@ -783,8 +783,8 @@ rule plot_luc_emissions:
 rule plot_sobol_conditional_sensitivity:
     """Plot stacked conditional Sobol shares vs policy slice parameters."""
     input:
-        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
         ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
@@ -806,8 +806,8 @@ rule plot_sobol_conditional_sensitivity:
 rule plot_sobol_joint_conditional_contour:
     """Plot conditional Sobol surface for one non-slice parameter."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{prefix}.pdf",
     params:
@@ -829,8 +829,8 @@ rule plot_sobol_joint_conditional_contour:
 rule plot_sobol_joint_conditional_phase_diagram:
     """Plot dominant non-slice sensitivity parameter across 2D policy space."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
     params:
@@ -865,8 +865,8 @@ ruleorder: plot_sobol_joint_conditional_phase_diagram_at_l1 > plot_sobol_joint_c
 rule plot_sobol_conditional_sensitivity_at_l1:
     """Plot stacked conditional Sobol shares at a fixed L1 cost."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}_l1_{l1_value}.pdf",
         ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}_l1_{l1_value}.pdf",
@@ -891,8 +891,8 @@ rule plot_sobol_conditional_sensitivity_at_l1:
 rule plot_sobol_joint_conditional_contour_at_l1:
     """Plot conditional Sobol surface for one parameter at a fixed L1 cost."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{prefix}_l1_{l1_value}.pdf",
     params:
@@ -917,8 +917,8 @@ rule plot_sobol_joint_conditional_contour_at_l1:
 rule plot_sobol_joint_conditional_phase_diagram_at_l1:
     """Plot dominant sensitivity factor at a fixed L1 cost."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{prefix}_l1_{l1_value}.pdf",
     params:
@@ -943,8 +943,8 @@ rule plot_sobol_joint_conditional_phase_diagram_at_l1:
 rule plot_sobol_grouped_sensitivity_at_l1:
     """Plot grouped conditional Sobol shares at a fixed L1 cost."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.csv",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.csv",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
     output:
         value_per_yll_pdf="<results>/{name}/plots/sobol_grouped_s1_vs_value_per_yll_{prefix}_l1_{l1_value}.pdf",
         ghg_price_pdf="<results>/{name}/plots/sobol_grouped_s1_vs_ghg_price_{prefix}_l1_{l1_value}.pdf",

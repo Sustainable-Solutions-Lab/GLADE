@@ -33,22 +33,28 @@ def test_build_solve_analyze(results_dir):
     near-instant when code hasn't changed.
     """
     run_snakemake_target(
-        "results/test/analysis/scen-default/crop_production.csv",
-        "results/test/analysis/scen-default/ghg_attribution.csv",
-        "results/test/analysis/scen-default/ghg_attribution_totals.csv",
-        "results/test/analysis/scen-default/net_emissions.csv",
-        "results/test/analysis/scen-default/objective_breakdown.csv",
+        "results/test/analysis/scen-default/crop_production.parquet",
+        "results/test/analysis/scen-default/ghg_attribution.parquet",
+        "results/test/analysis/scen-default/ghg_attribution_totals.parquet",
+        "results/test/analysis/scen-default/net_emissions.parquet",
+        "results/test/analysis/scen-default/objective_breakdown.parquet",
     )
 
     assert (results_dir / "solved" / "model_scen-default.nc").exists()
-    assert (results_dir / "analysis" / "scen-default" / "crop_production.csv").exists()
-    assert (results_dir / "analysis" / "scen-default" / "ghg_attribution.csv").exists()
     assert (
-        results_dir / "analysis" / "scen-default" / "ghg_attribution_totals.csv"
+        results_dir / "analysis" / "scen-default" / "crop_production.parquet"
     ).exists()
-    assert (results_dir / "analysis" / "scen-default" / "net_emissions.csv").exists()
     assert (
-        results_dir / "analysis" / "scen-default" / "objective_breakdown.csv"
+        results_dir / "analysis" / "scen-default" / "ghg_attribution.parquet"
+    ).exists()
+    assert (
+        results_dir / "analysis" / "scen-default" / "ghg_attribution_totals.parquet"
+    ).exists()
+    assert (
+        results_dir / "analysis" / "scen-default" / "net_emissions.parquet"
+    ).exists()
+    assert (
+        results_dir / "analysis" / "scen-default" / "objective_breakdown.parquet"
     ).exists()
 
 

@@ -30,12 +30,12 @@ def _assign_colors(
     return categorical_colors(groups, overrides)
 
 
-def _load_consumption_from_csv(csv_path: str) -> pd.Series:
-    """Load per-capita consumption by food group from analysis CSV.
+def _load_consumption(path: str) -> pd.Series:
+    """Load per-capita consumption by food group from analysis output.
 
     Returns Series indexed by food_group with values in g/person/day.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_parquet(path)
     if df.empty:
         return pd.Series(dtype=float)
 
@@ -47,12 +47,12 @@ def _load_consumption_from_csv(csv_path: str) -> pd.Series:
     return global_avg
 
 
-def _load_objective_from_csv(csv_path: str) -> pd.DataFrame:
-    """Load objective breakdown from analysis CSV.
+def _load_objective(path: str) -> pd.DataFrame:
+    """Load objective breakdown from analysis output.
 
     Returns DataFrame with category index and total column.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_parquet(path)
     if df.empty:
         return pd.DataFrame(columns=["total", "capex", "opex"])
 
@@ -386,12 +386,12 @@ def main() -> None:
 
         # Load consumption from pre-computed analysis
         logger.info("Loading consumption from: %s", consumption_path)
-        consumption = _load_consumption_from_csv(consumption_path)
+        consumption = _load_consumption(consumption_path)
         consumption_data[label] = consumption
 
         # Load objective breakdown from pre-computed analysis
         logger.info("Loading objective breakdown from: %s", breakdown_path)
-        objective_data[label] = _load_objective_from_csv(breakdown_path)
+        objective_data[label] = _load_objective(breakdown_path)
 
     # Assign colors to food groups
     all_groups = set()

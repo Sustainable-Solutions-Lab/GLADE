@@ -35,7 +35,7 @@ def _load_country_group_mass(food_group_consumption_path: str) -> pd.DataFrame:
 
     Returns DataFrame with countries as rows, food groups as columns, values in Mt.
     """
-    df = pd.read_csv(food_group_consumption_path)
+    df = pd.read_parquet(food_group_consumption_path)
     if df.empty:
         return pd.DataFrame()
 

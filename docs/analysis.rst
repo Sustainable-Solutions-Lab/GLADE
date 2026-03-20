@@ -16,7 +16,7 @@ health impacts of food systems.
 Statistics Extraction
 ---------------------
 
-The statistics extraction produces standardized CSV files summarizing key model
+The statistics extraction produces standardized Parquet files summarizing key model
 outputs. These files provide a consistent interface for downstream analysis and
 visualization, extracting data from the solved PyPSA network using actual
 dispatch flows rather than capacity-based estimates.
@@ -28,7 +28,7 @@ Running the Extraction
 
    # Extract all statistics for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/crop_production.csv
+       results/{name}/analysis/scen-default/crop_production.parquet
 
    # Or request any downstream plot to trigger extraction automatically
 
@@ -37,7 +37,7 @@ Output Files
 
 All statistics are written to ``results/{name}/analysis/scen-{scenario}/``.
 
-**crop_production.csv** — Crop production by crop, region, and country
+**crop_production.parquet** — Crop production by crop, region, and country
 
 .. csv-table::
    :header: Column, Type, Unit, Description
@@ -50,7 +50,7 @@ All statistics are written to ``results/{name}/analysis/scen-{scenario}/``.
 Sources include single-crop production links, grassland production, and
 multicropping links (where multiple crops share the same land).
 
-**land_use.csv** — Land allocation by crop, region, resource class, and water supply
+**land_use.parquet** — Land allocation by crop, region, resource class, and water supply
 
 .. csv-table::
    :header: Column, Type, Unit, Description
@@ -65,7 +65,7 @@ multicropping links (where multiple crops share the same land).
 For multicropping systems, land area is attributed to individual crops
 proportionally by their yield (efficiency) on that land.
 
-**animal_production.csv** — Livestock product output by product and country
+**animal_production.parquet** — Livestock product output by product and country
 
 .. csv-table::
    :header: Column, Type, Unit, Description
@@ -74,7 +74,7 @@ proportionally by their yield (efficiency) on that land.
    ``country``, string, —, "ISO 3166-1 alpha-3 country code"
    ``production_mt``, float, Mt, "Production quantity in megatonnes"
 
-**food_consumption.csv** — Food consumption and macronutrients by food and country
+**food_consumption.parquet** — Food consumption and macronutrients by food and country
 
 .. csv-table::
    :header: Column, Type, Unit, Description
@@ -92,9 +92,9 @@ proportionally by their yield (efficiency) on that land.
    ``fat_g_per_person_day``, float, g/person/day, "Per-capita daily fat intake"
    ``cal_kcal_per_person_day``, float, kcal/person/day, "Per-capita daily energy intake"
 
-**food_group_consumption.csv** — Consumption aggregated by food group and country
+**food_group_consumption.parquet** — Consumption aggregated by food group and country
 
-Has the same columns as ``food_consumption.csv``, except with ``food_group``
+Has the same columns as ``food_consumption.parquet``, except with ``food_group``
 instead of ``food``. Food groups aggregate related foods (e.g., ``cereals``,
 ``fruits``, ``red_meat``) for higher-level analysis.
 
@@ -108,13 +108,13 @@ Load statistics in Python for custom analysis:
    import pandas as pd
 
    # Load crop production
-   production = pd.read_csv("results/opt/analysis/scen-default/crop_production.csv")
+   production = pd.read_parquet("results/opt/analysis/scen-default/crop_production.parquet")
 
    # Total wheat production globally
    wheat_total = production[production["crop"] == "wheat"]["production_mt"].sum()
 
    # Load consumption with per-capita values
-   consumption = pd.read_csv("results/opt/analysis/scen-default/food_consumption.csv")
+   consumption = pd.read_parquet("results/opt/analysis/scen-default/food_consumption.parquet")
 
    # Average per-capita protein intake
    avg_protein = consumption["protein_g_per_person_day"].mean()
@@ -163,11 +163,11 @@ Running the GHG Extraction
 
    # Extract consumption-attributed GHG intensity for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/ghg_attribution.csv
+       results/{name}/analysis/scen-default/ghg_attribution.parquet
 
 Output files:
 
-``results/{name}/analysis/scen-{scenario}/ghg_attribution.csv``
+``results/{name}/analysis/scen-{scenario}/ghg_attribution.parquet``
    Per-country, per-food consumption-attributed GHG intensity including:
 
    .. csv-table::
@@ -180,7 +180,7 @@ Output files:
       ``ghg_kgco2e_per_kg``, float, kgCO2e/kg, "GHG intensity"
       ``ghg_usd_per_t``, float, USD/t, "Monetized GHG damage"
 
-``results/{name}/analysis/scen-{scenario}/ghg_attribution_totals.csv``
+``results/{name}/analysis/scen-{scenario}/ghg_attribution_totals.parquet``
    Total consumption-attributed GHG emissions by country and food group:
 
    .. csv-table::
@@ -201,9 +201,9 @@ emissions from spared land sequestration.
 
    # Extract net emissions for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/net_emissions.csv
+       results/{name}/analysis/scen-default/net_emissions.parquet
 
-``results/{name}/analysis/scen-{scenario}/net_emissions.csv``
+``results/{name}/analysis/scen-{scenario}/net_emissions.parquet``
    Net GHG emissions by gas and source category:
 
    .. csv-table::
@@ -257,11 +257,11 @@ Running the Health Extraction
 
    # Extract health marginals for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/health_marginals.csv
+       results/{name}/analysis/scen-default/health_marginals.parquet
 
 Output files:
 
-``results/{name}/analysis/scen-{scenario}/health_marginals.csv``
+``results/{name}/analysis/scen-{scenario}/health_marginals.parquet``
    Per-country, per-food-group marginal health impacts including:
 
    .. csv-table::
@@ -272,7 +272,7 @@ Output files:
       ``yll_per_mt``, float, YLL/Mt, "Marginal years of life lost per megatonne"
       ``health_usd_per_t``, float, USD/t, "Monetized marginal health damage"
 
-``results/{name}/analysis/scen-{scenario}/health_totals.csv``
+``results/{name}/analysis/scen-{scenario}/health_totals.parquet``
    Total years of life lost by health cluster:
 
    .. csv-table::
@@ -281,7 +281,7 @@ Output files:
       ``health_cluster``, int, —, "Health cluster identifier"
       ``yll_myll``, float, MYLL, "Total years of life lost in millions"
 
-``results/{name}/analysis/scen-{scenario}/health_attribution.csv``
+``results/{name}/analysis/scen-{scenario}/health_attribution.parquet``
    YLL attributed to each risk factor by health cluster and disease cause,
    using proportional allocation based on excess log-relative-risk:
 
@@ -346,12 +346,12 @@ Running the Objective Extraction
 
    # Extract objective breakdown for a scenario
    tools/smk -j4 --configfile config/<name>.yaml -- \
-       results/{name}/analysis/scen-default/objective_breakdown.csv
+       results/{name}/analysis/scen-default/objective_breakdown.parquet
 
 Output file:
 
-``results/{name}/analysis/scen-{scenario}/objective_breakdown.csv``
-   Single-row CSV with cost categories in billion USD:
+``results/{name}/analysis/scen-{scenario}/objective_breakdown.parquet``
+   Single-row Parquet file with cost categories in billion USD:
 
    .. csv-table::
       :header: Column, Type, Unit, Description

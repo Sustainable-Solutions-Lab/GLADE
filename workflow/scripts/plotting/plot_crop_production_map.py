@@ -54,12 +54,12 @@ def crop_groups_from_config(
     return crop_to_group, crop_group_colors
 
 
-def _load_land_use_by_region_class_crop(csv_path: str) -> pd.DataFrame:
-    """Load land use from statistics CSV, aggregated by region/resource_class/crop.
+def _load_land_use_by_region_class_crop(path: str) -> pd.DataFrame:
+    """Load land use from analysis output, aggregated by region/resource_class/crop.
 
     Returns DataFrame with columns: region, resource_class, crop, used_ha
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_parquet(path)
     if df.empty:
         return pd.DataFrame(columns=["region", "resource_class", "crop", "used_ha"])
 

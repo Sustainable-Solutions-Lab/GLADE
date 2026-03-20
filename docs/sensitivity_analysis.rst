@@ -804,7 +804,7 @@ automatically.
 .. code-block:: bash
 
    tools/smk -j4 --configfile config/pce_sensitivity.yaml -- \
-       results/pce_sensitivity/analysis/pce_global_indices_pce_.csv
+       results/pce_sensitivity/analysis/pce_global_indices_pce_.parquet
 
 The ``{prefix}`` wildcard in the output path matches the scenario name prefix
 (here ``pce_``) so the rule knows which scenarios to aggregate.
@@ -819,9 +819,9 @@ The ``{prefix}`` wildcard in the output path matches the scenario name prefix
 Output Files
 ------------
 
-Three CSV files are written to ``results/{name}/analysis/``:
+Three Parquet files are written to ``results/{name}/analysis/``:
 
-**pce_global_indices_{prefix}.csv** — Global Sobol indices
+**pce_global_indices_{prefix}.parquet** — Global Sobol indices
 
 .. csv-table::
    :header: Column, Type, Description
@@ -834,7 +834,7 @@ Three CSV files are written to ``results/{name}/analysis/``:
 One row per (output, parameter) pair. For example, with 4 outputs and 7
 parameters, this file has 28 rows.
 
-**pce_conditional_indices_{prefix}.csv** — Conditional Sobol indices
+**pce_conditional_indices_{prefix}.parquet** — Conditional Sobol indices
 
 .. csv-table::
    :header: Column, Type, Description
@@ -850,7 +850,7 @@ Slice parameter columns are named after the parameters themselves (e.g.,
 ``value_per_yll``, ``ghg_price``). One row per (output, parameter,
 conditioning-value combination).
 
-**pce_validation_{prefix}.csv** — PCE surrogate quality metrics
+**pce_validation_{prefix}.parquet** — PCE surrogate quality metrics
 
 .. csv-table::
    :header: Column, Type, Description

@@ -11,7 +11,7 @@ Overview
 After solving, the model produces results in several formats:
 
 1. **PyPSA network** (``results/{name}/solved/model_scen-{scenario}.nc``): Complete optimization results in NetCDF format
-2. **Analysis outputs** (``results/{name}/analysis/scen-{scenario}/*.csv``): Extracted statistics and impact assessments (see :ref:`analysis`)
+2. **Analysis outputs** (``results/{name}/analysis/scen-{scenario}/*.parquet``): Extracted statistics and impact assessments (see :ref:`analysis`)
 3. **Visualizations** (``results/{name}/plots/scen-{scenario}/*.pdf``): Publication-quality plots and maps
 
 The various output files are structured as follows::
@@ -23,18 +23,18 @@ The various output files are structured as follows::
     │   └── model_scen-{scenario}.nc    # Solved model with optimal values
     ├── analysis/
     │   └── scen-{scenario}/
-    │       ├── crop_production.csv     # Production by crop/region
-    │       ├── land_use.csv            # Land allocation
-    │       ├── animal_production.csv   # Livestock production
-    │       ├── food_consumption.csv    # Consumption by food
-    │       ├── food_group_consumption.csv  # Consumption by food group
-    │       ├── ghg_attribution.csv      # Consumption-attributed GHG intensity by food
-    │       ├── ghg_attribution_totals.csv  # Total attributed GHG by country/food group
-    │       ├── net_emissions.csv       # Net GHG emissions by gas
-    │       ├── health_marginals.csv    # Marginal health impacts by food group
-    │       ├── health_totals.csv       # Total YLL by health cluster
-    │       ├── health_attribution.csv  # YLL attributed by cluster/cause/food group
-    │       └── objective_breakdown.csv # Cost categories breakdown
+    │       ├── crop_production.parquet     # Production by crop/region
+    │       ├── land_use.parquet            # Land allocation
+    │       ├── animal_production.parquet   # Livestock production
+    │       ├── food_consumption.parquet    # Consumption by food
+    │       ├── food_group_consumption.parquet  # Consumption by food group
+    │       ├── ghg_attribution.parquet      # Consumption-attributed GHG intensity by food
+    │       ├── ghg_attribution_totals.parquet  # Total attributed GHG by country/food group
+    │       ├── net_emissions.parquet       # Net GHG emissions by gas
+    │       ├── health_marginals.parquet    # Marginal health impacts by food group
+    │       ├── health_totals.parquet       # Total YLL by health cluster
+    │       ├── health_attribution.parquet  # YLL attributed by cluster/cause/food group
+    │       └── objective_breakdown.parquet # Cost categories breakdown
     └── plots/
         └── scen-{scenario}/
             └── *.pdf                   # Visualizations

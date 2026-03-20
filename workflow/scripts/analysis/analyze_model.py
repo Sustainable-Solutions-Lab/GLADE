@@ -53,15 +53,15 @@ from workflow.scripts.logging_config import setup_script_logging
 
 
 def _write_empty_outputs() -> None:
-    """Write empty CSV files for all declared outputs."""
+    """Write empty Parquet files for all declared outputs."""
     for attr in dir(snakemake.output):
         if attr.startswith("_"):
             continue
         path = getattr(snakemake.output, attr, None)
-        if isinstance(path, str) and path.endswith(".csv"):
+        if isinstance(path, str) and path.endswith(".parquet"):
             p = Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text("")
+            pd.DataFrame().to_parquet(p)
 
 
 def main() -> None:
@@ -80,7 +80,7 @@ def main() -> None:
 
     if n.links.empty:
         logger.warning(
-            "Network has no links — likely an unsolved model. " "Writing empty outputs."
+            "Network has no links — likely an unsolved model. Writing empty outputs."
         )
         _write_empty_outputs()
         return
@@ -166,22 +166,22 @@ def main() -> None:
     output_dir = Path(snakemake.output.crop_production).parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    crop_production.to_csv(snakemake.output.crop_production, index=False)
-    land_use.to_csv(snakemake.output.land_use, index=False)
-    animal_production.to_csv(snakemake.output.animal_production, index=False)
-    food_consumption.to_csv(snakemake.output.food_consumption, index=False)
-    food_group_consumption.to_csv(snakemake.output.food_group_consumption, index=False)
-    net_emissions.to_csv(snakemake.output.net_emissions, index=False)
-    objective_breakdown.to_csv(snakemake.output.objective_breakdown, index=False)
-    ghg_attribution.to_csv(snakemake.output.ghg_attribution, index=False)
-    ghg_attribution_totals.to_csv(snakemake.output.ghg_attribution_totals, index=False)
-    health_marginals.to_csv(snakemake.output.health_marginals, index=False)
-    health_totals.to_csv(snakemake.output.health_totals, index=False)
-    health_attribution.to_csv(snakemake.output.health_attribution, index=False)
-    feed_by_category.to_csv(snakemake.output.feed_by_category, index=False)
-    feed_by_animal.to_csv(snakemake.output.feed_by_animal, index=False)
-    luc_breakdown.to_csv(snakemake.output.luc_breakdown, index=False)
-    baseline_deviation.to_csv(snakemake.output.baseline_deviation, index=False)
+    crop_production.to_parquet(snakemake.output.crop_production)
+    land_use.to_parquet(snakemake.output.land_use)
+    animal_production.to_parquet(snakemake.output.animal_production)
+    food_consumption.to_parquet(snakemake.output.food_consumption)
+    food_group_consumption.to_parquet(snakemake.output.food_group_consumption)
+    net_emissions.to_parquet(snakemake.output.net_emissions)
+    objective_breakdown.to_parquet(snakemake.output.objective_breakdown)
+    ghg_attribution.to_parquet(snakemake.output.ghg_attribution)
+    ghg_attribution_totals.to_parquet(snakemake.output.ghg_attribution_totals)
+    health_marginals.to_parquet(snakemake.output.health_marginals)
+    health_totals.to_parquet(snakemake.output.health_totals)
+    health_attribution.to_parquet(snakemake.output.health_attribution)
+    feed_by_category.to_parquet(snakemake.output.feed_by_category)
+    feed_by_animal.to_parquet(snakemake.output.feed_by_animal)
+    luc_breakdown.to_parquet(snakemake.output.luc_breakdown)
+    baseline_deviation.to_parquet(snakemake.output.baseline_deviation)
 
     logger.info("Wrote all analysis outputs to %s", output_dir)
 

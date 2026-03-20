@@ -495,7 +495,7 @@ def load_consumption_from_statistics(
     Reads pre-computed statistics CSVs from the workflow analysis outputs.
 
     Requires running the Snakemake extract_statistics rule first:
-        tools/smk --configfile config/{name}.yaml -- results/{name}/analysis/scen-{scenario}/food_group_consumption.csv
+        tools/smk --configfile config/{name}.yaml -- results/{name}/analysis/scen-{scenario}/food_group_consumption.parquet
 
     Args:
         scenarios: List of (param_value, scenario_name, network_path) tuples
@@ -515,7 +515,7 @@ def load_consumption_from_statistics(
             results_dir
             / "analysis"
             / f"scen-{scenario_name}"
-            / "food_group_consumption.csv"
+            / "food_group_consumption.parquet"
         )
         if not csv_path.exists():
             raise FileNotFoundError(
@@ -523,7 +523,7 @@ def load_consumption_from_statistics(
                 f"Run the extract_statistics rule first."
             )
 
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(csv_path)
 
         # Sum cal_pj across countries for each food group
         total_pj = df.groupby("food_group")["cal_pj"].sum()
@@ -546,7 +546,7 @@ def load_objective_from_analysis(
 ) -> pd.DataFrame:
     """Load objective breakdown from precomputed analysis outputs.
 
-    Reads objective_breakdown.csv files produced by the extract_objective_breakdown
+    Reads objective_breakdown.parquet files produced by the extract_objective_breakdown
     Snakemake rule.
 
     Args:
@@ -566,7 +566,7 @@ def load_objective_from_analysis(
             results_dir
             / "analysis"
             / f"scen-{scenario_name}"
-            / "objective_breakdown.csv"
+            / "objective_breakdown.parquet"
         )
         if not csv_path.exists():
             raise FileNotFoundError(
@@ -574,7 +574,7 @@ def load_objective_from_analysis(
                 f"Run the extract_objective_breakdown rule first."
             )
 
-        row = pd.read_csv(csv_path).iloc[0]
+        row = pd.read_parquet(csv_path).iloc[0]
         data[param_value] = row
 
     result = pd.DataFrame(data).T.fillna(0)
@@ -590,7 +590,7 @@ def load_ghg_from_statistics(
 ) -> pd.DataFrame:
     """Load GHG emissions data from extract_ghg_attribution rule outputs.
 
-    Reads pre-computed ghg_attribution.csv files from the workflow analysis outputs.
+    Reads pre-computed ghg_attribution.parquet files from the workflow analysis outputs.
 
     Requires running the Snakemake extract_ghg_attribution rule first.
 
@@ -608,7 +608,10 @@ def load_ghg_from_statistics(
     data = {}
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "ghg_attribution.csv"
+            results_dir
+            / "analysis"
+            / f"scen-{scenario_name}"
+            / "ghg_attribution.parquet"
         )
         if not csv_path.exists():
             raise FileNotFoundError(
@@ -616,7 +619,7 @@ def load_ghg_from_statistics(
                 f"Run the extract_ghg_attribution rule first."
             )
 
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(csv_path)
 
         # Compute total emissions per food_group:
         # consumption_mt * ghg_kgco2e_per_kg = MtCO2e (since kgCO2e/kg = MtCO2e/Mt)
@@ -640,7 +643,7 @@ def load_net_emissions(
 ) -> pd.Series:
     """Load total net GHG emissions from extract_net_emissions rule outputs.
 
-    Reads pre-computed net_emissions.csv files and returns the total net
+    Reads pre-computed net_emissions.parquet files and returns the total net
     emissions (including negative emissions from spared land sequestration).
 
     Args:
@@ -657,7 +660,7 @@ def load_net_emissions(
     data = {}
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.parquet"
         )
         if not csv_path.exists():
             raise FileNotFoundError(
@@ -665,7 +668,7 @@ def load_net_emissions(
                 f"Run the extract_net_emissions rule first."
             )
 
-        df = _load_net_emissions_csv(csv_path)
+        df = _load_net_emissions_parquet(csv_path)
         # Sum all sources across gases and convert MtCO2eq to GtCO2eq
         data[param_value] = df["mtco2eq"].sum() / 1000
 
@@ -684,8 +687,8 @@ def load_objective_from_statistics(
 ) -> pd.DataFrame:
     """Load objective breakdown from extract_objective_breakdown rule outputs.
 
-    Reads pre-computed objective_breakdown.csv, ghg_attribution_totals.csv, and
-    health_totals.csv files. Recomputes health/GHG costs at constant prices
+    Reads pre-computed objective_breakdown.parquet, ghg_attribution_totals.parquet, and
+    health_totals.parquet files. Recomputes health/GHG costs at constant prices
     for comparability across scenarios with different price assumptions.
 
     Requires running the Snakemake analysis rules first (extract_objective_breakdown,
@@ -709,13 +712,13 @@ def load_objective_from_statistics(
         analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
 
         # Load objective breakdown
-        obj_path = analysis_dir / "objective_breakdown.csv"
+        obj_path = analysis_dir / "objective_breakdown.parquet"
         if not obj_path.exists():
             raise FileNotFoundError(
                 f"Objective breakdown file not found: {obj_path}. "
                 f"Run the extract_objective_breakdown rule first."
             )
-        obj_df = pd.read_csv(obj_path)
+        obj_df = pd.read_parquet(obj_path)
 
         # Start with the breakdown categories (excluding health/GHG cost columns
         # which we recompute at constant prices)
@@ -726,18 +729,18 @@ def load_objective_from_statistics(
                 row[col] = obj_df[col].iloc[0]
 
         # Load GHG attribution totals and compute cost at constant price
-        ghg_totals_path = analysis_dir / "ghg_attribution_totals.csv"
+        ghg_totals_path = analysis_dir / "ghg_attribution_totals.parquet"
         if ghg_totals_path.exists():
-            ghg_totals_df = pd.read_csv(ghg_totals_path)
+            ghg_totals_df = pd.read_parquet(ghg_totals_path)
             ghg_mtco2eq = ghg_totals_df["ghg_mtco2eq"].sum()
             # MtCO2eq * USD/tCO2eq * 1e6 t/Mt * 1e-9 bn/USD = MtCO2eq * USD/tCO2eq * 1e-3
             ghg_cost_bnusd = ghg_mtco2eq * constant_ghg_price * 1e-3
             row["GHG cost"] = ghg_cost_bnusd
 
         # Load health totals and compute cost at constant price
-        health_totals_path = analysis_dir / "health_totals.csv"
+        health_totals_path = analysis_dir / "health_totals.parquet"
         if health_totals_path.exists():
-            health_totals_df = pd.read_csv(health_totals_path)
+            health_totals_df = pd.read_parquet(health_totals_path)
             health_myll = health_totals_df["yll_myll"].sum()
             # MYLL * USD/YLL * 1e6 YLL/MYLL * 1e-9 bn/USD = MYLL * USD/YLL * 1e-3
             health_cost_bnusd = health_myll * constant_health_value * 1e-3
@@ -782,7 +785,7 @@ def load_health_attribution_from_analysis(
 ) -> pd.DataFrame:
     """Load health attribution from pre-computed analysis CSVs.
 
-    Reads ``health_attribution.csv`` for each scenario and aggregates
+    Reads ``health_attribution.parquet`` for each scenario and aggregates
     by food_group (summing ``yll_myll`` across clusters and causes).
 
     Args:
@@ -802,9 +805,9 @@ def load_health_attribution_from_analysis(
             / config_name
             / "analysis"
             / f"scen-{scenario_name}"
-            / "health_attribution.csv"
+            / "health_attribution.parquet"
         )
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(csv_path)
         by_fg = df.groupby("food_group")["yll_myll"].sum()
         results[param_value] = by_fg
 
@@ -852,9 +855,9 @@ PRETTY_NAMES_EMISSIONS = {
 }
 
 
-def _load_net_emissions_csv(csv_path: Path) -> pd.DataFrame:
-    """Load ``net_emissions.csv`` using the exact analysis output schema."""
-    df = pd.read_csv(csv_path)
+def _load_net_emissions_parquet(csv_path: Path) -> pd.DataFrame:
+    """Load ``net_emissions.parquet`` using the exact analysis output schema."""
+    df = pd.read_parquet(csv_path)
     expected_cols = {"gas", "source", "mtco2eq"}
     if set(df.columns) != expected_cols:
         raise ValueError(
@@ -874,7 +877,7 @@ def load_net_emissions_by_gas(
     config_name: str,
     param_name: str = "param_value",
 ) -> pd.DataFrame:
-    """Load per-gas net emissions (CO2, CH4, N2O) from net_emissions.csv across scenarios.
+    """Load per-gas net emissions (CO2, CH4, N2O) from net_emissions.parquet across scenarios.
 
     Each gas value is already in MtCO2eq (GWP-adjusted). Returns in GtCO2eq.
 
@@ -893,12 +896,12 @@ def load_net_emissions_by_gas(
     data = {}
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.parquet"
         )
         if not csv_path.exists():
             continue
 
-        df = _load_net_emissions_csv(csv_path)
+        df = _load_net_emissions_parquet(csv_path)
         row = {}
         for gas in ["co2", "ch4", "n2o"]:
             gas_total = df.loc[df["gas"] == gas, "mtco2eq"].sum()
@@ -923,7 +926,7 @@ def load_emissions_by_source(
 ) -> dict[str, pd.DataFrame]:
     """Load per-source emissions breakdown for each gas across scenarios.
 
-    Reads the source-level ``net_emissions.csv`` produced by ``analyze_model``
+    Reads the source-level ``net_emissions.parquet`` produced by ``analyze_model``
     (columns: gas, source, mtco2eq).
 
     Args:
@@ -946,12 +949,12 @@ def load_emissions_by_source(
 
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.csv"
+            results_dir / "analysis" / f"scen-{scenario_name}" / "net_emissions.parquet"
         )
         if not csv_path.exists():
             continue
 
-        df = _load_net_emissions_csv(csv_path)
+        df = _load_net_emissions_parquet(csv_path)
         for gas in ["co2", "ch4", "n2o"]:
             gas_rows = df[df["gas"] == gas]
             gas_key = gas.upper()
@@ -1007,7 +1010,7 @@ def load_luc_breakdown(
 ) -> pd.DataFrame:
     """Load LUC breakdown across scenarios from analysis CSVs.
 
-    Reads ``luc_breakdown.csv`` produced by ``analyze_model`` (columns:
+    Reads ``luc_breakdown.parquet`` produced by ``analyze_model`` (columns:
     groupby, category, emissions_mtco2, area_mha).
 
     Args:
@@ -1029,12 +1032,12 @@ def load_luc_breakdown(
 
     for param_value, scenario_name, _ in scenarios:
         csv_path = (
-            results_dir / "analysis" / f"scen-{scenario_name}" / "luc_breakdown.csv"
+            results_dir / "analysis" / f"scen-{scenario_name}" / "luc_breakdown.parquet"
         )
         if not csv_path.exists():
             continue
 
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(csv_path)
         rows = df[df["groupby"] == groupby]
         if quantity == "emissions":
             # Convert MtCO2 to GtCO2
@@ -1251,7 +1254,7 @@ def load_feed_breakdown(
 ) -> pd.DataFrame:
     """Load feed use breakdown across scenarios from analysis CSVs.
 
-    Reads ``feed_by_category.csv`` or ``feed_by_animal.csv`` produced by
+    Reads ``feed_by_category.parquet`` or ``feed_by_animal.parquet`` produced by
     ``analyze_model``.
 
     Args:
@@ -1266,10 +1269,10 @@ def load_feed_breakdown(
     """
     results_dir = project_root / "results" / config_name
     if groupby == "feed_category":
-        csv_name = "feed_by_category.csv"
+        csv_name = "feed_by_category.parquet"
         key_col = "category"
     else:
-        csv_name = "feed_by_animal.csv"
+        csv_name = "feed_by_animal.parquet"
         key_col = "animal"
 
     data: dict[float, dict[str, float]] = {}
@@ -1279,7 +1282,7 @@ def load_feed_breakdown(
         if not csv_path.exists():
             continue
 
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(csv_path)
         # Convert Mt to Gt
         data[param_value] = {
             row[key_col]: row["mt_dm"] / 1000 for _, row in df.iterrows()
@@ -1303,7 +1306,7 @@ def load_crop_yield_and_production(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load crop-level average yield and production across scenarios.
 
-    Reads ``crop_production.csv`` and ``land_use.csv`` from the analysis
+    Reads ``crop_production.parquet`` and ``land_use.parquet`` from the analysis
     outputs and derives average yield per crop.
 
     Args:
@@ -1324,13 +1327,13 @@ def load_crop_yield_and_production(
 
     for param_value, scenario_name, _ in scenarios:
         analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
-        prod_path = analysis_dir / "crop_production.csv"
-        land_path = analysis_dir / "land_use.csv"
+        prod_path = analysis_dir / "crop_production.parquet"
+        land_path = analysis_dir / "land_use.parquet"
         if not prod_path.exists() or not land_path.exists():
             continue
 
-        prod_df = pd.read_csv(prod_path)
-        land_df = pd.read_csv(land_path)
+        prod_df = pd.read_parquet(prod_path)
+        land_df = pd.read_parquet(land_path)
 
         production = prod_df.groupby("crop")["production_mt"].sum()
         land = land_df.groupby("crop")["area_mha"].sum()
@@ -2265,9 +2268,9 @@ def load_grid_data_from_statistics(
     for ghg_price, yll_value, scenario_name, _ in scenarios:
         analysis_dir = results_dir / "analysis" / f"scen-{scenario_name}"
 
-        obj_df = pd.read_csv(analysis_dir / "objective_breakdown.csv")
-        net_df = _load_net_emissions_csv(analysis_dir / "net_emissions.csv")
-        health_df = pd.read_csv(analysis_dir / "health_totals.csv")
+        obj_df = pd.read_parquet(analysis_dir / "objective_breakdown.parquet")
+        net_df = _load_net_emissions_parquet(analysis_dir / "net_emissions.parquet")
+        health_df = pd.read_parquet(analysis_dir / "health_totals.parquet")
 
         ghg_mtco2eq = net_df["mtco2eq"].sum()
 

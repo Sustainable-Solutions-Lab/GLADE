@@ -44,13 +44,13 @@ CATEGORY_LABELS = {
 }
 
 
-def load_objective_breakdown(csv_path: Path) -> pd.Series:
-    """Load objective breakdown from analysis CSV.
+def load_objective_breakdown(path: Path) -> pd.Series:
+    """Load objective breakdown from analysis output.
 
-    The analysis CSV has a single row with category columns.
+    The file has a single row with category columns.
     Returns a Series with human-readable category names as index.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_parquet(path)
     if df.empty:
         return pd.Series(dtype=float)
 
@@ -122,12 +122,12 @@ def plot_cost_breakdown(series: pd.Series, output_path: Path) -> None:
 
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
-    input_csv = Path(snakemake.input.objective_breakdown)  # type: ignore[name-defined]
+    input_path = Path(snakemake.input.objective_breakdown)  # type: ignore[name-defined]
     output_pdf = Path(snakemake.output.breakdown_pdf)  # type: ignore[name-defined]
     output_csv = Path(snakemake.output.breakdown_csv)  # type: ignore[name-defined]
 
-    logger.info("Loading objective breakdown from %s", input_csv)
-    costs = load_objective_breakdown(input_csv)
+    logger.info("Loading objective breakdown from %s", input_path)
+    costs = load_objective_breakdown(input_path)
 
     # Filter out negligible costs
     costs = costs[costs.abs() > 1e-9]

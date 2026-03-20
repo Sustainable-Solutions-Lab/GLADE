@@ -23,9 +23,13 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger(__name__)
 
 
-def load_emissions_csv(path: Path) -> dict[str, dict[str, float]]:
-    """Load emissions CSV (gas, source, mtco2eq) into nested dict."""
-    df = pd.read_csv(path, comment="#")
+def load_emissions(path: Path) -> dict[str, dict[str, float]]:
+    """Load emissions data (gas, source, mtco2eq) into nested dict."""
+    df = (
+        pd.read_parquet(path)
+        if path.suffix == ".parquet"
+        else pd.read_csv(path, comment="#")
+    )
     # Normalise column name from GLEAM reference files
     df.columns = [c.replace("emissions_mtco2eq", "mtco2eq") for c in df.columns]
     expected_cols = {"gas", "source", "mtco2eq"}
@@ -301,7 +305,7 @@ if __name__ == "__main__":
 
     # Load modeled emissions from analysis CSV
     logger.info("Loading modeled emissions from %s", snakemake.input.net_emissions)
-    emissions = load_emissions_csv(Path(snakemake.input.net_emissions))
+    emissions = load_emissions(Path(snakemake.input.net_emissions))
 
     logger.info("Loading and processing FAOSTAT emissions data")
     faostat_emissions_df = pd.read_csv(snakemake.input.faostat_emissions)
@@ -309,7 +313,7 @@ if __name__ == "__main__":
         faostat_emissions_df, ch4_gwp, n2o_gwp
     )
 
-    gleam_emissions = load_emissions_csv(Path(snakemake.input.gleam_emissions))
+    gleam_emissions = load_emissions(Path(snakemake.input.gleam_emissions))
 
     # Log summary
     for gas, sources in emissions.items():

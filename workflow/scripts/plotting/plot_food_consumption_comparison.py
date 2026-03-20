@@ -37,7 +37,7 @@ def _load_global_per_capita(
     tuple[pd.Series, pd.Series]
         (mass_g_per_person_day, calories_kcal_per_person_day) indexed by food_group
     """
-    df = pd.read_csv(food_group_consumption_path)
+    df = pd.read_parquet(food_group_consumption_path)
 
     if df.empty:
         return pd.Series(dtype=float), pd.Series(dtype=float)
@@ -178,12 +178,12 @@ def main() -> None:
         raise RuntimeError("This script must be run from Snakemake") from exc
 
     logger = setup_script_logging(snakemake.log[0])
-    csv_paths = [Path(p) for p in snakemake.input.food_group_consumption]  # type: ignore[attr-defined]
+    consumption_paths = [Path(p) for p in snakemake.input.food_group_consumption]  # type: ignore[attr-defined]
     comparison_labels = list(snakemake.params.wildcards)  # type: ignore[attr-defined]
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[attr-defined]
     output_csv = Path(snakemake.output.csv)  # type: ignore[attr-defined]
 
-    if len(csv_paths) != len(comparison_labels):
+    if len(consumption_paths) != len(comparison_labels):
         raise ValueError(
             "Number of food_group_consumption inputs must match number of comparison labels"
         )
@@ -194,9 +194,9 @@ def main() -> None:
     mass_data: dict[str, pd.Series] = {}
     cal_data: dict[str, pd.Series] = {}
 
-    for label, csv_path in zip(comparison_labels, csv_paths):
-        logger.info("Loading consumption for %s from %s", label, csv_path)
-        mass_pc, cal_pc = _load_global_per_capita(str(csv_path))
+    for label, consumption_path in zip(comparison_labels, consumption_paths):
+        logger.info("Loading consumption for %s from %s", label, consumption_path)
+        mass_pc, cal_pc = _load_global_per_capita(str(consumption_path))
         mass_data[label] = mass_pc
         cal_data[label] = cal_pc
 

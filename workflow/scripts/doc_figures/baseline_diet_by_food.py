@@ -77,7 +77,7 @@ def _vary_luminance(hex_color: str, n: int) -> list[str]:
     colors = []
     for li in lightnesses:
         ri, gi, bi = colorsys.hls_to_rgb(h, li, s)
-        colors.append(f"#{int(ri*255):02x}{int(gi*255):02x}{int(bi*255):02x}")
+        colors.append(f"#{int(ri * 255):02x}{int(gi * 255):02x}{int(bi * 255):02x}")
     return colors
 
 

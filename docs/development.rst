@@ -214,8 +214,8 @@ Add new test files as ``tests/test_*.py``. Use the ``run_snakemake_target()`` he
 
     @pytest.mark.integration
     def test_my_new_output():
-        run_snakemake_target("results/test/analysis/scen-default/my_output.csv")
-        assert (RESULTS_DIR / "analysis" / "scen-default" / "my_output.csv").exists()
+        run_snakemake_target("results/test/analysis/scen-default/my_output.parquet")
+        assert (RESULTS_DIR / "analysis" / "scen-default" / "my_output.parquet").exists()
 
 Repository Structure
 --------------------

@@ -239,8 +239,8 @@ def main(
 ) -> None:
     """Generate both GHG and health figures."""
     # Load data
-    ghg_df = pd.read_csv(ghg_intensity_path)
-    health_df = pd.read_csv(health_marginals_path)
+    ghg_df = pd.read_parquet(ghg_intensity_path)
+    health_df = pd.read_parquet(health_marginals_path)
 
     # Compute global averages
     global_ghg = compute_global_ghg_averages(ghg_df)
