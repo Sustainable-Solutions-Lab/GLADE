@@ -62,8 +62,8 @@ sobol_parameter_groups = _sobol_parameter_groups()
 def _sobol_sensitivity_prefixes():
     """Return all scenario name prefixes for sensitivity generators."""
     generators = _sobol_sensitivity_generators()
-    # Extract prefix from name pattern like "pce_{sample_id}" -> "pce_"
-    return [gen["name"].split("{")[0] for gen in generators]
+    # Extract prefix from name pattern like "pce_{sample_id}" -> "pce"
+    return [gen["name"].split("_{")[0] for gen in generators]
 
 
 def _sobol_plot_targets():

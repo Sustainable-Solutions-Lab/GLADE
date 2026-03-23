@@ -150,7 +150,7 @@ scenarios:
           baseline_scenario: "baseline"
 
     # --- L1 = 0.05 ---
-    - name: pce_l1_0p05_{sample_id}
+    - name: pce-l1-0p05_{sample_id}
       mode: sensitivity
       method: pce
       grid_resolution: 50
@@ -170,7 +170,7 @@ scenarios:
           baseline_scenario: "baseline_l1_0p05"
 
     # --- L1 = 0.5 ---
-    - name: pce_l1_0p5_{sample_id}
+    - name: pce-l1-0p5_{sample_id}
       mode: sensitivity
       method: pce
       grid_resolution: 50

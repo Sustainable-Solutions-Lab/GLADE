@@ -16,7 +16,7 @@ def validate_sensitivity_generator(config: dict, _project_root=None) -> None:
     ]
 
     # Check that all sensitivity generators have unique name prefixes.
-    prefixes = [gen["name"].split("{")[0] for gen in sensitivity_generators]
+    prefixes = [gen["name"].split("_{")[0] for gen in sensitivity_generators]
     if len(prefixes) != len(set(prefixes)):
         raise ValueError(
             f"Sensitivity generators must have unique name prefixes, "

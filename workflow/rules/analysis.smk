@@ -88,6 +88,14 @@ rule analyze_model:
         "../scripts/analysis/analyze_model.py"
 
 
+def _sensitivity_generator_prefix(gen):
+    """Extract the prefix from a sensitivity generator name pattern.
+
+    E.g. "pce_{sample_id}" -> "pce", "pce-l1-0p05_{sample_id}" -> "pce-l1-0p05".
+    """
+    return gen["name"].split("_{")[0]
+
+
 def _sensitivity_generator(wildcards):
     """Return the sensitivity generator whose name prefix matches the wildcard."""
     raw_defs = config.get("scenarios") or {}
@@ -102,11 +110,10 @@ def _sensitivity_generator(wildcards):
         raise ValueError("No sensitivity generator found in scenarios")
 
     for gen in generators:
-        gen_prefix = gen["name"].split("{")[0]
-        if gen_prefix == prefix:
+        if _sensitivity_generator_prefix(gen) == prefix:
             return gen
 
-    available = [gen["name"].split("{")[0] for gen in generators]
+    available = [_sensitivity_generator_prefix(gen) for gen in generators]
     raise ValueError(
         f"No sensitivity generator matches prefix '{prefix}'. "
         f"Available prefixes: {available}"
@@ -115,12 +122,18 @@ def _sensitivity_generator(wildcards):
 
 def _sensitivity_scenario_names(wildcards):
     """Return all sensitivity scenario names matching the prefix in expansion order."""
-    prefix = wildcards.prefix
+    import re
+
+    generator = _sensitivity_generator(wildcards)
+    # Build regex from the generator's name pattern, replacing {sample_id}
+    # with a numeric match group.
+    pattern = re.escape(generator["name"]).replace(r"\{sample_id\}", r"\d+") + "$"
+
     all_scenarios = list_scenarios()
-    matching = [s for s in all_scenarios if s.startswith(prefix)]
+    matching = [s for s in all_scenarios if re.match(pattern, s)]
     if not matching:
         raise ValueError(
-            f"No scenarios found with prefix '{prefix}'. "
+            f"No scenarios found matching pattern '{pattern}'. "
             f"Available scenarios: {all_scenarios}"
         )
     return matching
@@ -134,45 +147,17 @@ _ANALYSIS_FILES = (
 )
 
 
-def _available_sensitivity_scenarios(wildcards):
-    """Return sensitivity scenarios whose analysis directories exist on disk.
-
-    This allows the GSA rule to run with an incomplete set of solved
-    scenarios (e.g. when some solves failed or results were partially
-    copied back from a cluster).
-    """
-    from pathlib import Path
-
-    all_scenarios = _sensitivity_scenario_names(wildcards)
-    base = Path(f"results/{wildcards.name}/analysis")
-    available = [
-        s
-        for s in all_scenarios
-        if all((base / f"scen-{s}" / f).exists() for f in _ANALYSIS_FILES)
-    ]
-    if not available:
-        raise ValueError(
-            f"No completed scenarios with prefix '{wildcards.prefix}' "
-            f"found in {base}"
-        )
-    n_total = len(all_scenarios)
-    n_avail = len(available)
-    if n_avail < n_total:
-        print(f"INFO: {n_avail}/{n_total} sensitivity scenarios available")
-    elif n_avail < n_total * 0.5:
-        print(
-            f"WARNING: Only {n_avail}/{n_total} sensitivity scenarios available "
-            f"({100*n_avail/ n_total:.0f}%). GSA results may be unreliable."
-        )
-    return available
-
-
 def _sensitivity_scenario_inputs(wildcards):
-    """Generate input files for sensitivity scenarios that completed successfully."""
-    available = _available_sensitivity_scenarios(wildcards)
+    """Generate input files for all sensitivity scenarios.
+
+    Lists all expected scenarios so Snakemake can build the full dependency
+    chain (solve → analyze → compute_sobol).  The compute script receives
+    only the available subset via params.scenario_names.
+    """
+    all_scenarios = _sensitivity_scenario_names(wildcards)
     return [
         f"<results>/{wildcards.name}/analysis/scen-{s}/{f}"
-        for s in available
+        for s in all_scenarios
         for f in _ANALYSIS_FILES
     ]
 
@@ -211,13 +196,13 @@ rule compute_sobol_sensitivity:
     then run:
         tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/sobol_global_indices_{prefix}.parquet
 
-    The {prefix} wildcard matches the scenario name prefix (e.g., "pce_" for
+    The {prefix} wildcard matches the scenario name prefix (e.g., "pce" for
     scenarios pce_0, pce_1, ...).
     """
     input:
         _sensitivity_scenario_inputs,
     params:
-        scenario_names=_available_sensitivity_scenarios,
+        scenario_names=_sensitivity_scenario_names,
         generator_spec=lambda w: _sensitivity_generator(w),
         slice_grid=_sensitivity_slice_grid,
     output:
