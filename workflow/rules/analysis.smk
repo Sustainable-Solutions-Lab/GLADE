@@ -89,8 +89,9 @@ rule analyze_model:
 
 
 def _sensitivity_generator(wildcards):
-    """Extract the single sensitivity generator from config scenarios."""
+    """Return the sensitivity generator whose name prefix matches the wildcard."""
     raw_defs = config.get("scenarios") or {}
+    prefix = wildcards.prefix
 
     generators = [
         gen
@@ -99,12 +100,17 @@ def _sensitivity_generator(wildcards):
     ]
     if not generators:
         raise ValueError("No sensitivity generator found in scenarios")
-    if len(generators) > 1:
-        raise ValueError(
-            "Multiple sensitivity generators found in scenarios. "
-            "Only one sensitivity generator per config is currently supported."
-        )
-    return generators[0]
+
+    for gen in generators:
+        gen_prefix = gen["name"].split("{")[0]
+        if gen_prefix == prefix:
+            return gen
+
+    available = [gen["name"].split("{")[0] for gen in generators]
+    raise ValueError(
+        f"No sensitivity generator matches prefix '{prefix}'. "
+        f"Available prefixes: {available}"
+    )
 
 
 def _sensitivity_scenario_names(wildcards):

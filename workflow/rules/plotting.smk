@@ -18,28 +18,22 @@ if comparison_scenarios == "all":
     comparison_scenarios = [f"scen-{name}" for name in scenario_names]
 
 
-def _sobol_sensitivity_generator():
-    """Return the single sensitivity generator, or None if not configured."""
+def _sobol_sensitivity_generators():
+    """Return all sensitivity generators, or an empty list if none configured."""
     raw_defs = config["scenarios"]
     if raw_defs is None:
-        return None
+        return []
     generators_raw = raw_defs["_generators"] if "_generators" in raw_defs else []
-    generators = [gen for gen in generators_raw if gen.get("mode") == "sensitivity"]
-    if not generators:
-        return None
-    if len(generators) > 1:
-        raise ValueError(
-            "Multiple sensitivity generators found in scenarios. "
-            "Only one sensitivity generator per config is currently supported."
-        )
-    return generators[0]
+    return [gen for gen in generators_raw if gen.get("mode") == "sensitivity"]
 
 
 def _sobol_non_slice_parameters():
     """Return sensitivity parameters excluding configured slice parameters."""
-    generator = _sobol_sensitivity_generator()
-    if generator is None:
+    generators = _sobol_sensitivity_generators()
+    if not generators:
         return []
+    # All generators share the same parameter set; use the first.
+    generator = generators[0]
     slice_parameters = set(generator["slice_parameters"])
     if len(slice_parameters) < 2:
         return []
@@ -53,77 +47,45 @@ def _sobol_non_slice_parameters():
 sobol_non_slice_parameters = _sobol_non_slice_parameters()
 
 
-def _sobol_l1_plot_values():
-    """Return L1 cost values to generate conditioned plots for."""
-    generator = _sobol_sensitivity_generator()
-    if generator is None:
-        return []
-    return [str(v) for v in generator.get("l1_plot_values", [])]
-
-
-def _sobol_l1_wildcard_constraint():
-    """Return regex constraint matching configured L1 plot values."""
-    values = _sobol_l1_plot_values()
-    if not values:
-        return "NONE"
-    # Escape dots for regex (0.22 -> 0\\.22)
-    return "|".join(v.replace(".", r"\.") for v in values)
-
-
-sobol_l1_plot_values = _sobol_l1_plot_values()
-
-
 def _sobol_parameter_groups():
-    """Return parameter grouping dict from the sensitivity generator."""
-    generator = _sobol_sensitivity_generator()
-    if generator is None:
+    """Return parameter grouping dict from the sensitivity generators."""
+    generators = _sobol_sensitivity_generators()
+    if not generators:
         return {}
-    return dict(generator.get("parameter_groups", {}))
+    # All generators share the same parameter groups; use the first.
+    return dict(generators[0].get("parameter_groups", {}))
 
 
 sobol_parameter_groups = _sobol_parameter_groups()
 
 
-def _sobol_sensitivity_prefix():
-    """Return the scenario name prefix for the sensitivity generator, or None."""
-    generator = _sobol_sensitivity_generator()
-    if generator is None:
-        return None
+def _sobol_sensitivity_prefixes():
+    """Return all scenario name prefixes for sensitivity generators."""
+    generators = _sobol_sensitivity_generators()
     # Extract prefix from name pattern like "pce_{sample_id}" -> "pce_"
-    name_pattern = generator["name"]
-    return name_pattern.split("{")[0]
+    return [gen["name"].split("{")[0] for gen in generators]
 
 
 def _sobol_plot_targets():
     """Build all Sobol sensitivity plot targets for the collection rule."""
-    prefix = _sobol_sensitivity_prefix()
-    if prefix is None:
+    prefixes = _sobol_sensitivity_prefixes()
+    if not prefixes:
         return []
 
-    targets = [
-        # Base conditional plots
-        f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
-        f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
-        # Phase diagram
-        f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
-    ]
-    # Per-parameter contour surfaces
-    for param in _sobol_non_slice_parameters():
-        targets.append(
-            f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}.pdf"
-        )
-    # L1-conditioned variants
-    for l1 in _sobol_l1_plot_values():
+    non_slice = _sobol_non_slice_parameters()
+    targets = []
+    for prefix in prefixes:
         targets += [
-            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}_l1_{l1}.pdf",
-            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}_l1_{l1}.pdf",
-            f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}_l1_{l1}.pdf",
-            f"<results>/{{name}}/plots/sobol_grouped_s1_vs_value_per_yll_{prefix}_l1_{l1}.pdf",
-            f"<results>/{{name}}/plots/sobol_grouped_s1_vs_ghg_price_{prefix}_l1_{l1}.pdf",
+            # Base conditional plots
+            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
+            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
+            # Phase diagram
+            f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
         ]
-        for param in _sobol_non_slice_parameters():
+        # Per-parameter contour surfaces
+        for param in non_slice:
             targets.append(
-                f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}_l1_{l1}.pdf"
+                f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}.pdf"
             )
     return targets
 
@@ -847,124 +809,6 @@ rule plot_sobol_joint_conditional_phase_diagram:
         "<benchmarks>/{name}/plot_sobol_joint_conditional_phase_diagram_{prefix}.tsv"
     script:
         "../scripts/plotting/plot_sobol_joint_conditional_phase_diagram.py"
-
-
-# --- L1-conditioned variants ---
-# These rules produce the same plots as above but conditioned on specific
-# prod_stability_cost (L1) values, using the joint conditional CSV.
-
-# Resolve ambiguity: the _at_l1 rules have an l1_value wildcard that the base
-# rules could match via an overly greedy {prefix} (e.g., "pce__l1_0.05").
-
-
-ruleorder: plot_sobol_conditional_sensitivity_at_l1 > plot_sobol_conditional_sensitivity
-ruleorder: plot_sobol_joint_conditional_contour_at_l1 > plot_sobol_joint_conditional_contour
-ruleorder: plot_sobol_joint_conditional_phase_diagram_at_l1 > plot_sobol_joint_conditional_phase_diagram
-
-
-rule plot_sobol_conditional_sensitivity_at_l1:
-    """Plot stacked conditional Sobol shares at a fixed L1 cost."""
-    input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
-    output:
-        value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}_l1_{l1_value}.pdf",
-        ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}_l1_{l1_value}.pdf",
-    params:
-        metric="S1_cond",
-        l1_value=lambda w: float(w.l1_value),
-    wildcard_constraints:
-        l1_value=_sobol_l1_wildcard_constraint(),
-    group:
-        "analysis_plot"
-    resources:
-        runtime="2m",
-        mem_mb=1200,
-    log:
-        "<logs>/{name}/plot_sobol_conditional_sensitivity_at_l1_{prefix}_{l1_value}.log",
-    benchmark:
-        "<benchmarks>/{name}/plot_sobol_conditional_sensitivity_at_l1_{prefix}_{l1_value}.tsv"
-    script:
-        "../scripts/plotting/plot_sobol_conditional_sensitivity_at_l1.py"
-
-
-rule plot_sobol_joint_conditional_contour_at_l1:
-    """Plot conditional Sobol surface for one parameter at a fixed L1 cost."""
-    input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
-    output:
-        pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{prefix}_l1_{l1_value}.pdf",
-    params:
-        metric="S1_cond",
-        allowed_parameters=sobol_non_slice_parameters,
-        l1_value=lambda w: float(w.l1_value),
-    wildcard_constraints:
-        l1_value=_sobol_l1_wildcard_constraint(),
-    group:
-        "analysis_plot"
-    resources:
-        runtime="2m",
-        mem_mb=1200,
-    log:
-        "<logs>/{name}/plot_sobol_joint_conditional_contour_at_l1_{parameter}_{prefix}_{l1_value}.log",
-    benchmark:
-        "<benchmarks>/{name}/plot_sobol_joint_conditional_contour_at_l1_{parameter}_{prefix}_{l1_value}.tsv"
-    script:
-        "../scripts/plotting/plot_sobol_joint_conditional_contour.py"
-
-
-rule plot_sobol_joint_conditional_phase_diagram_at_l1:
-    """Plot dominant sensitivity factor at a fixed L1 cost."""
-    input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
-    output:
-        pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{prefix}_l1_{l1_value}.pdf",
-    params:
-        metric="S1_cond",
-        allowed_parameters=sobol_non_slice_parameters,
-        l1_value=lambda w: float(w.l1_value),
-    wildcard_constraints:
-        l1_value=_sobol_l1_wildcard_constraint(),
-    group:
-        "analysis_plot"
-    resources:
-        runtime="2m",
-        mem_mb=1200,
-    log:
-        "<logs>/{name}/plot_sobol_joint_conditional_phase_diagram_at_l1_{prefix}_{l1_value}.log",
-    benchmark:
-        "<benchmarks>/{name}/plot_sobol_joint_conditional_phase_diagram_at_l1_{prefix}_{l1_value}.tsv"
-    script:
-        "../scripts/plotting/plot_sobol_joint_conditional_phase_diagram.py"
-
-
-rule plot_sobol_grouped_sensitivity_at_l1:
-    """Plot grouped conditional Sobol shares at a fixed L1 cost."""
-    input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
-    output:
-        value_per_yll_pdf="<results>/{name}/plots/sobol_grouped_s1_vs_value_per_yll_{prefix}_l1_{l1_value}.pdf",
-        ghg_price_pdf="<results>/{name}/plots/sobol_grouped_s1_vs_ghg_price_{prefix}_l1_{l1_value}.pdf",
-    params:
-        metric="S1_cond",
-        l1_value=lambda w: float(w.l1_value),
-        parameter_groups=sobol_parameter_groups,
-    wildcard_constraints:
-        l1_value=_sobol_l1_wildcard_constraint(),
-    group:
-        "analysis_plot"
-    resources:
-        runtime="2m",
-        mem_mb=1200,
-    log:
-        "<logs>/{name}/plot_sobol_grouped_sensitivity_at_l1_{prefix}_{l1_value}.log",
-    benchmark:
-        "<benchmarks>/{name}/plot_sobol_grouped_sensitivity_at_l1_{prefix}_{l1_value}.tsv"
-    script:
-        "../scripts/plotting/plot_sobol_grouped_sensitivity_at_l1.py"
 
 
 rule sobol_plots:

@@ -6,11 +6,7 @@
 
 
 def validate_sensitivity_generator(config: dict, _project_root=None) -> None:
-    """Ensure scenarios contains at most one sensitivity generator.
-
-    The current PCE sensitivity analysis implementation assumes one sensitivity
-    generator per config file.
-    """
+    """Ensure sensitivity generators have unique prefixes."""
     scenario_defs = config.get("scenarios") or {}
 
     sensitivity_generators = [
@@ -18,8 +14,11 @@ def validate_sensitivity_generator(config: dict, _project_root=None) -> None:
         for generator in scenario_defs.get("_generators", [])
         if generator.get("mode") == "sensitivity"
     ]
-    if len(sensitivity_generators) > 1:
+
+    # Check that all sensitivity generators have unique name prefixes.
+    prefixes = [gen["name"].split("{")[0] for gen in sensitivity_generators]
+    if len(prefixes) != len(set(prefixes)):
         raise ValueError(
-            "scenarios has multiple sensitivity generators. "
-            "Only one sensitivity generator per config is currently supported."
+            f"Sensitivity generators must have unique name prefixes, "
+            f"got duplicates in: {prefixes}"
         )

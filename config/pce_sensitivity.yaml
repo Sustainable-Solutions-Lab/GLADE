@@ -8,6 +8,10 @@
 # for PCE-based sensitivity analysis. Polynomial Chaos Expansions are fitted
 # to model outputs, yielding analytical Sobol indices (first-order and
 # total-order) as well as conditional indices for designated slice parameters.
+#
+# The analysis is replicated at three L1 production-stability costs (0.22,
+# 0.05, 0.5). Each L1 value has its own baseline scenario so that consumer
+# values / piecewise utility blocks are correctly calibrated.
 
 name: "pce_sensitivity"
 scenarios:
@@ -27,9 +31,11 @@ scenarios:
   #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
   #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
   #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
-  #   - prod_stability_cost: 0.05-0.5 uniform (L1 penalty cost, slice parameter)
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
+  #
+  # Each generator group is replicated at three L1 production-stability costs
+  # (0.22, 0.05, 0.5) with matching baseline scenarios for calibration.
 
   # Baseline scenarios for calibrating piecewise food utility blocks.
   # One per L1 cost so that consumer values (dual variables) reflect the
@@ -62,21 +68,21 @@ scenarios:
   default: {}
 
   _generators:
+    # --- Default L1 (0.22) ---
     - name: pce_{sample_id}
       mode: sensitivity
-      method: pce        # "pce" or "rf"
+      method: pce
       grid_resolution: 50
       method_options:
         n_mc_conditional: 4096
         cross_truncation: 0.8
-      samples: 4096
-      slice_parameters: [value_per_yll, ghg_price, prod_stability_cost]
-      l1_plot_values: [0.05, 0.22, 0.5]
-      parameter_groups:
+      samples: 8
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: &pce_parameter_groups
         "Emission factors": [ch4_factor, n2o_factor, luc_factor]
         "Agricultural": [yield_factor, flw_factor, fcr_factor]
         "Health risk": [rr_protective, rr_harmful]
-      parameters:
+      parameters: &pce_parameters
         yield_factor:
           lower: 0.8
           upper: 1.2
@@ -119,15 +125,11 @@ scenarios:
           lower: 0
           upper: 20000
           bounds: [0, null]
-        prod_stability_cost:
-          lower: 0.05
-          upper: 0.5
-          bounds: [0, null]
         ghg_price:
           lower: 0
           upper: 300
           bounds: [0, null]
-      template:
+      template: &pce_template
         sensitivity:
           crop_yields:
             all: "{yield_factor}"
@@ -142,11 +144,50 @@ scenarios:
             harmful: "{rr_harmful}"
         health:
           value_per_yll: "{value_per_yll}"
-        validation:
-          production_stability:
-            l1_cost: "{prod_stability_cost}"
         emissions:
           ghg_price: "{ghg_price}"
+        consumer_values:
+          baseline_scenario: "baseline"
+
+    # --- L1 = 0.05 ---
+    - name: pce_l1_0p05_{sample_id}
+      mode: sensitivity
+      method: pce
+      grid_resolution: 50
+      method_options:
+        n_mc_conditional: 4096
+        cross_truncation: 0.8
+      samples: 8
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: *pce_parameter_groups
+      parameters: *pce_parameters
+      template:
+        <<: *pce_template
+        validation:
+          production_stability:
+            l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
+
+    # --- L1 = 0.5 ---
+    - name: pce_l1_0p5_{sample_id}
+      mode: sensitivity
+      method: pce
+      grid_resolution: 50
+      method_options:
+        n_mc_conditional: 4096
+        cross_truncation: 0.8
+      samples: 8
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: *pce_parameter_groups
+      parameters: *pce_parameters
+      template:
+        <<: *pce_template
+        validation:
+          production_stability:
+            l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020
