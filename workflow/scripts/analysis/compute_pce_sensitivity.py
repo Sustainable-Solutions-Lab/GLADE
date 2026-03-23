@@ -180,6 +180,47 @@ def sobol_from_pce(
     return s1, s_total
 
 
+def precompute_slice_basis(
+    distribution: cp.Distribution,
+    max_degree: int,
+    slice_indices: list[int],
+    slice_grid: dict[int, list[float]],
+) -> dict[int, dict[float, dict[int, float]]]:
+    """Precompute univariate basis evaluations for all slice grid values.
+
+    Parameters
+    ----------
+    distribution : cp.Distribution
+        Joint distribution.
+    max_degree : int
+        Maximum polynomial degree in the PCE expansion.
+    slice_indices : list[int]
+        Parameter indices of slice variables.
+    slice_grid : dict[int, list[float]]
+        ``{param_idx: [grid_values]}``
+
+    Returns
+    -------
+    dict[int, dict[float, dict[int, float]]]
+        ``{param_idx: {value: {degree: basis_eval}}}``
+    """
+    cache: dict[int, dict[float, dict[int, float]]] = {}
+    for s_idx in slice_indices:
+        marginal = distribution[s_idx]
+        uni_expansion = cp.generate_expansion(
+            order=max_degree, dist=marginal, normed=True
+        )
+        # Map degree -> polynomial once
+        deg_polys = {int(poly.exponents[-1][0]): poly for poly in uni_expansion}
+        val_cache: dict[float, dict[int, float]] = {}
+        for s_val in slice_grid[s_idx]:
+            val_cache[s_val] = {
+                deg: float(poly(s_val)) for deg, poly in deg_polys.items()
+            }
+        cache[s_idx] = val_cache
+    return cache
+
+
 def conditional_sobol(
     coefficients: np.ndarray,
     expansion: list,
@@ -188,6 +229,7 @@ def conditional_sobol(
     n_params: int,
     slice_indices: list[int],
     slice_values: list[float],
+    precomputed_basis: dict[int, dict[float, dict[int, float]]] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Compute Sobol indices conditional on slice parameters.
 
@@ -200,7 +242,7 @@ def conditional_sobol(
     coefficients : np.ndarray
         PCE coefficients.
     expansion : list
-        Chaospy polynomial expansion.
+        Chaospy polynomial expansion (unused, kept for API compat).
     multi_indices : list[tuple]
         Multi-index exponents for each basis term.
     distribution : cp.Distribution
@@ -211,6 +253,9 @@ def conditional_sobol(
         Indices of slice parameters in the parameter vector.
     slice_values : list[float]
         Values to condition the slice parameters at.
+    precomputed_basis : dict, optional
+        Pre-evaluated basis values from :func:`precompute_slice_basis`.
+        When provided, skips the expensive per-call chaospy evaluation.
 
     Returns
     -------
@@ -218,33 +263,31 @@ def conditional_sobol(
         S1_cond, ST_cond (shape n_params; slice param entries are 0),
         and conditional_variance.
     """
-    # `expansion` is part of the public API and kept for compatibility.
-    # The computation below only needs coefficients and multi-indices.
     _ = expansion
 
     non_slice = sorted(set(range(n_params)) - set(slice_indices))
 
-    # For each multi-index alpha, the conditioning factor is the product
-    # of univariate basis evaluations psi_{alpha_j}(x_j*) for each
-    # slice parameter j. We extract these by building marginal orthonormal
-    # bases and evaluating at the conditioning values.
-
-    # Build marginal distributions for evaluation
-    marginals = [distribution[i] for i in range(n_params)]
-
-    # For each slice param, build univariate orthonormal basis and evaluate
-    slice_basis_values = {}  # {param_idx: {degree: value}}
-    for s_idx, s_val in zip(slice_indices, slice_values):
-        marginal = marginals[s_idx]
-        # Build univariate expansion up to max degree seen in multi_indices
-        max_deg = max(alpha[s_idx] for alpha in multi_indices)
-        uni_expansion = cp.generate_expansion(order=max_deg, dist=marginal, normed=True)
-        # Evaluate each basis polynomial at the conditioning value
-        vals = {}
-        for poly in uni_expansion:
-            deg = int(poly.exponents[-1][0])
-            vals[deg] = float(poly(s_val))
-        slice_basis_values[s_idx] = vals
+    # Build slice basis values: use precomputed cache when available,
+    # otherwise fall back to computing on the fly.
+    if precomputed_basis is not None:
+        slice_basis_values = {
+            s_idx: precomputed_basis[s_idx][s_val]
+            for s_idx, s_val in zip(slice_indices, slice_values)
+        }
+    else:
+        marginals = [distribution[i] for i in range(n_params)]
+        slice_basis_values = {}
+        for s_idx, s_val in zip(slice_indices, slice_values):
+            marginal = marginals[s_idx]
+            max_deg = max(alpha[s_idx] for alpha in multi_indices)
+            uni_expansion = cp.generate_expansion(
+                order=max_deg, dist=marginal, normed=True
+            )
+            vals = {}
+            for poly in uni_expansion:
+                deg = int(poly.exponents[-1][0])
+                vals[deg] = float(poly(s_val))
+            slice_basis_values[s_idx] = vals
 
     # Transform and collapse coefficients onto the reduced (non-slice) basis.
     # After conditioning, multiple original terms with the same non-slice
@@ -376,6 +419,23 @@ def run(snakemake) -> None:
 
     logger.info("Analyzing outputs: %s", available_columns)
 
+    # Precompute univariate basis evaluations for all slice grid values.
+    # This avoids rebuilding chaospy expansions inside the 50^3 joint loop.
+    if slice_indices and slice_grid:
+        # Build lookup keyed by param index (not name) for conditional_sobol
+        idx_grid = {
+            param_names.index(sp_name): values for sp_name, values in slice_grid.items()
+        }
+        precomputed_basis = precompute_slice_basis(
+            joint_dist, max_degree, slice_indices, idx_grid
+        )
+        logger.info(
+            "Precomputed slice basis for %d grid points",
+            sum(len(v) for v in idx_grid.values()),
+        )
+    else:
+        precomputed_basis = None
+
     # Fit PCE and compute indices for each output
     global_rows = []
     validation_rows = []
@@ -454,6 +514,7 @@ def run(snakemake) -> None:
                         n_params,
                         [sp_idx],
                         [sp_val],
+                        precomputed_basis=precomputed_basis,
                     )
 
                     for i, pname in enumerate(param_names):
@@ -482,6 +543,7 @@ def run(snakemake) -> None:
                     n_params,
                     slice_indices,
                     list(joint_values),
+                    precomputed_basis=precomputed_basis,
                 )
 
                 slice_value_map = dict(zip(slice_param_names, joint_values))

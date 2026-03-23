@@ -223,13 +223,12 @@ def main() -> None:
     if df.empty:
         raise ValueError(f"Conditional joint indices file is empty: {input_path}")
 
-    # Filter to nearest L1 cost grid point
-    if L1_COLUMN not in df.columns:
-        raise ValueError(f"Joint conditional CSV does not contain '{L1_COLUMN}' column")
-    nearest = df[L1_COLUMN].unique()
-    target = min(nearest, key=lambda v: abs(v - l1_value))
-    df = df[df[L1_COLUMN] == target].copy()
-    logger.info("Filtered to %s = %s (requested %s)", L1_COLUMN, target, l1_value)
+    # Filter to nearest L1 cost grid point (skip if column absent)
+    if L1_COLUMN in df.columns:
+        nearest = df[L1_COLUMN].unique()
+        target = min(nearest, key=lambda v: abs(v - l1_value))
+        df = df[df[L1_COLUMN] == target].copy()
+        logger.info("Filtered to %s = %s (requested %s)", L1_COLUMN, target, l1_value)
 
     # Assign parameter groups
     df = _assign_groups(df, parameter_groups)
