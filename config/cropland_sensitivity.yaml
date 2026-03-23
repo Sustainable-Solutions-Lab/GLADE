@@ -49,7 +49,7 @@ scenarios:
 # Consumer values derived from baseline consumption patterns
 food_incentives:
   sources:
-    - "results/{name}/consumer_values/values.csv"
+    - "results/{name}/consumer_values/baseline/values.csv"
 
 # Compare all scenarios in plots
 plotting:

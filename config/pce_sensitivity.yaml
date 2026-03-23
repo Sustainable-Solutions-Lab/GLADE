@@ -31,8 +31,10 @@ scenarios:
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
 
-  # Baseline scenario for calibrating piecewise food utility blocks (dual variables)
-  baseline:
+  # Baseline scenarios for calibrating piecewise food utility blocks.
+  # One per L1 cost so that consumer values (dual variables) reflect the
+  # production-stability regime of each scenario group.
+  baseline: &baseline_template
     validation:
       enforce_baseline_diet: true
     food_utility_piecewise:
@@ -41,6 +43,20 @@ scenarios:
       ghg_price: 0
     health:
       value_per_yll: 0
+
+  baseline_l1_0p05:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.05
+
+  baseline_l1_0p5:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.5
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
@@ -180,7 +196,7 @@ solving:
 
 remote_solve:
   enabled: false
-  local_scenarios: ["baseline"]
+  local_scenarios: ["baseline", "baseline_l1_0p05", "baseline_l1_0p5"]
   host: "shr"
   workdir: "~/food-opt-scratch"
   pixi_env: "gurobi"

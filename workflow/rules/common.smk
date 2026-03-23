@@ -84,6 +84,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "biomass.biofuel_demand_scale",
     "land.regional_limit",
     "grazing.grassland_forage_calibration.enabled",
+    "consumer_values",
     "sensitivity",
     "solving",
     "plotting",

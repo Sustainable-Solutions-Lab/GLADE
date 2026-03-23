@@ -24,21 +24,17 @@ def remote_solver_benchmark_path(w):
 
 if config["remote_solve"]["enabled"]:
     local_scenarios = list(config["remote_solve"]["local_scenarios"])
-    unsupported_local_scenarios = [s for s in local_scenarios if s != "baseline"]
-    if unsupported_local_scenarios:
-        unsupported = ", ".join(sorted(unsupported_local_scenarios))
-        raise ValueError(
-            "remote_solve.local_scenarios currently supports only "
-            f"['baseline']; unsupported entries: {unsupported}"
-        )
 
-    if "baseline" in local_scenarios:
+    if local_scenarios:
+        import re as _re
 
-        use rule solve_model as solve_model_local_baseline with:
+        _local_regex = "|".join(_re.escape(s) for s in local_scenarios)
+
+        use rule solve_model as solve_model_local with:
             output:
-                network="<results>/{name}/solved/model_scen-{scenario,baseline}.nc",
+                network=f"<results>/{{name}}/solved/model_scen-{{scenario,{_local_regex}}}.nc",
 
-        ruleorder: solve_model_local_baseline > collect_remote_solve > solve_model
+        ruleorder: solve_model_local > collect_remote_solve > solve_model
 
     else:
 

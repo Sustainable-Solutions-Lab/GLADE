@@ -11,18 +11,17 @@
 #   - ghg_*: GHG price sensitivity (health value = 0)
 #   - yll_*: Health value sensitivity (GHG price = 0)
 #   - ghg_yll_*: Combined sensitivity (both vary together)
+#
+# Each group is replicated at three L1 production-stability costs (0.22,
+# 0.05, 0.5).  Each L1 value has its own baseline scenario so that consumer
+# values / piecewise utility blocks are correctly calibrated.
 
 name: "sensitivity"
 scenarios:
-  # Combined Sensitivity Analysis Scenarios
-  # ---------------------------------------
-  # Includes three sensitivity analyses:
-  #   1. GHG price sensitivity (ghg_*): vary GHG price with health value = 0
-  #   2. YLL value sensitivity (yll_*): vary health value with GHG price = 0
-  #   3. Combined sensitivity (ghg_yll_*): vary both parameters together
-
-  # Baseline scenario for calibrating piecewise food utility blocks (dual variables)
-  baseline:
+  # Baseline scenarios for calibrating piecewise food utility blocks.
+  # One per L1 cost so that consumer values (dual variables) reflect the
+  # production-stability regime of each scenario group.
+  baseline: &baseline_template
     validation:
       enforce_baseline_diet: true
     food_utility_piecewise:
@@ -32,24 +31,34 @@ scenarios:
     health:
       value_per_yll: 0
 
+  baseline_l1_0p05:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.05
+
+  baseline_l1_0p5:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.5
+
   # =============================================================================
   # Generated Scenarios
   # =============================================================================
-  # Each generator sweeps its primary parameter(s) × l1_cost (production
-  # stability penalty). The default l1_cost (0.22) produces the original
-  # scenario names; alternative values append a suffix (e.g. _l1_0p05).
+  # Each generator sweeps its primary parameter(s) at one L1 cost.
+  # The default L1 (0.22) uses top-level defaults for l1_cost and
+  # consumer_values.baseline_scenario; non-default L1 values override both.
 
   _generators:
-    # Zero-point scenarios for each sensitivity group × l1_cost
-    - name: "{prefix}{l1_cost}"
-      mode: grid
+    # --- Zero-point scenarios ------------------------------------------------
+    - name: "{prefix}"
       parameters:
         prefix:
           values: ["ghg_0", "yll_0", "ghg_yll_0"]
-        l1_cost: &l1_cost_param
-          values: [0.22, 0.05, 0.5]
-          name_format: "lambda x: '' if x == 0.22 else '_l1_' + str(x).replace('.', 'p')"
-      template:
+      template: &zero_template
         emissions:
           ghg_price: 0
         health:
@@ -57,13 +66,33 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+
+    - name: "{prefix}_l1_0p05"
+      parameters:
+        prefix:
+          values: ["ghg_0", "yll_0", "ghg_yll_0"]
+      template:
+        <<: *zero_template
         validation:
           production_stability:
-            l1_cost: "{l1_cost}"
+            l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
 
-    # GHG price sensitivity: 5 to 500 USD/tCO2-eq (log-spaced)
-    - name: "ghg_{ghg}{l1_cost}"
-      mode: grid
+    - name: "{prefix}_l1_0p5"
+      parameters:
+        prefix:
+          values: ["ghg_0", "yll_0", "ghg_yll_0"]
+      template:
+        <<: *zero_template
+        validation:
+          production_stability:
+            l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
+
+    # --- GHG price sensitivity: 5 to 500 USD/tCO2-eq (log-spaced) -----------
+    - name: "ghg_{ghg}"
       parameters:
         ghg: &ghg_range
           space: log
@@ -71,8 +100,7 @@ scenarios:
           stop: 500
           num: &num_points 10
           round: true
-        l1_cost: *l1_cost_param
-      template:
+      template: &ghg_template
         emissions:
           ghg_price: "{ghg}"
         health:
@@ -80,13 +108,31 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+
+    - name: "ghg_{ghg}_l1_0p05"
+      parameters:
+        ghg: *ghg_range
+      template:
+        <<: *ghg_template
         validation:
           production_stability:
-            l1_cost: "{l1_cost}"
+            l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
 
-    # YLL value sensitivity: 50 to 100000 USD/YLL (log-spaced)
-    - name: "yll_{yll}{l1_cost}"
-      mode: grid
+    - name: "ghg_{ghg}_l1_0p5"
+      parameters:
+        ghg: *ghg_range
+      template:
+        <<: *ghg_template
+        validation:
+          production_stability:
+            l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
+
+    # --- YLL value sensitivity: 50 to 100000 USD/YLL (log-spaced) -----------
+    - name: "yll_{yll}"
       parameters:
         yll: &yll_range
           space: log
@@ -94,8 +140,7 @@ scenarios:
           stop: 100000
           num: *num_points
           round: true
-        l1_cost: *l1_cost_param
-      template:
+      template: &yll_template
         emissions:
           ghg_price: 0
         health:
@@ -103,18 +148,37 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
+
+    - name: "yll_{yll}_l1_0p05"
+      parameters:
+        yll: *yll_range
+      template:
+        <<: *yll_template
         validation:
           production_stability:
-            l1_cost: "{l1_cost}"
+            l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
 
-    # Combined sensitivity: both parameters vary together (log-spaced)
+    - name: "yll_{yll}_l1_0p5"
+      parameters:
+        yll: *yll_range
+      template:
+        <<: *yll_template
+        validation:
+          production_stability:
+            l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
+
+    # --- Combined sensitivity: both parameters vary together (log-spaced) ----
     # Separate generators per l1_cost because ghg+yll must be zipped (not crossed).
     - name: ghg_yll_{ghg}
       mode: zip
       parameters:
         ghg: *ghg_range
         yll: *yll_range
-      template:
+      template: &ghg_yll_template
         emissions:
           ghg_price: "{ghg}"
         health:
@@ -129,16 +193,12 @@ scenarios:
         ghg: *ghg_range
         yll: *yll_range
       template:
-        emissions:
-          ghg_price: "{ghg}"
-        health:
-          value_per_yll: "{yll}"
-        macronutrients:
-          cal:
-            equal_to_baseline: true
+        <<: *ghg_yll_template
         validation:
           production_stability:
             l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
 
     - name: ghg_yll_{ghg}_l1_0p5
       mode: zip
@@ -146,16 +206,12 @@ scenarios:
         ghg: *ghg_range
         yll: *yll_range
       template:
-        emissions:
-          ghg_price: "{ghg}"
-        health:
-          value_per_yll: "{yll}"
-        macronutrients:
-          cal:
-            equal_to_baseline: true
+        <<: *ghg_yll_template
         validation:
           production_stability:
             l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020
@@ -190,7 +246,7 @@ solving:
 
 remote_solve:
   enabled: true
-  local_scenarios: ["baseline"]
+  local_scenarios: ["baseline", "baseline_l1_0p05", "baseline_l1_0p5"]
   host: "shr"
   workdir: "~/food-opt-scratch"
   pixi_env: "gurobi"

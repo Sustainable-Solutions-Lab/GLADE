@@ -34,7 +34,7 @@ scenarios:
     food_incentives:
       enabled: true
       sources:
-      - "results/{name}/consumer_values/values.csv"
+      - "results/{name}/consumer_values/baseline/values.csv"
     health:
       enabled: true
     emissions:
@@ -50,7 +50,7 @@ scenarios:
     food_incentives:
       enabled: true
       sources:
-      - "results/{name}/consumer_values/values.csv"
+      - "results/{name}/consumer_values/baseline/values.csv"
     health:
       enabled: false
     emissions:
@@ -64,7 +64,7 @@ scenarios:
     food_incentives:
       enabled: true
       sources:
-      - "results/{name}/consumer_values/values.csv"
+      - "results/{name}/consumer_values/baseline/values.csv"
       - "results/{name}/optimal_taxes/taxes.csv"
     health:
       enabled: false

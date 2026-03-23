@@ -16,6 +16,7 @@ required:
   - paths
   - netcdf
   - validation
+  - consumer_values
   - food_incentives
   - food_utility_piecewise
   - optimal_taxes
@@ -319,6 +320,15 @@ properties:
         items:
           type: string
         description: "Paths to food incentives CSVs (may include {name} placeholder)"
+
+  consumer_values:
+    type: object
+    required: [baseline_scenario]
+    additionalProperties: false
+    properties:
+      baseline_scenario:
+        type: string
+        description: "Scenario name used for consumer values extraction (must have enforce_baseline_diet=true)"
 
   food_utility_piecewise:
     type: object

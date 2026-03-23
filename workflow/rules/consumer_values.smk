@@ -11,6 +11,11 @@ This workflow:
    consumption levels
 3. Uses these values in subsequent solves to explore how health/environmental
    pricing affects consumption while accounting for revealed consumer preferences
+
+The baseline scenario used for extraction is configurable per scenario via
+``consumer_values.baseline_scenario`` (default: ``"baseline"``).  This allows
+different scenario groups (e.g. with different L1 production-stability costs)
+to each have their own correctly-calibrated utility blocks.
 """
 
 
@@ -21,18 +26,18 @@ rule extract_consumer_values:
     equality constraints, representing the marginal value of consumption.
     """
     input:
-        network="<results>/{name}/solved/model_scen-baseline.nc",
+        network="<results>/{name}/solved/model_scen-{baseline}.nc",
     output:
-        consumer_values="<results>/{name}/consumer_values/values.csv",
+        consumer_values="<results>/{name}/consumer_values/{baseline}/values.csv",
     group:
         "prep"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "<logs>/{name}/extract_consumer_values.log",
+        "<logs>/{name}/extract_consumer_values_{baseline}.log",
     benchmark:
-        "<benchmarks>/{name}/extract_consumer_values.tsv"
+        "<benchmarks>/{name}/extract_consumer_values_{baseline}.tsv"
     script:
         "../scripts/extract_consumer_values.py"
 
@@ -40,10 +45,10 @@ rule extract_consumer_values:
 rule calibrate_food_utility_blocks:
     """Calibrate piecewise food utility blocks from baseline dual values."""
     input:
-        network="<results>/{name}/solved/model_scen-baseline.nc",
-        consumer_values="<results>/{name}/consumer_values/values.csv",
+        network="<results>/{name}/solved/model_scen-{baseline}.nc",
+        consumer_values="<results>/{name}/consumer_values/{baseline}/values.csv",
     output:
-        utility_blocks="<results>/{name}/consumer_values/utility_blocks.csv",
+        utility_blocks="<results>/{name}/consumer_values/{baseline}/utility_blocks.csv",
     params:
         n_blocks=config["food_utility_piecewise"]["n_blocks"],
         decline_factor=config["food_utility_piecewise"]["decline_factor"],
@@ -53,7 +58,7 @@ rule calibrate_food_utility_blocks:
     group:
         "prep"
     log:
-        "<logs>/{name}/calibrate_food_utility_blocks.log",
+        "<logs>/{name}/calibrate_food_utility_blocks_{baseline}.log",
     script:
         "../scripts/calibrate_food_utility_blocks.py"
 
@@ -81,7 +86,10 @@ rule plot_consumer_values_comparison:
     """Compare consumption and objective breakdown across consumer values scenarios."""
     input:
         unpack(consumer_values_comparison_inputs),
-        consumer_values="<results>/{name}/consumer_values/values.csv",
+        consumer_values=(
+            f"<results>/{{name}}/consumer_values"
+            f"/{config['consumer_values']['baseline_scenario']}/values.csv"
+        ),
     output:
         consumption_pdf="<results>/{name}/plots/consumer_values/consumption_comparison.pdf",
         consumption_csv="<results>/{name}/plots/consumer_values/consumption_comparison.csv",

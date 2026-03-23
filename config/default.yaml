@@ -106,6 +106,10 @@ food_incentives:
   enabled: false  # When true, food-level incentives are applied to the objective
   sources: []
 
+# --- section: consumer_values ---
+consumer_values:
+  baseline_scenario: "baseline"  # Scenario name for consumer values extraction (must have enforce_baseline_diet=true)
+
 # --- section: food_utility_piecewise ---
 food_utility_piecewise:
   enabled: false  # When true, use piecewise diminishing marginal utility for food consumption

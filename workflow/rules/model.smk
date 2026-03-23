@@ -234,8 +234,9 @@ def solve_model_inputs(w):
         ]
     utility_cfg = eff_cfg["food_utility_piecewise"]
     if utility_cfg["enabled"]:
+        baseline_name = eff_cfg["consumer_values"]["baseline_scenario"]
         inputs["food_utility_piecewise"] = (
-            f"<results>/{w.name}/consumer_values/utility_blocks.csv"
+            f"<results>/{w.name}/consumer_values/{baseline_name}/utility_blocks.csv"
         )
     equal_source = eff_cfg["food_groups"]["equal_by_country_source"]
     if equal_source:
