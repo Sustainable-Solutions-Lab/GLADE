@@ -9,12 +9,12 @@ This script computes:
    piecewise-linear dose-response curves at current population intake levels.
 2. Total YLL from the optimization result, read from the network's YLL stores.
 
-Uses food_group_consumption.csv from extract_statistics for consumption amounts,
+Uses food_group_consumption.parquet from extract_statistics for consumption amounts,
 avoiding duplicate extraction of consumption data from the network.
 
 Outputs:
-- health_marginals.csv: Marginal YLL at the food_group level (YLL/Mt, USD/t)
-- health_totals.csv: Total YLL by health cluster (MYLL)
+- health_marginals.parquet: Marginal YLL at the food_group level (YLL/Mt, USD/t)
+- health_totals.parquet: Total YLL by health cluster (MYLL)
 """
 
 from collections import defaultdict

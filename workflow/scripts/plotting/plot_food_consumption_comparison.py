@@ -30,7 +30,7 @@ def _load_global_per_capita(
     Parameters
     ----------
     food_group_consumption_path : str
-        Path to food_group_consumption.csv
+        Path to food_group_consumption.parquet
 
     Returns
     -------

@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""One-off migration: convert analysis CSVs to Parquet in-place.
+
+Usage:
+    pixi run python tools/migrate-csv-to-parquet results/pce_sensitivity/analysis/
+
+Converts all .csv files under the given directory tree to .parquet,
+then removes the originals. Skips files that already have a .parquet
+companion. Prints progress every 1000 files.
+"""
+
+from pathlib import Path
+import sys
+
+import pandas as pd
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <analysis-dir>", file=sys.stderr)
+        sys.exit(1)
+
+    root = Path(sys.argv[1])
+    if not root.is_dir():
+        print(f"Not a directory: {root}", file=sys.stderr)
+        sys.exit(1)
+
+    csvs = sorted(root.rglob("*.csv"))
+    print(f"Found {len(csvs)} CSV files under {root}")
+
+    converted = 0
+    skipped = 0
+    errors = 0
+
+    for i, csv_path in enumerate(csvs, 1):
+        parquet_path = csv_path.with_suffix(".parquet")
+
+        if parquet_path.exists():
+            skipped += 1
+            continue
+
+        try:
+            df = pd.read_csv(csv_path)
+            df.to_parquet(parquet_path)
+            csv_path.unlink()
+            converted += 1
+        except Exception as e:
+            print(f"  ERROR {csv_path}: {e}", file=sys.stderr)
+            errors += 1
+
+        if i % 1000 == 0:
+            print(f"  ... {i}/{len(csvs)} processed ({converted} converted)")
+
+    print(f"Done: {converted} converted, {skipped} skipped, {errors} errors")
+
+
+if __name__ == "__main__":
+    main()

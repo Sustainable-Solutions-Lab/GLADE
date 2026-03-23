@@ -8,12 +8,12 @@ This script computes consumption-attributed GHG emissions by tracing emissions
 through trade and processing networks back to production using flow-based
 attribution via sparse matrix algebra.
 
-Uses food_consumption.csv from extract_statistics for consumption amounts,
+Uses food_consumption.parquet from extract_statistics for consumption amounts,
 avoiding duplicate extraction of consumption data from the network.
 
 Outputs:
-- ghg_attribution.csv: Intensity at the food level (kgCO2e/kg, USD/t)
-- ghg_attribution_totals.csv: Total emissions by country and food_group (MtCO2eq)
+- ghg_attribution.parquet: Intensity at the food level (kgCO2e/kg, USD/t)
+- ghg_attribution_totals.parquet: Total emissions by country and food_group (MtCO2eq)
 """
 
 import logging

@@ -152,13 +152,13 @@ ANALYZE_ALL_SCENARIOS_TARGETS = [
     f"<results>/{{name}}/analysis/scen-{scenario}/{output}"
     for scenario in list_scenarios()
     for output in [
-        "crop_production.csv",
-        "ghg_attribution.csv",
-        "ghg_attribution_totals.csv",
-        "net_emissions.csv",
-        "health_marginals.csv",
-        "health_totals.csv",
-        "objective_breakdown.csv",
+        "crop_production.parquet",
+        "ghg_attribution.parquet",
+        "ghg_attribution_totals.parquet",
+        "net_emissions.parquet",
+        "health_marginals.parquet",
+        "health_totals.parquet",
+        "objective_breakdown.parquet",
     ]
 ]
 
