@@ -202,18 +202,27 @@ def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
                 residue_mask.sum(),
             )
 
-    # LUC CO2 from land conversion (both cropland and pasture expansion)
+    # LUC CO2 from land conversion and sparing (all carriers using LEF data)
     if luc_factor != 1.0:
-        luc_mask = n.links.static["carrier"].isin(["land_conversion", "new_to_pasture"])
+        luc_mask = n.links.static["carrier"].isin(
+            [
+                "land_conversion",
+                "new_to_pasture",
+                "spare_land",
+                "spare_existing_grassland",
+            ]
+        )
         if luc_mask.any():
             n.links.static.loc[luc_mask, "efficiency2"] *= luc_factor
             logger.info(
-                "Applied LUC emission factor %.3f to %d land conversion links",
+                "Applied LUC emission factor %.3f to %d land conversion/sparing links",
                 luc_factor,
                 luc_mask.sum(),
             )
         else:
-            logger.debug("No land conversion links found for LUC emission adjustment")
+            logger.debug(
+                "No land conversion/sparing links found for LUC emission adjustment"
+            )
 
 
 def _apply_flw_factor(n: pypsa.Network, factor: float) -> None:
