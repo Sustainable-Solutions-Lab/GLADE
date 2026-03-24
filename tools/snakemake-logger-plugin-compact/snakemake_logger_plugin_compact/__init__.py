@@ -18,6 +18,7 @@ from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.rule import Rule
 from rich.text import Text
+from snakemake.settings.enums import Quietness
 from snakemake_interface_logger_plugins.base import LogHandlerBase
 from snakemake_interface_logger_plugins.common import LogEvent
 
@@ -55,6 +56,7 @@ class LogHandler(LogHandlerBase):
 
     def __post_init__(self):
         nocolor = getattr(self.common_settings, "nocolor", False)
+        self._quiet = getattr(self.common_settings, "quiet", set()) or set()
         self._show_failed_logs = getattr(
             self.common_settings, "show_failed_logs", False
         )
@@ -81,6 +83,10 @@ class LogHandler(LogHandlerBase):
         self._pending_lines = []  # list of (text, style)
         self._flush_timer = None
         self._buffer_lock = threading.Lock()
+
+    def _is_quiet_about(self, quietness):
+        """Return whether the given quietness class should be suppressed."""
+        return Quietness.ALL in self._quiet or quietness in self._quiet
 
     def _ensure_live(self):
         """Start the Live display on first real job (TTY only, non-dryrun)."""
@@ -169,10 +175,16 @@ class LogHandler(LogHandlerBase):
 
     def filter(self, record):
         event = record.__dict__.get("event", None)
-        return event not in (
-            LogEvent.SHELLCMD,
-            LogEvent.RESOURCES_INFO,
-            LogEvent.DEBUG_DAG,
+        return not (
+            event in (LogEvent.SHELLCMD, LogEvent.RESOURCES_INFO, LogEvent.DEBUG_DAG)
+            or (
+                event in (LogEvent.JOB_INFO, LogEvent.GROUP_INFO)
+                and self._is_quiet_about(Quietness.RULES)
+            )
+            or (
+                event in (LogEvent.JOB_FINISHED, LogEvent.PROGRESS)
+                and self._is_quiet_about(Quietness.PROGRESS)
+            )
         )
 
     def emit(self, record):
