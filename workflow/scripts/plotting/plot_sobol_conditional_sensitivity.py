@@ -8,6 +8,7 @@ from math import ceil
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("pdf")
 import matplotlib.patches
@@ -35,6 +36,18 @@ X_LABELS = {
     "value_per_yll": "Value per YLL (USD per YLL)",
     "ghg_price": "GHG Price (USD per tCO2e)",
 }
+PARAMETER_LABELS = {
+    "luc_factor": "LUC Emissions",
+    "rr_protective": "RR Protective",
+    "rr_harmful": "RR Harmful",
+    "fcr_factor": "Feed Conversion Ratio",
+    "yield_factor": "Crop Yield",
+    "n2o_factor": "N\u2082O Emissions",
+    "value_per_yll": "Value per YLL",
+    "ch4_factor": "CH\u2084 Emissions",
+    "flw_factor": "Food Loss & Waste",
+    "ghg_price": "GHG Price",
+}
 
 
 def _validation_quality(error: float) -> str:
@@ -61,6 +74,70 @@ def _ordered_outputs(available: list[str]) -> list[str]:
     return ordered
 
 
+def _pretty(param: str) -> str:
+    return PARAMETER_LABELS.get(param, param)
+
+
+def _label_areas(
+    ax: plt.Axes,
+    x: np.ndarray,
+    y_arrays: list[np.ndarray],
+    parameters: list[str],
+    min_height: float = 0.08,
+) -> None:
+    """Place text labels directly on stacked areas that are tall enough.
+
+    Labels are placed in the interior of the x range (middle 60%) at the
+    position where each band is tallest, with overlap avoidance.
+    """
+    n = len(x)
+    # Restrict candidate positions to the interior to avoid edge clipping
+    margin = max(1, n // 5)
+    interior = slice(margin, n - margin)
+
+    cumulative = np.zeros_like(x)
+    bands: list[tuple[np.ndarray, np.ndarray, str]] = []
+    for y, param in zip(y_arrays, parameters):
+        lower = cumulative.copy()
+        cumulative = cumulative + y
+        bands.append((lower, cumulative.copy(), param))
+
+    # Track placed labels as (x_idx, y_center) for overlap checks
+    placed: list[tuple[int, float]] = []
+    for lower, upper, param in bands:
+        height = upper - lower
+        interior_height = height[interior]
+        if len(interior_height) == 0:
+            continue
+        best_interior = int(np.argmax(interior_height))
+        best_idx = margin + best_interior
+        band_h = float(height[best_idx])
+        if band_h < min_height:
+            continue
+        y_center = (lower[best_idx] + upper[best_idx]) / 2
+        # Skip if another label is nearby in both x and y
+        label_half = 0.035
+        overlaps = any(
+            abs(y_center - py) < (label_half * 2 + 0.01)
+            and abs(best_idx - px) < n * 0.25
+            for px, py in placed
+        )
+        if overlaps:
+            continue
+        ax.text(
+            x[best_idx],
+            y_center,
+            _pretty(param),
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="white",
+            fontweight="bold",
+            clip_on=True,
+        )
+        placed.append((best_idx, y_center))
+
+
 def _plot_for_x(
     df: pd.DataFrame,
     x_column: str,
@@ -75,8 +152,15 @@ def _plot_for_x(
     )
 
     outputs = _ordered_outputs(aggregated["output"].unique().tolist())
+
+    # Order parameters by mean contribution in total_cost (or overall if absent),
+    # descending so the largest contributor is at the bottom of the stack.
+    if "total_cost" in aggregated["output"].values:
+        rank_data = aggregated[aggregated["output"] == "total_cost"]
+    else:
+        rank_data = aggregated
     parameters = (
-        aggregated.groupby("parameter")[metric_column]
+        rank_data.groupby("parameter")[metric_column]
         .mean()
         .sort_values(ascending=False)
         .index.tolist()
@@ -123,9 +207,12 @@ def _plot_for_x(
             x,
             y_arrays,
             colors=[colors[param] for param in output_parameters],
-            linewidth=0.0,
+            edgecolor="white",
+            linewidth=0.5,
             alpha=0.95,
         )
+        _label_areas(ax, x, y_arrays, output_parameters)
+        ax.set_xlim(x.min(), x.max())
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
         err_value = error_by_output.get(output)
@@ -139,18 +226,20 @@ def _plot_for_x(
         if i % n_cols == 0:
             ax.set_ylabel("Explained Variability Fraction (S1)")
 
+    # Reverse legend order to match bottom-to-top stacking
     legend_handles = [
-        matplotlib.patches.Patch(color=colors[param], label=param)
-        for param in used_parameters
+        matplotlib.patches.Patch(color=colors[param], label=_pretty(param))
+        for param in reversed(used_parameters)
     ]
     if legend_handles:
+        fig.tight_layout(rect=(0, 0.05, 0.82, 1))
         fig.legend(
             handles=legend_handles,
             loc="center left",
-            bbox_to_anchor=(1.0, 0.5),
+            bbox_to_anchor=(0.83, 0.55),
             frameon=False,
+            fontsize=9,
         )
-        fig.tight_layout(rect=(0, 0.05, 0.86, 1))
     else:
         fig.tight_layout(rect=(0, 0.05, 1, 1))
 
