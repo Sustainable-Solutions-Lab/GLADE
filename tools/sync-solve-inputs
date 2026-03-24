@@ -65,6 +65,11 @@ SOURCES+=("data/curated/M49-codes.csv")
 SOURCES+=("data/curated/food_groups.csv")
 SOURCES+=("data/curated/nutrition.csv")
 
+# Grassland forage calibration files (used when grazing.grassland_forage_calibration.enabled).
+if [[ -d "data/curated/calibration" ]]; then
+    SOURCES+=("data/curated/calibration/")
+fi
+
 # Consumer value files (if they exist).
 if [[ -d "results/${CONFIG_NAME}/consumer_values" ]]; then
     SOURCES+=("results/${CONFIG_NAME}/consumer_values/")
