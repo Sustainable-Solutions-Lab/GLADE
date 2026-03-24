@@ -452,7 +452,7 @@ def _add_stage1_constraints(
             intake_values=intake_values,
             log_rr_by_intake=log_rr_by_intake,
             cluster_risk_index=cluster_risk_index,
-            risk_label=str(risk),
+            risk_label=str(first_risk),
             cluster_risk_pairs=cluster_risk_pairs,
             baseline_intakes=baseline_intakes,
             start_entries=start_entries,
