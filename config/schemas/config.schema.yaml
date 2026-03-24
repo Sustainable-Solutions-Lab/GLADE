@@ -1791,19 +1791,7 @@ properties:
           Per-risk-factor quantile values in [0, 1] interpolating between GBD
           rr_low (q=0) and rr_high (q=1) for each dose-response curve.
 
-# Disallow enabling the health objective while also enforcing fixed baseline diet
 allOf:
-  - not:
-      required: [health, validation]
-      properties:
-        health:
-          properties:
-            enabled:
-              const: true
-        validation:
-          properties:
-            enforce_baseline_diet:
-              const: true
   - not:
       required: [food_incentives, food_utility_piecewise]
       properties:
