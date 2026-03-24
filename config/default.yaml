@@ -666,6 +666,12 @@ health:
     red_meat: [CHD, Stroke, T2DM, CRC]
     whole_grains: [CHD, Stroke, T2DM, CRC]
     # sugar: [CHD, Stroke, T2DM, CRC]
+  # Per risk-factor overrides using log-linear RR from literature CSV files.
+  # When a risk factor maps to a CSV path, the GBD dose-response curve is replaced
+  # with a log-linear curve derived from the CSV, age-corrected using relative
+  # attenuation factors from the GBD data.
+  alternative_rr:
+    red_meat: "data/curated/red_meat_rr_log_linear.csv"
   # Multi-objective clustering settings for grouping countries into health clusters
   clustering:
     weights:

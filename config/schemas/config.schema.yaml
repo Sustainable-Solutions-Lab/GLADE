@@ -1152,6 +1152,11 @@ properties:
           items:
             type: string
             pattern: "^[A-Za-z0-9]+$"
+      alternative_rr:
+        type: object
+        description: "Per risk-factor overrides using log-linear RR from literature CSV files"
+        additionalProperties:
+          type: ["string", "null"]
       clustering:
         type: object
         required:

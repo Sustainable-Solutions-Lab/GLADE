@@ -34,11 +34,13 @@ rule prepare_gbd_mortality:
 
 rule prepare_relative_risks:
     input:
+        **{f"alt_rr_{k}": v for k, v in config["health"]["alternative_rr"].items() if v},
         gbd_rr="data/manually_downloaded/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX",
     params:
         risk_factors=config["health"]["risk_factors"],
         causes=config["health"]["causes"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
+        alternative_rr=config["health"]["alternative_rr"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",
     group:

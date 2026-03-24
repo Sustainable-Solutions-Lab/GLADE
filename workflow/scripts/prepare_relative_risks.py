@@ -5,6 +5,7 @@
 """Convert manually downloaded IHME GBD RR tables into tidy dietary risk curves."""
 
 import logging
+import math
 from pathlib import Path
 import re
 
@@ -341,6 +342,170 @@ def _fill_missing_ages(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _apply_alternative_rr(
+    df: pd.DataFrame,
+    alternative_rr: dict[str, str | None],
+) -> pd.DataFrame:
+    """Replace GBD RR entries with age-corrected log-linear curves from CSV.
+
+    For each risk factor with a non-null CSV path, the GBD dose-response
+    curves are replaced with log-linear curves: RR(x) = rr_per_unit^(x/unit).
+    Age-attenuation factors are extracted from the original GBD data to preserve
+    the age structure of the dose-response relationship.
+
+    Parameters
+    ----------
+    df
+        GBD relative risks DataFrame with columns: risk_factor, cause, age,
+        exposure_g_per_day, rr_mean, rr_low, rr_high.
+    alternative_rr
+        Mapping from risk factor name to CSV path (or None to skip).
+    """
+    for risk_factor, csv_path in alternative_rr.items():
+        if not csv_path:
+            continue
+
+        logger.info(
+            f"Applying alternative log-linear RR for '{risk_factor}' from {csv_path}"
+        )
+        alt_df = pd.read_csv(csv_path)
+
+        # Validate CSV columns
+        required_cols = {
+            "outcome",
+            "rr_central",
+            "rr_lower_95ci",
+            "rr_upper_95ci",
+            "per_unit",
+        }
+        missing = required_cols - set(alt_df.columns)
+        if missing:
+            raise ValueError(
+                f"Alternative RR CSV {csv_path} is missing columns: {sorted(missing)}"
+            )
+
+        # Extract age-attenuation factors from the original GBD data
+        attenuation = _extract_age_attenuation(df, risk_factor)
+
+        # Get the GBD exposure points for this risk factor
+        gbd_data = df[df["risk_factor"] == risk_factor]
+        if gbd_data.empty:
+            raise ValueError(
+                f"No GBD data found for risk factor '{risk_factor}' to extract "
+                f"exposure grid and age-attenuation factors"
+            )
+        exposure_points = sorted(gbd_data["exposure_g_per_day"].unique())
+
+        # Generate log-linear curves
+        new_rows: list[dict] = []
+        for _, row in alt_df.iterrows():
+            cause = row["outcome"]
+            rr_central = float(row["rr_central"])
+            rr_lower = float(row["rr_lower_95ci"])
+            rr_upper = float(row["rr_upper_95ci"])
+            per_unit = _parse_per_unit(row["per_unit"])
+
+            for age in ADULT_AGE_LABELS:
+                att = attenuation.get((cause, age), 1.0)
+                for exposure_g in exposure_points:
+                    x_ratio = exposure_g / per_unit
+                    new_rows.append(
+                        {
+                            "risk_factor": risk_factor,
+                            "cause": cause,
+                            "age": age,
+                            "exposure_g_per_day": exposure_g,
+                            "rr_mean": math.exp(att * math.log(rr_central) * x_ratio),
+                            "rr_low": math.exp(att * math.log(rr_lower) * x_ratio),
+                            "rr_high": math.exp(att * math.log(rr_upper) * x_ratio),
+                        }
+                    )
+
+        # Replace GBD entries for this risk factor
+        df = df[df["risk_factor"] != risk_factor]
+        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+        df = df.sort_values(
+            ["risk_factor", "cause", "age", "exposure_g_per_day"]
+        ).reset_index(drop=True)
+
+        logger.info(
+            f"  Replaced {risk_factor} with {len(new_rows)} log-linear entries "
+            f"({len(alt_df)} causes x {len(ADULT_AGE_LABELS)} ages x "
+            f"{len(exposure_points)} exposures)"
+        )
+
+    return df
+
+
+def _extract_age_attenuation(
+    df: pd.DataFrame, risk_factor: str
+) -> dict[tuple[str, str], float]:
+    """Extract age-attenuation factors from GBD data for a risk factor.
+
+    For each (cause, age), computes the ratio of log(RR) at that age to
+    log(RR) at the youngest age group, using a mid-range exposure point.
+    This ratio captures how much the RR effect attenuates with age.
+
+    Returns
+    -------
+    dict
+        Mapping (cause, age) -> attenuation factor in [0, 1].
+    """
+    risk_data = df[df["risk_factor"] == risk_factor]
+    youngest_age = ADULT_AGE_LABELS[0]
+    attenuation: dict[tuple[str, str], float] = {}
+
+    for cause in risk_data["cause"].unique():
+        cause_data = risk_data[risk_data["cause"] == cause]
+
+        # Use the highest non-zero exposure for stability
+        exposures = sorted(cause_data["exposure_g_per_day"].unique())
+        ref_exposure = [x for x in exposures if x > 0]
+        if not ref_exposure:
+            for age in ADULT_AGE_LABELS:
+                attenuation[(cause, age)] = 1.0
+            continue
+        ref_x = ref_exposure[-1]
+
+        # Get youngest age log(RR) at reference exposure
+        youngest_row = cause_data[
+            (cause_data["age"] == youngest_age)
+            & (cause_data["exposure_g_per_day"] == ref_x)
+        ]
+        if youngest_row.empty or youngest_row["rr_mean"].values[0] == 1.0:
+            for age in ADULT_AGE_LABELS:
+                attenuation[(cause, age)] = 1.0
+            continue
+
+        log_rr_youngest = math.log(float(youngest_row["rr_mean"].values[0]))
+        if abs(log_rr_youngest) < 1e-10:
+            for age in ADULT_AGE_LABELS:
+                attenuation[(cause, age)] = 1.0
+            continue
+
+        for age in ADULT_AGE_LABELS:
+            age_row = cause_data[
+                (cause_data["age"] == age) & (cause_data["exposure_g_per_day"] == ref_x)
+            ]
+            if age_row.empty:
+                attenuation[(cause, age)] = 1.0
+                continue
+            log_rr_age = math.log(float(age_row["rr_mean"].values[0]))
+            att = log_rr_age / log_rr_youngest
+            # Clamp to [0, 1] to avoid sign flips from noise
+            attenuation[(cause, age)] = max(0.0, min(1.0, att))
+
+    return attenuation
+
+
+def _parse_per_unit(per_unit: str) -> float:
+    """Parse per_unit string like '100 g/day' into numeric g/day value."""
+    parts = str(per_unit).strip().split()
+    if len(parts) < 2:
+        raise ValueError(f"Cannot parse per_unit: '{per_unit}'")
+    return float(parts[0])
+
+
 def main() -> None:
     snakemake = globals().get("snakemake")  # type: ignore
     if snakemake is None:
@@ -358,6 +523,11 @@ def main() -> None:
     df = pd.read_excel(input_path, header=None)
 
     relative_risks = _parse_relative_risks(df, ssb_sugar_per_gram)
+
+    # Apply alternative log-linear RR overrides if configured
+    alternative_rr = getattr(snakemake.params, "alternative_rr", {})
+    if alternative_rr:
+        relative_risks = _apply_alternative_rr(relative_risks, alternative_rr)
 
     # Validate that we have all required risk factors and causes
     required_risk_factors = set(snakemake.params["risk_factors"])

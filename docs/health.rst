@@ -291,6 +291,14 @@ Appendix 1, p. 171).
   effective RR curves per health cluster (see :ref:`age-specific-rr`).
 - **Intake units**: All quantities in fresh (as consumed) weight, matching GDD
   dietary data conventions
+- **Alternative RR sources**: The ``health.alternative_rr`` config option allows
+  substituting GBD dose-response curves with log-linear curves from literature
+  meta-analyses on a per-risk-factor basis. By default, red meat uses literature
+  estimates (Bechthold et al. 2019 for CHD/Stroke, Li et al. 2024 for T2DM,
+  Chan et al. 2011 for CRC) with GBD age-attenuation factors applied. The
+  log-linear assumption means ``RR(x) = RR_{per\,unit}^{x/unit}``. Confidence
+  intervals propagate through the GSA quantile architecture via ``log_rr_low``
+  and ``log_rr_high`` columns in the breakpoint tables.
 
 .. _tmrel-derivation:
 

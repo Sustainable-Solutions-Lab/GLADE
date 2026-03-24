@@ -305,6 +305,174 @@ class TestParseRelativeRisks:
 
 
 # ---------------------------------------------------------------------------
+# Tests: _apply_alternative_rr
+# ---------------------------------------------------------------------------
+
+
+class TestApplyAlternativeRR:
+    """Tests for log-linear RR overrides with age correction."""
+
+    @staticmethod
+    def _make_gbd_df():
+        """Build a minimal GBD-like DataFrame with age-varying RR for red_meat."""
+        from workflow.scripts.prepare_relative_risks import ADULT_AGE_LABELS
+
+        rows = []
+        # Red meat x CHD: age-varying (youngest=1.34, oldest=1.13 at 100g)
+        # Simplified: linear attenuation from 1.34 to 1.13 across 15 ages
+        for i, age in enumerate(ADULT_AGE_LABELS):
+            frac = i / (len(ADULT_AGE_LABELS) - 1)
+            rr_100 = 1.34 - frac * (1.34 - 1.13)
+            for exposure, rr in [(0.0, 1.0), (100.0, rr_100), (200.0, rr_100**2)]:
+                rows.append(
+                    {
+                        "risk_factor": "red_meat",
+                        "cause": "CHD",
+                        "age": age,
+                        "exposure_g_per_day": exposure,
+                        "rr_mean": rr,
+                        "rr_low": rr * 0.9,
+                        "rr_high": rr * 1.1,
+                    }
+                )
+        # Red meat x T2DM: age-constant (RR=1.20 at 100g for all ages)
+        for age in ADULT_AGE_LABELS:
+            for exposure, rr in [(0.0, 1.0), (100.0, 1.20), (200.0, 1.20**2)]:
+                rows.append(
+                    {
+                        "risk_factor": "red_meat",
+                        "cause": "T2DM",
+                        "age": age,
+                        "exposure_g_per_day": exposure,
+                        "rr_mean": rr,
+                        "rr_low": rr * 0.9,
+                        "rr_high": rr * 1.1,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def _make_alt_csv(tmp_path):
+        """Write a minimal alternative RR CSV."""
+        csv_path = tmp_path / "alt_rr.csv"
+        csv_path.write_text(
+            "outcome,rr_central,rr_lower_95ci,rr_upper_95ci,per_unit\n"
+            "CHD,1.15,1.08,1.23,100 g/day\n"
+            "T2DM,1.10,1.06,1.15,100 g/day\n"
+        )
+        return str(csv_path)
+
+    def test_log_linear_curve_at_youngest_age(self, tmp_path):
+        """At youngest age (attenuation=1), RR should match literature exactly."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        csv_path = self._make_alt_csv(tmp_path)
+        result = _apply_alternative_rr(gbd, {"red_meat": csv_path})
+
+        chd_young = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "CHD")
+            & (result["age"] == "25-29")
+            & (result["exposure_g_per_day"] == 100.0)
+        ]
+        assert chd_young["rr_mean"].values[0] == pytest.approx(1.15)
+
+    def test_log_linear_curve_at_200g(self, tmp_path):
+        """At 200g, log-linear RR should be rr_per_100^2."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        csv_path = self._make_alt_csv(tmp_path)
+        result = _apply_alternative_rr(gbd, {"red_meat": csv_path})
+
+        chd_young_200 = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "CHD")
+            & (result["age"] == "25-29")
+            & (result["exposure_g_per_day"] == 200.0)
+        ]
+        # 1.15^2 = 1.3225
+        assert chd_young_200["rr_mean"].values[0] == pytest.approx(1.15**2)
+
+    def test_bounds_propagation(self, tmp_path):
+        """CI bounds should follow the same log-linear formula."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        csv_path = self._make_alt_csv(tmp_path)
+        result = _apply_alternative_rr(gbd, {"red_meat": csv_path})
+
+        chd_100 = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "CHD")
+            & (result["age"] == "25-29")
+            & (result["exposure_g_per_day"] == 100.0)
+        ]
+        assert chd_100["rr_low"].values[0] == pytest.approx(1.08)
+        assert chd_100["rr_high"].values[0] == pytest.approx(1.23)
+
+    def test_age_correction_attenuates_older_ages(self, tmp_path):
+        """For age-varying causes, oldest age should have attenuated RR."""
+
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        csv_path = self._make_alt_csv(tmp_path)
+        result = _apply_alternative_rr(gbd, {"red_meat": csv_path})
+
+        chd_young = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "CHD")
+            & (result["age"] == "25-29")
+            & (result["exposure_g_per_day"] == 100.0)
+        ]["rr_mean"].values[0]
+        chd_old = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "CHD")
+            & (result["age"] == "95+")
+            & (result["exposure_g_per_day"] == 100.0)
+        ]["rr_mean"].values[0]
+
+        # Oldest should be closer to 1.0 than youngest
+        assert chd_old < chd_young
+        assert chd_old > 1.0
+
+    def test_age_constant_cause_unchanged(self, tmp_path):
+        """For age-constant causes (T2DM), all ages should have same RR."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        csv_path = self._make_alt_csv(tmp_path)
+        result = _apply_alternative_rr(gbd, {"red_meat": csv_path})
+
+        t2dm = result[
+            (result["risk_factor"] == "red_meat")
+            & (result["cause"] == "T2DM")
+            & (result["exposure_g_per_day"] == 100.0)
+        ]
+        rr_values = t2dm["rr_mean"].unique()
+        assert len(rr_values) == 1
+        assert rr_values[0] == pytest.approx(1.10)
+
+    def test_empty_alternative_rr_is_noop(self):
+        """Empty alternative_rr dict should not modify the DataFrame."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        result = _apply_alternative_rr(gbd.copy(), {})
+        pd.testing.assert_frame_equal(result, gbd)
+
+    def test_null_path_is_skipped(self):
+        """Null path for a risk factor should be skipped."""
+        from workflow.scripts.prepare_relative_risks import _apply_alternative_rr
+
+        gbd = self._make_gbd_df()
+        result = _apply_alternative_rr(gbd.copy(), {"red_meat": None})
+        pd.testing.assert_frame_equal(result, gbd)
+
+
+# ---------------------------------------------------------------------------
 # Tests: Constants (CAUSE_MAP and RISK_CONFIG)
 # ---------------------------------------------------------------------------
 
