@@ -29,6 +29,22 @@ OUTPUT_LABELS = {
 X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
 L1_COLUMN = "prod_stability_cost"
+PARAMETER_LABELS = {
+    "luc_factor": "LUC Emissions",
+    "rr_protective": "RR Protective",
+    "rr_harmful": "RR Harmful",
+    "fcr_factor": "Feed Conversion Ratio",
+    "yield_factor": "Crop Yield",
+    "n2o_factor": "N\u2082O Emissions",
+    "value_per_yll": "Value per YLL",
+    "ch4_factor": "CH\u2084 Emissions",
+    "flw_factor": "Food Loss & Waste",
+    "ghg_price": "GHG Price",
+}
+
+
+def _pretty(param: str) -> str:
+    return PARAMETER_LABELS.get(param, param)
 
 
 def _validation_quality(error: float) -> str:
@@ -95,6 +111,102 @@ def _imshow_extent(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, f
     )
 
 
+def _draw_region_boundaries(
+    ax: plt.Axes,
+    idx_grid: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+) -> None:
+    """Draw white boundary lines between regions of different dominant factors."""
+    dx = float(x[1] - x[0]) if len(x) > 1 else 1.0
+    dy = float(y[1] - y[0]) if len(y) > 1 else 1.0
+    n_rows, n_cols = idx_grid.shape
+    for row in range(n_rows):
+        for col in range(n_cols):
+            val = idx_grid[row, col]
+            cx = x[col]
+            cy = y[row]
+            # Right neighbour
+            if col + 1 < n_cols and idx_grid[row, col + 1] != val:
+                bx = cx + dx / 2
+                ax.plot(
+                    [bx, bx],
+                    [cy - dy / 2, cy + dy / 2],
+                    color="white",
+                    linewidth=0.8,
+                    solid_capstyle="butt",
+                )
+            # Upper neighbour
+            if row + 1 < n_rows and idx_grid[row + 1, col] != val:
+                by = cy + dy / 2
+                ax.plot(
+                    [cx - dx / 2, cx + dx / 2],
+                    [by, by],
+                    color="white",
+                    linewidth=0.8,
+                    solid_capstyle="butt",
+                )
+
+
+def _text_color_for_bg(hex_color: str) -> str:
+    """Return 'white' or a dark grey based on background luminance."""
+    rgb = mcolors.to_rgb(hex_color)
+    # Perceived luminance (ITU-R BT.601)
+    luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    return "#333333" if luminance > 0.55 else "white"
+
+
+def _label_regions(
+    ax: plt.Axes,
+    dominant_labels: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+    colors: dict[str, str],
+    min_fraction: float = 0.04,
+) -> None:
+    """Place text labels at the centroid of each contiguous dominant-factor region."""
+    from scipy import ndimage
+
+    unique_params = np.unique(dominant_labels)
+    placed: list[tuple[float, float]] = []
+    for param in unique_params:
+        mask = dominant_labels == param
+        fraction = mask.sum() / mask.size
+        if fraction < min_fraction:
+            continue
+        labeled, n_regions = ndimage.label(mask)
+        # Label only the largest contiguous region for this parameter
+        region_sizes = ndimage.sum(mask, labeled, range(1, n_regions + 1))
+        largest = int(np.argmax(region_sizes)) + 1
+        region_mask = labeled == largest
+        cy_idx, cx_idx = ndimage.center_of_mass(region_mask)
+        cx = float(np.interp(cx_idx, np.arange(len(x)), x))
+        cy = float(np.interp(cy_idx, np.arange(len(y)), y))
+        # Check overlap with already placed labels
+        x_range = float(x[-1] - x[0]) if len(x) > 1 else 1.0
+        y_range = float(y[-1] - y[0]) if len(y) > 1 else 1.0
+        overlaps = any(
+            abs(cx - px) < x_range * 0.12 and abs(cy - py) < y_range * 0.08
+            for px, py in placed
+        )
+        if overlaps:
+            continue
+        param_str = str(param)
+        fg = _text_color_for_bg(colors.get(param_str, "#000000"))
+        ax.text(
+            cx,
+            cy,
+            _pretty(param_str),
+            ha="center",
+            va="center",
+            fontsize=8,
+            color=fg,
+            fontweight="bold",
+            clip_on=True,
+        )
+        placed.append((cx, cy))
+
+
 def main() -> None:
     try:
         snakemake  # type: ignore[name-defined]
@@ -107,6 +219,8 @@ def main() -> None:
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
+    color_overrides = dict(snakemake.params.parameter_colors)  # type: ignore[attr-defined]
+    group_order = list(snakemake.params.parameter_group_order)  # type: ignore[attr-defined]
     l1_value = getattr(snakemake.params, "l1_value", None)
 
     if not input_path.exists():
@@ -143,7 +257,12 @@ def main() -> None:
             "Validation file must contain 'output' and 'validation_error' columns"
         )
 
-    parameters = [p for p in allowed_parameters if p in set(df["parameter"].unique())]
+    available = set(df["parameter"].unique()) & set(allowed_parameters)
+    # Use config group order for consistent legend/color ordering
+    parameters = [p for p in group_order if p in available]
+    for p in allowed_parameters:
+        if p in available and p not in parameters:
+            parameters.append(p)
     if not parameters:
         raise ValueError("No non-slice parameters available for dominant-factor plot")
 
@@ -155,7 +274,7 @@ def main() -> None:
         .to_dict()
     )
 
-    colors = categorical_colors(parameters, cmap_name="tab20")
+    colors = categorical_colors(parameters, overrides=color_overrides)
     cmap = mcolors.ListedColormap([colors[p] for p in parameters])
     bounds = np.arange(len(parameters) + 1) - 0.5
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
@@ -181,15 +300,18 @@ def main() -> None:
         x, y, dominant_labels = _dominant_grid(df, output, parameters, metric_column)
         idx_grid = np.vectorize(param_to_idx.get)(dominant_labels)
 
+        extent = _imshow_extent(x, y)
         ax.imshow(
             idx_grid,
             origin="lower",
-            extent=_imshow_extent(x, y),
+            extent=extent,
             interpolation="nearest",
             aspect="auto",
             cmap=cmap,
             norm=norm,
         )
+        _draw_region_boundaries(ax, idx_grid, x, y)
+        _label_regions(ax, dominant_labels, x, y, colors)
         ax.grid(False)
         err_value = error_by_output.get(output)
         err_suffix = (
@@ -198,23 +320,21 @@ def main() -> None:
             else f"\nerr={err_value:.3f} ({_validation_quality(float(err_value))})"
         )
         ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{err_suffix}")
-        ax.set_xlabel("GHG Price (USD per tCO2e)")
+        ax.set_xlabel("GHG Price (USD per tCO\u2082e)")
         if i % n_cols == 0:
             ax.set_ylabel("Value per YLL (USD per YLL)")
 
     legend_handles = [
-        mpatches.Patch(color=colors[param], label=param) for param in parameters
+        mpatches.Patch(color=colors[param], label=_pretty(param))
+        for param in parameters
     ]
+    fig.tight_layout(rect=(0, 0.05, 0.82, 1))
     fig.legend(
         handles=legend_handles,
         loc="center left",
-        bbox_to_anchor=(1.0, 0.5),
+        bbox_to_anchor=(0.83, 0.55),
         frameon=False,
-        title="Dominant factor",
-    )
-    l1_suffix = f" (L1 cost = {l1_value})" if l1_value is not None else ""
-    fig.suptitle(
-        f"Dominant non-slice sensitivity factor across policy space{l1_suffix}", y=1.02
+        fontsize=9,
     )
     fig.text(
         0.01,
@@ -223,7 +343,6 @@ def main() -> None:
         fontsize=8,
         alpha=0.8,
     )
-    fig.tight_layout(rect=(0, 0.02, 0.85, 1))
 
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_pdf, bbox_inches="tight", dpi=300)

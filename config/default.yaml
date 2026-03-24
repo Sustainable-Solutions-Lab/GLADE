@@ -1158,6 +1158,31 @@ plotting:
       crops: [alfalfa, silage-maize, biomass-sorghum, grassland]
 
   colors:
+    # Sensitivity parameter colors and groups (tab20b palette).
+    # Group order determines stacking order; colors within a group are adjacent hues.
+    parameter_groups:
+      Emissions:                                    # blues, light → dark
+        color: "#6b6ecf"
+        parameters:
+          ch4_factor: "#9c9ede"
+          n2o_factor: "#6b6ecf"
+          luc_factor: "#5254a3"
+      Agricultural:                                 # greens, light → dark
+        color: "#8ca252"
+        parameters:
+          yield_factor: "#cedb9c"
+          fcr_factor: "#b5cf6b"
+          flw_factor: "#8ca252"
+      "Health risk":                                # reds, light → dark
+        color: "#d6616b"
+        parameters:
+          rr_protective: "#e7969c"
+          rr_harmful: "#d6616b"
+      "Policy valuation":                           # purples, light → dark
+        color: "#ce6dbd"
+        parameters:
+          ghg_price: "#de9ed6"
+          value_per_yll: "#ce6dbd"
     crops:
       wheat: "#C58E2D"
       'dryland-rice': "#E0B341"

@@ -11,6 +11,7 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("pdf")
+import matplotlib.colors as mcolors
 import matplotlib.patches
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -78,11 +79,19 @@ def _pretty(param: str) -> str:
     return PARAMETER_LABELS.get(param, param)
 
 
+def _text_color_for_bg(hex_color: str) -> str:
+    """Return 'white' or a dark grey based on background luminance."""
+    rgb = mcolors.to_rgb(hex_color)
+    luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    return "#333333" if luminance > 0.55 else "white"
+
+
 def _label_areas(
     ax: plt.Axes,
     x: np.ndarray,
     y_arrays: list[np.ndarray],
     parameters: list[str],
+    colors: dict[str, str],
     min_height: float = 0.08,
 ) -> None:
     """Place text labels directly on stacked areas that are tall enough.
@@ -124,6 +133,7 @@ def _label_areas(
         )
         if overlaps:
             continue
+        fg = _text_color_for_bg(colors.get(param, "#000000"))
         ax.text(
             x[best_idx],
             y_center,
@@ -131,7 +141,7 @@ def _label_areas(
             ha="center",
             va="center",
             fontsize=7,
-            color="white",
+            color=fg,
             fontweight="bold",
             clip_on=True,
         )
@@ -144,6 +154,8 @@ def _plot_for_x(
     metric_column: str,
     error_by_output: dict[str, float],
     output_pdf: Path,
+    color_overrides: dict[str, str] | None = None,
+    group_order: list[str] | None = None,
 ) -> None:
     aggregated = (
         df.groupby(["output", x_column, "parameter"], as_index=False)[metric_column]
@@ -153,19 +165,26 @@ def _plot_for_x(
 
     outputs = _ordered_outputs(aggregated["output"].unique().tolist())
 
-    # Order parameters by mean contribution in total_cost (or overall if absent),
-    # descending so the largest contributor is at the bottom of the stack.
-    if "total_cost" in aggregated["output"].values:
-        rank_data = aggregated[aggregated["output"] == "total_cost"]
+    # Use config group order if provided, falling back to contribution-based ranking.
+    available = set(aggregated["parameter"].unique())
+    if group_order:
+        parameters = [p for p in group_order if p in available]
+        # Append any parameters not in the group config
+        for p in sorted(available):
+            if p not in parameters:
+                parameters.append(p)
     else:
-        rank_data = aggregated
-    parameters = (
-        rank_data.groupby("parameter")[metric_column]
-        .mean()
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
-    colors = categorical_colors(parameters)
+        if "total_cost" in aggregated["output"].values:
+            rank_data = aggregated[aggregated["output"] == "total_cost"]
+        else:
+            rank_data = aggregated
+        parameters = (
+            rank_data.groupby("parameter")[metric_column]
+            .mean()
+            .sort_values(ascending=False)
+            .index.tolist()
+        )
+    colors = categorical_colors(parameters, overrides=color_overrides)
 
     n_outputs = len(outputs)
     n_cols = 2 if n_outputs > 1 else 1
@@ -211,7 +230,7 @@ def _plot_for_x(
             linewidth=0.5,
             alpha=0.95,
         )
-        _label_areas(ax, x, y_arrays, output_parameters)
+        _label_areas(ax, x, y_arrays, output_parameters, colors)
         ax.set_xlim(x.min(), x.max())
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
@@ -267,6 +286,8 @@ def main() -> None:
     output_value_per_yll_pdf = Path(snakemake.output.value_per_yll_pdf)  # type: ignore[attr-defined]
     output_ghg_price_pdf = Path(snakemake.output.ghg_price_pdf)  # type: ignore[attr-defined]
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
+    color_overrides = dict(snakemake.params.parameter_colors)  # type: ignore[attr-defined]
+    group_order = list(snakemake.params.parameter_group_order)  # type: ignore[attr-defined]
 
     if not input_path.exists():
         raise FileNotFoundError(f"Missing conditional indices file: {input_path}")
@@ -318,11 +339,21 @@ def main() -> None:
         metric_column,
         error_by_output,
         output_value_per_yll_pdf,
+        color_overrides=color_overrides,
+        group_order=group_order,
     )
     logger.info("Wrote %s", output_value_per_yll_pdf)
 
     logger.info("Creating stacked conditional sensitivity plot vs ghg_price")
-    _plot_for_x(df, "ghg_price", metric_column, error_by_output, output_ghg_price_pdf)
+    _plot_for_x(
+        df,
+        "ghg_price",
+        metric_column,
+        error_by_output,
+        output_ghg_price_pdf,
+        color_overrides=color_overrides,
+        group_order=group_order,
+    )
     logger.info("Wrote %s", output_ghg_price_pdf)
 
 

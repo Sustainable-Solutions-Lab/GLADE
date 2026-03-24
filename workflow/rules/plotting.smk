@@ -6,6 +6,17 @@
 gaez = config["data"]["gaez"]
 plotting_cfg = config.get("plotting", {})
 food_group_colors = plotting_cfg.get("colors", {}).get("food_groups", {})
+_param_groups_cfg = plotting_cfg.get("colors", {}).get("parameter_groups", {})
+parameter_colors = {
+    param: color
+    for group in _param_groups_cfg.values()
+    for param, color in group.get("parameters", {}).items()
+}
+parameter_group_order = [
+    param
+    for group in _param_groups_cfg.values()
+    for param in group.get("parameters", {})
+]
 comparison_scenarios = plotting_cfg["comparison_scenarios"]
 
 # Expand "all" to all scenario names from config
@@ -752,6 +763,8 @@ rule plot_sobol_conditional_sensitivity:
         ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
     params:
         metric="S1_cond",
+        parameter_colors=parameter_colors,
+        parameter_group_order=parameter_group_order,
     group:
         "analysis_plot"
     resources:
@@ -798,6 +811,8 @@ rule plot_sobol_joint_conditional_phase_diagram:
     params:
         metric="S1_cond",
         allowed_parameters=sobol_non_slice_parameters,
+        parameter_colors=parameter_colors,
+        parameter_group_order=parameter_group_order,
     group:
         "analysis_plot"
     resources:

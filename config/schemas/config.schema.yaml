@@ -1667,9 +1667,29 @@ properties:
         description: "Scenario wildcards (suffixes after 'model_') available for comparison plots. Use 'all' to compare all scenarios defined under the `scenarios` key."
       colors:
         type: object
-        required: [crops, food_groups]
+        required: [parameter_groups, crops, food_groups]
         additionalProperties: false
         properties:
+          parameter_groups:
+            type: object
+            description: "Sensitivity parameter groups with colors for consistent plotting"
+            patternProperties:
+              ".+":
+                type: object
+                required: [color, parameters]
+                additionalProperties: false
+                properties:
+                  color:
+                    type: string
+                    pattern: "^#[0-9A-Fa-f]{6}$"
+                    description: "Group-level color (used when plotting aggregated groups)"
+                  parameters:
+                    type: object
+                    patternProperties:
+                      "^[a-z0-9_]+$":
+                        type: string
+                        pattern: "^#[0-9A-Fa-f]{6}$"
+                    description: "Per-parameter hex color codes within this group"
           crops:
             type: object
             patternProperties:
