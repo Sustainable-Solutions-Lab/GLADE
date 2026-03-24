@@ -137,9 +137,9 @@ def _load_health_data(
     # Get cluster population from network metadata (computed at build time)
     cluster_population = get_health_cluster_population(n)
 
-    # Sort breakpoint tables
+    # Sort breakpoint tables (risk breakpoints are cluster-specific)
     risk_breakpoints = risk_breakpoints.sort_values(
-        ["risk_factor", "intake_g_per_day", "cause"]
+        ["health_cluster", "risk_factor", "intake_g_per_day", "cause"]
     )
     cause_log_breakpoints = cause_log_breakpoints.sort_values(["cause", "log_rr_total"])
 
@@ -231,23 +231,30 @@ def _build_store_to_cluster_map(
 def _build_intake_breakpoints(risk_breakpoints: pd.DataFrame) -> dict:
     """Build intake grids from RR breakpoint data.
 
-    For each risk factor, creates:
+    For each (health_cluster, risk_factor), creates:
         - intake_steps: Index of breakpoint positions
         - intake_values: xr.DataArray of intake values (g/day)
         - log_rr: DataFrame with log(RR) by (intake_step, cause)
 
+    Risk breakpoints are cluster-specific due to age-weighted effective RR
+    curves, so the output is keyed by (cluster, risk_factor).
+
     Parameters
     ----------
     risk_breakpoints
-        DataFrame with columns: risk_factor, intake_g_per_day, cause, log_rr.
+        DataFrame with columns: health_cluster, risk_factor, intake_g_per_day,
+        cause, log_rr.
 
     Returns
     -------
     dict
-        {risk_factor: {intake_steps, intake_values, log_rr}}
+        {(cluster, risk_factor): {intake_steps, intake_values, log_rr}}
     """
     risk_data = {}
-    for risk, grp in risk_breakpoints.groupby("risk_factor"):
+    for (cluster, risk), grp in risk_breakpoints.groupby(
+        ["health_cluster", "risk_factor"]
+    ):
+        cluster = int(cluster)
         intakes = pd.Index(sorted(grp["intake_g_per_day"].unique()), name="intake")
         if intakes.empty:
             continue
@@ -267,7 +274,7 @@ def _build_intake_breakpoints(risk_breakpoints: pd.DataFrame) -> dict:
         intake_steps = pd.Index(range(len(intakes)), name="intake_step")
         pivot.index = intake_steps
 
-        risk_data[risk] = {
+        risk_data[(cluster, risk)] = {
             "intake_steps": intake_steps,
             "intake_values": xr.DataArray(
                 intakes.values, coords={"intake_step": intake_steps}, dims="intake_step"
@@ -284,7 +291,9 @@ def _group_cluster_risk_pairs(
     """Group (cluster, risk) pairs by shared intake coordinate patterns.
 
     Pairs with identical breakpoint grids share a single SOS2 variable set,
-    improving solver efficiency.
+    improving solver efficiency. The intake grid (x values) is typically shared
+    across clusters for the same risk factor, so clusters still batch together
+    even though log_rr values differ per cluster.
     """
     unique_pairs = store_map[["cluster", "risk_factor"]].drop_duplicates()
 
@@ -293,7 +302,7 @@ def _group_cluster_risk_pairs(
         cluster = int(row["cluster"])
         risk = row["risk_factor"]
 
-        risk_table = intake_data.get(risk)
+        risk_table = intake_data.get((cluster, risk))
         if risk_table is None:
             continue
 
@@ -352,9 +361,9 @@ def _add_stage1_constraints(
     # This batches constraint creation for efficiency - pairs with identical
     # breakpoint grids can share a single variable array.
     for _intake_grid, cluster_risk_pairs in intake_groups.items():
-        # Get risk data for this group (all pairs share same breakpoints)
-        risk = cluster_risk_pairs[0][1]
-        risk_table = intake_data[risk]
+        # Get intake grid for this group (all pairs share same x breakpoints)
+        first_cluster, first_risk = cluster_risk_pairs[0]
+        risk_table = intake_data[(first_cluster, first_risk)]
         intake_values = risk_table["intake_values"]
 
         # Build labels and dataframes for this group
@@ -406,7 +415,8 @@ def _add_stage1_constraints(
         # Build log(RR) breakpoint data
         # -----------------------------------------------------------------------
         log_rr_frames = [
-            intake_data[risk]["log_rr"] for _cluster, risk in cluster_risk_pairs
+            intake_data[(cluster, risk)]["log_rr"]
+            for cluster, risk in cluster_risk_pairs
         ]
 
         if not log_rr_frames:
@@ -1065,9 +1075,14 @@ def _expand_rr_groups(
     if not present_groups:
         return rr_quantiles
 
-    # Classify each risk factor by slope direction
+    # Classify each risk factor by slope direction (use first cluster's data
+    # since the slope direction is the same across all clusters)
     protective, harmful = [], []
-    for risk, grp in risk_breakpoints.groupby("risk_factor"):
+    first_cluster = risk_breakpoints["health_cluster"].iloc[0]
+    single_cluster_bp = risk_breakpoints[
+        risk_breakpoints["health_cluster"] == first_cluster
+    ]
+    for risk, grp in single_cluster_bp.groupby("risk_factor"):
         sorted_grp = grp.sort_values("intake_g_per_day")
         log_rr_low_intake = sorted_grp["log_rr"].iloc[0]
         log_rr_high_intake = sorted_grp["log_rr"].iloc[-1]
@@ -1168,34 +1183,38 @@ def _recompute_rr_ref(
     """
     cluster_cause_metadata = cluster_cause_metadata.copy()
 
-    # Compute log_rr at TMREL for each (risk_factor, cause) pair
-    log_rr_at_tmrel: dict[tuple[str, str], float] = {}
+    # Compute log_rr at TMREL for each (cluster, risk_factor, cause)
+    # Breakpoints are cluster-specific due to age-weighted effective RR
+    log_rr_at_tmrel: dict[tuple[int, str, str], float] = {}
     for risk, causes in risk_cause_map.items():
         tmrel_intake = tmrel.get(risk, 0.0)
         for cause in causes:
-            bp = risk_breakpoints[
-                (risk_breakpoints["risk_factor"] == risk)
-                & (risk_breakpoints["cause"] == cause)
-            ].sort_values("intake_g_per_day")
-            if bp.empty:
-                continue
-            log_rr_val = float(
-                np.interp(
-                    tmrel_intake,
-                    bp["intake_g_per_day"].values,
-                    bp["log_rr"].values,
+            for cluster, _ in cluster_cause_metadata.index:
+                cluster = int(cluster)
+                bp = risk_breakpoints[
+                    (risk_breakpoints["health_cluster"] == cluster)
+                    & (risk_breakpoints["risk_factor"] == risk)
+                    & (risk_breakpoints["cause"] == cause)
+                ].sort_values("intake_g_per_day")
+                if bp.empty:
+                    continue
+                log_rr_val = float(
+                    np.interp(
+                        tmrel_intake,
+                        bp["intake_g_per_day"].values,
+                        bp["log_rr"].values,
+                    )
                 )
-            )
-            log_rr_at_tmrel[(risk, cause)] = log_rr_val
+                log_rr_at_tmrel[(cluster, risk, cause)] = log_rr_val
 
-    # Sum per (cluster, cause) — same log_rr_total_ref for all clusters
-    # since the RR curve and TMREL are cluster-independent
+    # Sum per (cluster, cause)
     for cluster, cause in cluster_cause_metadata.index:
+        cluster = int(cluster)
         cause = str(cause)
         total = 0.0
         for risk, causes in risk_cause_map.items():
             if cause in causes:
-                total += log_rr_at_tmrel.get((risk, cause), 0.0)
+                total += log_rr_at_tmrel.get((cluster, risk, cause), 0.0)
         cluster_cause_metadata.at[(cluster, cause), "log_rr_total_ref"] = total
 
     return cluster_cause_metadata
@@ -1455,9 +1474,9 @@ def evaluate_health_posthoc(
     cause_log_breakpoints = pd.read_csv(cause_log_path)
     cluster_map = pd.read_csv(clusters_path)
 
-    # Sort breakpoint tables
+    # Sort breakpoint tables (risk breakpoints are cluster-specific)
     risk_breakpoints = risk_breakpoints.sort_values(
-        ["risk_factor", "intake_g_per_day", "cause"]
+        ["health_cluster", "risk_factor", "intake_g_per_day", "cause"]
     )
     cause_log_breakpoints = cause_log_breakpoints.sort_values(["cause", "log_rr_total"])
 
@@ -1506,11 +1525,13 @@ def evaluate_health_posthoc(
             cluster_intake[(cluster, risk)] = intake_g
 
     # --- Step 2: Evaluate log(RR) per (cluster, risk, cause) ---
-    # Build breakpoint lookup: {(risk, cause): (intake_array, log_rr_array)}
-    rr_bp: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
-    for (risk, cause), grp in risk_breakpoints.groupby(["risk_factor", "cause"]):
+    # Build breakpoint lookup: {(cluster, risk, cause): (intake_array, log_rr_array)}
+    rr_bp: dict[tuple[int, str, str], tuple[np.ndarray, np.ndarray]] = {}
+    for (cluster, risk, cause), grp in risk_breakpoints.groupby(
+        ["health_cluster", "risk_factor", "cause"]
+    ):
         sorted_grp = grp.sort_values("intake_g_per_day")
-        rr_bp[(risk, cause)] = (
+        rr_bp[(int(cluster), risk, cause)] = (
             sorted_grp["intake_g_per_day"].values,
             sorted_grp["log_rr"].values,
         )
@@ -1525,7 +1546,7 @@ def evaluate_health_posthoc(
             if cause not in causes:
                 continue
             intake = cluster_intake.get((cluster, risk), 0.0)
-            bp = rr_bp.get((risk, cause))
+            bp = rr_bp.get((cluster, risk, cause))
             if bp is None:
                 continue
             total += float(np.interp(intake, bp[0], bp[1]))

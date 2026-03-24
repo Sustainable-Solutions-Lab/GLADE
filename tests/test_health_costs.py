@@ -11,13 +11,17 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.prepare_health_costs import (
+    ADULT_AGES,
+    AgeWeights,
     RelativeRiskTable,
     _age_bucket_min,
     _build_intake_caps,
     _build_rr_tables,
     _derive_tmrel_from_rr,
     _evaluate_rr,
+    _evaluate_rr_age_weighted,
 )
+from workflow.scripts.prepare_relative_risks import ADULT_AGE_LABELS
 
 # ---------------------------------------------------------------------------
 # Tests: _age_bucket_min
@@ -45,6 +49,32 @@ class TestAgeBucketMin:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Age bucket alignment
+# ---------------------------------------------------------------------------
+
+
+class TestAgeBucketAlignment:
+    """Verify age bucket labels are consistent across the workflow."""
+
+    def test_rr_ages_match_health_costs_ages(self):
+        """ADULT_AGE_LABELS from prepare_relative_risks must match ADULT_AGES
+        from prepare_health_costs."""
+        assert ADULT_AGE_LABELS == ADULT_AGES
+
+    def test_adult_ages_count(self):
+        """There should be exactly 15 adult age groups (25-29 through 95+)."""
+        assert len(ADULT_AGES) == 15
+
+    def test_adult_ages_start_at_25(self):
+        """First adult age group should be 25-29."""
+        assert ADULT_AGES[0] == "25-29"
+
+    def test_adult_ages_end_at_95_plus(self):
+        """Last adult age group should be 95+."""
+        assert ADULT_AGES[-1] == "95+"
+
+
+# ---------------------------------------------------------------------------
 # Helpers for RR tests
 # ---------------------------------------------------------------------------
 
@@ -54,15 +84,44 @@ def _make_simple_rr_table():
 
     Exposures: [0, 100, 200]
     RR values: [1.5, 1.0, 0.8]
+    Same values across all age groups (age-constant).
     """
     table = RelativeRiskTable()
     rr_values = np.array([1.5, 1.0, 0.8])
-    table[("fruits", "CHD")] = {
-        "exposures": np.array([0.0, 100.0, 200.0]),
-        "log_rr_mean": np.log(rr_values),
-        "log_rr_low": np.log(rr_values),
-        "log_rr_high": np.log(rr_values),
-    }
+    for age in ADULT_AGES:
+        table[("fruits", "CHD", age)] = {
+            "exposures": np.array([0.0, 100.0, 200.0]),
+            "log_rr_mean": np.log(rr_values),
+            "log_rr_low": np.log(rr_values),
+            "log_rr_high": np.log(rr_values),
+        }
+    return table
+
+
+def _make_age_varying_rr_table():
+    """Build an age-varying RR table where younger ages have stronger effects.
+
+    Exposures: [0, 100, 200]
+    - Ages 25-29: RR = [1.5, 1.0, 0.7] (strong protective)
+    - Ages 75+:   RR = [1.5, 1.0, 0.9] (attenuated protective)
+    - Other ages: linear interpolation between the two extremes
+    """
+    table = RelativeRiskTable()
+    rr_at_200_young = 0.7
+    rr_at_200_old = 0.9
+
+    for i, age in enumerate(ADULT_AGES):
+        # Linear interpolation of RR at 200 g/day from young to old
+        frac = i / (len(ADULT_AGES) - 1)
+        rr_200 = rr_at_200_young + frac * (rr_at_200_old - rr_at_200_young)
+        rr_values = np.array([1.5, 1.0, rr_200])
+        table[("fruits", "CHD", age)] = {
+            "exposures": np.array([0.0, 100.0, 200.0]),
+            "log_rr_mean": np.log(rr_values),
+            "log_rr_low": np.log(rr_values),
+            "log_rr_high": np.log(rr_values),
+        }
+
     return table
 
 
@@ -77,26 +136,26 @@ class TestEvaluateRR:
     def test_exact_knot(self):
         """Intake at an exact exposure knot returns the corresponding RR."""
         table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", 100.0)
+        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 100.0)
         assert rr == pytest.approx(1.0)
 
     def test_below_minimum_clamps(self):
         """Intake below the lowest exposure clamps to the first RR value."""
         table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", -10.0)
+        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", -10.0)
         assert rr == pytest.approx(1.5)
 
     def test_above_maximum_clamps(self):
         """Intake above the highest exposure clamps to the last RR value."""
         table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", 300.0)
+        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 300.0)
         assert rr == pytest.approx(0.8)
 
     def test_interpolation_between_knots(self):
         """Intake between knots is log-linearly interpolated."""
         table = _make_simple_rr_table()
         intake = 50.0
-        rr = _evaluate_rr(table, "fruits", "CHD", intake)
+        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", intake)
 
         # Manual computation: interp in log space
         exposures = np.array([0.0, 100.0, 200.0])
@@ -113,8 +172,67 @@ class TestEvaluateRR:
             rr = exp(0.5 * log(1.5)) = 1.5^0.5
         """
         table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", 50.0)
+        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 50.0)
         assert rr == pytest.approx(math.sqrt(1.5))
+
+
+# ---------------------------------------------------------------------------
+# Tests: _evaluate_rr_age_weighted
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluateRRAgeWeighted:
+    """Tests for YLL-weighted effective RR computation."""
+
+    def test_age_constant_returns_original(self):
+        """When all ages have identical RR, age-weighting changes nothing."""
+        table = _make_simple_rr_table()
+        # Uniform weights
+        weights: AgeWeights = {
+            (0, "CHD", age): 1.0 / len(ADULT_AGES) for age in ADULT_AGES
+        }
+        rr_eff = _evaluate_rr_age_weighted(
+            table, "fruits", "CHD", 200.0, weights, cluster_id=0
+        )
+        assert rr_eff == pytest.approx(0.8)
+
+    def test_age_varying_weighted_average(self):
+        """Age-weighted RR is a proper weighted average."""
+        table = _make_age_varying_rr_table()
+        # Put all weight on the oldest age group
+        weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
+        weights[(0, "CHD", "95+")] = 1.0
+
+        rr_eff = _evaluate_rr_age_weighted(
+            table, "fruits", "CHD", 200.0, weights, cluster_id=0
+        )
+        # Should equal the oldest age group's RR
+        assert rr_eff == pytest.approx(0.9)
+
+    def test_age_varying_young_weighted(self):
+        """When weight is on the youngest age, effective RR = youngest RR."""
+        table = _make_age_varying_rr_table()
+        weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
+        weights[(0, "CHD", "25-29")] = 1.0
+
+        rr_eff = _evaluate_rr_age_weighted(
+            table, "fruits", "CHD", 200.0, weights, cluster_id=0
+        )
+        assert rr_eff == pytest.approx(0.7)
+
+    def test_age_varying_mixed_weights(self):
+        """With mixed weights, effective RR is between youngest and oldest."""
+        table = _make_age_varying_rr_table()
+        # 50/50 split between youngest and oldest
+        weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
+        weights[(0, "CHD", "25-29")] = 0.5
+        weights[(0, "CHD", "95+")] = 0.5
+
+        rr_eff = _evaluate_rr_age_weighted(
+            table, "fruits", "CHD", 200.0, weights, cluster_id=0
+        )
+        # Should be the average of 0.7 and 0.9
+        assert rr_eff == pytest.approx(0.8)
 
 
 # ---------------------------------------------------------------------------
@@ -135,21 +253,23 @@ class TestDeriveTmrelFromRR:
 
         # CHD: RR decreases from 1.5 to 0.6 (minimum at 200)
         rr_chd = np.array([1.5, 1.0, 0.6])
-        table[("fruits", "CHD")] = {
-            "exposures": np.array([0.0, 100.0, 200.0]),
-            "log_rr_mean": np.log(rr_chd),
-            "log_rr_low": np.log(rr_chd),
-            "log_rr_high": np.log(rr_chd),
-        }
+        for age in ADULT_AGES:
+            table[("fruits", "CHD", age)] = {
+                "exposures": np.array([0.0, 100.0, 200.0]),
+                "log_rr_mean": np.log(rr_chd),
+                "log_rr_low": np.log(rr_chd),
+                "log_rr_high": np.log(rr_chd),
+            }
 
         # T2DM: RR decreases from 1.3 to 0.7 (minimum at 200)
         rr_t2dm = np.array([1.3, 0.9, 0.7])
-        table[("fruits", "T2DM")] = {
-            "exposures": np.array([0.0, 100.0, 200.0]),
-            "log_rr_mean": np.log(rr_t2dm),
-            "log_rr_low": np.log(rr_t2dm),
-            "log_rr_high": np.log(rr_t2dm),
-        }
+        for age in ADULT_AGES:
+            table[("fruits", "T2DM", age)] = {
+                "exposures": np.array([0.0, 100.0, 200.0]),
+                "log_rr_mean": np.log(rr_t2dm),
+                "log_rr_low": np.log(rr_t2dm),
+                "log_rr_high": np.log(rr_t2dm),
+            }
 
         risk_to_causes = {"fruits": ["CHD", "T2DM"]}
         tmrel = _derive_tmrel_from_rr(table, risk_to_causes)
@@ -160,12 +280,13 @@ class TestDeriveTmrelFromRR:
         """With a single cause the TMREL is at the minimum RR exposure."""
         table = RelativeRiskTable()
         rr_vals = np.array([1.2, 0.8, 1.0])
-        table[("sugar", "T2DM")] = {
-            "exposures": np.array([0.0, 50.0, 100.0]),
-            "log_rr_mean": np.log(rr_vals),
-            "log_rr_low": np.log(rr_vals),
-            "log_rr_high": np.log(rr_vals),
-        }
+        for age in ADULT_AGES:
+            table[("sugar", "T2DM", age)] = {
+                "exposures": np.array([0.0, 50.0, 100.0]),
+                "log_rr_mean": np.log(rr_vals),
+                "log_rr_low": np.log(rr_vals),
+                "log_rr_high": np.log(rr_vals),
+            }
         risk_to_causes = {"sugar": ["T2DM"]}
         tmrel = _derive_tmrel_from_rr(table, risk_to_causes)
         # Minimum RR is 0.8 at exposure=50
@@ -177,18 +298,16 @@ class TestDeriveTmrelFromRR:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildRRTables:
-    """Tests for constructing RR lookup tables from a DataFrame."""
-
-    @pytest.fixture
-    def small_rr_df(self):
-        """A minimal relative risk DataFrame with two (risk, cause) pairs."""
-        rows = []
+def _make_rr_df_with_ages():
+    """A minimal relative risk DataFrame with age column."""
+    rows = []
+    for age in ADULT_AGES:
         for exposure, rr_mean in [(0.0, 1.5), (100.0, 1.0), (200.0, 0.8)]:
             rows.append(
                 {
                     "risk_factor": "fruits",
                     "cause": "CHD",
+                    "age": age,
                     "exposure_g_per_day": exposure,
                     "rr_mean": rr_mean,
                     "rr_low": rr_mean * 0.9,
@@ -200,21 +319,31 @@ class TestBuildRRTables:
                 {
                     "risk_factor": "fruits",
                     "cause": "T2DM",
+                    "age": age,
                     "exposure_g_per_day": exposure,
                     "rr_mean": rr_mean,
                     "rr_low": rr_mean * 0.9,
                     "rr_high": rr_mean * 1.1,
                 }
             )
-        return pd.DataFrame(rows)
+    return pd.DataFrame(rows)
+
+
+class TestBuildRRTables:
+    """Tests for constructing RR lookup tables from a DataFrame."""
+
+    @pytest.fixture
+    def small_rr_df(self):
+        return _make_rr_df_with_ages()
 
     def test_correct_number_of_pairs(self, small_rr_df):
-        """Output table contains exactly the expected (risk, cause) pairs."""
+        """Output table has entries for all (risk, cause, age) triples."""
         risk_cause_map = {"fruits": ["CHD", "T2DM"]}
         table, _ = _build_rr_tables(small_rr_df, ["fruits"], risk_cause_map)
-        assert len(table) == 2
-        assert ("fruits", "CHD") in table
-        assert ("fruits", "T2DM") in table
+        # 2 causes x 15 ages = 30 entries
+        assert len(table) == 30
+        assert ("fruits", "CHD", "25-29") in table
+        assert ("fruits", "T2DM", "95+") in table
 
     def test_exposures_are_sorted(self, small_rr_df):
         """Exposure arrays in each entry are sorted ascending."""
@@ -228,7 +357,7 @@ class TestBuildRRTables:
         """The stored log_rr_mean values are the natural log of the input rr_mean."""
         risk_cause_map = {"fruits": ["CHD", "T2DM"]}
         table, _ = _build_rr_tables(small_rr_df, ["fruits"], risk_cause_map)
-        data = table[("fruits", "CHD")]
+        data = table[("fruits", "CHD", "25-29")]
         # Input RR values for CHD: [1.5, 1.0, 0.8]
         expected_log = np.log(np.array([1.5, 1.0, 0.8]))
         np.testing.assert_allclose(data["log_rr_mean"], expected_log)

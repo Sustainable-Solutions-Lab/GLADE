@@ -66,6 +66,29 @@ CAUSE_MAP = {
 VALUE_REGEX = re.compile(r"[-+]?(?:\d+\.\d+|\d+)")
 
 
+# Map Excel column indices to GBD adult age bucket labels (25-29 through 95+).
+# Columns 5-12 (childhood/adolescent ages) are always NaN for dietary risks.
+ADULT_AGE_COLUMNS: dict[int, str] = {
+    13: "25-29",
+    14: "30-34",
+    15: "35-39",
+    16: "40-44",
+    17: "45-49",
+    18: "50-54",
+    19: "55-59",
+    20: "60-64",
+    21: "65-69",
+    22: "70-74",
+    23: "75-79",
+    24: "80-84",
+    25: "85-89",
+    26: "90-94",
+    27: "95+",
+}
+
+ADULT_AGE_LABELS: list[str] = list(ADULT_AGE_COLUMNS.values())
+
+
 def _parse_rr_value(cell: object) -> tuple[float, float | None, float | None]:
     """Return (mean, low, high) RR floats parsed from a string cell."""
 
@@ -180,32 +203,30 @@ def _parse_relative_risks(
                 skipped_units.add(exposure_raw)
                 continue
 
-            # Grab the first non-null RR cell from adult ages (prefer all-age, then 25-29+)
-            rr_cell = None
-            for col_idx in range(4, len(row)):
-                value = row[col_idx]
-                if isinstance(value, str) and value.strip():
-                    rr_cell = value
-                    break
+            # Extract RR values for each adult age group
+            for col_idx, age_label in ADULT_AGE_COLUMNS.items():
+                if col_idx >= len(row):
+                    continue
+                cell = row[col_idx]
+                if not (isinstance(cell, str) and cell.strip()):
+                    continue
 
-            if rr_cell is None:
-                continue
+                try:
+                    rr_mean, rr_low, rr_high = _parse_rr_value(cell)
+                except ValueError:
+                    continue
 
-            try:
-                rr_mean, rr_low, rr_high = _parse_rr_value(rr_cell)
-            except ValueError:
-                continue
-
-            records.append(
-                {
-                    "risk_factor": risk_id,
-                    "cause": cause,
-                    "exposure_g_per_day": float(exposure),
-                    "rr_mean": rr_mean,
-                    "rr_low": rr_low,
-                    "rr_high": rr_high,
-                }
-            )
+                records.append(
+                    {
+                        "risk_factor": risk_id,
+                        "cause": cause,
+                        "age": age_label,
+                        "exposure_g_per_day": float(exposure),
+                        "rr_mean": rr_mean,
+                        "rr_low": rr_low,
+                        "rr_high": rr_high,
+                    }
+                )
 
     if skipped_causes:
         logger.info("Skipped unmapped outcomes:")
@@ -223,11 +244,101 @@ def _parse_relative_risks(
 
     df_out = pd.DataFrame(records)
     df_out = (
-        df_out.groupby(["risk_factor", "cause", "exposure_g_per_day"], as_index=False)
+        df_out.groupby(
+            ["risk_factor", "cause", "age", "exposure_g_per_day"], as_index=False
+        )
         .agg({"rr_mean": "mean", "rr_low": "mean", "rr_high": "mean"})
-        .sort_values(["risk_factor", "cause", "exposure_g_per_day"])
+        .sort_values(["risk_factor", "cause", "age", "exposure_g_per_day"])
     )
+
+    # Fill missing age groups by extrapolating from the nearest available age.
+    df_out = _fill_missing_ages(df_out)
+
     return df_out
+
+
+def _fill_missing_ages(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure every (risk_factor, cause, exposure) triple has all 15 adult ages.
+
+    Missing ages are filled by copying from the nearest available age group,
+    preferring the closest older age (forward-fill in age order).
+    """
+    expected_ages = set(ADULT_AGE_LABELS)
+    filled_rows: list[dict] = []
+    n_filled = 0
+
+    for (risk, cause, exposure), grp in df.groupby(
+        ["risk_factor", "cause", "exposure_g_per_day"]
+    ):
+        present_ages = set(grp["age"].values)
+        missing = expected_ages - present_ages
+
+        if not missing:
+            continue
+
+        # Build a lookup from age label to row values
+        age_to_row = {row["age"]: row for _, row in grp.iterrows()}
+
+        for age_label in ADULT_AGE_LABELS:
+            if age_label not in missing:
+                continue
+
+            # Find the nearest available age: prefer the preceding age in order
+            idx = ADULT_AGE_LABELS.index(age_label)
+            donor = None
+            # Search backward first (nearest younger age)
+            for j in range(idx - 1, -1, -1):
+                if ADULT_AGE_LABELS[j] in age_to_row:
+                    donor = age_to_row[ADULT_AGE_LABELS[j]]
+                    break
+            # If no younger age, search forward
+            if donor is None:
+                for j in range(idx + 1, len(ADULT_AGE_LABELS)):
+                    if ADULT_AGE_LABELS[j] in age_to_row:
+                        donor = age_to_row[ADULT_AGE_LABELS[j]]
+                        break
+
+            if donor is None:
+                raise ValueError(
+                    f"Cannot fill missing age '{age_label}' for "
+                    f"({risk}, {cause}, {exposure}): no donor ages available"
+                )
+
+            filled_rows.append(
+                {
+                    "risk_factor": risk,
+                    "cause": cause,
+                    "age": age_label,
+                    "exposure_g_per_day": exposure,
+                    "rr_mean": donor["rr_mean"],
+                    "rr_low": donor["rr_low"],
+                    "rr_high": donor["rr_high"],
+                }
+            )
+            n_filled += 1
+
+    if filled_rows:
+        logger.info(
+            f"Filled {n_filled} missing age entries by extrapolation from nearest age"
+        )
+        df = pd.concat([df, pd.DataFrame(filled_rows)], ignore_index=True)
+        df = df.sort_values(
+            ["risk_factor", "cause", "age", "exposure_g_per_day"]
+        ).reset_index(drop=True)
+
+    # Assert completeness
+    for (risk, cause, exposure), grp in df.groupby(
+        ["risk_factor", "cause", "exposure_g_per_day"]
+    ):
+        present = set(grp["age"].values)
+        missing = expected_ages - present
+        if missing:
+            raise ValueError(
+                f"Age completeness check failed for ({risk}, {cause}, {exposure}): "
+                f"missing {sorted(missing)}"
+            )
+
+    return df
 
 
 def main() -> None:

@@ -126,6 +126,37 @@ where :math:`r` indexes risk factors and :math:`x_r` is the intake for each.
 
    Net 8% reduction in CHD risk despite increased red meat consumption.
 
+.. _age-specific-rr:
+
+Age-Specific Relative Risk
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The GBD provides **age-specific** relative risk values for cardiovascular
+outcomes (CHD, Stroke), where the protective or harmful effect of dietary risk
+factors **attenuates with age**. For example, at 300 g/day of fruit intake,
+:math:`\mathrm{RR}_{\mathrm{CHD}}` is 0.85 for ages 25–29 but 0.93 for ages
+75+. In contrast, T2DM and CRC have identical RR across all age groups.
+
+Since most years of life lost (YLL) from cardiovascular diseases come from
+older age groups, using the youngest age group's RR would systematically
+overestimate health impacts. The model therefore computes **YLL-weighted
+effective RR curves** for each health cluster.
+
+For each cluster :math:`c`, cause :math:`d`, and risk factor :math:`r`, the
+effective relative risk at intake :math:`x` is:
+
+.. math::
+   \mathrm{RR}^{\mathrm{eff}}_{c,r,d}(x) = \sum_a w_{a,c,d} \cdot \mathrm{RR}_{a,r,d}(x)
+
+where :math:`w_{a,c,d} = \mathrm{YLL}_{a,c,d} / \sum_{a'} \mathrm{YLL}_{a',c,d}`
+are YLL-based age weights computed from age-specific mortality, population, and
+life expectancy data.
+
+This approach is **exact for causes with a single risk factor** and a good
+approximation for causes with multiple risk factors (the approximation error
+is second-order, proportional to the covariance of age-specific RR curves
+across risk factors).
+
 Health Cost Formulation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -255,7 +286,9 @@ Appendix 1, p. 171).
 - **TMREL values**: Derived from relative risk curves, not taken from the table
   above (see :ref:`tmrel-derivation`)
 - **Age range**: Risk factors evaluated for adults ≥25 years
-  (``health.intake_age_min``)
+  (``health.intake_age_min``). Age-specific RR curves are extracted for all
+  15 adult age groups (25–29 through 95+) and combined into YLL-weighted
+  effective RR curves per health cluster (see :ref:`age-specific-rr`).
 - **Intake units**: All quantities in fresh (as consumed) weight, matching GDD
   dietary data conventions
 

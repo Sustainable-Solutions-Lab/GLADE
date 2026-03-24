@@ -187,18 +187,19 @@ class TestParseRelativeRisks:
 
     def test_valid_block_with_known_cause(self):
         """A valid block with mapped outcome produces correct output."""
+        # RR values go in columns 13-27 (adult age groups)
+        row_data = {0: "Ischemic heart disease", 1: "100 g/day"}
+        for col in range(13, 28):
+            row_data[col] = "0.80 (0.70, 0.90)"
         rows = [
             {0: "Diet low in fruits"},
-            {
-                0: "Ischemic heart disease",
-                1: "100 g/day",
-                4: "0.80 (0.70, 0.90)",
-            },
+            row_data,
         ]
         df = self._make_mock_df(rows)
         result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
-        assert len(result) == 1
+        # 15 age groups, 1 exposure
+        assert len(result) == 15
         row = result.iloc[0]
         assert row["risk_factor"] == "fruits"
         assert row["cause"] == "CHD"
@@ -209,34 +210,31 @@ class TestParseRelativeRisks:
 
     def test_unmapped_outcome_is_skipped(self):
         """Outcomes not in CAUSE_MAP are silently skipped."""
+        breast_row = {0: "Breast cancer", 1: "100 g/day"}
+        ihd_row = {0: "Ischemic heart disease", 1: "100 g/day"}
+        for col in range(13, 28):
+            breast_row[col] = "0.95 (0.90, 1.00)"
+            ihd_row[col] = "0.80 (0.70, 0.90)"
         rows = [
             {0: "Diet low in fruits"},
-            {
-                0: "Breast cancer",
-                1: "100 g/day",
-                4: "0.95 (0.90, 1.00)",
-            },
-            {
-                0: "Ischemic heart disease",
-                1: "100 g/day",
-                4: "0.80 (0.70, 0.90)",
-            },
+            breast_row,
+            ihd_row,
         ]
         df = self._make_mock_df(rows)
         result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
-        assert len(result) == 1
+        # 15 age groups for one cause
+        assert len(result) == 15
         assert result.iloc[0]["cause"] == "CHD"
 
     def test_output_columns(self):
         """Output DataFrame has expected columns."""
+        row_data = {0: "Ischemic heart disease", 1: "100 g/day"}
+        for col in range(13, 28):
+            row_data[col] = "0.80 (0.70, 0.90)"
         rows = [
             {0: "Diet low in fruits"},
-            {
-                0: "Ischemic heart disease",
-                1: "100 g/day",
-                4: "0.80 (0.70, 0.90)",
-            },
+            row_data,
         ]
         df = self._make_mock_df(rows)
         result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
@@ -244,6 +242,7 @@ class TestParseRelativeRisks:
         expected_cols = {
             "risk_factor",
             "cause",
+            "age",
             "exposure_g_per_day",
             "rr_mean",
             "rr_low",
@@ -254,18 +253,17 @@ class TestParseRelativeRisks:
     def test_sugar_conversion_applied(self):
         """SSB exposure is multiplied by ssb_sugar_per_gram."""
         ssb_sugar_per_gram = 0.11  # 11g sugar per 100g SSB
+        row_data = {0: "Diabetes mellitus type 2", 1: "200 g/day"}
+        for col in range(13, 28):
+            row_data[col] = "1.30 (1.20, 1.40)"
         rows = [
             {0: "Diet high in sugar-sweetened beverages"},
-            {
-                0: "Diabetes mellitus type 2",
-                1: "200 g/day",
-                4: "1.30 (1.20, 1.40)",
-            },
+            row_data,
         ]
         df = self._make_mock_df(rows)
         result = _parse_relative_risks(df, ssb_sugar_per_gram=ssb_sugar_per_gram)
 
-        assert len(result) == 1
+        assert len(result) == 15
         assert result.iloc[0]["risk_factor"] == "sugar"
         assert result.iloc[0]["exposure_g_per_day"] == pytest.approx(
             200.0 * ssb_sugar_per_gram
@@ -273,37 +271,34 @@ class TestParseRelativeRisks:
 
     def test_no_records_raises(self):
         """If no valid records are parsed, raises ValueError."""
+        row_data = {0: "Breast cancer", 1: "100 g/day"}  # unmapped cause
+        for col in range(13, 28):
+            row_data[col] = "0.95 (0.90, 1.00)"
         rows = [
             {0: "Diet low in fruits"},
-            {
-                0: "Breast cancer",  # unmapped cause
-                1: "100 g/day",
-                4: "0.95 (0.90, 1.00)",
-            },
+            row_data,
         ]
         df = self._make_mock_df(rows)
         with pytest.raises(ValueError, match="No dietary risk records"):
             _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
     def test_duplicate_records_aggregated(self):
-        """Duplicate risk/cause/exposure records are averaged."""
+        """Duplicate risk/cause/age/exposure records are averaged."""
+        row1 = {0: "Ischemic heart disease", 1: "100 g/day"}
+        row2 = {0: "Ischemic heart disease", 1: "100 g/day"}
+        for col in range(13, 28):
+            row1[col] = "0.80 (0.70, 0.90)"
+            row2[col] = "0.90 (0.85, 0.95)"
         rows = [
             {0: "Diet low in fruits"},
-            {
-                0: "Ischemic heart disease",
-                1: "100 g/day",
-                4: "0.80 (0.70, 0.90)",
-            },
-            {
-                0: "Ischemic heart disease",
-                1: "100 g/day",
-                4: "0.90 (0.85, 0.95)",
-            },
+            row1,
+            row2,
         ]
         df = self._make_mock_df(rows)
         result = _parse_relative_risks(df, ssb_sugar_per_gram=0.1)
 
-        assert len(result) == 1
+        # 15 age groups, averaged across the two duplicate rows
+        assert len(result) == 15
         assert result.iloc[0]["rr_mean"] == pytest.approx(0.85)
         assert result.iloc[0]["rr_low"] == pytest.approx(0.775)
         assert result.iloc[0]["rr_high"] == pytest.approx(0.925)

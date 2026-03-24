@@ -328,6 +328,7 @@ def risk_breakpoints():
     """Create risk breakpoints with protective and harmful factors."""
     return pd.DataFrame(
         {
+            "health_cluster": 0,
             "risk_factor": [
                 # whole_grains: protective (log_rr decreases with intake)
                 "whole_grains",

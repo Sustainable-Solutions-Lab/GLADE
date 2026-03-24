@@ -170,9 +170,12 @@ def compute_health_marginals(
         health_data.country_clusters, health_data.population
     )
 
-    # Build risk tables: risk_factor -> DataFrame(intake, cause -> log_rr)
-    risk_tables = {}
-    for risk, group in health_data.risk_breakpoints.groupby("risk_factor"):
+    # Build risk tables: (cluster, risk_factor) -> DataFrame(intake, cause -> log_rr)
+    # Risk breakpoints are cluster-specific due to age-weighted effective RR
+    risk_tables: dict[tuple[int, str], pd.DataFrame] = {}
+    for (cluster, risk), group in health_data.risk_breakpoints.groupby(
+        ["health_cluster", "risk_factor"]
+    ):
         pivot = (
             group.sort_values(["intake_g_per_day", "cause"])
             .pivot_table(
@@ -183,7 +186,7 @@ def compute_health_marginals(
             )
             .sort_index()
         )
-        risk_tables[str(risk)] = pivot
+        risk_tables[(int(cluster), str(risk))] = pivot
 
     # Cluster-cause baseline data
     cluster_cause = health_data.cluster_cause.assign(
@@ -201,7 +204,10 @@ def compute_health_marginals(
     all_clusters = set(cluster_population.keys())
 
     for cluster in all_clusters:
-        for rf, table in risk_tables.items():
+        for rf in risk_factors:
+            table = risk_tables.get((cluster, rf))
+            if table is None:
+                continue
             intake_g = intake_totals.get((cluster, rf), 0.0)
             xs = table.index.to_numpy(dtype=float)
             for cause in table.columns:
@@ -218,9 +224,11 @@ def compute_health_marginals(
         if cluster_pop <= 0:
             continue
 
-        for risk in risk_tables:
+        for risk in risk_factors:
+            risk_table = risk_tables.get((cluster, risk))
+            if risk_table is None:
+                continue
             intake_g = intake_totals.get((cluster, risk), 0.0)
-            risk_table = risk_tables[risk]
 
             total_marginal = 0.0
 
@@ -240,7 +248,7 @@ def compute_health_marginals(
                 if yll_total <= 0 or rr_baseline <= 0:
                     continue
 
-                # Get breakpoints for this (risk, cause)
+                # Get breakpoints for this (cluster, risk, cause)
                 xs = risk_table.index.to_numpy(dtype=float)
                 ys = risk_table[cause].to_numpy(dtype=float)
 
@@ -252,7 +260,7 @@ def compute_health_marginals(
 
                 # Total RR across ALL risk factors for this cause
                 log_rr_total = sum(
-                    log_rr_current.get((cluster, rf, cause), 0.0) for rf in risk_tables
+                    log_rr_current.get((cluster, rf, cause), 0.0) for rf in risk_factors
                 )
                 rr_total = exp(log_rr_total)
 

@@ -341,8 +341,31 @@ def _log_cluster_statistics(
                 )
 
 
-class RelativeRiskTable(dict[tuple[str, str], dict[str, np.ndarray]]):
-    """Container mapping (risk, cause) to exposure grids and log RR values."""
+class RelativeRiskTable(dict[tuple[str, str, str], dict[str, np.ndarray]]):
+    """Container mapping (risk, cause, age) to exposure grids and log RR values."""
+
+
+# The 15 adult age groups from GBD, matching population/mortality age buckets.
+ADULT_AGES: list[str] = [
+    "25-29",
+    "30-34",
+    "35-39",
+    "40-44",
+    "45-49",
+    "50-54",
+    "55-59",
+    "60-64",
+    "65-69",
+    "70-74",
+    "75-79",
+    "80-84",
+    "85-89",
+    "90-94",
+    "95+",
+]
+
+# Type alias for age weights: maps (cluster_id, cause, age) → weight in [0, 1].
+AgeWeights = dict[tuple[int, str, str], float]
 
 
 def _build_rr_tables(
@@ -350,10 +373,10 @@ def _build_rr_tables(
     risk_factors: Iterable[str],
     risk_cause_map: dict[str, list[str]],
 ) -> tuple[RelativeRiskTable, dict[str, float]]:
-    """Build lookup tables for relative risk curves by (risk, cause) pairs.
+    """Build lookup tables for relative risk curves by (risk, cause, age).
 
     Returns:
-        table: Dict mapping (risk, cause) to exposure arrays and log(RR) values
+        table: Dict mapping (risk, cause, age) to exposure arrays and log(RR) values
         max_exposure_g_per_day: Dict mapping risk factor to maximum exposure level in data
     """
     table: RelativeRiskTable = RelativeRiskTable()
@@ -362,7 +385,9 @@ def _build_rr_tables(
     seen_pairs: set[tuple[str, str]] = set()
     seen_risks: set[str] = set()
 
-    for (risk, cause), grp in rr_df.groupby(["risk_factor", "cause"], sort=True):
+    for (risk, cause, age), grp in rr_df.groupby(
+        ["risk_factor", "cause", "age"], sort=True
+    ):
         if (risk, cause) not in allowed:
             continue
 
@@ -374,7 +399,7 @@ def _build_rr_tables(
         log_rr_low = np.log(grp["rr_low"].astype(float).values)
         log_rr_high = np.log(grp["rr_high"].astype(float).values)
 
-        table[(risk, cause)] = {
+        table[(risk, cause, age)] = {
             "exposures": exposures,
             "log_rr_mean": log_rr_mean,
             "log_rr_low": log_rr_low,
@@ -399,15 +424,18 @@ def _derive_tmrel_from_rr(
 ) -> dict[str, float]:
     """Derive TMREL intake per risk from empirical RR curves.
 
-    For each risk, find the intake that minimizes the sum of log(RR) across all
-    its causes (i.e., the product of RRs), evaluated on the union of exposure
-    knots in the RR tables.
+    For each risk, find the intake that minimizes the unweighted mean of
+    log(RR) across all its causes and age groups. TMREL location is
+    age-independent (monotonic curves), so unweighted averaging suffices.
     """
     tmrel: dict[str, float] = {}
     for risk, causes in risk_to_causes.items():
         exposure_grid: list[float] = []
         for cause in causes:
-            exposure_grid.extend(rr_lookup[(risk, cause)]["exposures"])
+            for age in ADULT_AGES:
+                key = (risk, cause, age)
+                if key in rr_lookup:
+                    exposure_grid.extend(rr_lookup[key]["exposures"])
         if not exposure_grid:
             raise ValueError(f"No RR exposure data for risk factor: {risk}")
         grid = sorted({float(x) for x in exposure_grid})
@@ -415,10 +443,16 @@ def _derive_tmrel_from_rr(
         best_log = math.inf
         for intake in grid:
             total_log = 0.0
+            n = 0
             for cause in causes:
-                total_log += math.log(_evaluate_rr(rr_lookup, risk, cause, intake))
-            if total_log < best_log:
-                best_log = total_log
+                for age in ADULT_AGES:
+                    total_log += math.log(
+                        _evaluate_rr(rr_lookup, risk, cause, age, intake)
+                    )
+                    n += 1
+            avg_log = total_log / n if n > 0 else 0.0
+            if avg_log < best_log:
+                best_log = avg_log
                 best_intake = intake
         tmrel[risk] = best_intake
     return tmrel
@@ -428,11 +462,12 @@ def _evaluate_rr(
     table: RelativeRiskTable,
     risk: str,
     cause: str,
+    age: str,
     intake: float,
     key: str = "log_rr_mean",
 ) -> float:
     """Interpolate relative risk for given intake using log-linear interpolation."""
-    data = table[(risk, cause)]
+    data = table[(risk, cause, age)]
     exposures: npt.NDArray[np.floating] = data["exposures"]
     log_rr: npt.NDArray[np.floating] = data[key]
 
@@ -443,6 +478,29 @@ def _evaluate_rr(
 
     log_val = float(np.interp(intake, exposures, log_rr))
     return float(math.exp(log_val))
+
+
+def _evaluate_rr_age_weighted(
+    table: RelativeRiskTable,
+    risk: str,
+    cause: str,
+    intake: float,
+    age_weights: AgeWeights,
+    cluster_id: int,
+    key: str = "log_rr_mean",
+) -> float:
+    """Compute YLL-weighted effective RR across age groups.
+
+    Returns the weighted average of age-specific RR values:
+        RR_eff(x) = Σ_a w_a x RR_a(x)
+    """
+    rr_eff = 0.0
+    for age in ADULT_AGES:
+        w = age_weights.get((cluster_id, cause, age), 0.0)
+        if w <= 0:
+            continue
+        rr_eff += w * _evaluate_rr(table, risk, cause, age, intake, key=key)
+    return rr_eff
 
 
 def _load_input_data(
@@ -642,6 +700,53 @@ def _build_intake_caps(
     return caps
 
 
+def _compute_cluster_age_weights(
+    combo: pd.DataFrame,
+    cluster_to_countries: dict[int, list[str]],
+    relevant_causes: list[str],
+) -> AgeWeights:
+    """Compute YLL-based age weights per (cluster, cause, age).
+
+    For each (cluster, cause), the weight for age group a is:
+        w_a = YLL_a / Σ_a' YLL_a'
+    where YLL_a = death_rate_a x pop_a x life_exp_a (already computed in combo).
+
+    Only adult ages (25+ in ADULT_AGES) are included.
+    """
+    age_weights: AgeWeights = {}
+
+    for cluster_id, members in cluster_to_countries.items():
+        cluster_combo = combo[combo["country"].isin(members)]
+        adult_combo = cluster_combo[cluster_combo["age"].isin(ADULT_AGES)]
+
+        if adult_combo.empty:
+            # Uniform weights if no data
+            for cause in relevant_causes:
+                for age in ADULT_AGES:
+                    age_weights[(cluster_id, cause, age)] = 1.0 / len(ADULT_AGES)
+            continue
+
+        yll_by_cause_age = adult_combo.groupby(["cause", "age"])["yll"].sum()
+
+        for cause in relevant_causes:
+            if cause in yll_by_cause_age.index.get_level_values("cause"):
+                cause_yll = yll_by_cause_age.loc[cause]
+                total = cause_yll.sum()
+            else:
+                cause_yll = pd.Series(dtype=float)
+                total = 0.0
+
+            for age in ADULT_AGES:
+                if total > 0:
+                    age_weights[(cluster_id, cause, age)] = (
+                        float(cause_yll.get(age, 0.0)) / total
+                    )
+                else:
+                    age_weights[(cluster_id, cause, age)] = 1.0 / len(ADULT_AGES)
+
+    return age_weights
+
+
 def _process_health_clusters(
     cluster_to_countries: dict[int, list[str]],
     pop_total: pd.Series,
@@ -654,8 +759,12 @@ def _process_health_clusters(
     relevant_causes: list[str],
     tmrel_g_per_day: dict[str, float],
     reference_year: int,
+    age_weights: AgeWeights,
 ) -> tuple:
     """Process each health cluster to compute baseline metrics and intakes.
+
+    Uses YLL-weighted effective RR across age groups for each cluster,
+    accounting for the age structure of the disease burden.
 
     Returns YLL as incidence rates (per 100,000 population) rather than
     absolute values, enabling reconstruction using scenario-appropriate
@@ -710,9 +819,6 @@ def _process_health_clusters(
             )
 
             # Use TMREL intake as reference point for health cost calculations.
-            # rr_ref is calculated at TMREL, ensuring that in the solver, health cost
-            # is zero when RR = RR_ref (i.e., when intake is at optimal levels).
-            # This implements Cost = V * YLL_base * (RR/RR_ref - 1).
             tmrel_intake = float(tmrel_g_per_day[risk])
             if not math.isfinite(tmrel_intake):
                 tmrel_intake = 0.0
@@ -720,15 +826,28 @@ def _process_health_clusters(
 
             causes = risk_to_causes[risk]
             for cause in causes:
-                if (risk, cause) not in rr_lookup:
+                if (risk, cause, ADULT_AGES[0]) not in rr_lookup:
                     continue
-                rr_ref = _evaluate_rr(rr_lookup, risk, cause, tmrel_intake)
-                log_rr_ref_totals[cause] = log_rr_ref_totals[cause] + math.log(rr_ref)
+                # Age-weighted effective RR at TMREL and baseline
+                rr_ref = _evaluate_rr_age_weighted(
+                    rr_lookup,
+                    risk,
+                    cause,
+                    tmrel_intake,
+                    age_weights,
+                    cluster_id,
+                )
+                log_rr_ref_totals[cause] += math.log(rr_ref)
 
-                rr_base = _evaluate_rr(rr_lookup, risk, cause, baseline_intake)
-                log_rr_baseline_totals[cause] = log_rr_baseline_totals[
-                    cause
-                ] + math.log(rr_base)
+                rr_base = _evaluate_rr_age_weighted(
+                    rr_lookup,
+                    risk,
+                    cause,
+                    baseline_intake,
+                    age_weights,
+                    cluster_id,
+                )
+                log_rr_baseline_totals[cause] += math.log(rr_base)
 
         for cause in relevant_causes:
             log_rr_baseline = log_rr_baseline_totals[cause]
@@ -799,8 +918,14 @@ def _generate_breakpoint_tables(
     relevant_causes: list[str],
     log_rr_points: int,
     tmrel_g_per_day: dict[str, float],
+    cluster_ids: list[int],
+    age_weights: AgeWeights,
 ) -> tuple:
     """Generate SOS2 linearization breakpoint tables for risks and causes.
+
+    Produces cluster-specific risk breakpoints using YLL-weighted effective
+    RR curves that account for the age structure of the disease burden in
+    each health cluster.
 
     Intake grids:
         - Evenly spaced `intake_grid_points` over the empirical RR data range
@@ -811,7 +936,7 @@ def _generate_breakpoint_tables(
           linspace; this keeps knot density high where RR actually changes.
     Cause grids:
         - `log_rr_points` evenly spaced between aggregated min/max log(RR)
-          implied by the risk grids above.
+          implied by the risk grids above (global across all clusters).
     """
     risk_breakpoint_rows = []
     cause_log_min: dict[str, float] = dict.fromkeys(relevant_causes, 0.0)
@@ -825,9 +950,9 @@ def _generate_breakpoint_tables(
         # Empirical exposure domain from RR table (may vary by cause; take union)
         exposures = []
         for cause in causes:
-            exposures = rr_lookup[(risk, cause)]["exposures"]
-            if exposures is not None:
-                exposures = list(exposures)
+            key = (risk, cause, ADULT_AGES[0])
+            if key in rr_lookup:
+                exposures = list(rr_lookup[key]["exposures"])
                 break
         if not exposures:
             continue
@@ -849,42 +974,96 @@ def _generate_breakpoint_tables(
         grid = sorted(grid_points)
 
         for cause in causes:
-            key = (risk, cause)
-            if key not in rr_lookup:
+            if (risk, cause, ADULT_AGES[0]) not in rr_lookup:
                 continue
-            log_values: list[float] = []
-            log_values_low: list[float] = []
-            log_values_high: list[float] = []
-            for intake in grid:
-                rr_val = _evaluate_rr(rr_lookup, risk, cause, intake)
-                log_rr = math.log(rr_val)
-                rr_val_low = _evaluate_rr(
-                    rr_lookup, risk, cause, intake, key="log_rr_low"
+
+            for cluster_id in cluster_ids:
+                log_values: list[float] = []
+                log_values_low: list[float] = []
+                log_values_high: list[float] = []
+                for intake in grid:
+                    rr_val = _evaluate_rr_age_weighted(
+                        rr_lookup,
+                        risk,
+                        cause,
+                        intake,
+                        age_weights,
+                        cluster_id,
+                    )
+                    log_rr = math.log(rr_val)
+                    rr_val_low = _evaluate_rr_age_weighted(
+                        rr_lookup,
+                        risk,
+                        cause,
+                        intake,
+                        age_weights,
+                        cluster_id,
+                        key="log_rr_low",
+                    )
+                    log_rr_low = math.log(rr_val_low)
+                    rr_val_high = _evaluate_rr_age_weighted(
+                        rr_lookup,
+                        risk,
+                        cause,
+                        intake,
+                        age_weights,
+                        cluster_id,
+                        key="log_rr_high",
+                    )
+                    log_rr_high = math.log(rr_val_high)
+                    log_values.append(log_rr)
+                    log_values_low.append(log_rr_low)
+                    log_values_high.append(log_rr_high)
+                    risk_breakpoint_rows.append(
+                        {
+                            "health_cluster": cluster_id,
+                            "risk_factor": risk,
+                            "cause": cause,
+                            "intake_g_per_day": float(intake),
+                            "log_rr": log_rr,
+                            "log_rr_low": log_rr_low,
+                            "log_rr_high": log_rr_high,
+                        }
+                    )
+                if log_values:
+                    # Use the most extreme bounds across mean, low, and high
+                    # to ensure cause breakpoints cover the full uncertainty range
+                    all_log = log_values + log_values_low + log_values_high
+                    cause_log_min[cause] = min(
+                        cause_log_min[cause],
+                        cause_log_min[cause] + min(all_log),
+                    )
+                    cause_log_max[cause] = max(
+                        cause_log_max[cause],
+                        cause_log_max[cause] + max(all_log),
+                    )
+
+    # The cause log min/max above tracked per-cluster extremes incorrectly
+    # because we accumulated across clusters. Recompute correctly: for each
+    # cause, sum the min (max) log_rr across risk factors, taking the most
+    # extreme value across all clusters.
+    cause_log_min = dict.fromkeys(relevant_causes, 0.0)
+    cause_log_max = dict.fromkeys(relevant_causes, 0.0)
+    if risk_breakpoint_rows:
+        bp_df = pd.DataFrame(risk_breakpoint_rows)
+        for cause in relevant_causes:
+            cause_data = bp_df[bp_df["cause"] == cause]
+            if cause_data.empty:
+                continue
+            for risk in risk_factors:
+                risk_cause_data = cause_data[cause_data["risk_factor"] == risk]
+                if risk_cause_data.empty:
+                    continue
+                # Across all clusters and intakes, find the most extreme log_rr
+                all_log = pd.concat(
+                    [
+                        risk_cause_data["log_rr"],
+                        risk_cause_data["log_rr_low"],
+                        risk_cause_data["log_rr_high"],
+                    ]
                 )
-                log_rr_low = math.log(rr_val_low)
-                rr_val_high = _evaluate_rr(
-                    rr_lookup, risk, cause, intake, key="log_rr_high"
-                )
-                log_rr_high = math.log(rr_val_high)
-                log_values.append(log_rr)
-                log_values_low.append(log_rr_low)
-                log_values_high.append(log_rr_high)
-                risk_breakpoint_rows.append(
-                    {
-                        "risk_factor": risk,
-                        "cause": cause,
-                        "intake_g_per_day": float(intake),
-                        "log_rr": log_rr,
-                        "log_rr_low": log_rr_low,
-                        "log_rr_high": log_rr_high,
-                    }
-                )
-            if log_values:
-                # Use the most extreme bounds across mean, low, and high
-                # to ensure cause breakpoints cover the full uncertainty range
-                all_log = log_values + log_values_low + log_values_high
-                cause_log_min[cause] += min(all_log)
-                cause_log_max[cause] += max(all_log)
+                cause_log_min[cause] += float(all_log.min())
+                cause_log_max[cause] += float(all_log.max())
 
     risk_breakpoints = pd.DataFrame(risk_breakpoint_rows)
 
@@ -997,6 +1176,16 @@ def main() -> None:
         life_exp,
     )
 
+    # Compute age-specific YLL weights per (cluster, cause, age)
+    age_weights = _compute_cluster_age_weights(
+        combo, cluster_to_countries, relevant_causes
+    )
+    logger.info(
+        "Computed age-specific YLL weights for %d clusters x %d causes",
+        len(cluster_to_countries),
+        len(relevant_causes),
+    )
+
     # Process health clusters
     (
         cluster_summary,
@@ -1015,9 +1204,11 @@ def main() -> None:
         relevant_causes,
         tmrel_g_per_day,
         reference_year,
+        age_weights,
     )
 
     # Generate breakpoint tables for SOS2 linearization
+    cluster_ids = sorted(cluster_to_countries.keys())
     risk_breakpoints, cause_log_breakpoints = _generate_breakpoint_tables(
         risk_factors,
         intake_caps_g_per_day,
@@ -1028,6 +1219,8 @@ def main() -> None:
         relevant_causes,
         log_rr_points,
         tmrel_g_per_day,
+        cluster_ids,
+        age_weights,
     )
 
     # Write outputs
