@@ -3,18 +3,18 @@
 # SPDX-License-Identifier: CC-BY-4.0
 
 # Small test configuration for sensitivity analysis
-# Uses test config base (reduced resolution) with minimal PCE samples
+# Uses test config base (reduced resolution) with minimal GSA samples
 
 name: "test_sensitivity"
 scenarios:
   # Small sensitivity test scenarios
-  # 3 parameters x 32 samples for fast PCE testing
+  # 3 parameters x 32 samples for fast testing
 
   # Default scenario for reference
   default: {}
 
   _generators:
-    - name: pce_{sample_id}
+    - name: gsa_{sample_id}
       mode: sensitivity
       samples: 32
       parameters:
@@ -34,6 +34,13 @@ scenarios:
           emission_factors:
             ch4: "{ch4_factor}"
             luc: "{luc_factor}"
+
+sensitivity_analysis:
+  methods:
+    pce:
+      grid_resolution: 10
+      method_options:
+        cross_truncation: 0.8
 
 # Inherit from test config for fast execution
 aggregation:

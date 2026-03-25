@@ -380,8 +380,9 @@ def run(snakemake) -> None:
     slice_param_names = generator_spec.get("slice_parameters", [])
     slice_indices = [param_names.index(sp) for sp in slice_param_names]
 
-    # Read optional RF hyperparameters
-    method_options = generator_spec.get("method_options", {})
+    # Read RF hyperparameters from method config
+    method_config = dict(snakemake.params.method_config)
+    method_options = method_config.get("method_options", {})
     n_estimators = method_options.get("n_estimators", 500)
     n_mc_global = method_options.get("n_mc_global", 2**14)
     n_mc_conditional = method_options.get("n_mc_conditional", 2**13)

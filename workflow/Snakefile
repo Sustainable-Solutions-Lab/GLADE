@@ -94,7 +94,8 @@ wildcard_constraints:
     scenario=r"[a-zA-Z0-9_\-]+",  # Scenario preset wildcard
     lu_class=r"GL-[a-z]+",  # LUIcube land-use class (e.g., GL-owl, GL-notrees)
     variable=r"[a-zA-Z]+",  # LUIcube variable (e.g., area, HANPPharv, NPPeco)
-    prefix=r"[a-zA-Z0-9\-]+",  # Sensitivity generator prefix (no underscores)
+    group=r"[a-zA-Z0-9\-]+",  # Sensitivity scenario group (e.g. gsa, gsa-l1-0p05)
+    method=r"pce|rf",  # Surrogate fitting method
 
 
 ALL_RULE_TARGETS = [

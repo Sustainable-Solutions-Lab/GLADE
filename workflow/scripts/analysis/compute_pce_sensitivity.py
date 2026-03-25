@@ -359,8 +359,9 @@ def run(snakemake) -> None:
     slice_param_names = generator_spec.get("slice_parameters", [])
     slice_indices = [param_names.index(sp) for sp in slice_param_names]
 
-    # Read PCE hyperparameters
-    method_options = generator_spec.get("method_options", {})
+    # Read PCE hyperparameters from method config
+    method_config = dict(snakemake.params.method_config)
+    method_options = method_config.get("method_options", {})
     max_degree = method_options.get("max_degree", 3)
     cross_truncation = method_options.get("cross_truncation", 0.5)
 
@@ -375,7 +376,7 @@ def run(snakemake) -> None:
     )
 
     # Reconstruct full design matrix, then select rows for available scenarios.
-    # Scenario names encode their sample index (e.g. "pce_42"), so we extract
+    # Scenario names encode their sample index (e.g. "gsa_42"), so we extract
     # indices to align the design matrix with the (possibly incomplete) scenario set.
     x_design_full = reconstruct_samples(generator_spec)
     prefix = generator_spec["name"].removesuffix("{sample_id}")

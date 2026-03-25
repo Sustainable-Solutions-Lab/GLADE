@@ -88,18 +88,18 @@ rule analyze_model:
         "../scripts/analysis/analyze_model.py"
 
 
-def _sensitivity_generator_prefix(gen):
-    """Extract the prefix from a sensitivity generator name pattern.
+def _sensitivity_generator_group(gen):
+    """Extract the group name from a sensitivity generator name pattern.
 
-    E.g. "pce_{sample_id}" -> "pce", "pce-l1-0p05_{sample_id}" -> "pce-l1-0p05".
+    E.g. "gsa_{sample_id}" -> "gsa", "gsa-l1-0p05_{sample_id}" -> "gsa-l1-0p05".
     """
     return gen["name"].split("_{")[0]
 
 
 def _sensitivity_generator(wildcards):
-    """Return the sensitivity generator whose name prefix matches the wildcard."""
+    """Return the sensitivity generator whose group matches the wildcard."""
     raw_defs = config.get("scenarios") or {}
-    prefix = wildcards.prefix
+    group = wildcards.group
 
     generators = [
         gen
@@ -110,23 +110,21 @@ def _sensitivity_generator(wildcards):
         raise ValueError("No sensitivity generator found in scenarios")
 
     for gen in generators:
-        if _sensitivity_generator_prefix(gen) == prefix:
+        if _sensitivity_generator_group(gen) == group:
             return gen
 
-    available = [_sensitivity_generator_prefix(gen) for gen in generators]
+    available = [_sensitivity_generator_group(gen) for gen in generators]
     raise ValueError(
-        f"No sensitivity generator matches prefix '{prefix}'. "
-        f"Available prefixes: {available}"
+        f"No sensitivity generator matches group '{group}'. "
+        f"Available groups: {available}"
     )
 
 
 def _sensitivity_scenario_names(wildcards):
-    """Return all sensitivity scenario names matching the prefix in expansion order."""
+    """Return all sensitivity scenario names matching the group in expansion order."""
     import re
 
     generator = _sensitivity_generator(wildcards)
-    # Build regex from the generator's name pattern, replacing {sample_id}
-    # with a numeric match group.
     pattern = re.escape(generator["name"]).replace(r"\{sample_id\}", r"\d+") + "$"
 
     all_scenarios = list_scenarios()
@@ -162,20 +160,33 @@ def _sensitivity_scenario_inputs(wildcards):
     ]
 
 
+def _sensitivity_method_config(wildcards):
+    """Return the method-specific config dict from sensitivity_analysis.methods."""
+    method = wildcards.method
+    sa_cfg = config.get("sensitivity_analysis", {})
+    methods = sa_cfg.get("methods", {})
+    if method not in methods:
+        raise ValueError(
+            f"Unknown sensitivity method '{method}'. "
+            f"Available methods: {list(methods.keys())}"
+        )
+    return dict(methods[method])
+
+
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
     Returns a dict mapping each slice parameter name to a list of
-    linearly-spaced values between its min and max.  Resolution
-    defaults to 100 but can be overridden via ``grid_resolution``
-    in the generator spec.
+    linearly-spaced values between its min and max.  Grid resolution
+    is read from the method config under ``sensitivity_analysis.methods``.
     """
     import numpy as _np
 
     from scenario_generators import build_chaospy_distribution
 
     generator = _sensitivity_generator(wildcards)
-    n_grid = generator.get("grid_resolution", 100)
+    method_cfg = _sensitivity_method_config(wildcards)
+    n_grid = method_cfg.get("grid_resolution", 100)
     slice_params = generator.get("slice_parameters", [])
     grid = {}
     for sp in slice_params:
@@ -189,35 +200,34 @@ def _sensitivity_slice_grid(wildcards):
 rule compute_sobol_sensitivity:
     """Compute global sensitivity indices from ensemble scenario runs.
 
-    Dispatches to either PCE or Random Forest based on the ``method``
-    key in the generator spec (default: ``"pce"``).
+    Dispatches to either PCE or Random Forest based on the ``{method}``
+    wildcard, reading method-specific settings from
+    ``sensitivity_analysis.methods.<method>`` in config.
 
-    To use, ensure your scenarios file has a generator with mode: sensitivity,
-    then run:
-        tools/smk --configfile config/pce_sensitivity.yaml -- <results>/{name}/analysis/sobol_global_indices_{prefix}.parquet
-
-    The {prefix} wildcard matches the scenario name prefix (e.g., "pce" for
-    scenarios pce_0, pce_1, ...).
+    The {group} wildcard identifies the scenario sampling group (e.g., "gsa"),
+    while {method} selects the surrogate fitting approach ("pce" or "rf").
     """
     input:
         _sensitivity_scenario_inputs,
     params:
         scenario_names=_sensitivity_scenario_names,
         generator_spec=lambda w: _sensitivity_generator(w),
+        method=lambda w: w.method,
+        method_config=_sensitivity_method_config,
         slice_grid=_sensitivity_slice_grid,
     output:
-        global_indices="<results>/{name}/analysis/sobol_global_indices_{prefix}.parquet",
-        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.parquet",
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
+        global_indices="<results>/{name}/analysis/sobol_global_indices_{group}_{method}.parquet",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
     group:
         "analysis_plot"
     resources:
         runtime="5m",
         mem_mb=2000,
     log:
-        "<logs>/{name}/compute_sobol_sensitivity_{prefix}.log",
+        "<logs>/{name}/compute_sobol_sensitivity_{group}_{method}.log",
     benchmark:
-        "<benchmarks>/{name}/compute_sobol_sensitivity_{prefix}.tsv"
+        "<benchmarks>/{name}/compute_sobol_sensitivity_{group}_{method}.tsv"
     script:
         "../scripts/analysis/compute_sobol_sensitivity.py"

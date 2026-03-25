@@ -70,34 +70,39 @@ def _sobol_parameter_groups():
 sobol_parameter_groups = _sobol_parameter_groups()
 
 
-def _sobol_sensitivity_prefixes():
-    """Return all scenario name prefixes for sensitivity generators."""
+def _sobol_sensitivity_groups():
+    """Return all scenario group names for sensitivity generators."""
     generators = _sobol_sensitivity_generators()
-    # Extract prefix from name pattern like "pce_{sample_id}" -> "pce"
     return [gen["name"].split("_{")[0] for gen in generators]
+
+
+def _sobol_sensitivity_methods():
+    """Return all configured surrogate method names."""
+    sa_cfg = config.get("sensitivity_analysis", {})
+    return list(sa_cfg.get("methods", {}).keys())
 
 
 def _sobol_plot_targets():
     """Build all Sobol sensitivity plot targets for the collection rule."""
-    prefixes = _sobol_sensitivity_prefixes()
-    if not prefixes:
+    groups = _sobol_sensitivity_groups()
+    methods = _sobol_sensitivity_methods()
+    if not groups or not methods:
         return []
 
     non_slice = _sobol_non_slice_parameters()
     targets = []
-    for prefix in prefixes:
-        targets += [
-            # Base conditional plots
-            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
-            f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
-            # Phase diagram
-            f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
-        ]
-        # Per-parameter contour surfaces
-        for param in non_slice:
-            targets.append(
-                f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{prefix}.pdf"
-            )
+    for group in groups:
+        for method in methods:
+            gm = f"{group}_{method}"
+            targets += [
+                f"<results>/{{name}}/plots/sobol_conditional_s1_vs_value_per_yll_{gm}.pdf",
+                f"<results>/{{name}}/plots/sobol_conditional_s1_vs_ghg_price_{gm}.pdf",
+                f"<results>/{{name}}/plots/sobol_conditional_dominant_factor_{gm}.pdf",
+            ]
+            for param in non_slice:
+                targets.append(
+                    f"<results>/{{name}}/plots/sobol_conditional_s1_surface_{param}_{gm}.pdf"
+                )
     return targets
 
 
@@ -756,11 +761,11 @@ rule plot_luc_emissions:
 rule plot_sobol_conditional_sensitivity:
     """Plot stacked conditional Sobol shares vs policy slice parameters."""
     input:
-        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
+        conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
     output:
-        value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{prefix}.pdf",
-        ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{prefix}.pdf",
+        value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{group}_{method}.pdf",
+        ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{group}_{method}.pdf",
     params:
         metric="S1_cond",
         parameter_colors=parameter_colors,
@@ -771,9 +776,9 @@ rule plot_sobol_conditional_sensitivity:
         runtime="2m",
         mem_mb=1000,
     log:
-        "<logs>/{name}/plot_sobol_conditional_sensitivity_{prefix}.log",
+        "<logs>/{name}/plot_sobol_conditional_sensitivity_{group}_{method}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_sobol_conditional_sensitivity_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_conditional_sensitivity_{group}_{method}.tsv"
     script:
         "../scripts/plotting/plot_sobol_conditional_sensitivity.py"
 
@@ -781,10 +786,10 @@ rule plot_sobol_conditional_sensitivity:
 rule plot_sobol_joint_conditional_contour:
     """Plot conditional Sobol surface for one non-slice parameter."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
     output:
-        pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{prefix}.pdf",
+        pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{group}_{method}.pdf",
     params:
         metric="S1_cond",
         allowed_parameters=sobol_non_slice_parameters,
@@ -794,9 +799,9 @@ rule plot_sobol_joint_conditional_contour:
         runtime="2m",
         mem_mb=1200,
     log:
-        "<logs>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{prefix}.log",
+        "<logs>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{group}_{method}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_joint_conditional_contour_{parameter}_{group}_{method}.tsv"
     script:
         "../scripts/plotting/plot_sobol_joint_conditional_contour.py"
 
@@ -804,10 +809,10 @@ rule plot_sobol_joint_conditional_contour:
 rule plot_sobol_joint_conditional_phase_diagram:
     """Plot dominant non-slice sensitivity parameter across 2D policy space."""
     input:
-        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{prefix}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{prefix}.parquet",
+        conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
+        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
     output:
-        pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{prefix}.pdf",
+        pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{group}_{method}.pdf",
     params:
         metric="S1_cond",
         allowed_parameters=sobol_non_slice_parameters,
@@ -819,9 +824,9 @@ rule plot_sobol_joint_conditional_phase_diagram:
         runtime="2m",
         mem_mb=1200,
     log:
-        "<logs>/{name}/plot_sobol_joint_conditional_phase_diagram_{prefix}.log",
+        "<logs>/{name}/plot_sobol_joint_conditional_phase_diagram_{group}_{method}.log",
     benchmark:
-        "<benchmarks>/{name}/plot_sobol_joint_conditional_phase_diagram_{prefix}.tsv"
+        "<benchmarks>/{name}/plot_sobol_joint_conditional_phase_diagram_{group}_{method}.tsv"
     script:
         "../scripts/plotting/plot_sobol_joint_conditional_phase_diagram.py"
 

@@ -1633,6 +1633,28 @@ properties:
         type: boolean
         description: "Create the remote workdir before syncing"
 
+  sensitivity_analysis:
+    type: object
+    description: "Configuration for surrogate-based sensitivity analysis methods"
+    additionalProperties: false
+    properties:
+      methods:
+        type: object
+        description: "Surrogate method configs keyed by method name (e.g. pce, rf)"
+        patternProperties:
+          "^[a-z_]+$":
+            type: object
+            additionalProperties: true
+            properties:
+              grid_resolution:
+                type: integer
+                minimum: 2
+                description: "Number of conditioning grid points for slice parameters"
+              method_options:
+                type: object
+                additionalProperties: true
+                description: "Method-specific hyperparameters"
+
   plotting:
     type: object
     required: [colors, fallback_cmaps, comparison_scenarios, crop_groups]

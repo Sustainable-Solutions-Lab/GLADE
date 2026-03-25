@@ -1,0 +1,229 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Global Sensitivity Analysis Configuration
+# ------------------------------------------
+# This configuration uses a space-filling Sobol sequence to generate scenarios
+# across uncertain model parameters. Surrogate-based sensitivity analysis
+# (PCE, Random Forest) is configured separately under `sensitivity_analysis`.
+#
+# The analysis is replicated at three L1 production-stability costs (0.22,
+# 0.05, 0.5). Each L1 value has its own baseline scenario so that consumer
+# values / piecewise utility blocks are correctly calibrated.
+
+name: "gsa"
+scenarios:
+  # GSA Scenarios
+  # -------------
+  # Uses a scrambled Sobol sequence for space-filling design, transformed
+  # via inverse CDF to each parameter's distribution.
+  #
+  # Parameters and their uncertainty ranges (see docs/sensitivity_analysis.rst
+  # for detailed justification and references):
+  #   - yield_factor: 0.8-1.2 uniform (20% uncertainty in crop yields)
+  #   - ch4_factor: 0.5-1.5 normal 90% CI (combined EF + GWP100 uncertainty)
+  #   - n2o_factor: 0.3-1.7 normal 90% CI (combined EF + GWP100 uncertainty)
+  #   - luc_factor: 0.3-1.7 normal 90% CI (70% uncertainty in LUC emissions)
+  #   - flw_factor: 0.7-1.3 uniform (30% uncertainty in food loss & waste)
+  #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
+  #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
+  #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
+  #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
+  #   - ghg_price: 0-300 (GHG price, slice parameter)
+  #
+  # Each generator group is replicated at three L1 production-stability costs
+  # (0.22, 0.05, 0.5) with matching baseline scenarios for calibration.
+
+  # Baseline scenarios for calibrating piecewise food utility blocks.
+  # One per L1 cost so that consumer values (dual variables) reflect the
+  # production-stability regime of each scenario group.
+  baseline: &baseline_template
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  baseline_l1_0p05:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.05
+
+  baseline_l1_0p5:
+    <<: *baseline_template
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.5
+
+  # Default scenario for reference (no sensitivity adjustments)
+  default: {}
+
+  _generators:
+    # --- Default L1 (0.22) ---
+    - name: gsa_{sample_id}
+      mode: sensitivity
+      samples: 4096
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: &gsa_parameter_groups
+        "Emission factors": [ch4_factor, n2o_factor, luc_factor]
+        "Agricultural": [yield_factor, flw_factor, fcr_factor]
+        "Health risk": [rr_protective, rr_harmful]
+      parameters: &gsa_parameters
+        yield_factor:
+          lower: 0.8
+          upper: 1.2
+          bounds: [0, null]
+        ch4_factor:
+          distribution: normal_ci
+          lower: 0.5
+          upper: 1.5
+          confidence: 0.9
+          bounds: [0, null]
+        n2o_factor:
+          distribution: normal_ci
+          lower: 0.3
+          upper: 1.7
+          confidence: 0.9
+          bounds: [0, null]
+        luc_factor:
+          distribution: normal_ci
+          lower: 0.3
+          upper: 1.7
+          confidence: 0.9
+          bounds: [0, null]
+        flw_factor:
+          lower: 0.7
+          upper: 1.3
+          bounds: [0, null]
+        fcr_factor:
+          lower: 0.8
+          upper: 1.2
+          bounds: [0, null]
+        rr_protective:
+          lower: 0
+          upper: 1
+          bounds: [0, 1]
+        rr_harmful:
+          lower: 0
+          upper: 1
+          bounds: [0, 1]
+        value_per_yll:
+          lower: 0
+          upper: 20000
+          bounds: [0, null]
+        ghg_price:
+          lower: 0
+          upper: 300
+          bounds: [0, null]
+      template: &gsa_template
+        sensitivity:
+          crop_yields:
+            all: "{yield_factor}"
+          emission_factors:
+            ch4: "{ch4_factor}"
+            n2o: "{n2o_factor}"
+            luc: "{luc_factor}"
+          food_loss_waste: "{flw_factor}"
+          feed_conversion: "{fcr_factor}"
+          health_relative_risk:
+            protective: "{rr_protective}"
+            harmful: "{rr_harmful}"
+        health:
+          value_per_yll: "{value_per_yll}"
+        emissions:
+          ghg_price: "{ghg_price}"
+        consumer_values:
+          baseline_scenario: "baseline"
+
+    # --- L1 = 0.05 ---
+    - name: gsa-l1-0p05_{sample_id}
+      mode: sensitivity
+      samples: 4096
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: *gsa_parameter_groups
+      parameters: *gsa_parameters
+      template:
+        <<: *gsa_template
+        validation:
+          production_stability:
+            l1_cost: 0.05
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p05"
+
+    # --- L1 = 0.5 ---
+    - name: gsa-l1-0p5_{sample_id}
+      mode: sensitivity
+      samples: 4096
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: *gsa_parameter_groups
+      parameters: *gsa_parameters
+      template:
+        <<: *gsa_template
+        validation:
+          production_stability:
+            l1_cost: 0.5
+        consumer_values:
+          baseline_scenario: "baseline_l1_0p5"
+
+# Surrogate-based sensitivity analysis methods.
+# Each method is applied independently to the same solved GSA scenarios.
+sensitivity_analysis:
+  methods:
+    pce:
+      grid_resolution: 50
+      method_options:
+        n_mc_conditional: 4096
+        cross_truncation: 0.8
+    rf:
+      grid_resolution: 50
+      method_options:
+        n_estimators: 500
+
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2020
+baseline_year: 2020
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.22
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  mem_mb: 9000
+  time_limit: 60
+  runtime: 30
+
+remote_solve:
+  enabled: false
+  local_scenarios: ["baseline", "baseline_l1_0p05", "baseline_l1_0p5"]
+  host: "shr"
+  workdir: "~/food-opt-scratch"
+  pixi_env: "gurobi"
+  use_slurm: true
+  slurm_account: "sjdavis"
+  slurm_partition: "owners"
+  sync_pixi_files: false
+  ssh_options: []
+  rsync_options: []
+  preflight_check: true

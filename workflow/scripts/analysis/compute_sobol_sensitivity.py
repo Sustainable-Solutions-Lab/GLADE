@@ -5,10 +5,10 @@
 """Dispatcher for Sobol sensitivity analysis methods.
 
 Routes to the PCE or Random Forest implementation based on the
-``method`` key in the generator spec (default: ``"pce"``).
+``method`` param (derived from the ``{method}`` wildcard).
 """
 
-method = snakemake.params.generator_spec.get("method", "pce")
+method = snakemake.params.method
 
 if method == "pce":
     from workflow.scripts.analysis.compute_pce_sensitivity import run
