@@ -14,11 +14,11 @@ changes, not just missing outputs).
 import argparse
 from datetime import datetime
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
-import textwrap
 
 from snakemake.api import SnakemakeApi
 from snakemake.settings.types import (
@@ -65,6 +65,7 @@ def get_pending_scenarios(
     name: str,
     all_scenarios: list[str],
     inline_analysis: bool,
+    force_incomplete: bool = False,
 ) -> list[str]:
     """Find which solve jobs need running via the Snakemake Python API.
 
@@ -94,15 +95,34 @@ def get_pending_scenarios(
         output_re = SOLVE_OUTPUT_RE
 
     updated: list[str] = []
-    with SnakemakeApi(OutputSettings(dryrun=True)) as api:
-        wf = api.workflow(
-            resource_settings=ResourceSettings(cores=1),
-            config_settings=ConfigSettings(configfiles=configfiles),
-            snakefile=SNAKEFILE,
-            workdir=PROJECT_ROOT,
-        )
-        dag = wf.dag(dag_settings=DAGSettings(targets=frozenset(targets)))
-        dag.execute_workflow(executor="dryrun", updated_files=updated)
+    # Suppress all dryrun output (Snakemake's logger writes directly to
+    # stderr/stdout, so we redirect at the file descriptor level).
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    os.dup2(devnull_fd, 1)
+    os.dup2(devnull_fd, 2)
+    try:
+        with SnakemakeApi(OutputSettings(dryrun=True)) as api:
+            wf = api.workflow(
+                resource_settings=ResourceSettings(cores=1),
+                config_settings=ConfigSettings(configfiles=configfiles),
+                snakefile=SNAKEFILE,
+                workdir=PROJECT_ROOT,
+            )
+            dag = wf.dag(
+                dag_settings=DAGSettings(
+                    targets=frozenset(targets),
+                    force_incomplete=force_incomplete,
+                )
+            )
+            dag.execute_workflow(executor="dryrun", updated_files=updated)
+    finally:
+        os.dup2(saved_stdout, 1)
+        os.dup2(saved_stderr, 2)
+        os.close(devnull_fd)
+        os.close(saved_stdout)
+        os.close(saved_stderr)
 
     pending = []
     for f in updated:
@@ -164,7 +184,8 @@ def parse_mem(mem_str: str) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Submit solve jobs as a SLURM array with failure tolerance.",
+        description="Submit solve jobs as a SLURM array with failure tolerance. "
+        "Unrecognized arguments are forwarded to Snakemake (e.g. --rerun-incomplete).",
     )
     parser.add_argument(
         "--configfile",
@@ -204,7 +225,7 @@ def main():
         default="",
         help="Extra sbatch arguments (e.g., '--qos=normal --mail-type=END')",
     )
-    args = parser.parse_args()
+    args, extra_smk_args = parser.parse_known_args()
 
     configfile = Path(args.configfile).resolve()
     configfiles = [CONFIG_DEFAULT, configfile]
@@ -221,8 +242,12 @@ def main():
         print("  Mode: inline_analysis (solve_and_analyze_model)")
 
     # Determine which scenarios need solving
+    force_incomplete = "--rerun-incomplete" in extra_smk_args
     print("Building DAG to find pending solves...")
-    pending = get_pending_scenarios(configfiles, name, all_scenarios, inline_analysis)
+    pending = get_pending_scenarios(
+        configfiles, name, all_scenarios, inline_analysis,
+        force_incomplete=force_incomplete,
+    )
     print(f"  Pending solves: {len(pending)}")
 
     if not pending:
@@ -281,6 +306,7 @@ def main():
             sbatch_lines.append(f"#SBATCH {extra}")
 
     sbatch_directives = "\n".join(sbatch_lines)
+    extra_smk_str = (" ".join(extra_smk_args) + " ") if extra_smk_args else ""
 
     if inline_analysis:
         # Fused rule: target a representative analysis parquet per scenario.
@@ -290,48 +316,48 @@ def main():
         allowed_rule = "solve_model"
         target_line = 'TARGETS+=("results/${NAME}/solved/model_scen-${s}.nc")'
 
-    script_content = textwrap.dedent(f"""\
-        #!/bin/bash
-        {sbatch_directives}
+    script_content = f"""\
+#!/bin/bash
+{sbatch_directives}
 
-        set -euo pipefail
+set -euo pipefail
 
-        MANIFEST="{manifest_path}"
-        BATCH_SIZE={args.batch_size}
-        PARALLEL={args.parallel}
-        CONFIG="{configfile}"
-        NAME="{name}"
-        ELEMENT_MEM_MB={element_mem_mb}
+MANIFEST="{manifest_path}"
+BATCH_SIZE={args.batch_size}
+PARALLEL={args.parallel}
+CONFIG="{configfile}"
+NAME="{name}"
+ELEMENT_MEM_MB={element_mem_mb}
 
-        # Read this element's scenarios from the manifest
-        BATCH_START=$((SLURM_ARRAY_TASK_ID * BATCH_SIZE + 1))
-        BATCH_END=$((BATCH_START + BATCH_SIZE - 1))
-        SCENARIOS=$(sed -n "${{BATCH_START}},${{BATCH_END}}p" "$MANIFEST")
+# Read this element's scenarios from the manifest
+BATCH_START=$((SLURM_ARRAY_TASK_ID * BATCH_SIZE + 1))
+BATCH_END=$((BATCH_START + BATCH_SIZE - 1))
+SCENARIOS=$(sed -n "${{BATCH_START}},${{BATCH_END}}p" "$MANIFEST")
 
-        if [ -z "$SCENARIOS" ]; then
-            echo "No scenarios for array task $SLURM_ARRAY_TASK_ID"
-            exit 0
-        fi
+if [ -z "$SCENARIOS" ]; then
+    echo "No scenarios for array task $SLURM_ARRAY_TASK_ID"
+    exit 0
+fi
 
-        # Build target list
-        TARGETS=()
-        for s in $SCENARIOS; do
-            {target_line}
-        done
+# Build target list
+TARGETS=()
+for s in $SCENARIOS; do
+    {target_line}
+done
 
-        echo "Array task $SLURM_ARRAY_TASK_ID: solving ${{#TARGETS[@]}} scenarios"
+echo "Array task $SLURM_ARRAY_TASK_ID: solving ${{#TARGETS[@]}} scenarios"
 
-        cd "{PROJECT_ROOT}"
+cd "{PROJECT_ROOT}"
 
-        # --keep-going: failures don't kill siblings
-        # --nolock: safe because array elements target disjoint scenarios
-        # --allowed-rules: only run {allowed_rule}, never upstream rules
-        tools/smk -j${{PARALLEL}} --keep-going --nolock \\
-            --allowed-rules {allowed_rule} \\
-            --configfile "$CONFIG" \\
-            --resources mem_mb=${{ELEMENT_MEM_MB}} \\
-            -- "${{TARGETS[@]}}"
-    """)
+# --keep-going: failures don't kill siblings
+# --nolock: safe because array elements target disjoint scenarios
+# --allowed-rules: only run {allowed_rule}, never upstream rules
+tools/smk -j${{PARALLEL}} --keep-going --nolock \\
+    --allowed-rules {allowed_rule} \\
+    --configfile "$CONFIG" \\
+    --resources mem_mb=${{ELEMENT_MEM_MB}} \\
+    {extra_smk_str}-- "${{TARGETS[@]}}"
+"""
 
     script_path = batch_dir / f"batch_solve_{name}_{timestamp}.sh"
     script_path.write_text(script_content)
