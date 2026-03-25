@@ -48,10 +48,11 @@ These settings collectively remove the optimizer's degrees of freedom:
   observed yields (see :doc:`crop_production`), while ``use_actual_production``
   fixes harvested areas to present-day values. Grassland production is similarly
   pinned (see :doc:`livestock`).
-- **Demand side**: ``enforce_baseline_diet`` adds per-food, per-country equality
-  constraints that force consumption to match the processed GDD baseline diet
-  (see :doc:`current_diets`). ``enforce_baseline_feed`` pins animal feed use to
-  GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
+- **Demand side**: ``enforce_baseline_diet`` fixes food consumption links to
+  baseline values via ``p_set`` and adds bidirectional slack generators on each
+  food bus, so realized consumption exactly matches the processed GDD baseline
+  diet (see :doc:`current_diets`). ``enforce_baseline_feed`` pins animal feed
+  use to GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
 - **Land use**: Sparing of existing cropland and grassland is disabled so the
   model matches the historical land footprint (see :doc:`land_use`).
 - **Calibration multiplier**: ``grassland_yield_multiplier`` applies a small
@@ -73,9 +74,11 @@ constraints at a configurable penalty cost (``slack_marginal_cost``), so the
 solver always finds a feasible solution. The magnitude of slack in each
 category reveals where data inconsistencies exist:
 
-- **Food slack**: Difference between baseline demand and what the supply chain
-  can deliver. Large food slack indicates missing processing pathways, incorrect
-  yields, or data coverage gaps.
+- **Food slack**: Explicit ``slack:food_positive`` / ``slack:food_negative``
+  generators on food buses absorb the gap between supply and fixed consumption.
+  Positive slack fills shortages; negative slack absorbs excess. Large food
+  slack indicates missing processing pathways, incorrect yields, or data
+  coverage gaps.
 - **Feed slack**: Imbalance between the feed requirements of livestock and the
   available feed supply from crops, residues, and grassland.
 - **Land slack**: Cases where fixed harvested areas exceed the available land

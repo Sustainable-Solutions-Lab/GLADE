@@ -21,30 +21,36 @@ logger = logging.getLogger(__name__)
 
 
 def _load_baseline_food_consumption(n: pypsa.Network) -> pd.DataFrame:
-    """Load per-food baseline consumption (Mt/year) from food equality constraints."""
-    gc_df = n.global_constraints.static
-    if gc_df.empty:
-        raise ValueError("No global constraints found in solved baseline network")
+    """Load per-food baseline consumption (Mt/year) from p_set on consume links."""
+    links = n.links.static
+    consume = links[links["carrier"] == "food_consumption"]
 
-    food_constraints = gc_df[
-        gc_df.index.str.startswith("food_equal_")
-        & (gc_df["type"] == "food_consumption")
-    ].copy()
-    if food_constraints.empty:
+    if "p_set" not in n.links.dynamic or n.links.dynamic.p_set.empty:
         raise ValueError(
-            "No per-food equality constraints found. "
+            "No p_set values found on links. "
+            "Ensure baseline scenario uses validation.enforce_baseline_diet=true."
+        )
+
+    p_set = n.links.dynamic.p_set
+    snapshot = n.snapshots[-1]
+    targets = p_set.loc[snapshot].reindex(consume.index)
+
+    # Only include links that had p_set (non-NaN)
+    has_target = targets.notna()
+    consume = consume[has_target]
+    targets = targets[has_target]
+
+    if consume.empty:
+        raise ValueError(
+            "No fixed food consumption links found. "
             "Ensure baseline scenario uses validation.enforce_baseline_diet=true."
         )
 
     return pd.DataFrame(
         {
-            "food": food_constraints["food"].astype(str).values,
-            "country": food_constraints["country"].astype(str).str.upper().values,
-            "baseline_mt_per_year": pd.to_numeric(
-                food_constraints["constant"], errors="coerce"
-            )
-            .fillna(0.0)
-            .values,
+            "food": consume["food"].astype(str).values,
+            "country": consume["country"].astype(str).str.upper().values,
+            "baseline_mt_per_year": targets.fillna(0.0).values,
         }
     )
 

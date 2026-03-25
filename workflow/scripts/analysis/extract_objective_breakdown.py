@@ -223,12 +223,6 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     # Filter out negligible categories
     total = total[total.abs() > 1e-9]
 
-    # Food and biofuel slack penalties are linopy-level variables not visible
-    # as PyPSA components; their total cost is stored in n.meta by solve_model.
-    food_slack_cost = n.meta.get("food_slack_cost", 0.0)
-    if food_slack_cost:
-        total["Slack penalties"] = total.get("Slack penalties", 0.0) + food_slack_cost
-
     # Production stability penalties (L1/quadratic) are linopy-level terms.
     stability_cost = n.meta.get("production_stability_cost", 0.0)
     if stability_cost:

@@ -11,8 +11,10 @@ import pytest
 from workflow.scripts.extract_consumer_values import extract_consumer_values
 from workflow.scripts.solve_model.core import (
     _build_ratios_from_baseline,
-    add_food_consumption_constraints,
+    _match_baseline_to_consume_links,
     add_food_incentives_to_objective,
+    add_food_slack_generators,
+    fix_food_consumption_to_baseline,
 )
 
 # ---------------------------------------------------------------------------
@@ -305,39 +307,70 @@ class TestAddFoodIncentivesToObjective:
 
 
 # ---------------------------------------------------------------------------
-# Test add_food_consumption_constraints
+# Test add_food_slack_generators and fix_food_consumption_to_baseline
 # ---------------------------------------------------------------------------
 
 
-class TestAddFoodConsumptionConstraints:
-    def test_dual_mapping_names_match_link_dimension(self, food_network):
+class TestFoodSlackGeneratorsAndFixation:
+    def test_generators_added_to_food_buses(self, food_network):
         food_network.set_snapshots(["now"])
-        food_network.optimize.create_model(include_objective_constant=False)
 
         baseline_df = pd.DataFrame(
             {
-                "food": ["wheat", "rice", "wheat"],
-                "country": ["USA", "USA", "IND"],
-                "food_group": ["grain", "grain", "grain"],
-                "consumption_g_per_day": [100.0, 50.0, 25.0],
+                "food": ["wheat", "rice"],
+                "country": ["USA", "USA"],
+                "food_group": ["grain", "grain"],
+                "consumption_g_per_day": [100.0, 50.0],
             }
         )
         population = {"USA": 1_000_000.0, "IND": 1_000_000.0}
-
-        add_food_consumption_constraints(
-            food_network, baseline_df, population, slack_cost=50.0
+        consume_links = food_network.links.static[
+            food_network.links.static["carrier"] == "food_consumption"
+        ]
+        matched = _match_baseline_to_consume_links(
+            baseline_df, consume_links, population
         )
+        assert matched is not None
 
-        expected = {
-            "food_equal_consume:wheat:USA",
-            "food_equal_consume:rice:USA",
-            "food_equal_consume:wheat:IND",
-        }
-        assert expected.issubset(set(food_network.global_constraints.static.index))
+        add_food_slack_generators(food_network, matched, slack_cost=50.0)
 
-        gc = food_network.global_constraints.static.loc[sorted(expected)]
-        assert (gc["type"] == "food_consumption").all()
-        assert (gc["sense"] == "==").all()
+        gens = food_network.generators.static
+        pos = gens[gens["carrier"] == "slack_positive_food"]
+        neg = gens[gens["carrier"] == "slack_negative_food"]
+        assert len(pos) == 2
+        assert len(neg) == 2
+        assert "food" in pos.columns
+        assert "food_group" in pos.columns
+
+    def test_p_set_fixed_on_consume_links(self, food_network):
+        food_network.set_snapshots(["now"])
+
+        baseline_df = pd.DataFrame(
+            {
+                "food": ["wheat", "rice"],
+                "country": ["USA", "USA"],
+                "food_group": ["grain", "grain"],
+                "consumption_g_per_day": [100.0, 50.0],
+            }
+        )
+        population = {"USA": 1_000_000.0, "IND": 1_000_000.0}
+        consume_links = food_network.links.static[
+            food_network.links.static["carrier"] == "food_consumption"
+        ]
+        matched = _match_baseline_to_consume_links(
+            baseline_df, consume_links, population
+        )
+        assert matched is not None
+
+        fix_food_consumption_to_baseline(food_network, matched)
+
+        p_set = food_network.links.dynamic.p_set
+        assert p_set.loc["now", "consume:wheat:USA"] > 0
+        assert p_set.loc["now", "consume:rice:USA"] > 0
+        # Beef not in baseline, should not have p_set
+        assert "consume:beef:USA" not in p_set.columns or pd.isna(
+            p_set.loc["now", "consume:beef:USA"]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -353,20 +386,38 @@ class TestExtractConsumerValues:
         countries: list[str],
         mu_values: list[float],
     ) -> pypsa.Network:
-        """Build a mock solved network with food equality global constraints."""
-        n = pypsa.Network()
+        """Build a mock solved network with p_set duals on consume links."""
 
-        gc_names = [f"food_equal_{f}_{c}" for f, c in zip(foods, countries)]
-        n.global_constraints.add(
-            gc_names,
-            sense="==",
-            constant=0.0,
-            type="food_consumption",
+        n = pypsa.Network()
+        n.set_snapshots(["now"])
+
+        link_names = [f"consume:{f}:{c}" for f, c in zip(foods, countries)]
+        bus0_names = [f"food:{f}:{c}" for f, c in zip(foods, countries)]
+        bus1_names = [f"group:{fg}:{c}" for fg, c in zip(food_groups, countries)]
+
+        for bus in set(bus0_names + bus1_names):
+            n.add("Bus", bus)
+
+        n.links.add(
+            link_names,
+            bus0=bus0_names,
+            bus1=bus1_names,
+            carrier="food_consumption",
             food=foods,
             food_group=food_groups,
             country=countries,
-            mu=mu_values,
         )
+
+        # Simulate p_set (targets)
+        p_set_df = pd.DataFrame({name: [1.0] for name in link_names}, index=n.snapshots)
+        n.links.dynamic["p_set"] = p_set_df
+
+        # Simulate mu_p_set (duals)
+        mu_df = pd.DataFrame(
+            {name: [mu] for name, mu in zip(link_names, mu_values)},
+            index=n.snapshots,
+        )
+        n.links.dynamic["mu_p_set"] = mu_df
 
         return n
 
@@ -420,37 +471,10 @@ class TestExtractConsumerValues:
 
         assert result["country"].iloc[0] == "USA"
 
-    def test_nan_mu_treated_as_zero(self):
-        n = self._make_network_with_duals(
-            foods=["wheat"],
-            food_groups=["grain"],
-            countries=["USA"],
-            mu_values=[float("nan")],
-        )
-
-        result = extract_consumer_values(n)
-
-        assert result["value_bnusd_per_mt"].iloc[0] == pytest.approx(0.0)
-        assert result["adjustment_bnusd_per_mt"].iloc[0] == pytest.approx(0.0)
-
-    def test_raises_when_no_constraints(self):
+    def test_raises_when_no_p_set_duals(self):
         n = pypsa.Network()
 
-        with pytest.raises(ValueError, match="No food equality constraints"):
-            extract_consumer_values(n)
-
-    def test_ignores_non_food_constraints(self):
-        n = pypsa.Network()
-
-        # Add a non-food global constraint (should be ignored)
-        n.global_constraints.add(
-            ["co2_budget"],
-            sense="<=",
-            constant=100.0,
-            type="emission",
-        )
-
-        with pytest.raises(ValueError, match="No food equality constraints"):
+        with pytest.raises(ValueError, match="enforce_baseline_diet"):
             extract_consumer_values(n)
 
     def test_multi_country(self):

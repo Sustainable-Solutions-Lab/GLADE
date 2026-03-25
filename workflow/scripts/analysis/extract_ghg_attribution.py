@@ -122,7 +122,52 @@ def build_ghg_links_dataframe(
     # intensity calculation (and would cause division by zero).
     links = links[links["efficiency"].abs() > 1e-12]
 
-    return links[["link_name", "bus0", "bus1", "flow", "efficiency", "emissions_co2e"]]
+    result = links[
+        ["link_name", "bus0", "bus1", "flow", "efficiency", "emissions_co2e"]
+    ]
+
+    # Include generator dispatches as virtual zero-emission links so that
+    # generator inflows (e.g. slack generators on food buses) correctly dilute
+    # the emission intensity at the receiving bus.
+    gen_virtual = _generator_virtual_links(n, n.snapshots[-1])
+    if not gen_virtual.empty:
+        result = pd.concat([result, gen_virtual], ignore_index=True)
+
+    return result
+
+
+def _generator_virtual_links(n: pypsa.Network, snapshot) -> pd.DataFrame:
+    """Create virtual zero-emission link rows for generators with positive dispatch.
+
+    Generators inject flow into buses but are invisible to the link-based
+    attribution system. Representing them as virtual links from a zero-intensity
+    source bus ensures their contribution dilutes bus-level intensities correctly.
+    """
+    cols = ["link_name", "bus0", "bus1", "flow", "efficiency", "emissions_co2e"]
+    gen_p = n.generators.dynamic.p
+    if gen_p.empty:
+        return pd.DataFrame(columns=cols)
+
+    dispatch = (
+        gen_p.loc[snapshot] if snapshot in gen_p.index else pd.Series(dtype=float)
+    )
+    pos_dispatch = dispatch[dispatch > 1e-12]
+    if pos_dispatch.empty:
+        return pd.DataFrame(columns=cols)
+
+    gen_static = n.generators.static
+    buses = gen_static.loc[pos_dispatch.index, "bus"]
+
+    return pd.DataFrame(
+        {
+            "link_name": "__gen__" + pos_dispatch.index,
+            "bus0": "__zero_emission_source__",
+            "bus1": buses.values,
+            "flow": pos_dispatch.values,
+            "efficiency": 1.0,
+            "emissions_co2e": 0.0,
+        }
+    )
 
 
 def solve_emission_intensities(links_df: pd.DataFrame) -> dict[str, float]:

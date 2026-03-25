@@ -31,8 +31,6 @@ def add_food_group_buses_and_loads(
     population: pd.Series,
     *,
     max_per_capita: dict[str, float] | None = None,
-    add_slack_for_fixed_consumption: bool = False,
-    slack_marginal_cost: float | None = None,
 ) -> None:
     """Add carriers, buses, and stores for food groups.
 
@@ -49,34 +47,17 @@ def add_food_group_buses_and_loads(
     max_per_capita
         Optional per-group consumption caps in g/person/day. Applied as e_nom_max
         on stores after converting to Mt/year using country population.
-    add_slack_for_fixed_consumption
-        Whether to add slack generators for baseline consumption enforcement.
-    slack_marginal_cost
-        Marginal cost for slack generators.
     """
 
     countries_index = pd.Index(countries, dtype="object")
     pop_values = population.loc[countries].values
 
-    # Batch all store names/buses/carriers/metadata across groups
     all_store_names = []
     all_store_buses = []
     all_store_carriers = []
     all_store_e_nom_max = []
     all_store_countries = []
     all_store_food_groups = []
-
-    all_pos_gen_names = []
-    all_pos_gen_buses = []
-    all_pos_gen_carriers = []
-    all_pos_gen_countries = []
-    all_pos_gen_food_groups = []
-
-    all_neg_gen_names = []
-    all_neg_gen_buses = []
-    all_neg_gen_carriers = []
-    all_neg_gen_countries = []
-    all_neg_gen_food_groups = []
 
     logger.info("Adding food group stores for nutrition requirements...")
     for group in food_group_list:
@@ -100,29 +81,6 @@ def add_food_group_buses_and_loads(
         all_store_countries.extend(countries)
         all_store_food_groups.extend([group] * len(countries))
 
-        if add_slack_for_fixed_consumption:
-            n.carriers.add("slack_positive_group_" + group, unit="Mt")
-            n.carriers.add("slack_negative_group_" + group, unit="Mt")
-
-            pos_names = "slack:group_positive:" + group + ":" + countries_index
-            neg_names = "slack:group_negative:" + group + ":" + countries_index
-
-            all_pos_gen_names.extend(pos_names)
-            all_pos_gen_buses.extend(buses)
-            all_pos_gen_carriers.extend(
-                [f"slack_positive_group_{group}"] * len(countries)
-            )
-            all_pos_gen_countries.extend(countries)
-            all_pos_gen_food_groups.extend([group] * len(countries))
-
-            all_neg_gen_names.extend(neg_names)
-            all_neg_gen_buses.extend(buses)
-            all_neg_gen_carriers.extend(
-                [f"slack_negative_group_{group}"] * len(countries)
-            )
-            all_neg_gen_countries.extend(countries)
-            all_neg_gen_food_groups.extend([group] * len(countries))
-
     n.stores.add(
         all_store_names,
         bus=all_store_buses,
@@ -132,28 +90,6 @@ def add_food_group_buses_and_loads(
         country=all_store_countries,
         food_group=all_store_food_groups,
     )
-
-    if all_pos_gen_names:
-        n.generators.add(
-            all_pos_gen_names,
-            bus=all_pos_gen_buses,
-            carrier=all_pos_gen_carriers,
-            p_nom_extendable=True,
-            marginal_cost=slack_marginal_cost,
-            country=all_pos_gen_countries,
-            food_group=all_pos_gen_food_groups,
-        )
-        n.generators.add(
-            all_neg_gen_names,
-            bus=all_neg_gen_buses,
-            carrier=all_neg_gen_carriers,
-            p_nom_extendable=True,
-            p_min_pu=-1.0,
-            p_max_pu=0.0,
-            marginal_cost=-slack_marginal_cost,
-            country=all_neg_gen_countries,
-            food_group=all_neg_gen_food_groups,
-        )
 
 
 def add_macronutrient_loads(

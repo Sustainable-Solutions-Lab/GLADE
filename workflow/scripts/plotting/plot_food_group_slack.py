@@ -4,9 +4,8 @@
 
 """Plot positive/negative food group slack aggregated globally (Mt).
 
-Supports two slack mechanisms:
-1. Generator-based: group-level slack generators (slack_positive_group_*)
-2. Food-level constraints: per-food equality constraints from enforce_baseline_diet
+Reads food-level slack generators (slack_positive_food / slack_negative_food)
+and aggregates dispatch by food group for visualization.
 """
 
 import logging
@@ -27,127 +26,96 @@ from workflow.scripts.plotting.color_utils import categorical_colors
 
 logger = logging.getLogger(__name__)
 
-POSITIVE_PREFIX = "slack_positive_group_"
-NEGATIVE_PREFIX = "slack_negative_group_"
 
-
-def _snapshot_weights(network: pypsa.Network) -> pd.Series:
-    """Return per-snapshot weights; defaults to ones if missing."""
-
-    weights = network.snapshot_weightings.get("objective")
-    if weights is None:
-        return pd.Series(1.0, index=network.snapshots)
-    return weights
-
-
-def _has_food_level_constraints(network: pypsa.Network) -> bool:
-    """Check if the network has food-level equality constraints."""
-    gc = network.global_constraints.static
-    if gc.empty:
+def _has_food_slack_generators(network: pypsa.Network) -> bool:
+    """Check if the network has food-level slack generators."""
+    generators = network.generators.static
+    if generators.empty or "carrier" not in generators.columns:
         return False
-    return gc.index.astype(str).str.startswith("food_equal_").any()
+    return (generators["carrier"] == "slack_positive_food").any()
+
+
+def _build_food_slack_df(network: pypsa.Network) -> pd.DataFrame:
+    """Build per-food slack DataFrame from food-level slack generators.
+
+    Returns DataFrame with columns: food, food_group, overconsumption, underconsumption
+    """
+    generators = network.generators.static
+    dispatch = network.generators.dynamic.p
+
+    pos_mask = generators["carrier"] == "slack_positive_food"
+    neg_mask = generators["carrier"] == "slack_negative_food"
+
+    if not pos_mask.any() and not neg_mask.any():
+        return pd.DataFrame(
+            columns=["food", "food_group", "overconsumption", "underconsumption"]
+        )
+
+    snapshot = network.snapshots[-1]
+
+    records = {}
+    # Positive generators: dispatch > 0 means shortage (underconsumption)
+    for gen_name in generators.index[pos_mask]:
+        food = str(generators.loc[gen_name, "food"])
+        food_group = str(generators.loc[gen_name, "food_group"])
+        val = (
+            float(dispatch.loc[snapshot, gen_name])
+            if gen_name in dispatch.columns
+            else 0.0
+        )
+        key = (food, food_group)
+        if key not in records:
+            records[key] = {
+                "food": food,
+                "food_group": food_group,
+                "overconsumption": 0.0,
+                "underconsumption": 0.0,
+            }
+        records[key]["underconsumption"] += max(0.0, val)
+
+    # Negative generators: dispatch < 0 means excess (overconsumption)
+    for gen_name in generators.index[neg_mask]:
+        food = str(generators.loc[gen_name, "food"])
+        food_group = str(generators.loc[gen_name, "food_group"])
+        val = (
+            float(dispatch.loc[snapshot, gen_name])
+            if gen_name in dispatch.columns
+            else 0.0
+        )
+        key = (food, food_group)
+        if key not in records:
+            records[key] = {
+                "food": food,
+                "food_group": food_group,
+                "overconsumption": 0.0,
+                "underconsumption": 0.0,
+            }
+        records[key]["overconsumption"] += max(0.0, -val)
+
+    df = pd.DataFrame(list(records.values()))
+    return df
 
 
 def _aggregate_food_level_slack(
     network: pypsa.Network,
 ) -> tuple[pd.Series, pd.Series]:
-    """Compute per-food-group slack from food-level equality constraints.
+    """Compute per-food-group slack from food-level slack generators.
 
     Returns (positive, negative) Series indexed by food group name.
-    Positive = overconsumption (actual > target).
-    Negative = underconsumption (actual < target).
+    Positive = overconsumption (surplus absorbed by negative slack).
+    Negative = underconsumption (shortage filled by positive slack).
     """
-    gc = network.global_constraints.static
-    food_gc = gc[gc.index.astype(str).str.startswith("food_equal_")]
-
-    if food_gc.empty:
+    df = _build_food_slack_df(network)
+    if df.empty:
         return pd.Series(dtype=float), pd.Series(dtype=float)
 
-    # Get consumption link p0 values
-    consume_links = network.links.static[
-        network.links.static["carrier"] == "food_consumption"
-    ]
-    p0 = network.links.dynamic["p0"]
-
-    # Build actual consumption: (food, country) → p0
-    actual = {}
-    for link_name in consume_links.index:
-        food = consume_links.loc[link_name, "food"]
-        country = consume_links.loc[link_name, "country"]
-        val = float(p0.loc["now", link_name]) if link_name in p0.columns else 0.0
-        actual[(food, country)] = actual.get((food, country), 0.0) + val
-
-    # Compute per-food deviation
-    records = []
-    for _, gc_row in food_gc.iterrows():
-        food = str(gc_row["food"])
-        country = str(gc_row["country"])
-        food_group = str(gc_row.get("food_group", ""))
-        target = float(gc_row["constant"])
-        p0_val = actual.get((food, country), 0.0)
-        deviation = p0_val - target
-        records.append(
-            {
-                "food_group": food_group,
-                "overconsumption": max(0.0, deviation),
-                "underconsumption": max(0.0, -deviation),
-            }
-        )
-
-    df = pd.DataFrame(records)
     positive = df.groupby("food_group")["overconsumption"].sum()
     negative = df.groupby("food_group")["underconsumption"].sum()
 
-    # Filter out negligible values
     positive = positive[positive > 1e-6].sort_index()
     negative = negative[negative > 1e-6].sort_index()
 
     return positive, negative
-
-
-def _aggregate_positive_slack(network: pypsa.Network) -> pd.Series:
-    """Aggregate positive (shortage) slack by food group in Mt."""
-
-    generators = network.generators.static
-    if generators.empty or "carrier" not in generators.columns:
-        return pd.Series(dtype=float)
-
-    mask = generators["carrier"].astype(str).str.startswith(POSITIVE_PREFIX)
-    if not mask.any():
-        return pd.Series(dtype=float)
-
-    dispatch = network.generators.dynamic.p.loc[:, mask]
-    weights = _snapshot_weights(network)
-    weighted = dispatch.multiply(weights, axis=0)
-
-    totals = weighted.clip(lower=0.0).sum(axis=0)
-    carriers = generators.loc[mask, "carrier"]
-    by_group = totals.groupby(carriers).sum()
-
-    return by_group.rename(lambda c: c.replace(POSITIVE_PREFIX, "")).sort_index()
-
-
-def _aggregate_negative_slack(network: pypsa.Network) -> pd.Series:
-    """Aggregate negative (excess) slack by food group in Mt."""
-
-    generators = network.generators.static
-    if generators.empty or "carrier" not in generators.columns:
-        return pd.Series(dtype=float)
-
-    mask = generators["carrier"].astype(str).str.startswith(NEGATIVE_PREFIX)
-    if not mask.any():
-        return pd.Series(dtype=float)
-
-    dispatch = network.generators.dynamic.p.loc[:, mask]
-    weights = _snapshot_weights(network)
-    weighted = dispatch.multiply(weights, axis=0)
-
-    # Negative p values (consumption) correspond to absorbing surplus food
-    absorption = -weighted.clip(upper=0.0).sum(axis=0)
-    carriers = generators.loc[mask, "carrier"]
-    by_group = absorption.groupby(carriers).sum()
-
-    return by_group.rename(lambda c: c.replace(NEGATIVE_PREFIX, "")).sort_index()
 
 
 def _aggregate_consumption_by_group(network: pypsa.Network) -> pd.Series:
@@ -167,95 +135,26 @@ def _aggregate_consumption_by_group(network: pypsa.Network) -> pd.Series:
 def _aggregate_demand_by_group(network: pypsa.Network) -> pd.Series:
     """Aggregate baseline food demand by group in Mt.
 
-    Uses food-level equality constraints when available; falls back to
-    realized consumption for legacy generator-based slack mode.
+    Uses p_set on consume links when available; falls back to
+    realized consumption.
     """
-    if not _has_food_level_constraints(network):
-        return _aggregate_consumption_by_group(network)
-
-    gc = network.global_constraints.static
-    if gc.empty:
-        return pd.Series(dtype=float)
-
-    food_gc = gc[gc.index.astype(str).str.startswith("food_equal_")]
-    if food_gc.empty or "food_group" not in food_gc.columns:
-        return pd.Series(dtype=float)
-
-    constants = pd.to_numeric(food_gc["constant"], errors="coerce").fillna(0.0)
-    groups = food_gc["food_group"].astype(str)
-    return constants.groupby(groups).sum().sort_index()
-
-
-def _build_food_slack_df(network: pypsa.Network) -> pd.DataFrame:
-    """Build per-food slack DataFrame from food-level constraints or generators.
-
-    Returns DataFrame with columns: food, food_group, overconsumption, underconsumption
-    """
-    if _has_food_level_constraints(network):
-        return _build_food_slack_from_constraints(network)
-    return _build_food_slack_from_generators(network)
-
-
-def _build_food_slack_from_constraints(network: pypsa.Network) -> pd.DataFrame:
-    """Build per-food slack from food-level equality constraints."""
-    gc = network.global_constraints.static
-    food_gc = gc[gc.index.astype(str).str.startswith("food_equal_")]
-
     consume = network.links.static[
         network.links.static["carrier"] == "food_consumption"
     ]
-    p0 = network.links.dynamic["p0"]
+    if consume.empty:
+        return pd.Series(dtype=float)
 
-    # Actual consumption: (food, country) → p0
-    actual = {}
-    for link_name in consume.index:
-        food = consume.loc[link_name, "food"]
-        country = consume.loc[link_name, "country"]
-        val = float(p0.loc["now", link_name]) if link_name in p0.columns else 0.0
-        actual[(food, country)] = actual.get((food, country), 0.0) + val
+    if "p_set" in network.links.dynamic and not network.links.dynamic.p_set.empty:
+        p_set = network.links.dynamic.p_set
+        snapshot = network.snapshots[-1]
+        targets = p_set.loc[snapshot].reindex(consume.index)
+        has_target = targets.notna()
+        if has_target.any():
+            targets = targets[has_target].clip(lower=0)
+            groups = consume.loc[has_target.values, "food_group"].astype(str)
+            return targets.groupby(groups).sum().sort_index()
 
-    records = []
-    for _, gc_row in food_gc.iterrows():
-        food = str(gc_row["food"])
-        country = str(gc_row["country"])
-        food_group = str(gc_row.get("food_group", ""))
-        target = float(gc_row["constant"])
-        deviation = actual.get((food, country), 0.0) - target
-        records.append(
-            {
-                "food": food,
-                "food_group": food_group,
-                "overconsumption": max(0.0, deviation),
-                "underconsumption": max(0.0, -deviation),
-            }
-        )
-
-    df = pd.DataFrame(records)
-    # Aggregate across countries
-    return (
-        df.groupby(["food", "food_group"])[["overconsumption", "underconsumption"]]
-        .sum()
-        .reset_index()
-    )
-
-
-def _build_food_slack_from_generators(network: pypsa.Network) -> pd.DataFrame:
-    """Build per-food-group slack from generator-based slack (legacy)."""
-    positive = _aggregate_positive_slack(network)
-    negative = _aggregate_negative_slack(network)
-
-    groups = sorted(set(positive.index) | set(negative.index))
-    records = []
-    for g in groups:
-        records.append(
-            {
-                "food": g,
-                "food_group": g,
-                "overconsumption": negative.get(g, 0.0),
-                "underconsumption": positive.get(g, 0.0),
-            }
-        )
-    return pd.DataFrame(records)
+    return _aggregate_consumption_by_group(network)
 
 
 def _plot_food_slack(

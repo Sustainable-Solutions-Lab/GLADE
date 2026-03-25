@@ -348,16 +348,6 @@ class TestUnrecognizedComponents:
 
 
 class TestLinopyMetaCosts:
-    def test_food_slack_cost(self, solved_network):
-        """food_slack_cost from n.meta should add to Slack penalties."""
-        n = solved_network
-        slack_extra = 0.5
-        n._meta["food_slack_cost"] = slack_extra
-        n._objective += slack_extra
-        result = extract_objective_breakdown(n)
-        expected = EXPECTED_COSTS["slack_penalties"] + slack_extra
-        assert result["slack_penalties"].iloc[0] == pytest.approx(expected, abs=1e-6)
-
     def test_production_stability_cost(self, solved_network):
         """production_stability_cost should appear as its own category."""
         n = solved_network

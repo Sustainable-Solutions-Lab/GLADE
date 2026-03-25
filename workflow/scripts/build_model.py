@@ -921,8 +921,6 @@ if __name__ == "__main__":
         cfg_countries,
         population,
         max_per_capita=snakemake.params.food_group_max_per_capita,
-        add_slack_for_fixed_consumption=False,  # Slack handled in solve_model via linopy variables
-        slack_marginal_cost=validation_slack_cost,
     )
     nutrition.add_macronutrient_loads(
         n,

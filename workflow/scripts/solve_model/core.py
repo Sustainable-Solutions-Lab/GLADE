@@ -263,36 +263,24 @@ def add_food_group_constraints(
             )
 
 
-def add_food_consumption_constraints(
-    n: pypsa.Network,
+def _match_baseline_to_consume_links(
     baseline_df: pd.DataFrame,
+    consume_links: pd.DataFrame,
     population: dict[str, float],
-    slack_cost: float,
-) -> None:
-    """Add per-food equality constraints on food consumption links.
+) -> pd.DataFrame | None:
+    """Match baseline diet data to food consumption links and compute Mt targets.
 
-    For each (food, country), constrains Link-p to the baseline
-    consumption value from baseline_diet.csv, with slack variables
-    to ensure feasibility.
+    Returns a DataFrame with columns: name, food, food_group, country,
+    consumption_g_per_day, target_mt — or None if no links matched.
     """
-    m = n.model
-    link_p = m.variables["Link-p"].sel(snapshot="now")
-    links_df = n.links.static
-    consume_links = links_df[links_df["carrier"] == "food_consumption"]
+    df = _prepare_baseline_diet_for_food_constraints(baseline_df, consume_links)
 
-    df = _prepare_baseline_diet_for_food_constraints(
-        baseline_df,
-        consume_links,
-    )
-
-    # Build link name → target mapping
     consume_links_keyed = consume_links.copy()
     consume_links_keyed["key"] = (
         consume_links_keyed["food"] + ":" + consume_links_keyed["country"]
     )
     df["key"] = df["food"] + ":" + df["country"]
 
-    # Match baseline to links
     matched = df.merge(
         consume_links_keyed[["key"]].reset_index(),
         on="key",
@@ -300,67 +288,145 @@ def add_food_consumption_constraints(
 
     if matched.empty:
         logger.warning("No matching food consumption links for baseline diet data")
-        return
+        return None
 
-    link_names = matched["name"].values
-    targets_g = matched["consumption_g_per_day"].values
-    countries = matched["country"].values
-
-    # Convert g/person/day → Mt/year per country
-    targets_mt = np.array(
+    matched["target_mt"] = np.array(
         [
             _per_capita_mass_to_mt_per_year(g, population[c])
-            for g, c in zip(targets_g, countries)
+            for g, c in zip(
+                matched["consumption_g_per_day"].values, matched["country"].values
+            )
         ]
     )
+    return matched
 
-    target_arr = xr.DataArray(
-        targets_mt, coords={"name": list(link_names)}, dims="name"
-    )
-    food_var = link_p.sel(name=list(link_names))
 
-    # Linopy slack variables
-    link_coords = [list(link_names)]
-    link_dims = ["name"]
-    slack_pos = m.add_variables(
-        lower=0, coords=link_coords, dims=link_dims, name="food_slack_pos"
-    )
-    slack_neg = m.add_variables(
-        lower=0, coords=link_coords, dims=link_dims, name="food_slack_neg"
-    )
+def add_food_slack_generators(
+    n: pypsa.Network,
+    matched: pd.DataFrame,
+    slack_cost: float,
+) -> None:
+    """Add bidirectional slack generators on food buses for baseline enforcement.
 
-    # Constraint: food_var + slack_neg - slack_pos == target
-    m.add_constraints(
-        food_var + slack_neg - slack_pos == target_arr,
-        name="GlobalConstraint-food_equal",
-    )
+    Must be called BEFORE ``n.optimize.create_model()`` so that PyPSA includes
+    these generators in the linopy model.
 
-    # Slack penalty in objective
-    m.objective += slack_cost * (slack_pos.sum() + slack_neg.sum())
-
-    # Register global constraints for dual extraction
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network to add slack components to.
+    matched : pd.DataFrame
+        Output of ``_match_baseline_to_consume_links`` with food, food_group,
+        country columns.
+    slack_cost : float
+        Penalty cost per Mt of slack (billion USD/Mt).
+    """
     foods = matched["food"].values
-    # Constraint dual assignment in PyPSA maps vectorized GlobalConstraint duals
-    # by appending the linopy dimension value (here: link name) to the
-    # "GlobalConstraint-food_equal" prefix. Use matching GlobalConstraint names
-    # so duals are written back correctly (e.g. food_equal_consume:wheat:USA).
-    gc_names = [f"food_equal_{link}" for link in link_names]
+    countries = matched["country"].values
     food_groups = matched["food_group"].values
-    n.global_constraints.add(
-        gc_names,
-        sense="==",
-        constant=targets_mt,
-        type="food_consumption",
+    food_buses = pd.Index(
+        "food:" + pd.Index(foods) + ":" + pd.Index(countries),
+        dtype="object",
+    )
+
+    n.carriers.add(
+        ["slack_positive_food", "slack_negative_food"],
+        unit="Mt",
+    )
+
+    pos_names = pd.Index(
+        "slack:food_positive:" + pd.Index(foods) + ":" + pd.Index(countries),
+        dtype="object",
+    )
+    n.generators.add(
+        pos_names,
+        bus=food_buses.values,
+        carrier="slack_positive_food",
+        p_nom_extendable=True,
+        marginal_cost=slack_cost,
+        food=foods,
+        food_group=food_groups,
+        country=countries,
+    )
+
+    neg_names = pd.Index(
+        "slack:food_negative:" + pd.Index(foods) + ":" + pd.Index(countries),
+        dtype="object",
+    )
+    n.generators.add(
+        neg_names,
+        bus=food_buses.values,
+        carrier="slack_negative_food",
+        p_nom_extendable=True,
+        p_min_pu=-1.0,
+        p_max_pu=0.0,
+        marginal_cost=-slack_cost,
         food=foods,
         food_group=food_groups,
         country=countries,
     )
 
     logger.info(
-        "Added %d per-food consumption equality constraints (slack cost=%.1f)",
-        len(matched),
-        slack_cost,
+        "Added %d positive + %d negative food slack generators",
+        len(pos_names),
+        len(neg_names),
     )
+
+
+def fix_food_consumption_to_baseline(
+    n: pypsa.Network,
+    matched: pd.DataFrame,
+) -> None:
+    """Fix food consumption link dispatch to baseline values via p_set.
+
+    Must be called BEFORE ``n.optimize.create_model()`` so that p_set
+    values are included in the constraint definition.
+
+    Also relaxes food-group store caps (``e_nom_max``) to infinity, since
+    the baseline diet may slightly exceed per-capita caps that are only
+    meaningful when the optimizer freely chooses the diet.
+
+    Consumer value duals are available post-solve via ``n.links.dynamic.mu_p_set``
+    (after calling ``_extract_p_set_duals``).
+    """
+    link_names = matched["name"].values
+    targets_mt = matched["target_mt"].values
+
+    new_p_set = pd.DataFrame(
+        {link: [target] for link, target in zip(link_names, targets_mt)},
+        index=n.snapshots,
+    )
+    existing = n.links.dynamic.get("p_set", pd.DataFrame(index=n.snapshots))
+    if not existing.empty:
+        new_p_set = pd.concat([existing, new_p_set], axis=1)
+    n.links.dynamic["p_set"] = new_p_set
+
+    # Relax food-group store caps: with consumption fixed exactly at baseline,
+    # even tiny mismatches between baseline totals and per-capita caps
+    # would cause hard infeasibility. The caps only constrain free-diet
+    # optimization, not baseline validation.
+    store_idx = n.stores.static.index
+    group_stores = store_idx[store_idx.astype(str).str.startswith("store:group:")]
+    if not group_stores.empty:
+        n.stores.static.loc[group_stores, "e_nom_max"] = np.inf
+
+    logger.info(
+        "Fixed %d food consumption links to baseline via p_set",
+        len(link_names),
+    )
+
+
+def _extract_p_set_duals(n: pypsa.Network) -> None:
+    """Write Link p_set duals to n.links.dynamic.mu_p_set.
+
+    Must be called after solving and ``assign_duals`` to populate the
+    consumer value shadow prices used by ``extract_consumer_values``.
+    """
+    constraints = dict(n.model.constraints.items())
+    if "Link-p_set" not in constraints:
+        return
+    dual_df = constraints["Link-p_set"].dual.to_pandas()
+    n.links.dynamic["mu_p_set"] = dual_df
 
 
 def _prepare_baseline_diet_for_food_constraints(
@@ -1068,13 +1134,43 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         incentives_paths = list(smk.input.food_incentives)
         add_food_incentives_to_objective(n, incentives_paths)
 
+    # Get population from network metadata
+    population_map = get_country_population(n)
+
+    # Load baseline diet data (used for food-level enforcement and/or ratio constraints)
+    baseline_df = pd.read_csv(smk.input.baseline_diet)
+    consume_links = n.links.static[n.links.static["carrier"] == "food_consumption"]
+    prepared_baseline_df = _prepare_baseline_diet_for_food_constraints(
+        baseline_df,
+        consume_links,
+    )
+
+    # Food-level baseline enforcement: add food slack generators and fix
+    # consumption links to baseline via p_set. Both must happen BEFORE
+    # create_model() so PyPSA includes them in the linopy model.
+    per_country_equal: dict[str, dict[str, float]] | None = None
+    equal_source = smk.config["food_groups"]["equal_by_country_source"]
+    enforce_baseline = bool(smk.params.enforce_baseline)
+    if enforce_baseline and equal_source:
+        raise ValueError(
+            "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
+        )
+    if enforce_baseline:
+        slack_cost = float(smk.config["validation"]["slack_marginal_cost"])
+        matched_baseline = _match_baseline_to_consume_links(
+            prepared_baseline_df, consume_links, population_map
+        )
+        if matched_baseline is not None:
+            add_food_slack_generators(n, matched_baseline, slack_cost)
+            fix_food_consumption_to_baseline(n, matched_baseline)
+
     # Create the linopy model
     logger.info("Creating linopy model...")
     n.optimize.create_model(include_objective_constant=False)
     logger.info("Linopy model created.")
 
     if piecewise_utility_enabled:
-        if bool(smk.params.enforce_baseline):
+        if enforce_baseline:
             raise ValueError(
                 "food_utility_piecewise cannot be combined with "
                 "validation.enforce_baseline_diet=true"
@@ -1111,31 +1207,7 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         if smk.log and "LogFile" not in solver_options:
             solver_options["LogFile"] = str(smk.log[0])
 
-    # Get population from network metadata
-    population_map = get_country_population(n)
-
-    # Load baseline diet data (used for food-level enforcement and/or ratio constraints)
-    baseline_df = pd.read_csv(smk.input.baseline_diet)
-    consume_links = n.links.static[n.links.static["carrier"] == "food_consumption"]
-    prepared_baseline_df = _prepare_baseline_diet_for_food_constraints(
-        baseline_df,
-        consume_links,
-    )
-
-    # Food-level baseline enforcement (per-food equality constraints)
-    per_country_equal: dict[str, dict[str, float]] | None = None
-    equal_source = smk.config["food_groups"]["equal_by_country_source"]
-    enforce_baseline = bool(smk.params.enforce_baseline)
-    if enforce_baseline and equal_source:
-        raise ValueError(
-            "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
-        )
-    if enforce_baseline:
-        slack_cost = float(smk.config["validation"]["slack_marginal_cost"])
-        add_food_consumption_constraints(
-            n, prepared_baseline_df, population_map, slack_cost
-        )
-    elif equal_source:
+    if not enforce_baseline and equal_source:
         equal_df = pd.read_csv(smk.input.food_group_equal)
         required = {"group", "country", "consumption_g_per_day"}
         missing = required - set(equal_df.columns)
@@ -1296,6 +1368,7 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         try:
             n.optimize.assign_solution()
             n.optimize.assign_duals(False)
+            _extract_p_set_duals(n)
             n.optimize.post_processing()
         finally:
             if removed:
@@ -1331,20 +1404,6 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
                 )
         if production_slack:
             n.meta["production_stability_slack"] = production_slack
-
-        # Store food slack cost for objective breakdown extraction
-        if "food_slack_pos" in n.model.variables:
-            slack_pos_sol = n.model.variables["food_slack_pos"].solution
-            slack_neg_sol = n.model.variables["food_slack_neg"].solution
-            food_slack_total = float(slack_pos_sol.sum() + slack_neg_sol.sum())
-            food_slack_cost_val = float(smk.config["validation"]["slack_marginal_cost"])
-            n.meta["food_slack_cost"] = food_slack_total * food_slack_cost_val
-            if food_slack_total > 1e-6:
-                logger.info(
-                    "Food slack used: %.4f Mt total (cost: %.2f bnUSD)",
-                    food_slack_total,
-                    n.meta["food_slack_cost"],
-                )
 
         # Store production stability penalty cost for objective breakdown.
         # L1/quadratic penalties are linopy-level terms not visible to PyPSA

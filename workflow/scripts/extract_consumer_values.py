@@ -2,16 +2,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Extract consumer values (dual variables) from per-food equality constraints.
+"""Extract consumer values (dual variables) from fixed food consumption links.
 
 Consumer values represent the marginal value of consuming one additional unit
-of each food, as revealed by the dual variables of fixed consumption
-constraints. These values can be used to construct an objective function that
-replicates consumer preferences.
+of each food, as revealed by the dual variables of p_set constraints on
+food_consumption links. These values can be used to construct an objective
+function that replicates consumer preferences.
 
 Expects a solved network with:
-- validation.enforce_baseline_diet=True (fixed per-food consumption)
-- Global constraints with food, food_group, and country columns set
+- validation.enforce_baseline_diet=True (fixed per-food consumption via p_set)
+- mu_p_set duals extracted to n.links.dynamic
 """
 
 import logging
@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 def extract_consumer_values(n: pypsa.Network) -> pd.DataFrame:
-    """Extract consumer values from per-food equality constraint duals.
+    """Extract consumer values from p_set duals on food consumption links.
 
     Parameters
     ----------
     n : pypsa.Network
-        Solved network with per-food equality constraints.
+        Solved network with fixed food consumption links (p_set).
 
     Returns
     -------
@@ -39,33 +39,42 @@ def extract_consumer_values(n: pypsa.Network) -> pd.DataFrame:
         adjustment_bnusd_per_mt. The adjustment column is the value with
         sign flipped for direct use as a marginal cost incentive.
     """
-    gc_df = n.global_constraints.static
+    links = n.links.static
+    consume = links[links["carrier"] == "food_consumption"]
 
-    if gc_df.empty:
+    if "mu_p_set" not in n.links.dynamic:
         raise ValueError(
-            "No food equality constraints found in the network. "
+            "No p_set duals found in the network. "
             "Ensure the model was solved with validation.enforce_baseline_diet=true"
         )
 
-    # Filter to per-food equality constraints
-    food_constraints = gc_df[
-        gc_df.index.str.startswith("food_equal_")
-        & (gc_df["type"] == "food_consumption")
-    ]
+    mu_p_set = n.links.dynamic.mu_p_set
+    snapshot = n.snapshots[-1]
+    duals = mu_p_set.loc[snapshot].reindex(consume.index).fillna(0.0)
 
-    if food_constraints.empty:
+    # Only include links that actually had p_set (non-NaN duals)
+    has_dual = duals != 0.0
+    if "p_set" in n.links.dynamic:
+        p_set = n.links.dynamic.p_set
+        has_p_set = p_set.loc[snapshot].reindex(consume.index).notna()
+        has_dual = has_dual | has_p_set
+
+    consume = consume[has_dual]
+    duals = duals[has_dual]
+
+    if consume.empty:
         raise ValueError(
-            "No food equality constraints found in the network. "
+            "No fixed food consumption links found. "
             "Ensure the model was solved with validation.enforce_baseline_diet=true"
         )
 
     df = pd.DataFrame(
         {
-            "food": food_constraints["food"].astype(str).values,
-            "food_group": food_constraints["food_group"].astype(str).values,
-            "country": food_constraints["country"].astype(str).str.upper().values,
-            "value_bnusd_per_mt": food_constraints["mu"].fillna(0.0).values,
-            "adjustment_bnusd_per_mt": -food_constraints["mu"].fillna(0.0).values,
+            "food": consume["food"].astype(str).values,
+            "food_group": consume["food_group"].astype(str).values,
+            "country": consume["country"].astype(str).str.upper().values,
+            "value_bnusd_per_mt": duals.values,
+            "adjustment_bnusd_per_mt": -duals.values,
         }
     )
 
