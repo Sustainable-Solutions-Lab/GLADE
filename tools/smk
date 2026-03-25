@@ -1,8 +1,7 @@
+#!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Minimal wrapper: run Snakemake under a 10G cgroup cap, no swap.
