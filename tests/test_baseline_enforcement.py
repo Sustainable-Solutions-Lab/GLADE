@@ -4,25 +4,16 @@
 
 """Unit tests for food-level baseline enforcement and consumer values."""
 
-import importlib.util
-from pathlib import Path
-
 import pandas as pd
 import pypsa
 import pytest
 
 from workflow.scripts.extract_consumer_values import extract_consumer_values
-
-# solve_model.py coexists with a solve_model/ package; import the file directly.
-_solve_model_path = Path(__file__).parent.parent / "workflow/scripts/solve_model.py"
-_spec = importlib.util.spec_from_file_location("solve_model_script", _solve_model_path)
-_solve_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_solve_module)
-
-_build_ratios_from_baseline = _solve_module._build_ratios_from_baseline
-add_food_incentives_to_objective = _solve_module.add_food_incentives_to_objective
-add_food_consumption_constraints = _solve_module.add_food_consumption_constraints
-
+from workflow.scripts.solve_model.core import (
+    _build_ratios_from_baseline,
+    add_food_consumption_constraints,
+    add_food_incentives_to_objective,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

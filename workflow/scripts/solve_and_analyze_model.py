@@ -15,7 +15,7 @@ import logging
 
 from workflow.scripts.analysis.analyze_model import run_analysis, write_empty_outputs
 from workflow.scripts.logging_config import setup_script_logging
-from workflow.scripts.solve_model import _ShadowPriceLogFilter, run_solve
+from workflow.scripts.solve_model.core import _ShadowPriceLogFilter, run_solve
 
 
 def main() -> None:

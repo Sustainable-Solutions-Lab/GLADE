@@ -19,7 +19,6 @@ The exported MPS file can then be used for Gurobi parameter tuning:
 """
 
 import argparse
-import importlib.util
 import logging
 import os
 from pathlib import Path
@@ -29,25 +28,18 @@ import pypsa
 import yaml
 
 from workflow.scripts.snakemake_utils import _recursive_update, apply_scenario_config
+from workflow.scripts.solve_model.core import (
+    add_food_group_constraints,
+    add_food_incentives_to_objective,
+    add_ghg_pricing_to_objective,
+    add_macronutrient_constraints,
+    add_residue_feed_constraints,
+    build_residue_feed_fraction_by_country,
+)
 from workflow.scripts.solve_model.health import add_health_objective
 
 # Enable new PyPSA components API
 pypsa.options.api.new_components_api = True
-
-# Import solve_model.py directly (not the solve_model/ package)
-_solve_model_path = Path(__file__).parent.parent / "workflow/scripts/solve_model.py"
-_spec = importlib.util.spec_from_file_location("solve_model_script", _solve_model_path)
-_solve_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_solve_module)
-
-add_food_group_constraints = _solve_module.add_food_group_constraints
-add_food_incentives_to_objective = _solve_module.add_food_incentives_to_objective
-add_ghg_pricing_to_objective = _solve_module.add_ghg_pricing_to_objective
-add_macronutrient_constraints = _solve_module.add_macronutrient_constraints
-add_residue_feed_constraints = _solve_module.add_residue_feed_constraints
-build_residue_feed_fraction_by_country = (
-    _solve_module.build_residue_feed_fraction_by_country
-)
 
 logging.basicConfig(
     level=logging.INFO,
