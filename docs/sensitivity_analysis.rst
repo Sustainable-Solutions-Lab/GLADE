@@ -239,6 +239,7 @@ assumed independent).
    :header: Distribution, Required fields, Optional fields, Description
 
    ``uniform`` (default), "``lower``, ``upper``", , "Flat distribution over [lower, upper]"
+   ``log_uniform``, "``lower``, ``upper``", , "Log-uniform: uniform on log scale over [lower, upper] (both > 0)"
    ``normal``, "``mean``, ``std``", ``bounds``, "Gaussian with given mean and standard deviation"
    ``normal_ci``, "``lower``, ``upper``", "``confidence``, ``bounds``", "Normal distribution where [lower, upper] defines a confidence interval"
    ``lognormal``, "``mu``, ``sigma``", , "Log-normal with log-scale mean and std"

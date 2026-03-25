@@ -266,7 +266,7 @@ Each parameter specifies a distribution instead of a value range:
          emissions:
            ghg_price: "{ghg_price}"
 
-Supported distributions are ``uniform`` (default; requires ``lower``, ``upper``), ``normal`` (requires ``mean``, ``std``), ``normal_ci`` (requires ``lower``, ``upper``; optional ``confidence``, ``bounds``), and ``lognormal`` (requires ``mu``, ``sigma``).
+Supported distributions are ``uniform`` (default; requires ``lower``, ``upper``), ``log_uniform`` (requires ``lower``, ``upper``; both positive), ``normal`` (requires ``mean``, ``std``), ``normal_ci`` (requires ``lower``, ``upper``; optional ``confidence``, ``bounds``), and ``lognormal`` (requires ``mu``, ``sigma``).
 
 The ``samples`` field sets the number of quasi-random samples (should be a power of 2). The ``slice_parameters`` field designates parameters for conditional analysis — these are included in the surrogate fit but can be fixed at specific values to study how sensitivity changes with policy choices. Surrogate method configuration (PCE, RF) lives in a separate ``sensitivity_analysis`` top-level section.
 

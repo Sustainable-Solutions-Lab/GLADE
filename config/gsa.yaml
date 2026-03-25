@@ -114,14 +114,18 @@ scenarios:
           lower: 0
           upper: 1
           bounds: [0, 1]
+        # Log-uniform gives denser sampling at lower values where the model
+        # response changes most rapidly. Use uniform for evenly spaced coverage:
+        #   value_per_yll: { lower: 0, upper: 20000 }
+        #   ghg_price: { lower: 0, upper: 300 }
         value_per_yll:
-          lower: 0
+          distribution: log_uniform
+          lower: 100
           upper: 20000
-          bounds: [0, null]
         ghg_price:
-          lower: 0
+          distribution: log_uniform
+          lower: 1
           upper: 300
-          bounds: [0, null]
       template: &gsa_template
         sensitivity:
           crop_yields:

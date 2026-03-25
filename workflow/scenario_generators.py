@@ -235,10 +235,21 @@ def _validate_distribution_spec(param_name: str, param_spec: dict) -> None:
                 f"Parameter '{param_name}' with normal_ci distribution "
                 "requires 'lower' and 'upper'"
             )
+    elif dist == "log_uniform":
+        if "lower" not in param_spec or "upper" not in param_spec:
+            raise ValueError(
+                f"Parameter '{param_name}' with log_uniform distribution "
+                "requires 'lower' and 'upper' (both must be positive)"
+            )
+        if param_spec["lower"] <= 0:
+            raise ValueError(
+                f"Parameter '{param_name}' with log_uniform distribution "
+                "requires lower > 0"
+            )
     else:
         raise ValueError(
             f"Parameter '{param_name}' has unsupported distribution '{dist}'. "
-            "Supported: uniform, normal, lognormal, normal_ci"
+            "Supported: uniform, normal, lognormal, normal_ci, log_uniform"
         )
 
 
@@ -281,6 +292,8 @@ def build_chaospy_distribution(param_spec: dict) -> cp.Distribution:
             hi = np.inf if bounds[1] is None else bounds[1]
             return cp.TruncNormal(lo, hi, mean, std)
         return cp.Normal(mean, std)
+    elif dist == "log_uniform":
+        return cp.LogUniform(np.log(param_spec["lower"]), np.log(param_spec["upper"]))
     else:
         raise ValueError(f"Unsupported distribution: {dist}")
 
