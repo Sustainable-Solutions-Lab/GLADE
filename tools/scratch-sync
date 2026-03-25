@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+
+# Manage a fast scratch workspace on Sherlock.
+#
+# The scratch workspace is a full git clone with all non-git data (downloads,
+# pixi environments, etc.) so the entire workflow runs on scratch storage.
+# The group-home repo serves as a durable archive for results.
+#
+# Usage:
+#   tools/scratch-sync setup          # first-time (or post-purge) setup
+#   tools/scratch-sync push           # sync non-git data home → scratch
+#   tools/scratch-sync pull           # sync results + data scratch → home
+#   tools/scratch-sync status         # show workspace info
+#   tools/scratch-sync path           # print scratch workspace path
+
+HOME_REPO="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Scratch workspace location: $GROUP_SCRATCH/$USER/food-opt
+if [[ -z "${GROUP_SCRATCH:-}" ]]; then
+  echo "error: \$GROUP_SCRATCH is not set (are you on Sherlock?)" >&2
+  exit 1
+fi
+SCRATCH_REPO="${GROUP_SCRATCH}/${USER}/food-opt"
+
+# Branch to check out on scratch (cluster-specific fixes live here).
+SCRATCH_BRANCH="sherlock"
+
+# Non-git data directories to sync (relative to repo root).
+# These are large/downloaded datasets not tracked in git.
+DATA_DIRS=(
+  data/downloads
+  data/manually_downloaded
+)
+
+# Directories to pull back from scratch to home for archival.
+PULL_DIRS=(
+  results
+  data/downloads
+  data/manually_downloaded
+)
+
+usage() {
+  cat <<'EOF'
+Usage: tools/scratch-sync <command>
+
+Commands:
+  setup    First-time setup: git clone, copy data, pixi install
+           Also works as recovery after a scratch purge.
+  push     Sync non-git data from home → scratch
+  pull     Sync results and data from scratch → home
+  status   Show workspace info (branches, heads, disk usage)
+  path     Print the scratch workspace path
+
+Typical workflow:
+  1. tools/scratch-sync setup              # one-time
+  2. cd $(tools/scratch-sync path)         # work from scratch
+  3. git pull / edit / tools/smk ...       # fast!
+  4. tools/scratch-sync pull               # archive results to home
+EOF
+}
+
+# --- helpers -----------------------------------------------------------------
+
+log() { echo "[scratch-sync] $*"; }
+
+rsync_dir() {
+  local src="$1" dst="$2"
+  if [[ -d "$src" ]]; then
+    mkdir -p "$dst"
+    rsync -a --info=stats1 "$src/" "$dst/"
+  fi
+}
+
+# --- commands ----------------------------------------------------------------
+
+cmd_setup() {
+  log "Setting up scratch workspace at $SCRATCH_REPO"
+
+  # Clone or update the repo
+  if [[ -d "$SCRATCH_REPO/.git" ]]; then
+    log "Scratch repo exists; fetching latest..."
+    (cd "$SCRATCH_REPO" && git fetch --all)
+    (cd "$SCRATCH_REPO" && git checkout "$SCRATCH_BRANCH")
+    (cd "$SCRATCH_REPO" && git pull --ff-only || true)
+  else
+    local remote
+    remote="$(cd "$HOME_REPO" && git config --get remote.origin.url)"
+    log "Cloning from $remote ..."
+    git clone -b "$SCRATCH_BRANCH" "$remote" "$SCRATCH_REPO"
+  fi
+
+  # Copy non-git data
+  cmd_push
+
+  # Install pixi environments
+  log "Running pixi install..."
+  (cd "$SCRATCH_REPO" && pixi install)
+
+  log "Done! Workspace ready at: $SCRATCH_REPO"
+  log "  cd $SCRATCH_REPO"
+}
+
+cmd_push() {
+  log "Syncing non-git data: home → scratch"
+  for dir in "${DATA_DIRS[@]}"; do
+    if [[ -d "$HOME_REPO/$dir" ]]; then
+      log "  $dir"
+      rsync_dir "$HOME_REPO/$dir" "$SCRATCH_REPO/$dir"
+    else
+      log "  $dir (skipped, not present on home)"
+    fi
+  done
+  log "Push complete."
+}
+
+cmd_pull() {
+  log "Syncing outputs: scratch → home"
+  for dir in "${PULL_DIRS[@]}"; do
+    if [[ -d "$SCRATCH_REPO/$dir" ]]; then
+      log "  $dir"
+      rsync_dir "$SCRATCH_REPO/$dir" "$HOME_REPO/$dir"
+    else
+      log "  $dir (skipped, not present on scratch)"
+    fi
+  done
+  log "Pull complete."
+}
+
+cmd_status() {
+  echo "Home repo:    $HOME_REPO"
+  echo "Scratch repo: $SCRATCH_REPO"
+  echo
+
+  if [[ -d "$SCRATCH_REPO/.git" ]]; then
+    local s_head s_branch h_head h_branch
+    s_head="$(cd "$SCRATCH_REPO" && git rev-parse --short HEAD)"
+    s_branch="$(cd "$SCRATCH_REPO" && git rev-parse --abbrev-ref HEAD)"
+    h_head="$(cd "$HOME_REPO" && git rev-parse --short HEAD)"
+    h_branch="$(cd "$HOME_REPO" && git rev-parse --abbrev-ref HEAD)"
+
+    echo "Home:    $h_branch @ $h_head"
+    echo "Scratch: $s_branch @ $s_head"
+    if [[ "$s_head" != "$h_head" ]]; then
+      echo "  (heads differ — consider git pull on scratch)"
+    fi
+  else
+    echo "Scratch workspace not set up. Run: tools/scratch-sync setup"
+    return
+  fi
+
+  echo
+  echo "Non-git data on scratch:"
+  for dir in "${DATA_DIRS[@]}"; do
+    if [[ -d "$SCRATCH_REPO/$dir" ]]; then
+      echo "  $dir: present"
+    else
+      echo "  $dir: missing"
+    fi
+  done
+
+  echo
+  echo "Pixi environments:"
+  if [[ -d "$SCRATCH_REPO/.pixi/envs" ]]; then
+    echo "  installed"
+  else
+    echo "  not installed"
+  fi
+}
+
+cmd_path() {
+  echo "$SCRATCH_REPO"
+}
+
+# --- main --------------------------------------------------------------------
+
+case "${1:-}" in
+  setup)  cmd_setup ;;
+  push)   cmd_push ;;
+  pull)   cmd_pull ;;
+  status) cmd_status ;;
+  path)   cmd_path ;;
+  -h|--help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

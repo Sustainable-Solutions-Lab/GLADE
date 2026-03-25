@@ -233,6 +233,18 @@ Notes:
 - Snakemake tracks code changes and will rerun affected rules; manual cleanup of workflow artefacts is unnecessary. You almost never have to use the `--forcerun` argument.
 - Prefer small, testable edits and validate by running the narrowest target that exercises your change.
 - `tools/smk` runs Snakemake in a systemd cgroup with a hard 10G cap and swap disabled by default; override with `SMK_MEM_MAX=12G tools/smk ...`. When `SMK_MEM_MAX` is set, it is also forwarded to Snakemake as a global `mem_mb` resource limit for scheduling. It also implements the `-e <environment>` flag to select the pixi environment.
+- **Sherlock (Slurm)**: On Sherlock, use `--slurm` to submit jobs via Slurm:
+  ```bash
+  tools/smk --slurm -j4 --configfile config/<name>.yaml
+  ```
+- **Scratch workspace**: On Sherlock, run the entire workflow from `$GROUP_SCRATCH` for performance. Use `tools/scratch-sync` to manage the workspace:
+  ```bash
+  tools/scratch-sync setup            # one-time: clone, copy data, pixi install
+  cd $(tools/scratch-sync path)       # work from scratch
+  tools/smk --slurm -j4 ...          # run workflow (fast!)
+  tools/scratch-sync pull             # archive results back to group home
+  ```
+  After a scratch purge, `tools/scratch-sync setup` re-creates everything automatically. Run `tools/scratch-sync status` to check workspace state. See `tools/scratch-sync --help` for all commands.
 - Retrieval / downloading rules and scripts make network calls; when running such rules you will need to ask for permission to run outside the sandbox in order to get network access.
 - Never rerun retrieval rules without explicitly being instructed to do so. This includes implicit calls like an indiscriminate use of the `--forceall` Snakemake argument.
 
