@@ -1513,7 +1513,7 @@ properties:
 
   solving:
     type: object
-    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs, time_limit, runtime, mem_mb]
+    required: [solver, io_api, threads, calculate_fixed_duals, options_gurobi, options_highs, time_limit, runtime, mem_mb, inline_analysis]
     additionalProperties: false
     properties:
       solver:
@@ -1562,6 +1562,9 @@ properties:
         type: integer
         minimum: 100
         description: "Maximum solver memory in MB (SLURM resource)"
+      inline_analysis:
+        type: boolean
+        description: "When true, analysis runs inside the solve process without writing the intermediate solved .nc file"
 
   remote_solve:
     type: object

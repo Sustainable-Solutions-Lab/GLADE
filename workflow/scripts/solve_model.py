@@ -910,6 +910,7 @@ def _apply_biofuel_demand_scaling(n: pypsa.Network, scale: float) -> None:
 
 def _apply_forage_calibration(
     n: pypsa.Network,
+    smk,
     forage_overlap_crops: list[str],
     enforce_baseline_feed: bool,
 ) -> None:
@@ -923,7 +924,7 @@ def _apply_forage_calibration(
     read_csv = functools.partial(pd.read_csv, comment="#")
 
     # 1. Grassland yield correction
-    yield_cal = read_csv(snakemake.input.grassland_yield_correction)
+    yield_cal = read_csv(smk.input.grassland_yield_correction)
     grass_links = n.links.static[n.links.static["carrier"] == "grassland_production"]
     if not grass_links.empty and not yield_cal.empty:
         cal_map = yield_cal.set_index("country")["yield_correction"]
@@ -937,7 +938,7 @@ def _apply_forage_calibration(
         )
 
     # 2. Fodder-to-forage conversion correction
-    fodder_cal = read_csv(snakemake.input.fodder_conversion_correction)
+    fodder_cal = read_csv(smk.input.fodder_conversion_correction)
     fc_links = n.links.static[
         (n.links.static["carrier"] == "feed_conversion")
         & (n.links.static["feed_category"] == "ruminant_forage")
@@ -955,7 +956,7 @@ def _apply_forage_calibration(
         )
 
     # 3. Exogenous forage generators for deficit countries
-    exo_cal = read_csv(snakemake.input.exogenous_forage)
+    exo_cal = read_csv(smk.input.exogenous_forage)
     exog = exo_cal[exo_cal["exogenous_forage_mt_dm"] > 0].copy()
     if not exog.empty:
         exog_buses = "feed:ruminant_forage:" + exog["country"]
@@ -997,20 +998,32 @@ def _apply_forage_calibration(
             )
 
 
-def _run_solve() -> None:
-    """Main solve logic, factored out for profiling."""
+def run_solve(smk, _logger) -> pypsa.Network | None:
+    """Core solve logic returning the solved network.
+
+    Parameters
+    ----------
+    smk
+        Snakemake object providing inputs, params, config, wildcards, and log.
+    _logger
+        Logger instance (already configured by the caller).
+
+    Returns
+    -------
+    pypsa.Network or None
+        The solved network with solution assigned, or ``None`` when the
+        solve fails (time-limit, infeasible, or other solver error).
+    """
     global logger
-    logger = setup_script_logging(snakemake.log[0])
-    # Suppress the noisy PyPSA shadow-price info log.
-    logging.getLogger("pypsa.optimization.optimize").addFilter(_ShadowPriceLogFilter())
+    logger = _logger
 
     # Apply scenario config overrides based on wildcard
-    apply_scenario_config(snakemake.config, snakemake.wildcards.scenario)
+    apply_scenario_config(smk.config, smk.wildcards.scenario)
 
-    n = pypsa.Network(snakemake.input.network)
+    n = pypsa.Network(smk.input.network)
 
     # Apply sensitivity adjustments (moved from build_model to allow shared builds)
-    sensitivity_cfg = snakemake.params.sensitivity
+    sensitivity_cfg = smk.params.sensitivity
     if sensitivity_cfg:
         from workflow.scripts.solve_model.sensitivity import apply_sensitivity_factors
 
@@ -1018,31 +1031,32 @@ def _run_solve() -> None:
         apply_sensitivity_factors(n, sensitivity_cfg)
 
     # Apply grassland forage calibration if enabled for this scenario
-    if snakemake.params.forage_calibration_enabled:
+    if smk.params.forage_calibration_enabled:
         logger.info("Applying grassland forage calibration...")
         _apply_forage_calibration(
             n,
-            forage_overlap_crops=snakemake.params.forage_overlap_crops,
-            enforce_baseline_feed=snakemake.params.enforce_baseline_feed,
+            smk,
+            forage_overlap_crops=smk.params.forage_overlap_crops,
+            enforce_baseline_feed=smk.params.enforce_baseline_feed,
         )
 
     # Rescale land supply generators if scenario regional_limit differs from build
-    _apply_regional_limit_scaling(n, snakemake.config["land"]["regional_limit"])
+    _apply_regional_limit_scaling(n, smk.config["land"]["regional_limit"])
     _apply_biofuel_demand_scaling(
-        n, float(snakemake.config["biomass"]["biofuel_demand_scale"])
+        n, float(smk.config["biomass"]["biofuel_demand_scale"])
     )
 
     # Add GHG pricing to the objective if enabled
-    if snakemake.config["emissions"]["ghg_pricing_enabled"]:
-        ghg_price = float(snakemake.params.ghg_price)
+    if smk.config["emissions"]["ghg_pricing_enabled"]:
+        ghg_price = float(smk.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
 
     # Update health store marginal costs to match scenario value_per_yll.
     # The build uses the base config value; scenarios may override it.
-    _apply_health_pricing(n, float(snakemake.params.health_value_per_yll))
+    _apply_health_pricing(n, float(smk.params.health_value_per_yll))
 
-    incentives_enabled = bool(snakemake.config["food_incentives"]["enabled"])
-    piecewise_utility_cfg = snakemake.params.food_utility_piecewise
+    incentives_enabled = bool(smk.config["food_incentives"]["enabled"])
+    piecewise_utility_cfg = smk.params.food_utility_piecewise
     piecewise_utility_enabled = bool(piecewise_utility_cfg["enabled"])
 
     if incentives_enabled and piecewise_utility_enabled:
@@ -1052,7 +1066,7 @@ def _run_solve() -> None:
 
     # Add food-level linear incentives to marginal costs if enabled
     if incentives_enabled:
-        incentives_paths = list(snakemake.input.food_incentives)
+        incentives_paths = list(smk.input.food_incentives)
         add_food_incentives_to_objective(n, incentives_paths)
 
     # Create the linopy model
@@ -1061,21 +1075,20 @@ def _run_solve() -> None:
     logger.info("Linopy model created.")
 
     if piecewise_utility_enabled:
-        if bool(snakemake.params.enforce_baseline):
+        if bool(smk.params.enforce_baseline):
             raise ValueError(
                 "food_utility_piecewise cannot be combined with "
                 "validation.enforce_baseline_diet=true"
             )
         add_piecewise_food_utility(
             n,
-            snakemake.input.food_utility_piecewise,
+            smk.input.food_utility_piecewise,
             float(piecewise_utility_cfg["min_block_width_mt"]),
         )
 
-    solver_name = snakemake.params.solver
-    solver_options = dict(snakemake.params.solver_options)
-    io_api = snakemake.params.io_api
-    netcdf_config = snakemake.params.netcdf
+    solver_name = smk.params.solver
+    solver_options = dict(smk.params.solver_options)
+    io_api = smk.params.io_api
 
     # Configure Gurobi logging. Explicitly creating an Env with
     # OutputFlag=0 silences the license banner and "Set parameter"
@@ -1094,16 +1107,16 @@ def _run_solve() -> None:
 
         gurobi_env = gp.Env(params={"OutputFlag": 0})
 
-        if snakemake.log and "LogToConsole" not in solver_options:
+        if smk.log and "LogToConsole" not in solver_options:
             solver_options["LogToConsole"] = 0
-        if snakemake.log and "LogFile" not in solver_options:
-            solver_options["LogFile"] = str(snakemake.log[0])
+        if smk.log and "LogFile" not in solver_options:
+            solver_options["LogFile"] = str(smk.log[0])
 
     # Get population from network metadata
     population_map = get_country_population(n)
 
     # Load baseline diet data (used for food-level enforcement and/or ratio constraints)
-    baseline_df = pd.read_csv(snakemake.input.baseline_diet)
+    baseline_df = pd.read_csv(smk.input.baseline_diet)
     consume_links = n.links.static[n.links.static["carrier"] == "food_consumption"]
     prepared_baseline_df = _prepare_baseline_diet_for_food_constraints(
         baseline_df,
@@ -1112,19 +1125,19 @@ def _run_solve() -> None:
 
     # Food-level baseline enforcement (per-food equality constraints)
     per_country_equal: dict[str, dict[str, float]] | None = None
-    equal_source = snakemake.config["food_groups"]["equal_by_country_source"]
-    enforce_baseline = bool(snakemake.params.enforce_baseline)
+    equal_source = smk.config["food_groups"]["equal_by_country_source"]
+    enforce_baseline = bool(smk.params.enforce_baseline)
     if enforce_baseline and equal_source:
         raise ValueError(
             "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
         )
     if enforce_baseline:
-        slack_cost = float(snakemake.config["validation"]["slack_marginal_cost"])
+        slack_cost = float(smk.config["validation"]["slack_marginal_cost"])
         add_food_consumption_constraints(
             n, prepared_baseline_df, population_map, slack_cost
         )
     elif equal_source:
-        equal_df = pd.read_csv(snakemake.input.food_group_equal)
+        equal_df = pd.read_csv(smk.input.food_group_equal)
         required = {"group", "country", "consumption_g_per_day"}
         missing = required - set(equal_df.columns)
         if missing:
@@ -1157,14 +1170,14 @@ def _run_solve() -> None:
                 )
             per_country_equal[str(group)] = values
 
-    macronutrient_cfg = snakemake.params.macronutrients or {}
+    macronutrient_cfg = smk.params.macronutrients or {}
     baseline_by_nutrient: dict[str, dict[str, float]] | None = None
     needs_baseline = any(
         isinstance(bounds, dict) and bounds.get("equal_to_baseline")
         for bounds in macronutrient_cfg.values()
     )
     if needs_baseline:
-        nutrition_df = pd.read_csv(snakemake.input.nutrition)
+        nutrition_df = pd.read_csv(smk.input.nutrition)
         baseline_by_nutrient = {
             nutrient: _compute_baseline_macronutrient_by_country(
                 prepared_baseline_df, nutrition_df, nutrient
@@ -1178,32 +1191,30 @@ def _run_solve() -> None:
     )
     add_food_group_constraints(
         n,
-        snakemake.params.food_group_constraints,
+        smk.params.food_group_constraints,
         population_map,
         per_country_equal,
     )
 
     # Add residue feed limit constraints
-    max_feed_fraction = float(snakemake.config["residues"]["max_feed_fraction"])
+    max_feed_fraction = float(smk.config["residues"]["max_feed_fraction"])
     max_feed_fraction_by_country = build_residue_feed_fraction_by_country(
-        snakemake.config, snakemake.input.m49
+        smk.config, smk.input.m49
     )
     add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
     # Add production stability constraints (per-link for both crops and animals)
-    stability_cfg = snakemake.params.production_stability
+    stability_cfg = smk.params.production_stability
     if stability_cfg["enabled"]:
-        slack_marginal_cost = float(
-            snakemake.config["validation"]["slack_marginal_cost"]
-        )
+        slack_marginal_cost = float(smk.config["validation"]["slack_marginal_cost"])
         add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
 
     # Add animal growth cap constraints (independent of production stability)
-    animal_growth_cap_cfg = snakemake.params.animal_growth_cap
+    animal_growth_cap_cfg = smk.params.animal_growth_cap
     add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
 
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
-    ratio_cfg = snakemake.params.fix_within_group_ratios
+    ratio_cfg = smk.params.fix_within_group_ratios
     if ratio_cfg["enabled"] and not enforce_baseline:
         ratios_df = _build_ratios_from_baseline(prepared_baseline_df)
         add_within_group_ratio_constraints(n, ratios_df)
@@ -1213,33 +1224,33 @@ def _run_solve() -> None:
         )
 
     # Add health impacts if enabled
-    health_enabled = bool(snakemake.params.health_enabled)
-    value_per_yll = float(snakemake.params.health_value_per_yll)
+    health_enabled = bool(smk.params.health_enabled)
+    value_per_yll = float(smk.params.health_value_per_yll)
     if health_enabled and value_per_yll > 0:
         # Extract per-risk-factor RR quantiles from sensitivity config
-        sensitivity_cfg = snakemake.params.sensitivity or {}
+        sensitivity_cfg = smk.params.sensitivity or {}
         rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
 
         add_health_objective(
             n,
-            snakemake.input.health_risk_breakpoints,
-            snakemake.input.health_cluster_cause,
-            snakemake.input.health_cause_log,
-            snakemake.input.health_cluster_summary,
-            snakemake.input.health_clusters,
-            snakemake.params.health_risk_factors,
-            snakemake.params.health_risk_cause_map,
+            smk.input.health_risk_breakpoints,
+            smk.input.health_cluster_cause,
+            smk.input.health_cause_log,
+            smk.input.health_cluster_summary,
+            smk.input.health_clusters,
+            smk.params.health_risk_factors,
+            smk.params.health_risk_cause_map,
             value_per_yll,
-            snakemake.input.health_cluster_risk_baseline,
+            smk.input.health_cluster_risk_baseline,
             rr_quantiles=rr_quantiles,
-            tmrel_path=snakemake.input.health_derived_tmrel,
+            tmrel_path=smk.input.health_derived_tmrel,
         )
 
     # Export fully-constructed model to MPS for Gurobi parameter tuning
-    if snakemake.config["solving"].get("export_for_tuning"):
-        from pathlib import Path
-
-        output_path = Path(snakemake.output.network).with_suffix(".mps")
+    if smk.config["solving"].get("export_for_tuning") and hasattr(
+        smk.output, "network"
+    ):
+        output_path = Path(smk.output.network).with_suffix(".mps")
         logger.info("Exporting model to %s for tuning...", output_path)
         gp_model = n.model.to_gurobipy(env=gurobi_env)
         gp_model.update()
@@ -1253,7 +1264,7 @@ def _run_solve() -> None:
         solver_name=solver_name,
         io_api=io_api,
         env=gurobi_env,
-        calculate_fixed_duals=snakemake.params.calculate_fixed_duals,
+        calculate_fixed_duals=smk.params.calculate_fixed_duals,
         reformulate_sos="auto",
         **solver_options,
     )
@@ -1273,12 +1284,8 @@ def _run_solve() -> None:
         gc.collect()
 
     if condition == "time_limit":
-        logger.warning(
-            "Solver hit time limit — treating as failed solve. "
-            "Writing empty output file so the workflow can continue."
-        )
-        Path(snakemake.output.network).touch()
-        return
+        logger.warning("Solver hit time limit — treating as failed solve.")
+        return None
     elif status == "ok":
         aux_names = HEALTH_AUX_MAP.pop(id(n.model), set())
         variables_container = n.model.variables
@@ -1331,9 +1338,7 @@ def _run_solve() -> None:
             slack_pos_sol = n.model.variables["food_slack_pos"].solution
             slack_neg_sol = n.model.variables["food_slack_neg"].solution
             food_slack_total = float(slack_pos_sol.sum() + slack_neg_sol.sum())
-            food_slack_cost_val = float(
-                snakemake.config["validation"]["slack_marginal_cost"]
-            )
+            food_slack_cost_val = float(smk.config["validation"]["slack_marginal_cost"])
             n.meta["food_slack_cost"] = food_slack_total * food_slack_cost_val
             if food_slack_total > 1e-6:
                 logger.info(
@@ -1372,31 +1377,27 @@ def _run_solve() -> None:
 
         # Post-hoc health evaluation when value_per_yll == 0
         if health_enabled and value_per_yll == 0:
-            sensitivity_cfg = snakemake.params.sensitivity or {}
+            sensitivity_cfg = smk.params.sensitivity or {}
             rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
             evaluate_health_posthoc(
                 n,
-                risk_breakpoints_path=snakemake.input.health_risk_breakpoints,
-                cluster_cause_path=snakemake.input.health_cluster_cause,
-                cause_log_path=snakemake.input.health_cause_log,
-                clusters_path=snakemake.input.health_clusters,
-                risk_factors=snakemake.params.health_risk_factors,
-                risk_cause_map=snakemake.params.health_risk_cause_map,
+                risk_breakpoints_path=smk.input.health_risk_breakpoints,
+                cluster_cause_path=smk.input.health_cluster_cause,
+                cause_log_path=smk.input.health_cause_log,
+                clusters_path=smk.input.health_clusters,
+                risk_factors=smk.params.health_risk_factors,
+                risk_cause_map=smk.params.health_risk_cause_map,
                 rr_quantiles=rr_quantiles,
-                tmrel_path=snakemake.input.health_derived_tmrel,
+                tmrel_path=smk.input.health_derived_tmrel,
             )
 
-        # Free the linopy model before export; all values have been assigned.
+        # Free the linopy model; all values have been assigned.
         n._model = None
         gc.collect()
         with contextlib.suppress(OSError):
             ctypes.CDLL("libc.so.6").malloc_trim(0)
 
-        n.export_to_netcdf(
-            snakemake.output.network,
-            compression=netcdf_config["compression"],
-            float32=netcdf_config["float32"],
-        )
+        return n
     elif condition in {"infeasible", "infeasible_or_unbounded"}:
         logger.error("Model is infeasible or unbounded!")
         if solver_name.lower() == "gurobi":
@@ -1433,6 +1434,28 @@ def _run_solve() -> None:
             logger.error("Infeasibility diagnosis only available with Gurobi solver")
     else:
         logger.error("Optimization unsuccessful: %s", result)
+
+    return None
+
+
+def _run_solve() -> None:
+    """Solve the model and export to netcdf (Snakemake entry point)."""
+    _logger = setup_script_logging(snakemake.log[0])
+    logging.getLogger("pypsa.optimization.optimize").addFilter(_ShadowPriceLogFilter())
+
+    n = run_solve(snakemake, _logger)
+
+    if n is None:
+        # Write empty file so downstream rules see a (failed) output.
+        Path(snakemake.output.network).touch()
+        return
+
+    netcdf_config = snakemake.params.netcdf
+    n.export_to_netcdf(
+        snakemake.output.network,
+        compression=netcdf_config["compression"],
+        float32=netcdf_config["float32"],
+    )
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ solved network. Intermediate DataFrames (food_consumption, food_group_consumptio
 are passed in memory rather than written and re-read from disk.
 """
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -52,50 +53,61 @@ from workflow.scripts.analysis.extract_statistics import (
 from workflow.scripts.logging_config import setup_script_logging
 
 
-def _write_empty_outputs() -> None:
-    """Write empty Parquet files for all declared outputs."""
-    for attr in dir(snakemake.output):
+def write_empty_outputs(output) -> None:
+    """Write empty Parquet files for all declared outputs.
+
+    Parameters
+    ----------
+    output
+        Snakemake output object (or any object whose non-underscore string
+        attributes ending in ``.parquet`` should be created as empty files).
+    """
+    for attr in dir(output):
         if attr.startswith("_"):
             continue
-        path = getattr(snakemake.output, attr, None)
+        path = getattr(output, attr, None)
         if isinstance(path, str) and path.endswith(".parquet"):
             p = Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             pd.DataFrame().to_parquet(p)
 
 
-def main() -> None:
-    logger = setup_script_logging(snakemake.log[0])
+def run_analysis(
+    n: pypsa.Network,
+    *,
+    output_paths: dict[str, str],
+    food_groups_path: str,
+    m49_codes_path: str,
+    risk_breakpoints_path: str,
+    health_cluster_cause_path: str,
+    health_cause_log_path: str,
+    health_clusters_path: str,
+    population_path: str,
+    derived_tmrel_path: str,
+    ghg_price: float,
+    ch4_gwp: float,
+    n2o_gwp: float,
+    value_per_yll: float,
+    health_risk_factors: list[str],
+    logger: logging.Logger,
+) -> None:
+    """Run all analysis extractions on a solved network.
 
-    network_path = Path(snakemake.input.network)
-    if network_path.stat().st_size == 0:
-        logger.warning(
-            "Network file is empty (solve failed or timed out). "
-            "Writing empty outputs."
-        )
-        _write_empty_outputs()
-        return
-
-    try:
-        n = pypsa.Network(snakemake.input.network)
-    except (KeyError, Exception) as e:
-        logger.warning(
-            "Failed to load network (%s) — likely an unsolved model. "
-            "Writing empty outputs.",
-            e,
-        )
-        _write_empty_outputs()
-        return
-
-    if n.links.empty:
-        logger.warning(
-            "Network has no links — likely an unsolved model. Writing empty outputs."
-        )
-        _write_empty_outputs()
-        return
-
-    logger.info("Loaded network with %d links", len(n.links))
-
+    Parameters
+    ----------
+    n
+        Solved PyPSA network with solution assigned.
+    output_paths
+        Mapping of output name to file path (e.g. ``{"crop_production": "/.../crop_production.parquet"}``).
+    food_groups_path, m49_codes_path, ...
+        Paths to input data files needed by analysis.
+    ghg_price, ch4_gwp, n2o_gwp, value_per_yll
+        Scalar parameters for emissions and health valuation.
+    health_risk_factors
+        List of risk factor names for health impact computation.
+    logger
+        Logger instance.
+    """
     # --- Statistics ---
     logger.info("Extracting statistics...")
     crop_production = extract_crop_production(n)
@@ -112,7 +124,7 @@ def main() -> None:
 
     # --- LUC breakdown ---
     logger.info("Extracting LUC breakdown...")
-    m49 = pd.read_csv(snakemake.input.m49_codes, sep=";", comment="#")
+    m49 = pd.read_csv(m49_codes_path, sep=";", comment="#")
     country_to_continent = {}
     for _, row in m49.iterrows():
         iso3 = row.get("ISO-alpha3 Code")
@@ -123,8 +135,6 @@ def main() -> None:
 
     # --- Net emissions ---
     logger.info("Extracting net emissions...")
-    ch4_gwp = float(snakemake.params.ch4_gwp)
-    n2o_gwp = float(snakemake.params.n2o_gwp)
     net_emissions = extract_net_emissions(n, ch4_gwp, n2o_gwp)
 
     # --- Objective breakdown ---
@@ -133,8 +143,7 @@ def main() -> None:
 
     # --- GHG attribution ---
     logger.info("Computing GHG attribution...")
-    ghg_price = float(snakemake.params.ghg_price)
-    food_groups = pd.read_csv(snakemake.input.food_groups)
+    food_groups = pd.read_csv(food_groups_path)
     bus_intensities = compute_bus_intensities(n, ch4_gwp, n2o_gwp)
     ghg_attribution = join_intensities_to_consumption(
         food_consumption, food_groups, bus_intensities
@@ -147,16 +156,15 @@ def main() -> None:
 
     # --- Health impacts ---
     logger.info("Extracting health impacts...")
-    value_per_yll = float(snakemake.params.value_per_yll)
-    risk_factors = list(snakemake.params.health_risk_factors)
+    risk_factors = list(health_risk_factors)
     health_data = load_health_data(
         {
-            "risk_breakpoints": snakemake.input.risk_breakpoints,
-            "health_cluster_cause": snakemake.input.health_cluster_cause,
-            "health_cause_log": snakemake.input.health_cause_log,
-            "health_clusters": snakemake.input.health_clusters,
-            "population": snakemake.input.population,
-            "derived_tmrel": snakemake.input.derived_tmrel,
+            "risk_breakpoints": risk_breakpoints_path,
+            "health_cluster_cause": health_cluster_cause_path,
+            "health_cause_log": health_cause_log_path,
+            "health_clusters": health_clusters_path,
+            "population": population_path,
+            "derived_tmrel": derived_tmrel_path,
         }
     )
     health_marginals = compute_health_marginals(
@@ -172,27 +180,93 @@ def main() -> None:
     )
 
     # Write all outputs
-    output_dir = Path(snakemake.output.crop_production).parent
+    output_dir = Path(output_paths["crop_production"]).parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    crop_production.to_parquet(snakemake.output.crop_production)
-    land_use.to_parquet(snakemake.output.land_use)
-    animal_production.to_parquet(snakemake.output.animal_production)
-    food_consumption.to_parquet(snakemake.output.food_consumption)
-    food_group_consumption.to_parquet(snakemake.output.food_group_consumption)
-    net_emissions.to_parquet(snakemake.output.net_emissions)
-    objective_breakdown.to_parquet(snakemake.output.objective_breakdown)
-    ghg_attribution.to_parquet(snakemake.output.ghg_attribution)
-    ghg_attribution_totals.to_parquet(snakemake.output.ghg_attribution_totals)
-    health_marginals.to_parquet(snakemake.output.health_marginals)
-    health_totals.to_parquet(snakemake.output.health_totals)
-    health_attribution.to_parquet(snakemake.output.health_attribution)
-    feed_by_category.to_parquet(snakemake.output.feed_by_category)
-    feed_by_animal.to_parquet(snakemake.output.feed_by_animal)
-    luc_breakdown.to_parquet(snakemake.output.luc_breakdown)
-    baseline_deviation.to_parquet(snakemake.output.baseline_deviation)
+    results = {
+        "crop_production": crop_production,
+        "land_use": land_use,
+        "animal_production": animal_production,
+        "food_consumption": food_consumption,
+        "food_group_consumption": food_group_consumption,
+        "net_emissions": net_emissions,
+        "objective_breakdown": objective_breakdown,
+        "ghg_attribution": ghg_attribution,
+        "ghg_attribution_totals": ghg_attribution_totals,
+        "health_marginals": health_marginals,
+        "health_totals": health_totals,
+        "health_attribution": health_attribution,
+        "feed_by_category": feed_by_category,
+        "feed_by_animal": feed_by_animal,
+        "luc_breakdown": luc_breakdown,
+        "baseline_deviation": baseline_deviation,
+    }
+    for name, df in results.items():
+        df.to_parquet(output_paths[name])
 
     logger.info("Wrote all analysis outputs to %s", output_dir)
+
+
+def main() -> None:
+    """Snakemake entry point: load solved network and run analysis."""
+    logger = setup_script_logging(snakemake.log[0])
+
+    network_path = Path(snakemake.input.network)
+    if network_path.stat().st_size == 0:
+        logger.warning(
+            "Network file is empty (solve failed or timed out). "
+            "Writing empty outputs."
+        )
+        write_empty_outputs(snakemake.output)
+        return
+
+    try:
+        n = pypsa.Network(snakemake.input.network)
+    except (KeyError, Exception) as e:
+        logger.warning(
+            "Failed to load network (%s) — likely an unsolved model. "
+            "Writing empty outputs.",
+            e,
+        )
+        write_empty_outputs(snakemake.output)
+        return
+
+    if n.links.empty:
+        logger.warning(
+            "Network has no links — likely an unsolved model. Writing empty outputs."
+        )
+        write_empty_outputs(snakemake.output)
+        return
+
+    logger.info("Loaded network with %d links", len(n.links))
+
+    # Build output_paths dict from snakemake.output
+    output_paths = {
+        attr: getattr(snakemake.output, attr)
+        for attr in dir(snakemake.output)
+        if not attr.startswith("_")
+        and isinstance(getattr(snakemake.output, attr), str)
+        and getattr(snakemake.output, attr).endswith(".parquet")
+    }
+
+    run_analysis(
+        n,
+        output_paths=output_paths,
+        food_groups_path=snakemake.input.food_groups,
+        m49_codes_path=snakemake.input.m49_codes,
+        risk_breakpoints_path=snakemake.input.risk_breakpoints,
+        health_cluster_cause_path=snakemake.input.health_cluster_cause,
+        health_cause_log_path=snakemake.input.health_cause_log,
+        health_clusters_path=snakemake.input.health_clusters,
+        population_path=snakemake.input.population,
+        derived_tmrel_path=snakemake.input.derived_tmrel,
+        ghg_price=float(snakemake.params.ghg_price),
+        ch4_gwp=float(snakemake.params.ch4_gwp),
+        n2o_gwp=float(snakemake.params.n2o_gwp),
+        value_per_yll=float(snakemake.params.value_per_yll),
+        health_risk_factors=list(snakemake.params.health_risk_factors),
+        logger=logger,
+    )
 
 
 if __name__ == "__main__":

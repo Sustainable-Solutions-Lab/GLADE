@@ -114,18 +114,18 @@ scenarios:
           lower: 0
           upper: 1
           bounds: [0, 1]
+        value_per_yll: { lower: 0, upper: 20000 }
+        ghg_price: { lower: 0, upper: 300 }
         # Log-uniform gives denser sampling at lower values where the model
-        # response changes most rapidly. Use uniform for evenly spaced coverage:
-        #   value_per_yll: { lower: 0, upper: 20000 }
-        #   ghg_price: { lower: 0, upper: 300 }
-        value_per_yll:
-          distribution: log_uniform
-          lower: 100
-          upper: 20000
-        ghg_price:
-          distribution: log_uniform
-          lower: 1
-          upper: 300
+        # response changes most rapidly.
+        # value_per_yll:
+        #   distribution: log_uniform
+        #   lower: 100
+        #   upper: 20000
+        # ghg_price:
+        #   distribution: log_uniform
+        #   lower: 1
+        #   upper: 300
       template: &gsa_template
         sensitivity:
           crop_yields:
@@ -216,19 +216,6 @@ solving:
   io_api: "direct"
   threads: 2
   mem_mb: 9000
-  time_limit: 60
-  runtime: 30
-
-remote_solve:
-  enabled: false
-  local_scenarios: ["baseline", "baseline_l1_0p05", "baseline_l1_0p5"]
-  host: "shr"
-  workdir: "~/food-opt-scratch"
-  pixi_env: "gurobi"
-  use_slurm: true
-  slurm_account: "sjdavis"
-  slurm_partition: "owners"
-  sync_pixi_files: false
-  ssh_options: []
-  rsync_options: []
-  preflight_check: true
+  time_limit: 60  # Hard limit
+  runtime: 30     # Initial limit before retries for more favourable slurm scheduling
+  inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
