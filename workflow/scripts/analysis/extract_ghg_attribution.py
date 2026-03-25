@@ -39,6 +39,9 @@ def compute_bus_intensities(
     - M = weighted adjacency matrix (flow fractions)
     - e = direct emission intensities
 
+    Intensities can be negative for buses that carry a net sequestration
+    credit (e.g. spare-land sinks whose links remove more CO2 than they emit).
+
     Returns dict mapping bus name to intensity (MtCO2e/Mt = kgCO2e/kg).
     """
     # Get snapshot and flows
@@ -92,7 +95,11 @@ def build_ghg_links_dataframe(
     # Ensure efficiency is filled
     links["efficiency"] = links["efficiency"].fillna(1.0)
 
-    # Compute emissions per unit of input flow (summing bus2/3/4 contributions)
+    # Compute emissions per unit of input flow (summing bus2/3/4 contributions).
+    # Positive efficiency to an emission bus = emissions (e.g. CH4 from enteric
+    # fermentation); negative efficiency = sequestration (e.g. CO2 credits from
+    # spared land).  Both are included so that food intensities reflect net
+    # emissions and sequestration credits are attributed to spare-land buses.
     links["emissions_co2e"] = 0.0
 
     for bus_col, eff_col in [
@@ -103,15 +110,17 @@ def build_ghg_links_dataframe(
         if bus_col not in links.columns:
             continue
 
-        # Get the emission bus and efficiency for each link
         emission_bus = links[bus_col].fillna("")
         eff = links[eff_col].fillna(0.0) if eff_col in links.columns else 0.0
 
-        # Only positive efficiencies are emissions (negative = inputs)
-        # Map to GWP factor based on bus name
         for gas, gwp_factor in gwp.items():
-            mask = (emission_bus == gas) & (eff > 0)
+            mask = emission_bus == gas
             links.loc[mask, "emissions_co2e"] += eff[mask] * gwp_factor
+
+    # Exclude links with zero primary efficiency: they consume from bus0 but
+    # deliver nothing to bus1, so they cannot participate in the flow-weighted
+    # intensity calculation (and would cause division by zero).
+    links = links[links["efficiency"].abs() > 1e-12]
 
     return links[["link_name", "bus0", "bus1", "flow", "efficiency", "emissions_co2e"]]
 
