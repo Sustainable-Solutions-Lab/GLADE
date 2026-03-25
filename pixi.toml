@@ -57,9 +57,12 @@ p7zip = ">=16.02,<17"                # 7z archive extraction for Huang water dat
 poppler = ">=25,<26"                 # provides pdftotext for parsing FPED/NHANES tables
 xgboost = ">=3.2.0,<4"
 
+# Database driver for Snakemake persistence backend (PostgreSQL)
+psycopg2 = ">=2.9,<3"
+
 [pypi-dependencies]
 # Workflow engine
-snakemake = ">=9.13.7, <10"
+snakemake = ">=9.17, <10"
 # Custom forks of SLURM executor plugins with parallel group job dispatch
 snakemake-executor-plugin-slurm = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm.git", tag = "v2.2.0+food.opt" }
 snakemake-executor-plugin-slurm-jobstep = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git", tag = "v0.4.0+food.opt" }

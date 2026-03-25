@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+
+# Manage a user-local PostgreSQL server on Sherlock for Snakemake persistence.
+#
+# The server runs as a SLURM job on the service partition, storing data on
+# $SCRATCH. Compute nodes connect over the cluster network.
+#
+# Usage:
+#   tools/pg-server setup    # one-time: init data dir and create database
+#   tools/pg-server start    # submit server job, wait until ready
+#   tools/pg-server stop     # cancel the server job
+#   tools/pg-server status   # show whether the server is running
+#   tools/pg-server url      # print SQLAlchemy connection URL (for scripts)
+
+PG_PORT=5433
+PG_DB="smk_${USER}"
+PG_DATADIR="${SCRATCH}/pg-${USER}"
+PG_JOB_NAME="pg_${USER}"
+PG_URL_FILE="${PG_DATADIR}/url"
+PG_PARTITION="service"
+PG_TIME="2-00:00:00"
+PG_MEM="1G"
+
+usage() {
+  cat <<EOF
+Usage: tools/pg-server <command>
+
+Manage a PostgreSQL server for Snakemake persistence on Sherlock.
+
+Commands:
+  setup    One-time setup: init data directory, create database
+  start    Submit SLURM job running the server; wait until ready
+  stop     Cancel the server job
+  status   Show whether the server is running and on which node
+  url      Print the SQLAlchemy connection URL (exits non-zero if not running)
+
+Configuration:
+  Data dir:   ${PG_DATADIR}
+  Database:   ${PG_DB}
+  Port:       ${PG_PORT}
+  Partition:  ${PG_PARTITION}
+  Job name:   ${PG_JOB_NAME}
+EOF
+}
+
+log() { echo "[pg-server] $*"; }
+
+# --- helpers -----------------------------------------------------------------
+
+get_job_node() {
+  # Returns the short hostname of the node running the server job, or empty.
+  squeue --me --name="${PG_JOB_NAME}" --noheader --format="%N" 2>/dev/null | head -1
+}
+
+get_job_state() {
+  squeue --me --name="${PG_JOB_NAME}" --noheader --format="%T" 2>/dev/null | head -1
+}
+
+# --- commands ----------------------------------------------------------------
+
+cmd_setup() {
+  log "Setting up PostgreSQL data directory at ${PG_DATADIR}"
+
+  if [[ -d "${PG_DATADIR}/base" ]]; then
+    log "Data directory already initialized; skipping initdb."
+  else
+    module load system postgresql
+    mkdir -p "${PG_DATADIR}"
+    initdb -D "${PG_DATADIR}"
+
+    # Allow trusted connections from all cluster nodes (internal network).
+    cat >> "${PG_DATADIR}/pg_hba.conf" <<'PGEOF'
+
+# Sherlock cluster: trust connections from same network
+host    all     all     samenet     trust
+PGEOF
+
+    # Listen on all interfaces and use our custom port.
+    cat >> "${PG_DATADIR}/postgresql.conf" <<PGEOF
+
+# Custom settings for Snakemake persistence
+listen_addresses = '*'
+port = ${PG_PORT}
+# Unix socket in data dir (avoids /tmp collisions with other users)
+unix_socket_directories = '${PG_DATADIR}'
+PGEOF
+
+    log "Data directory initialized."
+  fi
+
+  # Create the database (requires a running server). Start a temporary one.
+  log "Starting temporary server to create database..."
+  module load system postgresql
+  pg_ctl start -D "${PG_DATADIR}" -l "${PG_DATADIR}/setup.log" -w
+  if ! psql -h "${PG_DATADIR}" -p "${PG_PORT}" -lqt | cut -d'|' -f1 | grep -qw "${PG_DB}"; then
+    createdb -h "${PG_DATADIR}" -p "${PG_PORT}" "${PG_DB}"
+    log "Database '${PG_DB}' created."
+  else
+    log "Database '${PG_DB}' already exists."
+  fi
+  pg_ctl stop -D "${PG_DATADIR}" -m fast -w
+  log "Setup complete."
+}
+
+cmd_start() {
+  local node
+  node="$(get_job_node)"
+  if [[ -n "$node" ]]; then
+    log "Server already running on ${node} (job ${PG_JOB_NAME})."
+    cmd_url
+    return
+  fi
+
+  log "Submitting PostgreSQL server job..."
+  # Remove stale URL file
+  rm -f "${PG_URL_FILE}"
+
+  sbatch --parsable \
+    --job-name="${PG_JOB_NAME}" \
+    --partition="${PG_PARTITION}" \
+    --time="${PG_TIME}" \
+    --mem="${PG_MEM}" \
+    --cpus-per-task=1 \
+    --dependency=singleton \
+    --output="${PG_DATADIR}/server_%j.log" \
+    --error="${PG_DATADIR}/server_%j.log" \
+    --wrap "$(cat <<WRAP
+module load system postgresql
+echo "Starting PostgreSQL on \$(hostname) port ${PG_PORT}"
+# Write URL file so clients can discover us
+echo "postgresql+psycopg2://${USER}@\$(hostname):${PG_PORT}/${PG_DB}" > "${PG_URL_FILE}"
+exec postgres -i -D "${PG_DATADIR}" -p ${PG_PORT} -k "${PG_DATADIR}"
+WRAP
+)"
+
+  log "Waiting for server to start..."
+  local attempts=0
+  while [[ $attempts -lt 60 ]]; do
+    sleep 2
+    if [[ -f "${PG_URL_FILE}" ]]; then
+      local state
+      state="$(get_job_state)"
+      if [[ "$state" == "RUNNING" ]]; then
+        log "Server is running."
+        cmd_url
+        return
+      fi
+    fi
+    attempts=$((attempts + 1))
+  done
+
+  log "Timed out waiting for server to start." >&2
+  log "Check logs: ${PG_DATADIR}/server_*.log" >&2
+  exit 1
+}
+
+cmd_stop() {
+  local node
+  node="$(get_job_node)"
+  if [[ -z "$node" ]]; then
+    log "No running server job found."
+    return
+  fi
+
+  log "Cancelling server job on ${node}..."
+  scancel --name="${PG_JOB_NAME}"
+  rm -f "${PG_URL_FILE}"
+  log "Server stopped."
+}
+
+cmd_status() {
+  local node state
+  node="$(get_job_node)"
+  state="$(get_job_state)"
+
+  if [[ -n "$node" ]]; then
+    echo "PostgreSQL server: RUNNING on ${node}"
+    echo "  Job name:  ${PG_JOB_NAME}"
+    echo "  Port:      ${PG_PORT}"
+    echo "  Database:  ${PG_DB}"
+    echo "  Data dir:  ${PG_DATADIR}"
+    if [[ -f "${PG_URL_FILE}" ]]; then
+      echo "  URL:       $(cat "${PG_URL_FILE}")"
+    fi
+  elif [[ -n "$state" ]]; then
+    echo "PostgreSQL server: ${state} (waiting for resources)"
+  else
+    echo "PostgreSQL server: NOT RUNNING"
+    echo "  Start with: tools/pg-server start"
+  fi
+}
+
+cmd_url() {
+  if [[ -f "${PG_URL_FILE}" ]]; then
+    local url
+    url="$(cat "${PG_URL_FILE}")"
+    # Verify the job is actually running
+    local node
+    node="$(get_job_node)"
+    if [[ -n "$node" ]]; then
+      echo "$url"
+      return
+    fi
+  fi
+
+  echo "PostgreSQL server is not running." >&2
+  echo "Start it with: tools/pg-server start" >&2
+  exit 1
+}
+
+# --- main --------------------------------------------------------------------
+
+case "${1:-}" in
+  setup)  cmd_setup ;;
+  start)  cmd_start ;;
+  stop)   cmd_stop ;;
+  status) cmd_status ;;
+  url)    cmd_url ;;
+  -h|--help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

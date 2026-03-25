@@ -137,6 +137,12 @@ if [ "$USE_SLURM" = true ]; then
     exit 1
   fi
   set -- --profile "$SLURM_PROFILE" "$@"
+  # Inject PostgreSQL persistence URL if available (avoids SQLite locking
+  # when many SLURM jobs write metadata concurrently).
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  if pg_url=$("${SCRIPT_DIR}/pg-server" url 2>/dev/null); then
+    set -- --persistence-backend-db-url "$pg_url" "$@"
+  fi
   if [ -n "$PIXI_ENV" ]; then
     exec srun --partition=service --mem=8G --time=2-00:00:00 pixi run -e "$PIXI_ENV" snakemake "$@"
   else

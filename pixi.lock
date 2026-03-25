@@ -234,6 +234,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/proj-9.7.1-he0df7b0_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/prometheus-cpp-1.3.0-ha5d0236_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/psutil-7.2.2-py313h54dd161_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.11-py313hdc942f6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-hb9d3cd8_1002.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-23.0.1-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-23.0.1-py313h98bfbea_0_cpu.conda
@@ -346,6 +347,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ce/12/ad37a1ef86006d0a0117fc06a4a00bd461c775356b534b425f00dde208ea/google_auth-2.39.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/d5/3c97526c8796d3caf5f4b3bed2b05e8a7102326f00a334e7a438237f3b22/google_auth_httplib2-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e1/67ffaa3a645b86318ce30717af7145070ebccec5eef5c623ae08b86129b8/google_reauth-0.1.1-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a3/51/1664f6b78fc6ebbd98019a1fd730e83fa78f2db7058f72b1463d3612b8db/greenlet-3.3.2.tar.gz
       - pypi: https://files.pythonhosted.org/packages/03/f4/4e3a844340830d28fc5c108f8d6160f7301988f9c9638f908e77fec3b9c1/gsutil-5.36.tar.gz
       - pypi: https://files.pythonhosted.org/packages/59/0f/29725a9caf4b2618f524e0f28e2bda91aca8f880123ec77426ede6ea1ea4/httplib2-0.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl
@@ -379,14 +381,13 @@ environments:
       - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/7b/18/22316545b712dbed0119c7d3b8683a566c7da26353e344a4188b99f12692/remotezip-0.12.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/e6/bedc75b264cbcbf6e6d0e5071d96d739f540fc09be31744a7a8824c02a8e/retry_decorator-1.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/93/0c0f002031f18b53af7a6166103c02b9c0667be528944137cc954ec921b3/rsa-4.7.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/15/ad/9724757c0f1abd6a915ef05bd99a1b22fbad579d841ac9d9112becbeca41/snakemake-9.18.1-py3-none-any.whl
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
@@ -394,8 +395,11 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/f0/df73f6abc9b5910e43612ae28c7b6f666af80c4edd46a216ef47599ab6cb/snakemake_interface_report_plugins-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0e/d0/f4e9894c8aaf37efe3bf1afe15ee3cf0546d82b2713a589e266ee47bf2ef/snakemake_interface_scheduler_plugins-2.0.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/74/20/08a4f00c32329544ff147bafa68d0bab53645dca64dae218ff861bb4187d/snakemake_interface_storage_plugins-4.3.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b6/49/1f72d8c05d8588f06a61f1af3deb125a4ff8169d2a41f1b839d62c824d1c/snakemake_interface_storage_plugins-4.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/88/cb59509e4668d8001818d7355d9995be90c321313078c912420603a7cb95/sqlalchemy-2.0.48-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/b1/e1/7c8d18e737433f3b5bbe27b56a9072a9fcb36342b48f1bef34b6da1d61f2/sqlmodel-0.0.37-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/66/70/42d8796acc57c8bcd9ae395b1a6a0bbc833f738492a8ed192a44ccd58035/throttler-1.2.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
@@ -711,6 +715,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.52-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt_toolkit-3.0.52-hd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/psutil-7.2.2-py313h54dd161_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.11-py313hdc942f6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-hb9d3cd8_1002.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ptyprocess-0.7.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pure_eval-0.2.3-pyhd8ed1ab_1.conda
@@ -863,6 +868,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ce/12/ad37a1ef86006d0a0117fc06a4a00bd461c775356b534b425f00dde208ea/google_auth-2.39.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/d5/3c97526c8796d3caf5f4b3bed2b05e8a7102326f00a334e7a438237f3b22/google_auth_httplib2-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e1/67ffaa3a645b86318ce30717af7145070ebccec5eef5c623ae08b86129b8/google_reauth-0.1.1-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a3/51/1664f6b78fc6ebbd98019a1fd730e83fa78f2db7058f72b1463d3612b8db/greenlet-3.3.2.tar.gz
       - pypi: https://files.pythonhosted.org/packages/03/f4/4e3a844340830d28fc5c108f8d6160f7301988f9c9638f908e77fec3b9c1/gsutil-5.36.tar.gz
       - pypi: https://files.pythonhosted.org/packages/59/0f/29725a9caf4b2618f524e0f28e2bda91aca8f880123ec77426ede6ea1ea4/httplib2-0.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl
@@ -900,7 +906,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/7b/18/22316545b712dbed0119c7d3b8683a566c7da26353e344a4188b99f12692/remotezip-0.12.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/e6/bedc75b264cbcbf6e6d0e5071d96d739f540fc09be31744a7a8824c02a8e/retry_decorator-1.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/93/0c0f002031f18b53af7a6166103c02b9c0667be528944137cc954ec921b3/rsa-4.7.2-py3-none-any.whl
@@ -908,7 +913,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9f/e2/e5e8b804e5f4301d17b099f90d0356a62fa9ec030b1e0f98fcdf9c92ef56/snakefmt-0.11.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/15/ad/9724757c0f1abd6a915ef05bd99a1b22fbad579d841ac9d9112becbeca41/snakemake-9.18.1-py3-none-any.whl
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
@@ -916,8 +921,11 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/f0/df73f6abc9b5910e43612ae28c7b6f666af80c4edd46a216ef47599ab6cb/snakemake_interface_report_plugins-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0e/d0/f4e9894c8aaf37efe3bf1afe15ee3cf0546d82b2713a589e266ee47bf2ef/snakemake_interface_scheduler_plugins-2.0.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/74/20/08a4f00c32329544ff147bafa68d0bab53645dca64dae218ff861bb4187d/snakemake_interface_storage_plugins-4.3.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b6/49/1f72d8c05d8588f06a61f1af3deb125a4ff8169d2a41f1b839d62c824d1c/snakemake_interface_storage_plugins-4.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/88/cb59509e4668d8001818d7355d9995be90c321313078c912420603a7cb95/sqlalchemy-2.0.48-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/b1/e1/7c8d18e737433f3b5bbe27b56a9072a9fcb36342b48f1bef34b6da1d61f2/sqlmodel-0.0.37-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/66/70/42d8796acc57c8bcd9ae395b1a6a0bbc833f738492a8ed192a44ccd58035/throttler-1.2.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
@@ -1233,6 +1241,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.52-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt_toolkit-3.0.52-hd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/psutil-7.2.2-py313h54dd161_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.11-py313hdc942f6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-hb9d3cd8_1002.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ptyprocess-0.7.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pure_eval-0.2.3-pyhd8ed1ab_1.conda
@@ -1385,6 +1394,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ce/12/ad37a1ef86006d0a0117fc06a4a00bd461c775356b534b425f00dde208ea/google_auth-2.39.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/d5/3c97526c8796d3caf5f4b3bed2b05e8a7102326f00a334e7a438237f3b22/google_auth_httplib2-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e1/67ffaa3a645b86318ce30717af7145070ebccec5eef5c623ae08b86129b8/google_reauth-0.1.1-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a3/51/1664f6b78fc6ebbd98019a1fd730e83fa78f2db7058f72b1463d3612b8db/greenlet-3.3.2.tar.gz
       - pypi: https://files.pythonhosted.org/packages/03/f4/4e3a844340830d28fc5c108f8d6160f7301988f9c9638f908e77fec3b9c1/gsutil-5.36.tar.gz
       - pypi: https://files.pythonhosted.org/packages/10/b2/b829bf5ad5f0f241bbdcbeca2fccc0655452ed7c7e55787f446d6e773142/gurobipy-13.0.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/59/0f/29725a9caf4b2618f524e0f28e2bda91aca8f880123ec77426ede6ea1ea4/httplib2-0.20.4-py3-none-any.whl
@@ -1423,7 +1433,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/7b/18/22316545b712dbed0119c7d3b8683a566c7da26353e344a4188b99f12692/remotezip-0.12.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/e6/bedc75b264cbcbf6e6d0e5071d96d739f540fc09be31744a7a8824c02a8e/retry_decorator-1.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/93/0c0f002031f18b53af7a6166103c02b9c0667be528944137cc954ec921b3/rsa-4.7.2-py3-none-any.whl
@@ -1431,7 +1440,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9f/e2/e5e8b804e5f4301d17b099f90d0356a62fa9ec030b1e0f98fcdf9c92ef56/snakefmt-0.11.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/15/ad/9724757c0f1abd6a915ef05bd99a1b22fbad579d841ac9d9112becbeca41/snakemake-9.18.1-py3-none-any.whl
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
@@ -1439,8 +1448,11 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/f0/df73f6abc9b5910e43612ae28c7b6f666af80c4edd46a216ef47599ab6cb/snakemake_interface_report_plugins-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0e/d0/f4e9894c8aaf37efe3bf1afe15ee3cf0546d82b2713a589e266ee47bf2ef/snakemake_interface_scheduler_plugins-2.0.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/74/20/08a4f00c32329544ff147bafa68d0bab53645dca64dae218ff861bb4187d/snakemake_interface_storage_plugins-4.3.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b6/49/1f72d8c05d8588f06a61f1af3deb125a4ff8169d2a41f1b839d62c824d1c/snakemake_interface_storage_plugins-4.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/88/cb59509e4668d8001818d7355d9995be90c321313078c912420603a7cb95/sqlalchemy-2.0.48-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/b1/e1/7c8d18e737433f3b5bbe27b56a9072a9fcb36342b48f1bef34b6da1d61f2/sqlmodel-0.0.37-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/66/70/42d8796acc57c8bcd9ae395b1a6a0bbc833f738492a8ed192a44ccd58035/throttler-1.2.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
@@ -1688,6 +1700,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/proj-9.7.1-he0df7b0_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/prometheus-cpp-1.3.0-ha5d0236_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/psutil-7.2.2-py313h54dd161_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.11-py313hdc942f6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-hb9d3cd8_1002.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-23.0.1-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-23.0.1-py313h98bfbea_0_cpu.conda
@@ -1800,6 +1813,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ce/12/ad37a1ef86006d0a0117fc06a4a00bd461c775356b534b425f00dde208ea/google_auth-2.39.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/d5/3c97526c8796d3caf5f4b3bed2b05e8a7102326f00a334e7a438237f3b22/google_auth_httplib2-0.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/69/e1/67ffaa3a645b86318ce30717af7145070ebccec5eef5c623ae08b86129b8/google_reauth-0.1.1-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a3/51/1664f6b78fc6ebbd98019a1fd730e83fa78f2db7058f72b1463d3612b8db/greenlet-3.3.2.tar.gz
       - pypi: https://files.pythonhosted.org/packages/03/f4/4e3a844340830d28fc5c108f8d6160f7301988f9c9638f908e77fec3b9c1/gsutil-5.36.tar.gz
       - pypi: https://files.pythonhosted.org/packages/10/b2/b829bf5ad5f0f241bbdcbeca2fccc0655452ed7c7e55787f446d6e773142/gurobipy-13.0.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/59/0f/29725a9caf4b2618f524e0f28e2bda91aca8f880123ec77426ede6ea1ea4/httplib2-0.20.4-py3-none-any.whl
@@ -1834,14 +1848,13 @@ environments:
       - pypi: git+https://github.com/koen-vg/PyPSA.git?tag=v1.0.7.3%2Bfood.opt#954a85109e1c7f8549e337a4210897899110dd09
       - pypi: https://files.pythonhosted.org/packages/29/b5/c1209e6cb77647bc2c9a6a1a953355720f34f3b006b725e303c70f3c0786/pyu2f-0.1.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/7b/18/22316545b712dbed0119c7d3b8683a566c7da26353e344a4188b99f12692/remotezip-0.12.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/e6/bedc75b264cbcbf6e6d0e5071d96d739f540fc09be31744a7a8824c02a8e/retry_decorator-1.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e9/93/0c0f002031f18b53af7a6166103c02b9c0667be528944137cc954ec921b3/rsa-4.7.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5e/ea/dcdecd68acebb49d3fd560473a43499b1635076f7f1ae8641c060fe7ce74/smart_open-7.5.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/15/ad/9724757c0f1abd6a915ef05bd99a1b22fbad579d841ac9d9112becbeca41/snakemake-9.18.1-py3-none-any.whl
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git?tag=v0.4.0%2Bfood.opt#340843a31c52c435d840ae2c680c1f6af74a706e
       - pypi: git+https://github.com/koen-vg/snakemake-executor-plugin-slurm.git?tag=v2.2.0%2Bfood.opt#cb388dd08e7d05307e54b85151188ff99c3bb85f
       - pypi: https://files.pythonhosted.org/packages/28/90/a4a3652e832667917383f8d34112bdb37b78a6d14efc049e22a2c8192524/snakemake_interface_common-1.23.0-py3-none-any.whl
@@ -1849,8 +1862,11 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/c3/1f/f0848d750e7ca675e2cc0ea5e14135f432db498e8ad8cf746a19108e9d55/snakemake_interface_logger_plugins-2.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f0/f0/df73f6abc9b5910e43612ae28c7b6f666af80c4edd46a216ef47599ab6cb/snakemake_interface_report_plugins-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0e/d0/f4e9894c8aaf37efe3bf1afe15ee3cf0546d82b2713a589e266ee47bf2ef/snakemake_interface_scheduler_plugins-2.0.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/74/20/08a4f00c32329544ff147bafa68d0bab53645dca64dae218ff861bb4187d/snakemake_interface_storage_plugins-4.3.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b6/49/1f72d8c05d8588f06a61f1af3deb125a4ff8169d2a41f1b839d62c824d1c/snakemake_interface_storage_plugins-4.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fe/88/cb59509e4668d8001818d7355d9995be90c321313078c912420603a7cb95/sqlalchemy-2.0.48-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/b1/e1/7c8d18e737433f3b5bbe27b56a9072a9fcb36342b48f1bef34b6da1d61f2/sqlmodel-0.0.37-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/66/70/42d8796acc57c8bcd9ae395b1a6a0bbc833f738492a8ed192a44ccd58035/throttler-1.2.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl
@@ -3709,6 +3725,17 @@ packages:
   purls: []
   size: 2426455
   timestamp: 1769427102743
+- pypi: https://files.pythonhosted.org/packages/a3/51/1664f6b78fc6ebbd98019a1fd730e83fa78f2db7058f72b1463d3612b8db/greenlet-3.3.2.tar.gz
+  name: greenlet
+  version: 3.3.2
+  sha256: 2eaf067fc6d886931c7962e8c6bede15d2f01965560f3359b27c80bde2d151f2
+  requires_dist:
+  - sphinx ; extra == 'docs'
+  - furo ; extra == 'docs'
+  - objgraph ; extra == 'test'
+  - psutil ; extra == 'test'
+  - setuptools ; extra == 'test'
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/03/f4/4e3a844340830d28fc5c108f8d6160f7301988f9c9638f908e77fec3b9c1/gsutil-5.36.tar.gz
   name: gsutil
   version: '5.36'
@@ -7020,6 +7047,21 @@ packages:
   - pkg:pypi/psutil?source=hash-mapping
   size: 228663
   timestamp: 1769678153829
+- conda: https://conda.anaconda.org/conda-forge/linux-64/psycopg2-2.9.11-py313hdc942f6_0.conda
+  sha256: b07fe792134520a17c53eff5bfad3dba238f8a3c6674b6b8fbb00549aa80a141
+  md5: 2fd62f406b2c131638339edb0de648a8
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - libgcc >=14
+  - libpq >=18.1,<19.0a0
+  - python >=3.13,<3.14.0a0
+  - python_abi 3.13.* *_cp313
+  license: LGPL-3.0-or-later
+  license_family: LGPL
+  purls:
+  - pkg:pypi/psycopg2?source=hash-mapping
+  size: 192012
+  timestamp: 1767372443669
 - conda: https://conda.anaconda.org/conda-forge/linux-64/pthread-stubs-0.4-hb9d3cd8_1002.conda
   sha256: 9c88f8c64590e9567c6c80823f0328e58d3b1efb0e1c539c0315ceca764e0973
   md5: b3c17d95b5a10c6e64a21fa17573e70e
@@ -7728,11 +7770,6 @@ packages:
   - pkg:pypi/requests?source=compressed-mapping
   size: 63602
   timestamp: 1766926974520
-- pypi: https://files.pythonhosted.org/packages/66/11/e295e07d4ae500144177f875a8de11daa4d86b8246ab41c76a98ce9280ca/reretry-0.11.8-py2.py3-none-any.whl
-  name: reretry
-  version: 0.11.8
-  sha256: 5ec1084cd9644271ee386d34cd5dd24bdb3e91d55961b076d1a31d585ad68a79
-  requires_python: '>=3.7'
 - pypi: https://files.pythonhosted.org/packages/6e/e6/bedc75b264cbcbf6e6d0e5071d96d739f540fc09be31744a7a8824c02a8e/retry_decorator-1.1.1.tar.gz
   name: retry-decorator
   version: 1.1.1
@@ -8021,10 +8058,10 @@ packages:
   - black>=24.3.0,<25
   - click>=8.2.0,<9
   requires_python: '>=3.11,<4'
-- pypi: https://files.pythonhosted.org/packages/2b/0c/adf4310b15ebcbbbe36d316808d48142424f904422fef1fecca3d6e76c8a/snakemake-9.16.3-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/15/ad/9724757c0f1abd6a915ef05bd99a1b22fbad579d841ac9d9112becbeca41/snakemake-9.18.1-py3-none-any.whl
   name: snakemake
-  version: 9.16.3
-  sha256: 42f9b74446794750a333fbaeb977fddf561ec7b3abd00839c44ab97c630781e3
+  version: 9.18.1
+  sha256: e4c6f4ec87d3176b3f1e4259d029dc1102c8a6bb943b25b6fac7a94aac41f0fb
   requires_dist:
   - appdirs
   - immutables
@@ -8042,11 +8079,11 @@ packages:
   - pyyaml
   - referencing
   - requests>=2.8.1,<3.0
-  - reretry
+  - tenacity>=9.1.4,<10.0
   - smart-open>=4.0,<8.0
   - snakemake-interface-executor-plugins>=9.3.2,<10.0
   - snakemake-interface-common>=1.20.1,<2.0
-  - snakemake-interface-storage-plugins>=4.3.2,<5.0
+  - snakemake-interface-storage-plugins>=4.4.1,<5.0
   - snakemake-interface-report-plugins>=1.2.0,<2.0.0
   - snakemake-interface-logger-plugins>=1.1.0,<3.0.0
   - snakemake-interface-scheduler-plugins>=2.0.0,<3.0.0
@@ -8056,6 +8093,7 @@ packages:
   - yte>=1.5.5,<2.0
   - dpath>=2.1.6,<3.0.0
   - conda-inject>=1.3.1,<2.0
+  - sqlmodel>=0.0.37,<0.0.38
   - eido ; extra == 'pep'
   - peppy ; extra == 'pep'
   - pygments ; extra == 'reports'
@@ -8120,17 +8158,17 @@ packages:
   requires_dist:
   - snakemake-interface-common>=1.20.1,<2.0
   requires_python: '>=3.11,<4.0'
-- pypi: https://files.pythonhosted.org/packages/74/20/08a4f00c32329544ff147bafa68d0bab53645dca64dae218ff861bb4187d/snakemake_interface_storage_plugins-4.3.3-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/b6/49/1f72d8c05d8588f06a61f1af3deb125a4ff8169d2a41f1b839d62c824d1c/snakemake_interface_storage_plugins-4.4.1-py3-none-any.whl
   name: snakemake-interface-storage-plugins
-  version: 4.3.3
-  sha256: 6ebaad6f6f7024cbd85c2ab3cc764db69456216212b6afb10954f1e0ed8d3bfe
+  version: 4.4.1
+  sha256: 6e075f448543cc3d0cb1ee5e6e5a83af9761e7085f3ce0922011685d098f231e
   requires_dist:
   - humanfriendly>=10.0,<11
-  - reretry>=0.11.8
   - snakemake-interface-common>=1.12.0
+  - tenacity>=9.1.4,<10.0
   - throttler>=1.2.2
   - wrapt>=1.15.0
-  requires_python: '>=3.11'
+  requires_python: '>=3.10'
 - pypi: ./tools/snakemake-logger-plugin-compact
   name: snakemake-logger-plugin-compact
   version: 0.1.0
@@ -8332,6 +8370,44 @@ packages:
   - pkg:pypi/sphinxcontrib-serializinghtml?source=hash-mapping
   size: 28669
   timestamp: 1733750596111
+- pypi: https://files.pythonhosted.org/packages/fe/88/cb59509e4668d8001818d7355d9995be90c321313078c912420603a7cb95/sqlalchemy-2.0.48-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+  name: sqlalchemy
+  version: 2.0.48
+  sha256: b19151e76620a412c2ac1c6f977ab1b9fa7ad43140178345136456d5265b32ed
+  requires_dist:
+  - importlib-metadata ; python_full_version < '3.8'
+  - greenlet>=1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+  - typing-extensions>=4.6.0
+  - greenlet>=1 ; extra == 'asyncio'
+  - mypy>=0.910 ; extra == 'mypy'
+  - pyodbc ; extra == 'mssql'
+  - pymssql ; extra == 'mssql-pymssql'
+  - pyodbc ; extra == 'mssql-pyodbc'
+  - mysqlclient>=1.4.0 ; extra == 'mysql'
+  - mysql-connector-python ; extra == 'mysql-connector'
+  - mariadb>=1.0.1,!=1.1.2,!=1.1.5,!=1.1.10 ; extra == 'mariadb-connector'
+  - cx-oracle>=8 ; extra == 'oracle'
+  - oracledb>=1.0.1 ; extra == 'oracle-oracledb'
+  - psycopg2>=2.7 ; extra == 'postgresql'
+  - pg8000>=1.29.1 ; extra == 'postgresql-pg8000'
+  - greenlet>=1 ; extra == 'postgresql-asyncpg'
+  - asyncpg ; extra == 'postgresql-asyncpg'
+  - psycopg2-binary ; extra == 'postgresql-psycopg2binary'
+  - psycopg2cffi ; extra == 'postgresql-psycopg2cffi'
+  - psycopg>=3.0.7 ; extra == 'postgresql-psycopg'
+  - psycopg[binary]>=3.0.7 ; extra == 'postgresql-psycopgbinary'
+  - pymysql ; extra == 'pymysql'
+  - greenlet>=1 ; extra == 'aiomysql'
+  - aiomysql>=0.2.0 ; extra == 'aiomysql'
+  - greenlet>=1 ; extra == 'aioodbc'
+  - aioodbc ; extra == 'aioodbc'
+  - greenlet>=1 ; extra == 'asyncmy'
+  - asyncmy>=0.2.3,!=0.2.4,!=0.2.6 ; extra == 'asyncmy'
+  - greenlet>=1 ; extra == 'aiosqlite'
+  - aiosqlite ; extra == 'aiosqlite'
+  - typing-extensions!=3.10.0.1 ; extra == 'aiosqlite'
+  - sqlcipher3-binary ; extra == 'sqlcipher'
+  requires_python: '>=3.7'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.52.0-h04a0ce9_0.conda
   sha256: c9af81e7830d9c4b67a7f48e512d060df2676b29cac59e3b31f09dbfcee29c58
   md5: 7d9d7efe9541d4bb71b5934e8ee348ea
@@ -8347,6 +8423,14 @@ packages:
   purls: []
   size: 203641
   timestamp: 1772818888368
+- pypi: https://files.pythonhosted.org/packages/b1/e1/7c8d18e737433f3b5bbe27b56a9072a9fcb36342b48f1bef34b6da1d61f2/sqlmodel-0.0.37-py3-none-any.whl
+  name: sqlmodel
+  version: 0.0.37
+  sha256: 2137a4045ef3fd66a917a7717ada959a1ceb3630d95e1f6aaab39dd2c0aef278
+  requires_dist:
+  - sqlalchemy>=2.0.14,<2.1.0
+  - pydantic>=2.11.0
+  requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.3-pyhd8ed1ab_1.conda
   sha256: 570da295d421661af487f1595045760526964f41471021056e993e73089e9c41
   md5: b1b505328da7a6b246787df4b5a49fbc
@@ -8367,6 +8451,17 @@ packages:
   sha256: f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3
   requires_dist:
   - wcwidth ; extra == 'widechars'
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl
+  name: tenacity
+  version: 9.1.4
+  sha256: 6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55
+  requires_dist:
+  - reno ; extra == 'doc'
+  - sphinx ; extra == 'doc'
+  - pytest ; extra == 'test'
+  - tornado>=4.5 ; extra == 'test'
+  - typeguard ; extra == 'test'
   requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/noarch/terminado-0.18.1-pyhc90fa1f_1.conda
   sha256: 6b6727a13d1ca6a23de5e6686500d0669081a117736a87c8abf444d60c1e40eb
