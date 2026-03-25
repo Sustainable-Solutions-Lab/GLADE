@@ -69,7 +69,7 @@ scenarios:
     # --- Default L1 (0.22) ---
     - name: gsa_{sample_id}
       mode: sensitivity
-      samples: 4096
+      samples: 8192
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: &gsa_parameter_groups
         "Emission factors": [ch4_factor, n2o_factor, luc_factor]
@@ -114,18 +114,14 @@ scenarios:
           lower: 0
           upper: 1
           bounds: [0, 1]
-        value_per_yll: { lower: 0, upper: 20000 }
-        ghg_price: { lower: 0, upper: 300 }
-        # Log-uniform gives denser sampling at lower values where the model
-        # response changes most rapidly.
-        # value_per_yll:
-        #   distribution: log_uniform
-        #   lower: 100
-        #   upper: 20000
-        # ghg_price:
-        #   distribution: log_uniform
-        #   lower: 1
-        #   upper: 300
+        value_per_yll:
+          distribution: log_uniform
+          lower: 50
+          upper: 100000
+        ghg_price:
+          distribution: log_uniform
+          lower: 5
+          upper: 500
       template: &gsa_template
         sensitivity:
           crop_yields:
@@ -149,7 +145,7 @@ scenarios:
     # --- L1 = 0.05 ---
     - name: gsa-l1-0p05_{sample_id}
       mode: sensitivity
-      samples: 4096
+      samples: 8192
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: *gsa_parameter_groups
       parameters: *gsa_parameters
@@ -164,7 +160,7 @@ scenarios:
     # --- L1 = 0.5 ---
     - name: gsa-l1-0p5_{sample_id}
       mode: sensitivity
-      samples: 4096
+      samples: 8192
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: *gsa_parameter_groups
       parameters: *gsa_parameters
@@ -184,7 +180,7 @@ sensitivity_analysis:
     pce:
       grid_resolution: 50
       method_options:
-        n_mc_conditional: 4096
+        n_mc_conditional: 8192
         cross_truncation: 0.8
     rf:
       grid_resolution: 50
