@@ -348,6 +348,7 @@ def run(snakemake) -> None:
     scenario_names = list(snakemake.params.scenario_names)
     generator_spec = dict(snakemake.params.generator_spec)
     slice_grid = dict(snakemake.params.slice_grid)
+    holdout_fraction = float(snakemake.params.holdout_fraction)
 
     logger.info("Using analysis directory: %s", analysis_dir)
 
@@ -418,6 +419,24 @@ def run(snakemake) -> None:
     if not available_columns:
         raise ValueError("No valid output columns found for sensitivity analysis")
 
+    # Train/test split for holdout validation.
+    # Use the tail of the Sobol sequence as holdout: the first N points of a
+    # Sobol sequence have better space-filling properties, so training on
+    # the front preserves the best-quality design for fitting.
+    n_total = len(x_design)
+    n_holdout = int(n_total * holdout_fraction)
+    n_train = n_total - n_holdout
+    x_train = x_design[:n_train]
+    x_test = x_design[n_train:] if n_holdout > 0 else None
+    outputs_train = outputs_df.iloc[:n_train]
+    outputs_test = outputs_df.iloc[n_train:] if n_holdout > 0 else None
+    logger.info(
+        "Train/test split: %d train, %d holdout (%.0f%%)",
+        n_train,
+        n_holdout,
+        holdout_fraction * 100,
+    )
+
     logger.info("Analyzing outputs: %s", available_columns)
 
     # Precompute univariate basis evaluations for all slice grid values.
@@ -444,24 +463,46 @@ def run(snakemake) -> None:
     conditional_joint_rows = []
 
     for col in available_columns:
-        y = outputs_df[col].values
+        y_train = outputs_train[col].values
 
-        # Fit PCE
-        pce_result = fit_pce(x_design, y, joint_dist, max_degree, cross_truncation)
+        # Fit PCE on training data only
+        pce_result = fit_pce(x_train, y_train, joint_dist, max_degree, cross_truncation)
+
+        # Compute holdout error if we have a test set
+        if x_test is not None and outputs_test is not None:
+            y_test = outputs_test[col].values
+            basis_test = np.array(
+                [poly(*x_test.T) for poly in pce_result["expansion"]]
+            ).T
+            y_pred_test = basis_test @ pce_result["coefficients"]
+            ss_res_test = np.sum((y_test - y_pred_test) ** 2)
+            ss_tot_test = np.sum((y_test - np.mean(y_test)) ** 2)
+            r2_test = 1 - ss_res_test / ss_tot_test if ss_tot_test > 0 else 0.0
+            holdout_error = 1 - r2_test
+        else:
+            r2_test = None
+            holdout_error = None
+
+        # Use holdout error as the primary validation metric when available,
+        # otherwise fall back to LOO
+        validation_error = (
+            holdout_error if holdout_error is not None else pce_result["loo_error"]
+        )
 
         logger.info(
-            "PCE for %s: R^2=%.4f, LOO=%.4f, %d/%d active terms",
+            "PCE for %s: R²_train=%.4f, LOO=%.4f, R²_test=%s, %d/%d active terms",
             col,
             pce_result["r2"],
             pce_result["loo_error"],
+            f"{r2_test:.4f}" if r2_test is not None else "N/A",
             pce_result["n_active_terms"],
             pce_result["n_terms"],
         )
 
-        if pce_result["loo_error"] > 0.1:
+        if validation_error > 0.1:
             logger.warning(
-                "High LOO error (%.3f) for output '%s' -- PCE may be inaccurate",
-                pce_result["loo_error"],
+                "High validation error (%.3f) for output '%s' -- PCE may be inaccurate",
+                validation_error,
                 col,
             )
 
@@ -469,17 +510,20 @@ def run(snakemake) -> None:
         validation_rows.append(
             {
                 "output": col,
-                "validation_error": pce_result["loo_error"],
-                "r2": pce_result["r2"],
+                "validation_error": validation_error,
+                "loo_error": pce_result["loo_error"],
+                "r2_train": pce_result["r2"],
+                "r2_test": r2_test,
                 "n_terms": pce_result["n_terms"],
                 "n_active_terms": pce_result["n_active_terms"],
-                "n_samples": len(y),
+                "n_train": n_train,
+                "n_test": n_holdout,
                 "method": "pce",
                 "max_degree": max_degree,
             }
         )
 
-        # Global Sobol indices
+        # Global Sobol indices (from training-data fit)
         s1, s_total = sobol_from_pce(
             pce_result["coefficients"],
             pce_result["multi_indices"],

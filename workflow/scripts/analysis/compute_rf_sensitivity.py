@@ -369,6 +369,7 @@ def run(snakemake) -> None:
     scenario_names = list(snakemake.params.scenario_names)
     generator_spec = dict(snakemake.params.generator_spec)
     slice_grid = dict(snakemake.params.slice_grid)
+    holdout_fraction = float(snakemake.params.holdout_fraction)
 
     logger.info("Using analysis directory: %s", analysis_dir)
 
@@ -435,6 +436,21 @@ def run(snakemake) -> None:
     if not available_columns:
         raise ValueError("No valid output columns found for sensitivity analysis")
 
+    # Train/test split for holdout validation.
+    n_total = len(x_design)
+    n_holdout = int(n_total * holdout_fraction)
+    n_train = n_total - n_holdout
+    x_train = x_design[:n_train]
+    x_test = x_design[n_train:] if n_holdout > 0 else None
+    outputs_train = outputs_df.iloc[:n_train]
+    outputs_test = outputs_df.iloc[n_train:] if n_holdout > 0 else None
+    logger.info(
+        "Train/test split: %d train, %d holdout (%.0f%%)",
+        n_train,
+        n_holdout,
+        holdout_fraction * 100,
+    )
+
     logger.info("Analyzing outputs: %s", available_columns)
 
     # Fit RF and compute indices for each output
@@ -444,23 +460,40 @@ def run(snakemake) -> None:
     conditional_joint_rows = []
 
     for col in available_columns:
-        y = outputs_df[col].values
+        y_train = outputs_train[col].values
 
-        # Fit Random Forest
-        rf_result = fit_random_forest(x_design, y, n_estimators=n_estimators)
+        # Fit Random Forest on training data only
+        rf_result = fit_random_forest(x_train, y_train, n_estimators=n_estimators)
+
+        # Compute holdout error if we have a test set
+        if x_test is not None and outputs_test is not None:
+            y_test = outputs_test[col].values
+            y_pred_test = rf_result["model"].predict(x_test)
+            ss_res_test = np.sum((y_test - y_pred_test) ** 2)
+            ss_tot_test = np.sum((y_test - np.mean(y_test)) ** 2)
+            r2_test = 1 - ss_res_test / ss_tot_test if ss_tot_test > 0 else 0.0
+            holdout_error = 1 - r2_test
+        else:
+            r2_test = None
+            holdout_error = None
+
+        # Use holdout error as the primary validation metric when available,
+        # otherwise fall back to OOB
+        oob_error = rf_result["validation_error"]
+        validation_error = holdout_error if holdout_error is not None else oob_error
 
         logger.info(
-            "RF for %s: OOB R²=%.4f, validation_error=%.4f, %d trees",
+            "RF for %s: OOB R²=%.4f, R²_test=%s, %d trees",
             col,
             rf_result["r2"],
-            rf_result["validation_error"],
+            f"{r2_test:.4f}" if r2_test is not None else "N/A",
             rf_result["n_estimators"],
         )
 
-        if rf_result["validation_error"] > 0.1:
+        if validation_error > 0.1:
             logger.warning(
                 "High validation error (%.3f) for output '%s' -- RF may be inaccurate",
-                rf_result["validation_error"],
+                validation_error,
                 col,
             )
 
@@ -468,9 +501,12 @@ def run(snakemake) -> None:
         validation_rows.append(
             {
                 "output": col,
-                "validation_error": rf_result["validation_error"],
-                "r2": rf_result["r2"],
-                "n_samples": rf_result["n_samples"],
+                "validation_error": validation_error,
+                "oob_error": oob_error,
+                "r2_train": rf_result["r2"],
+                "r2_test": r2_test,
+                "n_train": n_train,
+                "n_test": n_holdout,
                 "method": "rf",
                 "n_estimators": rf_result["n_estimators"],
             }

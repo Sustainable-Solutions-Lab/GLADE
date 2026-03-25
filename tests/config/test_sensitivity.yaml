@@ -36,6 +36,7 @@ scenarios:
             luc: "{luc_factor}"
 
 sensitivity_analysis:
+  holdout_fraction: 0.15
   methods:
     pce:
       grid_resolution: 10

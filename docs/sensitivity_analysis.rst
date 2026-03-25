@@ -28,9 +28,15 @@ A parameter with :math:`S_1 \approx S_T` influences the output mainly through
 its direct effect. A parameter with :math:`S_T \gg S_1` is involved in
 significant interactions with other parameters.
 
-This implementation uses **Polynomial Chaos Expansion (PCE)** as a surrogate
-model to compute Sobol indices analytically, avoiding the thousands of
-additional model evaluations that traditional Monte Carlo methods require.
+This implementation supports two surrogate modelling approaches:
+
+- **Polynomial Chaos Expansion (PCE)**: Computes Sobol indices analytically
+  from a polynomial approximation to the model response.
+- **Random Forest (RF)**: Computes Sobol indices via Monte Carlo permutation
+  of a fitted random forest ensemble.
+
+Both methods are fitted to the same set of solved model scenarios, enabling
+direct comparison of surrogate quality and derived sensitivity indices.
 
 
 Methodology
@@ -76,7 +82,7 @@ The polynomial basis is generated using `chaospy
 <https://chaospy.readthedocs.io/>`_. A **cross-truncation** parameter
 :math:`q \in (0, 1]` controls the multi-index set: lower values favour
 lower-order interaction terms, keeping the basis compact. The default is
-:math:`q = 0.75`.
+:math:`q = 0.5`.
 
 
 Sparse Fitting via LARS
@@ -96,13 +102,40 @@ The fitting uses `sklearn.linear_model.LarsCV
 <https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LarsCV.html>`_
 with 5-fold cross-validation.
 
-**Validation**: The quality of the PCE surrogate is assessed by two metrics:
+**Validation**: Surrogate quality is assessed through multiple metrics:
 
-- **Leave-one-out (LOO) error**: A relative error measure computed via the hat
-  matrix, approximating the prediction error on held-out samples without
-  refitting. Values below 0.1 indicate a reliable surrogate.
-- **R-squared** (:math:`R^2`): The coefficient of determination on training
-  data. Values close to 1.0 confirm good fit.
+- **Holdout error**: When ``holdout_fraction > 0`` (recommended), the tail of
+  the Sobol sequence is reserved as held-out test data. The surrogate is fitted
+  on the remaining training samples and evaluated on the holdout set. This gives
+  an honest, out-of-sample error estimate. Using the tail preserves the
+  space-filling quality of the training design (Sobol sequences front-load
+  coverage).
+- **Leave-one-out error** (PCE only): A relative error computed via the hat
+  matrix without refitting. Reported alongside holdout error for comparison.
+- **Out-of-bag R²** (RF only): The OOB score from bootstrap aggregation.
+  Reported alongside holdout error for comparison.
+- **R-squared** (:math:`R^2`): Coefficient of determination on training data.
+
+The primary ``validation_error`` field in output files is the holdout error when
+available, falling back to LOO (PCE) or OOB (RF) error otherwise.
+
+Random Forest
+~~~~~~~~~~~~~
+
+As an alternative to PCE, a **Random Forest** ensemble can be fitted to the
+same model samples. Sobol indices are computed via Monte Carlo integration:
+for each parameter, the marginal effect is estimated by permuting that
+parameter's values while holding others fixed, then comparing the variance
+reduction.
+
+Random Forests are non-parametric and can capture non-smooth or discontinuous
+model responses that polynomials may miss. However, they are more expensive to
+evaluate conditionally (requiring Monte Carlo samples at each grid point) and
+produce noisier sensitivity estimates.
+
+The implementation uses `sklearn.ensemble.RandomForestRegressor
+<https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html>`_
+with OOB scoring enabled.
 
 
 Sobol Indices from PCE Coefficients
@@ -149,9 +182,10 @@ policy setting, how sensitive are outcomes to the remaining uncertain
 parameters?*
 
 Designated **slice parameters** are fixed at specific conditioning values.
-The conditioning is performed analytically: for each slice parameter :math:`j`
-with conditioning value :math:`x_j^*`, the univariate basis is evaluated at
-that value, and the resulting factors are absorbed into the PCE coefficients:
+For **PCE**, the conditioning is performed analytically: for each slice
+parameter :math:`j` with conditioning value :math:`x_j^*`, the univariate
+basis is evaluated at that value, and the resulting factors are absorbed into
+the PCE coefficients:
 
 .. math::
 
@@ -163,6 +197,10 @@ Sobol indices are then computed from the transformed coefficients
 non-slice parameter is active. The result is a set of Sobol indices for the
 remaining parameters, conditional on the policy choices — showing how
 sensitivity patterns shift as policy values change.
+
+For **RF**, conditioning is done via Monte Carlo: slice parameters are held
+fixed while remaining parameters are sampled from their marginal distributions,
+and Sobol indices are computed from the resulting predictions.
 
 
 Experimental Design
@@ -232,76 +270,59 @@ distributions rather than fixed value lists.
 
 .. code-block:: yaml
 
-   # config/pce_sensitivity_scenarios.yaml
+   # config/gsa.yaml
+   name: "gsa"
 
-   # Reference scenario (no sensitivity adjustments)
-   default: {}
+   scenarios:
+     default: {}
 
-   _generators:
-     - name: pce_{sample_id}
-       mode: sensitivity
-       samples: 1024
-       slice_parameters: [value_per_yll, ghg_price]
-       parameters:
-         yield_factor:
-           lower: 0.8
-           upper: 1.2
-           bounds: [0, null]
-         ch4_factor:
-           distribution: normal_ci
-           lower: 0.5
-           upper: 1.5
-           confidence: 0.9
-           bounds: [0, null]
-         n2o_factor:
-           distribution: normal_ci
-           lower: 0.3
-           upper: 1.7
-           confidence: 0.9
-           bounds: [0, null]
-         luc_factor:
-           distribution: normal_ci
-           lower: 0.3
-           upper: 1.7
-           confidence: 0.9
-           bounds: [0, null]
-         flw_factor:
-           lower: 0.7
-           upper: 1.3
-           bounds: [0, null]
-         fcr_factor:
-           lower: 0.8
-           upper: 1.2
-           bounds: [0, null]
-         rr_protective:
-           lower: 0
-           upper: 1
-         rr_harmful:
-           lower: 0
-           upper: 1
-         value_per_yll:
-           lower: 0
-           upper: 20000
-         ghg_price:
-           lower: 0
-           upper: 300
-       template:
-         sensitivity:
-           crop_yields:
-             all: "{yield_factor}"
-           emission_factors:
-             ch4: "{ch4_factor}"
-             n2o: "{n2o_factor}"
-             luc: "{luc_factor}"
-           food_loss_waste: "{flw_factor}"
-           feed_conversion: "{fcr_factor}"
-           health_relative_risk:
-             protective: "{rr_protective}"
-             harmful: "{rr_harmful}"
-         health:
-           value_per_yll: "{value_per_yll}"
-         emissions:
-           ghg_price: "{ghg_price}"
+     _generators:
+       - name: gsa_{sample_id}
+         mode: sensitivity
+         samples: 4096
+         slice_parameters: [value_per_yll, ghg_price]
+         parameters:
+           yield_factor:
+             lower: 0.8
+             upper: 1.2
+             bounds: [0, null]
+           ch4_factor:
+             distribution: normal_ci
+             lower: 0.5
+             upper: 1.5
+             confidence: 0.9
+             bounds: [0, null]
+           # ... (remaining parameters)
+         template:
+           sensitivity:
+             crop_yields:
+               all: "{yield_factor}"
+             emission_factors:
+               ch4: "{ch4_factor}"
+               # ...
+           health:
+             value_per_yll: "{value_per_yll}"
+           emissions:
+             ghg_price: "{ghg_price}"
+
+   # Surrogate fitting methods (applied independently to the same scenarios)
+   sensitivity_analysis:
+     holdout_fraction: 0.15
+     methods:
+       pce:
+         grid_resolution: 50
+         method_options:
+           n_mc_conditional: 4096
+           cross_truncation: 0.8
+       rf:
+         grid_resolution: 50
+         method_options:
+           n_estimators: 500
+
+The generator defines only the scenario sampling design (parameters,
+distributions, sample count). Surrogate method configuration lives in
+the separate ``sensitivity_analysis`` section, allowing multiple methods
+to be applied to the same solved scenarios without duplication.
 
 Health relative risk parameters use a **quantile parameterization**: each
 ``rr_<risk_factor>`` value is a quantile :math:`q \in [0, 1]` that interpolates
@@ -318,32 +339,40 @@ between the GBD confidence bounds at every dose-response breakpoint:
 This is applied per (risk factor, cause, exposure) point, so a single quantile
 parameter per risk factor produces cause-specific adjustments automatically.
 
-**Field reference**:
+**Generator field reference**:
 
 - ``name``: Scenario name pattern. Use ``{sample_id}`` as a placeholder for the
-  zero-indexed sample number (e.g., ``pce_{sample_id}`` produces ``pce_0``,
-  ``pce_1``, ..., ``pce_1023``).
+  zero-indexed sample number (e.g., ``gsa_{sample_id}`` produces ``gsa_0``,
+  ``gsa_1``, ..., ``gsa_4095``).
 - ``mode: sensitivity``: Activates space-filling Sobol sampling with
   distribution-based parameter specifications.
 - ``samples``: Number of samples to draw. Should be a power of 2.
 - ``seed`` (optional): Random seed for the scrambled Sobol sequence. Default: 42.
 - ``slice_parameters`` (optional): List of parameter names to use as
-  conditioning variables in the conditional Sobol analysis. These parameters
-  are included in the PCE fit but can be fixed at specific values analytically.
+  conditioning variables in the conditional Sobol analysis.
+- ``parameter_groups`` (optional): Mapping of group names to parameter lists,
+  used for plot organisation and colour grouping.
 - ``parameters``: Mapping of parameter names to distribution specifications (see
   :ref:`supported-distributions` above).
 - ``template``: Configuration template with ``{param_name}`` placeholders that
   are substituted with sampled values. Type is preserved when the placeholder
   is the entire value.
-- ``method_options`` (optional): Method-specific hyperparameters. For
-  ``method: pce``:
 
-  - ``max_degree`` (default: 3): Maximum polynomial degree for the PCE basis.
-  - ``cross_truncation`` (default: 0.5): Cross-truncation parameter
-    :math:`q \in (0, 1]`. Lower values favour lower-order interactions,
-    keeping the basis compact.
-  - ``n_mc_conditional`` (default: 4096): Number of Monte Carlo samples for
-    conditional Sobol index grid evaluation.
+**``sensitivity_analysis`` field reference**:
+
+- ``holdout_fraction``: Fraction of samples reserved for out-of-sample
+  validation (e.g., 0.15 for 15%). Set to 0 to disable holdout.
+- ``methods``: Mapping of method names (``pce``, ``rf``) to method-specific
+  config. Each method entry supports:
+
+  - ``grid_resolution`` (default: 100): Number of grid points for conditional
+    Sobol evaluation along each slice parameter axis.
+  - ``method_options``: Method-specific hyperparameters:
+
+    - **PCE**: ``max_degree`` (default: 3), ``cross_truncation`` (default: 0.5),
+      ``n_mc_conditional`` (default: 4096).
+    - **RF**: ``n_estimators`` (default: 500), ``n_mc_global`` (default: 16384),
+      ``n_mc_conditional`` (default: 8192).
 
 
 .. _sensitivity-parameter-ranges:
@@ -790,38 +819,45 @@ Running the Analysis
 --------------------
 
 The sensitivity analysis requires three stages: build all sampled scenarios,
-solve them, then run the PCE computation. Snakemake handles all dependencies
+solve them, then fit surrogates. Snakemake handles all dependencies
 automatically.
 
-**Run the full pipeline** (build + solve + analyze for all 1024 samples):
+**Run the full pipeline** (build + solve + analyze for all samples):
 
 .. code-block:: bash
 
-   tools/smk -j4 --configfile config/pce_sensitivity.yaml
+   tools/smk -j4 --configfile config/gsa.yaml
 
-**Run just the PCE analysis step** (after scenarios are already solved):
+**Run just the surrogate analysis step** (after scenarios are already solved):
 
 .. code-block:: bash
 
-   tools/smk -j4 --configfile config/pce_sensitivity.yaml -- \
-       results/pce_sensitivity/analysis/pce_global_indices_pce_.parquet
+   # PCE analysis for the default scenario group
+   tools/smk -j4 --configfile config/gsa.yaml -- \
+       results/gsa/analysis/sobol_global_indices_gsa_pce.parquet
 
-The ``{prefix}`` wildcard in the output path matches the scenario name prefix
-(here ``pce_``) so the rule knows which scenarios to aggregate.
+   # RF analysis for the same scenarios
+   tools/smk -j4 --configfile config/gsa.yaml -- \
+       results/gsa/analysis/sobol_global_indices_gsa_rf.parquet
+
+Output paths use two wildcards: ``{group}`` identifies the scenario sampling
+group (e.g., ``gsa``, ``gsa-l1-0p05``) and ``{method}`` selects the surrogate
+(``pce`` or ``rf``). Both methods consume the same solved scenarios.
 
 .. note::
 
    Each sample requires a full model build and solve. Start with a small sample
-   count (32--64) for testing, then increase (512--1024) for production. A
+   count (32--64) for testing, then increase (1024--4096) for production. A
    coarser spatial resolution also reduces per-sample cost.
 
 
 Output Files
 ------------
 
-Three Parquet files are written to ``results/{name}/analysis/``:
+Four Parquet files are written to ``results/{name}/analysis/`` per
+(group, method) combination:
 
-**pce_global_indices_{prefix}.parquet** — Global Sobol indices
+**sobol_global_indices_{group}_{method}.parquet** — Global Sobol indices
 
 .. csv-table::
    :header: Column, Type, Description
@@ -831,10 +867,9 @@ Three Parquet files are written to ``results/{name}/analysis/``:
    ``S1``, float, "First-order Sobol index"
    ``ST``, float, "Total-order Sobol index"
 
-One row per (output, parameter) pair. For example, with 4 outputs and 7
-parameters, this file has 28 rows.
+One row per (output, parameter) pair.
 
-**pce_conditional_indices_{prefix}.parquet** — Conditional Sobol indices
+**sobol_conditional_indices_{group}_{method}.parquet** — Conditional Sobol indices (1D slices)
 
 .. csv-table::
    :header: Column, Type, Description
@@ -846,43 +881,45 @@ parameters, this file has 28 rows.
    ``conditional_variance``, float, "Output variance when slice parameters are fixed"
    *slice columns*, float, "One column per slice parameter with the conditioning value"
 
-Slice parameter columns are named after the parameters themselves (e.g.,
-``value_per_yll``, ``ghg_price``). One row per (output, parameter,
-conditioning-value combination).
+One row per (output, parameter, conditioning-value combination).
 
-**pce_validation_{prefix}.parquet** — PCE surrogate quality metrics
+**sobol_conditional_joint_indices_{group}_{method}.parquet** — Joint conditional Sobol indices (2D grid)
+
+Same schema as above, but conditioned on *all* slice parameters simultaneously
+over a 2D grid. Used by the dominant factor phase diagram plot.
+
+**sobol_validation_{group}_{method}.parquet** — Surrogate quality metrics
 
 .. csv-table::
    :header: Column, Type, Description
 
    ``output``, string, "Output metric"
-   ``loo_error``, float, "Relative leave-one-out error (lower is better)"
-   ``r2``, float, "Coefficient of determination"
-   ``n_terms``, int, "Total candidate basis terms"
-   ``n_active_terms``, int, "Non-zero PCE coefficients after LARS selection"
-   ``n_samples``, int, "Number of model samples"
-   ``max_degree``, int, "Maximum polynomial degree (default: 3)"
+   ``validation_error``, float, "Primary error metric (holdout error when available)"
+   ``r2_train``, float, "R² on training data"
+   ``r2_test``, float, "R² on holdout data (null if holdout disabled)"
+   ``n_train``, int, "Number of training samples"
+   ``n_test``, int, "Number of holdout samples"
+   ``method``, string, "Surrogate method (``pce`` or ``rf``)"
 
-One row per output metric.
+Additional method-specific columns: ``loo_error``, ``n_terms``,
+``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators`` (RF).
 
-**Conditional sensitivity area plots**
+**Plots**
 
-You can visualize how conditional first-order Sobol shares change with policy
-slice parameters using:
+Three types of sensitivity plots are generated per (group, method):
 
 .. code-block:: bash
 
-   tools/smk -j4 --configfile config/pce_sensitivity.yaml -- \
-       results/pce_sensitivity/plots/pce_conditional_s1_vs_value_per_yll_pce_.pdf
+   tools/smk -j4 --configfile config/gsa.yaml -- \
+       results/gsa/plots/sobol_conditional_s1_vs_ghg_price_gsa_pce.pdf
 
-This rule also generates:
-
-- ``results/{name}/plots/pce_conditional_s1_vs_ghg_price_{prefix}.pdf``
-- ``results/{name}/plots/pce_conditional_s1_vs_value_per_yll_{prefix}.pdf``
-
-Each figure contains one panel per model output (for example ``total_cost``,
-``ghg_emissions``, ``land_use``, ``yll``) with stacked areas for non-slice
-parameters showing conditional first-order Sobol shares.
+- **Stacked area charts** (``sobol_conditional_s1_vs_{slice}_{group}_{method}.pdf``):
+  Conditional first-order Sobol shares vs each slice parameter. One panel per
+  model output.
+- **Dominant factor phase diagrams** (``sobol_conditional_dominant_factor_{group}_{method}.pdf``):
+  2D policy space coloured by which parameter has the highest conditional S1.
+- **Contour surfaces** (``sobol_conditional_s1_surface_{parameter}_{group}_{method}.pdf``):
+  Per-parameter conditional S1 surface over the 2D policy space.
 
 
 Interpreting Results
@@ -903,10 +940,12 @@ crop yield uncertainty alone.
 
 **Validation quality**:
 
-- LOO error < 0.1 indicates a reliable PCE surrogate.
-- LOO error > 0.1 suggests the polynomial approximation is insufficient.
-  Consider increasing the number of samples, raising the polynomial degree,
-  or checking whether the model response is highly non-smooth.
+- Validation error < 0.1 indicates a reliable surrogate.
+- Validation error > 0.1 suggests the surrogate approximation is insufficient.
+  For PCE, consider increasing samples or polynomial degree. For RF, consider
+  increasing the number of estimators. Comparing PCE and RF errors can reveal
+  whether the issue is model non-smoothness (where RF may outperform PCE) or
+  insufficient data.
 
 **Conditional indices**: These show how sensitivity patterns shift with policy
 choices. For instance, at low GHG prices, yield uncertainty may dominate

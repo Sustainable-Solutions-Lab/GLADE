@@ -175,6 +175,7 @@ scenarios:
 # Surrogate-based sensitivity analysis methods.
 # Each method is applied independently to the same solved GSA scenarios.
 sensitivity_analysis:
+  holdout_fraction: 0.15
   methods:
     pce:
       grid_resolution: 50

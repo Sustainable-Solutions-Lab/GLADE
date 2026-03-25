@@ -235,14 +235,14 @@ When a placeholder is the entire value (e.g., ``"{param}"``), the numeric type i
 Sensitivity analysis mode
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In addition to ``zip`` and ``grid`` modes, generators support ``mode: sensitivity`` for PCE-based global sensitivity analysis. In this mode, parameter values are drawn from a **space-filling Sobol sequence** transformed to specified probability distributions, rather than from fixed value lists.
+In addition to ``zip`` and ``grid`` modes, generators support ``mode: sensitivity`` for surrogate-based global sensitivity analysis. In this mode, parameter values are drawn from a **space-filling Sobol sequence** transformed to specified probability distributions, rather than from fixed value lists.
 
 Each parameter specifies a distribution instead of a value range:
 
 .. code-block:: yaml
 
    _generators:
-     - name: pce_{sample_id}
+     - name: gsa_{sample_id}
        mode: sensitivity
        samples: 256
        slice_parameters: [ghg_price]
@@ -266,9 +266,9 @@ Each parameter specifies a distribution instead of a value range:
          emissions:
            ghg_price: "{ghg_price}"
 
-Supported distributions are ``uniform`` (default; requires ``lower``, ``upper``), ``normal`` (requires ``mean``, ``std``), and ``lognormal`` (requires ``mu``, ``sigma``).
+Supported distributions are ``uniform`` (default; requires ``lower``, ``upper``), ``normal`` (requires ``mean``, ``std``), ``normal_ci`` (requires ``lower``, ``upper``; optional ``confidence``, ``bounds``), and ``lognormal`` (requires ``mu``, ``sigma``).
 
-The ``samples`` field sets the number of quasi-random samples (should be a power of 2). The ``slice_parameters`` field designates parameters for conditional analysis — these are included in the PCE fit but can be analytically fixed at specific values to study how sensitivity changes with policy choices.
+The ``samples`` field sets the number of quasi-random samples (should be a power of 2). The ``slice_parameters`` field designates parameters for conditional analysis — these are included in the surrogate fit but can be fixed at specific values to study how sensitivity changes with policy choices. Surrogate method configuration (PCE, RF) lives in a separate ``sensitivity_analysis`` top-level section.
 
 See :doc:`sensitivity_analysis` for full methodology details, output file formats, and interpretation guidance.
 

@@ -214,6 +214,7 @@ rule compute_sobol_sensitivity:
         generator_spec=lambda w: _sensitivity_generator(w),
         method=lambda w: w.method,
         method_config=_sensitivity_method_config,
+        holdout_fraction=lambda w: config["sensitivity_analysis"]["holdout_fraction"],
         slice_grid=_sensitivity_slice_grid,
     output:
         global_indices="<results>/{name}/analysis/sobol_global_indices_{group}_{method}.parquet",

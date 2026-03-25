@@ -1636,8 +1636,14 @@ properties:
   sensitivity_analysis:
     type: object
     description: "Configuration for surrogate-based sensitivity analysis methods"
+    required: [holdout_fraction, methods]
     additionalProperties: false
     properties:
+      holdout_fraction:
+        type: number
+        minimum: 0
+        maximum: 0.5
+        description: "Fraction of samples held out for validation (0 disables holdout)"
       methods:
         type: object
         description: "Surrogate method configs keyed by method name (e.g. pce, rf)"
