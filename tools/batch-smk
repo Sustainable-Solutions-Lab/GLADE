@@ -34,6 +34,12 @@ SNAKEFILE = PROJECT_ROOT / "workflow" / "Snakefile"
 CONFIG_DEFAULT = PROJECT_ROOT / "config" / "default.yaml"
 
 SOLVE_OUTPUT_RE = re.compile(r"results/.+/solved/model_scen-(.+)\.nc$")
+# When inline_analysis is enabled the fused rule targets analysis parquets
+# instead of solved .nc files.  We use a single representative parquet to
+# detect pending scenarios.
+INLINE_OUTPUT_RE = re.compile(
+    r"results/.+/analysis/scen-(.+)/objective_breakdown\.parquet$"
+)
 
 # Overhead for the Snakemake process + Python interpreter inside each SLURM
 # array element, on top of the memory allocated for the solves themselves.
@@ -55,23 +61,37 @@ def load_merged_config(*configfiles: Path) -> dict:
 
 
 def get_pending_scenarios(
-    configfiles: list[Path], name: str, all_scenarios: list[str]
+    configfiles: list[Path],
+    name: str,
+    all_scenarios: list[str],
+    inline_analysis: bool,
 ) -> list[str]:
-    """Find which solve_model jobs need running via the Snakemake Python API.
+    """Find which solve jobs need running via the Snakemake Python API.
 
     Builds the full DAG in dryrun mode targeting all solve outputs, executes a
-    dryrun, then filters ``updated_files`` for solve_model outputs. This
-    catches missing outputs as well as code/input/param changes.
+    dryrun, then filters ``updated_files`` for solve outputs. This catches
+    missing outputs as well as code/input/param changes.
 
-    Note: we cannot use ``allowed_rules={"solve_model"}`` in DAGSettings here
-    because that prevents Snakemake from resolving upstream dependencies during
-    DAG construction (it raises MissingInputException for inputs that come from
+    When *inline_analysis* is true, targets are analysis parquets (produced by
+    ``solve_and_analyze_model``) instead of solved ``.nc`` files.
+
+    Note: we cannot use ``allowed_rules`` in DAGSettings here because that
+    prevents Snakemake from resolving upstream dependencies during DAG
+    construction (it raises MissingInputException for inputs that come from
     other rules). Instead we build the full DAG and filter the output list.
-    The ``--allowed-rules solve_model`` flag in the generated sbatch script
-    serves a different purpose: it prevents execution of upstream rules at
-    runtime (builds should already be complete by then).
+    The ``--allowed-rules`` flag in the generated sbatch script serves a
+    different purpose: it prevents execution of upstream rules at runtime
+    (builds should already be complete by then).
     """
-    targets = [f"results/{name}/solved/model_scen-{s}.nc" for s in all_scenarios]
+    if inline_analysis:
+        targets = [
+            f"results/{name}/analysis/scen-{s}/objective_breakdown.parquet"
+            for s in all_scenarios
+        ]
+        output_re = INLINE_OUTPUT_RE
+    else:
+        targets = [f"results/{name}/solved/model_scen-{s}.nc" for s in all_scenarios]
+        output_re = SOLVE_OUTPUT_RE
 
     updated: list[str] = []
     with SnakemakeApi(OutputSettings(dryrun=True)) as api:
@@ -86,7 +106,7 @@ def get_pending_scenarios(
 
     pending = []
     for f in updated:
-        m = SOLVE_OUTPUT_RE.search(f)
+        m = output_re.search(f)
         if m:
             pending.append(m.group(1))
     return sorted(pending)
@@ -191,15 +211,18 @@ def main():
 
     config = load_merged_config(*configfiles)
     name = config["name"]
+    inline_analysis = config["solving"]["inline_analysis"]
 
     # Get all scenarios
     print(f"Loading scenarios for config '{name}'...")
     all_scenarios = list(load_scenarios(config))
     print(f"  Total scenarios: {len(all_scenarios)}")
+    if inline_analysis:
+        print("  Mode: inline_analysis (solve_and_analyze_model)")
 
     # Determine which scenarios need solving
     print("Building DAG to find pending solves...")
-    pending = get_pending_scenarios(configfiles, name, all_scenarios)
+    pending = get_pending_scenarios(configfiles, name, all_scenarios, inline_analysis)
     print(f"  Pending solves: {len(pending)}")
 
     if not pending:
@@ -259,6 +282,14 @@ def main():
 
     sbatch_directives = "\n".join(sbatch_lines)
 
+    if inline_analysis:
+        # Fused rule: target a representative analysis parquet per scenario.
+        allowed_rule = "solve_and_analyze_model"
+        target_line = 'TARGETS+=("results/${NAME}/analysis/scen-${s}/objective_breakdown.parquet")'
+    else:
+        allowed_rule = "solve_model"
+        target_line = 'TARGETS+=("results/${NAME}/solved/model_scen-${s}.nc")'
+
     script_content = textwrap.dedent(f"""\
         #!/bin/bash
         {sbatch_directives}
@@ -282,10 +313,10 @@ def main():
             exit 0
         fi
 
-        # Build target list — only solve_model outputs
+        # Build target list
         TARGETS=()
         for s in $SCENARIOS; do
-            TARGETS+=("results/${{NAME}}/solved/model_scen-${{s}}.nc")
+            {target_line}
         done
 
         echo "Array task $SLURM_ARRAY_TASK_ID: solving ${{#TARGETS[@]}} scenarios"
@@ -294,9 +325,9 @@ def main():
 
         # --keep-going: failures don't kill siblings
         # --nolock: safe because array elements target disjoint scenarios
-        # --allowed-rules: only run solve_model, never upstream rules
+        # --allowed-rules: only run {allowed_rule}, never upstream rules
         tools/smk -j${{PARALLEL}} --keep-going --nolock \\
-            --allowed-rules solve_model \\
+            --allowed-rules {allowed_rule} \\
             --configfile "$CONFIG" \\
             --resources mem_mb=${{ELEMENT_MEM_MB}} \\
             -- "${{TARGETS[@]}}"
