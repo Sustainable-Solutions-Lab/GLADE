@@ -126,6 +126,8 @@ linux = "3.10"
 libc = { family = "glibc", version = "2.17" }
 
 [activation.env]
+# Use project-local cache to avoid shared /tmp collisions on multi-user systems
+XDG_CACHE_HOME = "$PIXI_PROJECT_ROOT/.cache"
 # Enable new PyPSA components API globally
 PYPSA_API__NEW_COMPONENTS_API = "true"
 # Disable network requests (update checks) for faster loading
