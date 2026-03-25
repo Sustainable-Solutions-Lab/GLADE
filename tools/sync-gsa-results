@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Temporary script: rsync analysis results from shr and rename pce_* → gsa_*
+# Usage: tools/sync-gsa-results
+set -euo pipefail
+
+REMOTE="shr:~/food-opt-scratch"
+REMOTE_NAME="pce_sensitivity"
+LOCAL_NAME="gsa"
+
+LOCAL_ANALYSIS="results/${LOCAL_NAME}/analysis"
+mkdir -p "$LOCAL_ANALYSIS"
+
+# Prefixes to rename: old → new
+declare -A RENAMES=(
+    ["pce_"]="gsa_"
+    ["pce-l1-0p05_"]="gsa-l1-0p05_"
+    ["pce-l1-0p5_"]="gsa-l1-0p5_"
+)
+
+# Rsync each prefix group, using --link-dest trick isn't needed since we
+# rename on the fly. Instead: rsync to a temp dir, then rename in bulk.
+TMPDIR=$(mktemp -d "${LOCAL_ANALYSIS}/.sync-XXXXXX")
+trap 'rm -rf "$TMPDIR"' EXIT
+
+echo "==> Syncing analysis directories from ${REMOTE}..."
+rsync -a --whole-file --compress --info=progress2 \
+    --include='scen-pce*/' --include='scen-pce*/**' --exclude='*' \
+    "${REMOTE}/results/${REMOTE_NAME}/analysis/" \
+    "$TMPDIR/"
+
+echo "==> Renaming pce_* → gsa_*..."
+renamed=0
+for old_prefix in "${!RENAMES[@]}"; do
+    new_prefix="${RENAMES[$old_prefix]}"
+    for dir in "$TMPDIR"/scen-${old_prefix}*; do
+        [ -d "$dir" ] || continue
+        base=$(basename "$dir")
+        newbase="${base/scen-${old_prefix}/scen-${new_prefix}}"
+        target="${LOCAL_ANALYSIS}/${newbase}"
+        if [ -d "$target" ]; then
+            # Merge into existing (overwrite)
+            cp -a "$dir"/* "$target"/
+        else
+            mv "$dir" "$target"
+        fi
+        ((renamed++))
+    done
+done
+
+rm -rf "$TMPDIR"
+trap - EXIT
+
+echo "==> Done. Renamed ${renamed} scenario directories into ${LOCAL_ANALYSIS}/"

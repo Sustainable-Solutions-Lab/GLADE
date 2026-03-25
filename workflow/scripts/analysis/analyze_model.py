@@ -67,6 +67,15 @@ def _write_empty_outputs() -> None:
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
 
+    network_path = Path(snakemake.input.network)
+    if network_path.stat().st_size == 0:
+        logger.warning(
+            "Network file is empty (solve failed or timed out). "
+            "Writing empty outputs."
+        )
+        _write_empty_outputs()
+        return
+
     try:
         n = pypsa.Network(snakemake.input.network)
     except (KeyError, Exception) as e:

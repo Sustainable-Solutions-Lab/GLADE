@@ -7,6 +7,7 @@ import ctypes
 import functools
 import gc
 import logging
+from pathlib import Path
 
 from linopy.constraints import print_single_constraint
 import numpy as np
@@ -1271,7 +1272,14 @@ def _run_solve() -> None:
         n.model.solver_model = None
         gc.collect()
 
-    if status == "ok":
+    if condition == "time_limit":
+        logger.warning(
+            "Solver hit time limit — treating as failed solve. "
+            "Writing empty output file so the workflow can continue."
+        )
+        Path(snakemake.output.network).touch()
+        return
+    elif status == "ok":
         aux_names = HEALTH_AUX_MAP.pop(id(n.model), set())
         variables_container = n.model.variables
         removed = {}
