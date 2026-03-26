@@ -299,9 +299,11 @@ def _sensitivity_method_config(wildcards):
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
-    Returns a dict mapping each slice parameter name to a list of
-    linearly-spaced values between its min and max.  Grid resolution
-    is read from the method config under ``sensitivity_analysis.methods``.
+    Returns a dict mapping each slice parameter name to a list of grid
+    values between its min and max.  Log-uniform parameters get
+    log-spaced grids; all others get linearly-spaced grids.  Grid
+    resolution is read from the method config under
+    ``sensitivity_analysis.methods``.
     """
     import numpy as _np
 
@@ -316,7 +318,11 @@ def _sensitivity_slice_grid(wildcards):
         spec = generator["parameters"][sp]
         dist = build_chaospy_distribution(spec)
         lo, hi = float(dist.lower[0]), float(dist.upper[0])
-        grid[sp] = [float(v) for v in _np.linspace(lo, hi, n_grid)]
+        if spec.get("distribution") == "log_uniform":
+            values = _np.geomspace(lo, hi, n_grid)
+        else:
+            values = _np.linspace(lo, hi, n_grid)
+        grid[sp] = [float(v) for v in values]
     return grid
 
 

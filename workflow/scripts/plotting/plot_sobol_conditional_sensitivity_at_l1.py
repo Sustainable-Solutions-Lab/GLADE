@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use("pdf")
 import matplotlib.patches
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
@@ -132,6 +133,8 @@ def _plot_for_x(
             alpha=0.95,
         )
         ax.set_xscale("log")
+        ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+        ax.xaxis.set_minor_formatter(mticker.NullFormatter())
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
         err_value = error_by_output.get(output)

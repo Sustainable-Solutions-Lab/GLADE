@@ -13,6 +13,7 @@ matplotlib.use("pdf")
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
@@ -304,6 +305,9 @@ def main() -> None:
         )
         ax.set_xscale("log")
         ax.set_yscale("log")
+        for axis in (ax.xaxis, ax.yaxis):
+            axis.set_major_formatter(mticker.ScalarFormatter())
+            axis.set_minor_formatter(mticker.NullFormatter())
         _draw_region_boundaries(ax, idx_grid, x_edges, y_edges)
         _label_regions(ax, dominant_labels, x, y, colors)
         ax.grid(False)

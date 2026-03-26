@@ -11,6 +11,7 @@ import matplotlib
 
 matplotlib.use("pdf")
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
@@ -191,6 +192,9 @@ def main() -> None:
         )
         ax.set_xscale("log")
         ax.set_yscale("log")
+        for axis in (ax.xaxis, ax.yaxis):
+            axis.set_major_formatter(mticker.ScalarFormatter())
+            axis.set_minor_formatter(mticker.NullFormatter())
         ax.grid(False)
         err_value = error_by_output.get(output)
         err_suffix = (
