@@ -176,14 +176,15 @@ scenarios:
 # Each method is applied independently to the same solved GSA scenarios.
 sensitivity_analysis:
   holdout_fraction: 0.15
+  threads: 6
   methods:
     pce:
-      grid_resolution: 50
+      grid_resolution: 20
       method_options:
-        n_mc_conditional: 8192
+        n_mc_conditional: 2048
         cross_truncation: 0.8
     rf:
-      grid_resolution: 50
+      grid_resolution: 20
       method_options:
         n_estimators: 500
 
@@ -210,7 +211,7 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 2
+  threads: 6
   mem_mb: 9000
   time_limit: 60  # Hard limit
   runtime: 30     # Initial limit before retries for more favourable slurm scheduling

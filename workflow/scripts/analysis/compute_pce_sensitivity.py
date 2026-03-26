@@ -38,6 +38,7 @@ def fit_pce(
     distribution: cp.Distribution,
     max_degree: int,
     cross_truncation: float,
+    n_jobs: int = 1,
 ) -> dict:
     """Fit a sparse PCE using LARS with cross-validation.
 
@@ -81,7 +82,7 @@ def fit_pce(
     n_basis = basis_matrix.shape[1]
 
     # Fit sparse coefficients via LARS with cross-validation
-    lars = LarsCV(cv=min(5, n_samples), fit_intercept=False)
+    lars = LarsCV(cv=min(5, n_samples), fit_intercept=False, n_jobs=n_jobs)
     lars.fit(basis_matrix, y)
     coefficients = lars.coef_.copy()
 
@@ -91,15 +92,16 @@ def fit_pce(
     ss_tot = np.sum((y - np.mean(y)) ** 2)
     r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
-    # Compute LOO error using the hat matrix for linear regression
+    # Compute LOO error using the hat matrix diagonal for linear regression.
     # H = A (A^T A)^{-1} A^T; LOO_i = (y_i - y_hat_i) / (1 - H_ii)
-    # Use only active columns for numerical stability
+    # Only the diagonal is needed, so avoid materializing the full NxN matrix:
+    # h_diag_i = sum_j A_{ij} * [(ATA)^{-1} AT]_{ji}
     active_mask = coefficients != 0
     if np.any(active_mask):
         a_active = basis_matrix[:, active_mask]
         try:
-            hat_matrix = a_active @ np.linalg.solve(a_active.T @ a_active, a_active.T)
-            h_diag = np.diag(hat_matrix)
+            r = np.linalg.solve(a_active.T @ a_active, a_active.T)  # (k, N)
+            h_diag = np.einsum("ij,ji->i", a_active, r)
             loo_residuals = (y - y_pred) / (1 - h_diag)
             loo_mse = np.mean(loo_residuals**2)
             loo_error = loo_mse / np.var(y) if np.var(y) > 0 else float("inf")
@@ -342,6 +344,13 @@ def conditional_sobol(
 def run(snakemake) -> None:
     logger = setup_script_logging(snakemake.log[0])
 
+    # Limit all thread pools (BLAS, OpenMP, etc.) to the allocated threads
+    n_threads = snakemake.threads
+    from threadpoolctl import threadpool_limits
+
+    threadpool_limits(limits=n_threads)
+    logger.info("Thread limit set to %d", n_threads)
+
     # Derive analysis directory from resolved output path.
     # This avoids unresolved "<results>" placeholders in params.
     analysis_dir = Path(snakemake.output.global_indices).parent
@@ -466,7 +475,9 @@ def run(snakemake) -> None:
         y_train = outputs_train[col].values
 
         # Fit PCE on training data only
-        pce_result = fit_pce(x_train, y_train, joint_dist, max_degree, cross_truncation)
+        pce_result = fit_pce(
+            x_train, y_train, joint_dist, max_degree, cross_truncation, n_jobs=n_threads
+        )
 
         # Compute holdout error if we have a test set
         if x_test is not None and outputs_test is not None:
@@ -605,6 +616,9 @@ def run(snakemake) -> None:
                     }
                     row.update(slice_value_map)
                     conditional_joint_rows.append(row)
+
+        # Free chaospy expansion objects before processing the next output
+        del pce_result
 
     # Write output files
     global_df = pd.DataFrame(global_rows)

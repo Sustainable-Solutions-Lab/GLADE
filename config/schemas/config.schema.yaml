@@ -1639,7 +1639,7 @@ properties:
   sensitivity_analysis:
     type: object
     description: "Configuration for surrogate-based sensitivity analysis methods"
-    required: [holdout_fraction, methods]
+    required: [holdout_fraction, threads, methods]
     additionalProperties: false
     properties:
       holdout_fraction:
@@ -1647,6 +1647,10 @@ properties:
         minimum: 0
         maximum: 0.5
         description: "Fraction of samples held out for validation (0 disables holdout)"
+      threads:
+        type: integer
+        minimum: 1
+        description: "Number of threads for sensitivity analysis (controls sklearn n_jobs and BLAS)"
       methods:
         type: object
         description: "Surrogate method configs keyed by method name (e.g. pce, rf)"

@@ -35,6 +35,7 @@ def fit_random_forest(
     x_design: np.ndarray,
     y: np.ndarray,
     n_estimators: int = 500,
+    n_jobs: int = 1,
     random_state: int = 42,
 ) -> dict:
     """Fit a Random Forest regressor with OOB validation.
@@ -47,6 +48,8 @@ def fit_random_forest(
         Output values, shape (N,).
     n_estimators : int
         Number of trees in the forest.
+    n_jobs : int
+        Number of parallel jobs for tree fitting and prediction.
     random_state : int
         Random seed for reproducibility.
 
@@ -62,7 +65,7 @@ def fit_random_forest(
     rf = RandomForestRegressor(
         n_estimators=n_estimators,
         oob_score=True,
-        n_jobs=-1,
+        n_jobs=n_jobs,
         random_state=random_state,
     )
     rf.fit(x_design, y)
@@ -129,11 +132,14 @@ def sobol_from_rf(
     if var_y <= 0:
         return s1, s_total
 
+    # Reuse a single AB matrix, swapping columns in-place to avoid copies
+    x_ab = x_a.copy()
     for i in range(n_params):
         # AB_i: A with column i replaced by B's column i
-        x_ab_i = x_a.copy()
-        x_ab_i[:, i] = x_b[:, i]
-        f_ab_i = model.predict(x_ab_i)
+        saved_col = x_ab[:, i].copy()
+        x_ab[:, i] = x_b[:, i]
+        f_ab_i = model.predict(x_ab)
+        x_ab[:, i] = saved_col
 
         # Saltelli (2010) estimators
         s1[i] = np.mean(f_b * (f_ab_i - f_a)) / var_y
@@ -145,97 +151,6 @@ def sobol_from_rf(
     return s1, s_total
 
 
-def conditional_sobol_rf(
-    model: RandomForestRegressor,
-    distribution,
-    n_params: int,
-    slice_indices: list[int],
-    slice_values: list[float],
-    n_mc: int = 2**13,
-    seed: int = 0,
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Estimate conditional Sobol indices by fixing slice parameters.
-
-    Parameters
-    ----------
-    model : RandomForestRegressor
-        Fitted RF model.
-    distribution : chaospy.Distribution
-        Joint distribution for the parameters.
-    n_params : int
-        Total number of parameters (including slice params).
-    slice_indices : list[int]
-        Indices of slice parameters to fix.
-    slice_values : list[float]
-        Values to fix the slice parameters at.
-    n_mc : int
-        Number of Monte Carlo samples per matrix.
-    seed : int
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, float]
-        S1_cond, ST_cond (shape n_params; slice param entries are 0),
-        and conditional_variance.
-    """
-    non_slice = sorted(set(range(n_params)) - set(slice_indices))
-    n_free = len(non_slice)
-
-    rng = np.random.default_rng(seed)
-
-    # Sample A, B for free parameters only, from their marginals
-    u_a_free = rng.random((n_mc, n_free))
-    u_b_free = rng.random((n_mc, n_free))
-
-    # Transform free parameters via marginal inverse CDF
-    x_a_free = np.empty_like(u_a_free)
-    x_b_free = np.empty_like(u_b_free)
-    for j, orig_idx in enumerate(non_slice):
-        marginal = distribution[orig_idx]
-        x_a_free[:, j] = marginal.inv(u_a_free[:, j])
-        x_b_free[:, j] = marginal.inv(u_b_free[:, j])
-
-    # Embed into full parameter space
-    def _embed(x_free):
-        x_full = np.empty((x_free.shape[0], n_params))
-        for j, orig_idx in enumerate(non_slice):
-            x_full[:, orig_idx] = x_free[:, j]
-        for s_idx, s_val in zip(slice_indices, slice_values):
-            x_full[:, s_idx] = s_val
-        return x_full
-
-    x_a = _embed(x_a_free)
-    x_b = _embed(x_b_free)
-
-    f_a = model.predict(x_a)
-    f_b = model.predict(x_b)
-
-    # Conditional variance
-    f_all = np.concatenate([f_a, f_b])
-    cond_var = float(np.var(f_all))
-
-    s1_cond = np.zeros(n_params)
-    st_cond = np.zeros(n_params)
-
-    if cond_var <= 0:
-        return s1_cond, st_cond, cond_var
-
-    # Saltelli estimator on free parameters
-    for j, orig_idx in enumerate(non_slice):
-        x_ab_free = x_a_free.copy()
-        x_ab_free[:, j] = x_b_free[:, j]
-        x_ab = _embed(x_ab_free)
-        f_ab = model.predict(x_ab)
-
-        s1_cond[orig_idx] = np.mean(f_b * (f_ab - f_a)) / cond_var
-        st_cond[orig_idx] = 0.5 * np.mean((f_a - f_ab) ** 2) / cond_var
-
-    np.clip(s1_cond, 0.0, 1.0, out=s1_cond)
-
-    return s1_cond, st_cond, cond_var
-
-
 def conditional_sobol_rf_batch(
     model: RandomForestRegressor,
     distribution,
@@ -244,7 +159,7 @@ def conditional_sobol_rf_batch(
     slice_value_grid: list[list[float]],
     n_mc: int = 2**13,
     seed: int = 0,
-    batch_size: int = 500,
+    batch_size: int = 50,
 ) -> list[tuple[np.ndarray, np.ndarray, float]]:
     """Batch-estimate conditional Sobol indices across a grid of slice values.
 
@@ -365,6 +280,13 @@ def conditional_sobol_rf_batch(
 def run(snakemake) -> None:
     logger = setup_script_logging(snakemake.log[0])
 
+    # Limit all thread pools (BLAS, OpenMP, etc.) to the allocated threads
+    n_threads = snakemake.threads
+    from threadpoolctl import threadpool_limits
+
+    threadpool_limits(limits=n_threads)
+    logger.info("Thread limit set to %d", n_threads)
+
     analysis_dir = Path(snakemake.output.global_indices).parent
     scenario_names = list(snakemake.params.scenario_names)
     generator_spec = dict(snakemake.params.generator_spec)
@@ -463,7 +385,9 @@ def run(snakemake) -> None:
         y_train = outputs_train[col].values
 
         # Fit Random Forest on training data only
-        rf_result = fit_random_forest(x_train, y_train, n_estimators=n_estimators)
+        rf_result = fit_random_forest(
+            x_train, y_train, n_estimators=n_estimators, n_jobs=n_threads
+        )
 
         # Compute holdout error if we have a test set
         if x_test is not None and outputs_test is not None:
@@ -536,17 +460,22 @@ def run(snakemake) -> None:
 
         # Conditional Sobol indices (if slice parameters defined)
         if slice_indices and slice_grid:
+            # Individual conditioning: batch all grid values per slice param
             for sp_idx, sp_name in zip(slice_indices, slice_param_names):
-                for sp_val in slice_grid[sp_name]:
-                    s1_c, st_c, cond_var = conditional_sobol_rf(
-                        rf_result["model"],
-                        joint_dist,
-                        n_params,
-                        [sp_idx],
-                        [sp_val],
-                        n_mc=n_mc_conditional,
-                    )
+                grid_values = [[v] for v in slice_grid[sp_name]]
+                indiv_results = conditional_sobol_rf_batch(
+                    rf_result["model"],
+                    joint_dist,
+                    n_params,
+                    [sp_idx],
+                    grid_values,
+                    n_mc=n_mc_conditional,
+                )
 
+                for sp_val_list, (s1_c, st_c, cond_var) in zip(
+                    grid_values, indiv_results
+                ):
+                    sp_val = sp_val_list[0]
                     for i, pname in enumerate(param_names):
                         if i == sp_idx:
                             continue

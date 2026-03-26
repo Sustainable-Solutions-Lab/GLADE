@@ -11,7 +11,7 @@ analysis scripts.
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pyarrow.parquet as pq
 from scipy.stats.qmc import Sobol
 
 from workflow.scenario_generators import build_joint_distribution
@@ -45,11 +45,55 @@ def reconstruct_samples(generator_spec: dict) -> np.ndarray:
     return physical_samples.T  # shape (n_samples, d)
 
 
+def _read_column_sum(path: Path, column: str) -> float:
+    """Read a single column from a parquet file and return its sum.
+
+    Uses pyarrow directly to avoid materializing a full pandas DataFrame,
+    which matters for large files like land_use.parquet (~52k rows, ~12 MB
+    decompressed).  Over thousands of scenarios the avoided allocations
+    prevent significant memory accumulation from allocator fragmentation.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return np.nan
+    schema = pq.read_schema(path)
+    if column not in schema.names:
+        return np.nan
+    table = pq.read_table(path, columns=[column])
+    if table.num_rows == 0:
+        return np.nan
+    return float(table.column(column).to_numpy().sum())
+
+
+def _read_row_sum(path: Path) -> float:
+    """Read a single-row parquet and return the sum of all columns."""
+    if not path.exists() or path.stat().st_size == 0:
+        return np.nan
+    table = pq.read_table(path)
+    if table.num_rows == 0:
+        return np.nan
+    return float(sum(table.column(i)[0].as_py() for i in range(table.num_columns)))
+
+
+def _read_yll(path: Path) -> float:
+    """Read the YLL total, trying column names in priority order."""
+    if not path.exists() or path.stat().st_size == 0:
+        return np.nan
+    schema = pq.read_schema(path)
+    col_names = schema.names
+    for candidate in ("yll_myll", "yll_million", "total_yll"):
+        if candidate in col_names:
+            return _read_column_sum(path, candidate)
+    return np.nan
+
+
 def load_scenario_outputs(
     analysis_dir: Path,
     scenario_names: list[str],
-) -> pd.DataFrame:
-    """Load and aggregate outputs from sensitivity scenarios.
+) -> "pd.DataFrame":
+    """Load and aggregate scalar outputs from sensitivity scenarios.
+
+    Reads only the needed columns via pyarrow to avoid materializing full
+    DataFrames (land_use.parquet alone is ~12 MB per scenario).
 
     Parameters
     ----------
@@ -63,54 +107,28 @@ def load_scenario_outputs(
     pd.DataFrame
         DataFrame with one row per scenario and columns for each output metric.
     """
-    outputs = []
+    import pandas as pd
 
-    for scenario_name in scenario_names:
-        scenario_dir = analysis_dir / f"scen-{scenario_name}"
-        row = {"scenario": scenario_name}
+    scenarios = np.empty(len(scenario_names), dtype=object)
+    total_cost = np.empty(len(scenario_names))
+    ghg_emissions = np.empty(len(scenario_names))
+    land_use = np.empty(len(scenario_names))
+    yll = np.empty(len(scenario_names))
 
-        # Load objective breakdown for total cost
-        obj_path = scenario_dir / "objective_breakdown.parquet"
-        if obj_path.exists() and obj_path.stat().st_size > 0:
-            obj_df = pd.read_parquet(obj_path)
-            row["total_cost"] = obj_df.iloc[0].sum()
-        else:
-            row["total_cost"] = np.nan
+    for i, scenario_name in enumerate(scenario_names):
+        d = analysis_dir / f"scen-{scenario_name}"
+        scenarios[i] = scenario_name
+        total_cost[i] = _read_row_sum(d / "objective_breakdown.parquet")
+        ghg_emissions[i] = _read_column_sum(d / "net_emissions.parquet", "mtco2eq")
+        land_use[i] = _read_column_sum(d / "land_use.parquet", "area_mha")
+        yll[i] = _read_yll(d / "health_totals.parquet")
 
-        # Load net emissions (source-level breakdown; sum for total)
-        ghg_path = scenario_dir / "net_emissions.parquet"
-        if ghg_path.exists() and ghg_path.stat().st_size > 0:
-            ghg_df = pd.read_parquet(ghg_path)
-            row["ghg_emissions"] = ghg_df["mtco2eq"].sum()
-        else:
-            row["ghg_emissions"] = np.nan
-
-        # Load land use totals
-        land_path = scenario_dir / "land_use.parquet"
-        if land_path.exists() and land_path.stat().st_size > 0:
-            land_df = pd.read_parquet(land_path)
-            if "area_mha" in land_df.columns:
-                row["land_use"] = land_df["area_mha"].sum()
-            else:
-                row["land_use"] = np.nan
-        else:
-            row["land_use"] = np.nan
-
-        # Load health totals
-        health_path = scenario_dir / "health_totals.parquet"
-        if health_path.exists() and health_path.stat().st_size > 0:
-            health_df = pd.read_parquet(health_path)
-            if "yll_myll" in health_df.columns:
-                row["yll"] = health_df["yll_myll"].sum()
-            elif "yll_million" in health_df.columns:
-                row["yll"] = health_df["yll_million"].sum()
-            elif "total_yll" in health_df.columns:
-                row["yll"] = health_df["total_yll"].sum()
-            else:
-                row["yll"] = np.nan
-        else:
-            row["yll"] = np.nan
-
-        outputs.append(row)
-
-    return pd.DataFrame(outputs)
+    return pd.DataFrame(
+        {
+            "scenario": scenarios,
+            "total_cost": total_cost,
+            "ghg_emissions": ghg_emissions,
+            "land_use": land_use,
+            "yll": yll,
+        }
+    )
