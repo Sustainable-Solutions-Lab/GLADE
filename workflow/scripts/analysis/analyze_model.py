@@ -19,6 +19,7 @@ import pypsa
 from workflow.scripts.analysis.extract_baseline_deviation import (
     extract_baseline_deviation,
 )
+from workflow.scripts.analysis.extract_food_prices import extract_food_prices
 from workflow.scripts.analysis.extract_ghg_attribution import (
     add_monetary_value as add_ghg_monetary_value,
 )
@@ -118,6 +119,10 @@ def run_analysis(
     feed_by_category = extract_feed_by_category(n)
     feed_by_animal = extract_feed_by_animal(n)
 
+    # --- Food prices ---
+    logger.info("Extracting food prices...")
+    food_prices = extract_food_prices(n)
+
     # --- Baseline deviation ---
     logger.info("Extracting baseline deviation...")
     baseline_deviation = extract_baseline_deviation(n)
@@ -200,6 +205,7 @@ def run_analysis(
         "feed_by_animal": feed_by_animal,
         "luc_breakdown": luc_breakdown,
         "baseline_deviation": baseline_deviation,
+        "food_prices": food_prices,
     }
     for name, df in results.items():
         df.to_parquet(output_paths[name])

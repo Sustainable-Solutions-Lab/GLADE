@@ -32,6 +32,7 @@ _ANALYSIS_SCRIPTS = expand(
         "extract_ghg_attribution.py",
         "extract_health_impacts.py",
         "extract_baseline_deviation.py",
+        "extract_food_prices.py",
     ],
 )
 
@@ -52,6 +53,7 @@ _ANALYSIS_OUTPUTS = {
     "feed_by_animal": "<results>/{name}/analysis/scen-{scenario}/feed_by_animal.parquet",
     "luc_breakdown": "<results>/{name}/analysis/scen-{scenario}/luc_breakdown.parquet",
     "baseline_deviation": "<results>/{name}/analysis/scen-{scenario}/baseline_deviation.parquet",
+    "food_prices": "<results>/{name}/analysis/scen-{scenario}/food_prices.parquet",
 }
 
 
@@ -342,6 +344,7 @@ rule compute_sobol_sensitivity:
         conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",
         conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
         validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
+    threads: lambda w: config["sensitivity_analysis"]["threads"]
     group:
         "analysis_plot"
     resources:

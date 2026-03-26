@@ -117,6 +117,7 @@ ANALYSIS_OUTPUTS = [
     "feed_by_animal",
     "luc_breakdown",
     "baseline_deviation",
+    "food_prices",
 ]
 
 
