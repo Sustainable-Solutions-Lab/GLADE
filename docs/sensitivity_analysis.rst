@@ -327,7 +327,7 @@ to be applied to the same solved scenarios without duplication.
 
 Health relative risk parameters use a **quantile parameterization**: each
 ``rr_<risk_factor>`` value is a quantile :math:`q \in [0, 1]` that interpolates
-between the GBD confidence bounds at every dose-response breakpoint:
+between the GBD confidence bounds [#gbd]_ at every dose-response breakpoint:
 
 .. math::
 

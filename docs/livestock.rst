@@ -354,7 +354,7 @@ Baseline Feed Intake
 --------------------
 
 To ground the livestock module in observed feed flows, the model constructs a
-country-level baseline from FAO's GLEAM 3.0 model [4]_ that describes how
+country-level baseline from FAO's GLEAM 3.0 model [4]_ [5]_ that describes how
 much dry-matter feed of each category each animal product consumed in the
 reference year. GLEAM 3.0 provides country-level data for 229 countries
 (reference year 2015), eliminating the need for the OECD/Non-OECD
@@ -608,6 +608,8 @@ production:
 The FAOSTAT area cap is applied in ``build_model.py`` before any downstream
 functions, so all components (generators, spare links, land budget) inherit
 the corrected area.
+
+.. _grassland-forage-calibration:
 
 Grassland Forage Calibration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
