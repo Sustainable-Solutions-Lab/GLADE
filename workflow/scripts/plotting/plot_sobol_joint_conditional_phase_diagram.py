@@ -99,48 +99,41 @@ def _dominant_grid(
     return x, y, z
 
 
-def _imshow_extent(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float]:
-    """Compute imshow extent from 1D grid centers."""
-    dx = float(x[1] - x[0]) if len(x) > 1 else 1.0
-    dy = float(y[1] - y[0]) if len(y) > 1 else 1.0
-    return (
-        float(x[0] - dx / 2.0),
-        float(x[-1] + dx / 2.0),
-        float(y[0] - dy / 2.0),
-        float(y[-1] + dy / 2.0),
-    )
+def _cell_edges(centers: np.ndarray) -> np.ndarray:
+    """Compute cell edges from 1D grid centers (midpoints, extended at boundaries)."""
+    edges = np.empty(len(centers) + 1)
+    edges[1:-1] = (centers[:-1] + centers[1:]) / 2
+    edges[0] = centers[0] - (edges[1] - centers[0])
+    edges[-1] = centers[-1] + (centers[-1] - edges[-2])
+    return edges
 
 
 def _draw_region_boundaries(
     ax: plt.Axes,
     idx_grid: np.ndarray,
-    x: np.ndarray,
-    y: np.ndarray,
+    x_edges: np.ndarray,
+    y_edges: np.ndarray,
 ) -> None:
     """Draw white boundary lines between regions of different dominant factors."""
-    dx = float(x[1] - x[0]) if len(x) > 1 else 1.0
-    dy = float(y[1] - y[0]) if len(y) > 1 else 1.0
     n_rows, n_cols = idx_grid.shape
     for row in range(n_rows):
         for col in range(n_cols):
             val = idx_grid[row, col]
-            cx = x[col]
-            cy = y[row]
             # Right neighbour
             if col + 1 < n_cols and idx_grid[row, col + 1] != val:
-                bx = cx + dx / 2
+                bx = x_edges[col + 1]
                 ax.plot(
                     [bx, bx],
-                    [cy - dy / 2, cy + dy / 2],
+                    [y_edges[row], y_edges[row + 1]],
                     color="white",
                     linewidth=0.8,
                     solid_capstyle="butt",
                 )
             # Upper neighbour
             if row + 1 < n_rows and idx_grid[row + 1, col] != val:
-                by = cy + dy / 2
+                by = y_edges[row + 1]
                 ax.plot(
-                    [cx - dx / 2, cx + dx / 2],
+                    [x_edges[col], x_edges[col + 1]],
                     [by, by],
                     color="white",
                     linewidth=0.8,
@@ -300,17 +293,18 @@ def main() -> None:
         x, y, dominant_labels = _dominant_grid(df, output, parameters, metric_column)
         idx_grid = np.vectorize(param_to_idx.get)(dominant_labels)
 
-        extent = _imshow_extent(x, y)
-        ax.imshow(
+        x_edges = _cell_edges(x)
+        y_edges = _cell_edges(y)
+        ax.pcolormesh(
+            x_edges,
+            y_edges,
             idx_grid,
-            origin="lower",
-            extent=extent,
-            interpolation="nearest",
-            aspect="auto",
             cmap=cmap,
             norm=norm,
         )
-        _draw_region_boundaries(ax, idx_grid, x, y)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        _draw_region_boundaries(ax, idx_grid, x_edges, y_edges)
         _label_regions(ax, dominant_labels, x, y, colors)
         ax.grid(False)
         err_value = error_by_output.get(output)

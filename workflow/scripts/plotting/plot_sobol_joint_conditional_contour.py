@@ -80,16 +80,13 @@ def _surface_grid(
     return x, y, z
 
 
-def _imshow_extent(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float]:
-    """Compute imshow extent from 1D grid centers."""
-    dx = float(x[1] - x[0]) if len(x) > 1 else 1.0
-    dy = float(y[1] - y[0]) if len(y) > 1 else 1.0
-    return (
-        float(x[0] - dx / 2.0),
-        float(x[-1] + dx / 2.0),
-        float(y[0] - dy / 2.0),
-        float(y[-1] + dy / 2.0),
-    )
+def _cell_edges(centers: np.ndarray) -> np.ndarray:
+    """Compute cell edges from 1D grid centers (midpoints, extended at boundaries)."""
+    edges = np.empty(len(centers) + 1)
+    edges[1:-1] = (centers[:-1] + centers[1:]) / 2
+    edges[0] = centers[0] - (edges[1] - centers[0])
+    edges[-1] = centers[-1] + (centers[-1] - edges[-2])
+    return edges
 
 
 def main() -> None:
@@ -182,16 +179,18 @@ def main() -> None:
     for i, output in enumerate(outputs):
         ax = axes.flat[i]
         x, y, z = grids[output]
-        mesh = ax.imshow(
+        x_edges = _cell_edges(x)
+        y_edges = _cell_edges(y)
+        mesh = ax.pcolormesh(
+            x_edges,
+            y_edges,
             z,
-            origin="lower",
-            extent=_imshow_extent(x, y),
-            interpolation="nearest",
-            aspect="auto",
             cmap="viridis",
             vmin=0.0,
             vmax=vmax,
         )
+        ax.set_xscale("log")
+        ax.set_yscale("log")
         ax.grid(False)
         err_value = error_by_output.get(output)
         err_suffix = (

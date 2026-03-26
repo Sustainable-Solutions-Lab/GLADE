@@ -231,6 +231,7 @@ def _plot_for_x(
             alpha=0.95,
         )
         _label_areas(ax, x, y_arrays, output_parameters, colors)
+        ax.set_xscale("log")
         ax.set_xlim(x.min(), x.max())
         ax.set_ylim(0.0, 1.0)
         ax.grid(axis="y", alpha=0.3)
