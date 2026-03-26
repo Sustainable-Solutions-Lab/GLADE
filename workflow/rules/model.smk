@@ -208,7 +208,10 @@ rule build_model:
 
 
 def solve_model_inputs(w):
-    """Get input files for solve_model rule."""
+    """Get input files for solve_model rule.
+
+    NOTE: Also update tools/export-solve-manifest when changing these inputs.
+    """
     inputs = {
         "network": f"<results>/{w.name}/build/model.nc",
         "m49": "data/curated/M49-codes.csv",
@@ -316,6 +319,8 @@ def solve_model_mem_mb(wildcards, attempt: int) -> int:
     return math.ceil(base_mem_mb * (1.3 ** (attempt - 1)))
 
 
+# NOTE: When changing inputs or params on solve_model, also update
+# tools/export-solve-manifest which mirrors these for the HPC manifest.
 rule solve_model:
     input:
         unpack(solve_model_inputs),
@@ -366,6 +371,30 @@ rule solve_model:
         ]["grassland_forage_calibration"]["enabled"],
         forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
         enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
+        regional_limit=lambda w: get_effective_config(w.scenario)["land"][
+            "regional_limit"
+        ],
+        biofuel_demand_scale=lambda w: get_effective_config(w.scenario)["biomass"][
+            "biofuel_demand_scale"
+        ],
+        ghg_pricing_enabled=lambda w: get_effective_config(w.scenario)["emissions"][
+            "ghg_pricing_enabled"
+        ],
+        food_incentives_enabled=lambda w: get_effective_config(w.scenario)[
+            "food_incentives"
+        ]["enabled"],
+        equal_by_country_source=lambda w: get_effective_config(w.scenario)[
+            "food_groups"
+        ]["equal_by_country_source"],
+        slack_marginal_cost=config["validation"]["slack_marginal_cost"],
+        residue_max_feed_fraction=config["residues"]["max_feed_fraction"],
+        residue_max_feed_fraction_by_region=config["residues"][
+            "max_feed_fraction_by_region"
+        ],
+        countries=config["countries"],
+        export_for_tuning=lambda w: get_effective_config(w.scenario)["solving"].get(
+            "export_for_tuning", False
+        ),
         # Only used to force correct reruns when scenario definitions change.
         scenario_hash=lambda w: scenario_override_hash(w.scenario),
     output:

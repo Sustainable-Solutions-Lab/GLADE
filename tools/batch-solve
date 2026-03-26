@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Submit solve jobs as a SLURM array using a pre-built manifest.
+
+Unlike ``batch-smk``, this tool does NOT use Snakemake on the cluster.
+Each array element runs ``tools/cluster-solve`` directly for its assigned
+batch of scenarios.
+
+Usage:
+    tools/batch-solve --manifest .batch/manifest_gsa.json [options]
+"""
+
+import argparse
+from datetime import datetime
+import math
+from pathlib import Path
+import subprocess
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Overhead for the Python interpreter and libraries (MB).
+OVERHEAD_MB = 2000
+
+
+def compute_resources(solving: dict, parallel: int, batch_size: int) -> dict:
+    """Compute default SLURM resources from manifest solving config."""
+    base_mem_mb = solving["mem_mb"]
+    base_runtime = solving["runtime"]
+    time_limit = solving["time_limit"]
+    threads = solving["threads"]
+    max_retries = 2
+
+    mem_mb = parallel * base_mem_mb + OVERHEAD_MB
+
+    max_solve_time = base_runtime * (5**max_retries)
+    if time_limit is not None:
+        max_solve_time = min(max_solve_time, time_limit + 10)
+    time_minutes = math.ceil(batch_size / parallel) * max_solve_time + 15
+
+    return {
+        "mem_mb": mem_mb,
+        "time_minutes": time_minutes,
+        "cpus": parallel * threads,
+    }
+
+
+def format_time(minutes: int) -> str:
+    """Format minutes as HH:MM:SS for SLURM."""
+    h, m = divmod(minutes, 60)
+    return f"{h}:{m:02d}:00"
+
+
+def parse_time(time_str: str) -> int:
+    """Parse HH:MM:SS or H:MM:SS to minutes."""
+    parts = time_str.split(":")
+    if len(parts) >= 2:
+        return int(parts[0]) * 60 + int(parts[1])
+    raise ValueError(f"Cannot parse time: {time_str}")
+
+
+def parse_mem(mem_str: str) -> int:
+    """Parse memory string like '40G' or '40000M' to MB."""
+    mem_str = mem_str.strip().upper()
+    if mem_str.endswith("G"):
+        return int(float(mem_str[:-1]) * 1000)
+    elif mem_str.endswith("M"):
+        return int(mem_str[:-1])
+    elif mem_str.endswith("T"):
+        return int(float(mem_str[:-1]) * 1000000)
+    return int(mem_str)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Submit solve jobs as a SLURM array from a manifest."
+    )
+    parser.add_argument(
+        "--manifest",
+        required=True,
+        help="Path to the manifest JSON file",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=50,
+        help="Scenarios per SLURM array element (default: 50)",
+    )
+    parser.add_argument(
+        "-j",
+        "--parallel",
+        type=int,
+        default=4,
+        help="Concurrent solves per array element (default: 4)",
+    )
+    parser.add_argument(
+        "--time",
+        help="SLURM time limit (HH:MM:SS), overrides computed default",
+    )
+    parser.add_argument(
+        "--mem",
+        help="SLURM memory (e.g., 40G), overrides computed default",
+    )
+    parser.add_argument(
+        "-e",
+        "--environment",
+        help="Pixi environment (e.g., gurobi)",
+    )
+    parser.add_argument("--partition", help="SLURM partition")
+    parser.add_argument("--account", help="SLURM account")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print plan and generated script without submitting",
+    )
+    parser.add_argument(
+        "--sbatch-args",
+        default="",
+        help="Extra sbatch arguments (e.g., '--qos=normal --mail-type=END')",
+    )
+    args = parser.parse_args()
+
+    import json
+
+    manifest_path = Path(args.manifest).resolve()
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    name = manifest["config_name"]
+    solving = manifest["solving"]
+    entries = manifest["scenarios"]
+    n_scenarios = len(entries)
+
+    if n_scenarios == 0:
+        print("Manifest has no scenarios. Nothing to submit.")
+        return
+
+    print(f"Config: {name}")
+    print(f"Scenarios in manifest: {n_scenarios}")
+
+    # Compute resources
+    resources = compute_resources(solving, args.parallel, args.batch_size)
+    mem_mb = parse_mem(args.mem) if args.mem else resources["mem_mb"]
+    time_minutes = parse_time(args.time) if args.time else resources["time_minutes"]
+    cpus = resources["cpus"]
+
+    n_batches = math.ceil(n_scenarios / args.batch_size)
+
+    print("\nBatch layout:")
+    print(f"  Scenarios: {n_scenarios}")
+    print(f"  Batch size: {args.batch_size}")
+    print(f"  Array elements: {n_batches}")
+    print(f"  Parallel solves per element: {args.parallel}")
+    print(f"  CPUs per element: {cpus}")
+    print(f"  Memory per element: {mem_mb} MB ({mem_mb / 1000:.1f} GB)")
+    print(f"  Time per element: {format_time(time_minutes)}")
+
+    # Create .batch directory
+    batch_dir = PROJECT_ROOT / ".batch"
+    logs_dir = batch_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Build sbatch directives
+    sbatch_lines = [
+        f"#SBATCH --array=0-{n_batches - 1}",
+        f"#SBATCH --time={format_time(time_minutes)}",
+        f"#SBATCH --mem={mem_mb}M",
+        f"#SBATCH --cpus-per-task={cpus}",
+        f"#SBATCH --job-name=solve_{name}",
+        f"#SBATCH --output={logs_dir}/solve_%A_%a.out",
+        f"#SBATCH --error={logs_dir}/solve_%A_%a.err",
+    ]
+    if args.partition:
+        sbatch_lines.append(f"#SBATCH --partition={args.partition}")
+    if args.account:
+        sbatch_lines.append(f"#SBATCH --account={args.account}")
+    if args.sbatch_args:
+        for extra in args.sbatch_args.split():
+            sbatch_lines.append(f"#SBATCH {extra}")
+
+    sbatch_directives = "\n".join(sbatch_lines)
+
+    env_prefix = f"pixi run -e {args.environment}" if args.environment else "pixi run"
+
+    script_content = f"""\
+#!/bin/bash
+{sbatch_directives}
+
+set -euo pipefail
+
+MANIFEST="{manifest_path}"
+BATCH_SIZE={args.batch_size}
+PARALLEL={args.parallel}
+
+# Compute index range for this array element
+START=$((SLURM_ARRAY_TASK_ID * BATCH_SIZE))
+END=$((START + BATCH_SIZE - 1))
+TOTAL={n_scenarios}
+
+if [ "$START" -ge "$TOTAL" ]; then
+    echo "No scenarios for array task $SLURM_ARRAY_TASK_ID"
+    exit 0
+fi
+
+# Cap END at total
+if [ "$END" -ge "$TOTAL" ]; then
+    END=$((TOTAL - 1))
+fi
+
+echo "Array task $SLURM_ARRAY_TASK_ID: scenarios $START-$END"
+
+cd "{PROJECT_ROOT}"
+
+# Run scenarios in parallel batches using GNU parallel or a simple loop
+PIDS=()
+FAILED=0
+for IDX in $(seq $START $END); do
+    # Wait if we've hit the parallelism limit
+    while [ ${{#PIDS[@]}} -ge $PARALLEL ]; do
+        # Wait for any child to finish
+        wait -n 2>/dev/null || true
+        # Clean up finished PIDs
+        NEW_PIDS=()
+        for pid in "${{PIDS[@]}}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                NEW_PIDS+=("$pid")
+            else
+                wait "$pid" 2>/dev/null || FAILED=$((FAILED + 1))
+            fi
+        done
+        PIDS=("${{NEW_PIDS[@]}}")
+    done
+
+    {env_prefix} python tools/cluster-solve "$MANIFEST" --index "$IDX" --skip-existing &
+    PIDS+=($!)
+done
+
+# Wait for remaining
+for pid in "${{PIDS[@]}}"; do
+    wait "$pid" 2>/dev/null || FAILED=$((FAILED + 1))
+done
+
+if [ "$FAILED" -gt 0 ]; then
+    echo "WARNING: $FAILED scenario(s) failed in array task $SLURM_ARRAY_TASK_ID"
+fi
+
+echo "Array task $SLURM_ARRAY_TASK_ID complete."
+"""
+
+    script_path = batch_dir / f"batch_solve_{name}_{timestamp}.sh"
+    script_path.write_text(script_content)
+    script_path.chmod(0o755)
+    print(f"\n  Script: {script_path}")
+
+    if args.dry_run:
+        print("\n--- Generated sbatch script ---")
+        print(script_content)
+        print("--- Dry run: not submitting ---")
+        return
+
+    # Submit
+    result = subprocess.run(
+        ["sbatch", str(script_path)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"sbatch failed:\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n{result.stdout.strip()}")
+    print(f"Monitor with: squeue -u $USER -n solve_{name}")
+
+
+if __name__ == "__main__":
+    main()

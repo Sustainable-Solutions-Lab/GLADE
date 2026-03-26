@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+* Steps
+- If present, delete previously solved networks on sherlock
+- Build model locally and run baseline scenarios (these generate consumer values needed by GSA scenarios):
+  #+begin_src bash
+  # Locally
+  SMK_MEM_MAX=40G tools/smk -e gurobi -j5 --configfile config/gsa.yaml -- results/gsa/analysis/scen-gsa{,-l1-0p05,-l1-0p5}_0/objective_breakdown.parquet
+  #+end_src
+- Export solve manifest (excluding baselines already solved locally):
+  #+begin_src bash
+  # Locally
+  pixi run python tools/export-solve-manifest config/gsa.yaml --exclude "baseline*" "default" --skip-existing
+  #+end_src
+- Sync solve inputs + manifest to sherlock:
+  #+begin_src bash
+  # Locally
+  tools/sync-solve-inputs gsa.yaml shr /scratch/groups/sjdavis/koenvg/food-opt
+  #+end_src
+- On sherlock, submit batched solves (no Snakemake needed on the cluster):
+  #+begin_src bash
+  # On sherlock
+  cd /scratch/groups/sjdavis/koenvg/food-opt
+  pixi run python tools/batch-solve --manifest .batch/manifest_gsa.json -j6 -e gurobi --partition owners --account sjdavis
+  #+end_src
+- Monitor jobs:
+  #+begin_src bash
+  squeue -u $USER -n solve_gsa
+  #+end_src
+- Sync analysis results back to local, or mount using sshfs:
+  #+begin_src bash
+  # Locally
+  rsync -a --info=progress2 "shr-dtn:/scratch/groups/sjdavis/koenvg/food-opt/results/gsa/analysis/" results/gsa/analysis
+  #+end_src
+- Run PCE analysis locally:
+  #+begin_src bash
+  # Locally
+  tools/smk -j20 --configfile config/gsa.yaml --allowed-rules compute_sobol_sensitivity plot_sobol_conditional_sensitivity plot_sobol_joint_conditional_contour plot_sobol_joint_conditional_phase_diagram sobol_plots -- sobol_plots
+  #+end_src
+  Consider running with -n first and potentially running with --touch to prevent rerunning solve_model,analyze_model
+
+* Notes
+- The manifest-based workflow (export-solve-manifest + cluster-solve + batch-solve) replaces the Snakemake-based batch-smk approach.
+- cluster-solve runs solve+analyze directly without Snakemake, avoiding DAG construction overhead and HPC I/O latency issues.
+- Baselines must be solved locally first since they generate consumer values that GSA scenarios depend on.
+- The --skip-existing flag on export-solve-manifest avoids re-including scenarios that were already solved in previous runs.
+- batch-solve uses --skip-existing per scenario in the sbatch script, so re-submitting is safe.

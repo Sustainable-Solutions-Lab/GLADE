@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Export a JSON manifest describing solve+analyze inputs/params for each scenario.
+
+The manifest is consumed by ``tools/cluster-solve`` on the HPC, eliminating the
+need for Snakemake on the cluster.  All input paths and params are fully
+resolved using the same config/scenario machinery as the Snakemake rules.
+
+Usage:
+    tools/export-solve-manifest <configfile> [-o manifest.json] [--scenarios S1 S2 ...]
+"""
+
+import argparse
+import copy
+import json
+import os
+from pathlib import Path
+import sys
+
+import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Add workflow scripts to path for imports.
+sys.path.insert(0, str(PROJECT_ROOT / "workflow" / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "workflow"))
+
+from scenario_generators import expand_scenario_defs  # noqa: E402
+from snakemake_utils import _recursive_update  # noqa: E402
+
+
+def load_merged_config(*configfiles: Path) -> dict:
+    """Load and merge YAML config files (later files override earlier ones)."""
+    merged = {}
+    for path in configfiles:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        _recursive_update(merged, data)
+    return merged
+
+
+def get_effective_config(
+    base_config: dict, scenario_name: str, scenario_defs: dict
+) -> dict:
+    """Return the configuration with scenario overrides applied.
+
+    Parameters
+    ----------
+    base_config : dict
+        Merged base config.
+    scenario_name : str
+        Scenario name.
+    scenario_defs : dict
+        Pre-expanded scenario definitions (from ``expand_scenario_defs``).
+    """
+    eff = copy.deepcopy(base_config)
+    if not scenario_name:
+        return eff
+    if scenario_name in scenario_defs:
+        _recursive_update(eff, scenario_defs[scenario_name])
+    return eff
+
+
+def resolve_path_root(raw_path: str) -> str:
+    """Resolve environment variables and user-home markers in a path root."""
+    resolved = os.path.expanduser(os.path.expandvars(raw_path))
+    if resolved != "/":
+        resolved = resolved.rstrip("/")
+    return resolved
+
+
+def resolve_pathvars(path: str, path_roots: dict[str, str]) -> str:
+    """Replace <results>, <processing>, etc. with actual paths."""
+    for key, root in path_roots.items():
+        path = path.replace(f"<{key}>", root)
+    return path
+
+
+def solver_options_with_overrides(cfg: dict) -> dict:
+    """Return solver options with threads and time-limit overrides applied."""
+    solver_name = cfg["solving"]["solver"]
+    options = cfg["solving"].get(f"options_{solver_name}", {}) or {}
+    threads = int(cfg["solving"]["threads"])
+    time_limit = cfg["solving"]["time_limit"]
+
+    options = dict(options)
+    solver_key = solver_name.lower()
+    if solver_key == "gurobi":
+        options["Threads"] = threads
+        if time_limit is not None:
+            options["TimeLimit"] = time_limit * 60
+    elif solver_key == "highs":
+        options["threads"] = threads
+        if time_limit is not None:
+            options["time_limit"] = time_limit * 60
+    return options
+
+
+# --- Analysis outputs (mirrors _ANALYSIS_OUTPUTS in analysis.smk) ---
+ANALYSIS_OUTPUTS = [
+    "crop_production",
+    "land_use",
+    "animal_production",
+    "food_consumption",
+    "food_group_consumption",
+    "net_emissions",
+    "objective_breakdown",
+    "ghg_attribution",
+    "ghg_attribution_totals",
+    "health_marginals",
+    "health_totals",
+    "health_attribution",
+    "feed_by_category",
+    "feed_by_animal",
+    "luc_breakdown",
+    "baseline_deviation",
+]
+
+
+def build_scenario_entry(
+    base_config: dict,
+    scenario: str,
+    name: str,
+    path_roots: dict[str, str],
+    inline_analysis: bool,
+    scenario_defs: dict,
+) -> dict:
+    """Build a manifest entry for one scenario."""
+    eff = get_effective_config(base_config, scenario, scenario_defs)
+
+    def rp(path: str) -> str:
+        """Resolve pathvars and {name}/{scenario} placeholders."""
+        return resolve_pathvars(path.format(name=name, scenario=scenario), path_roots)
+
+    # --- Inputs (mirrors solve_model_inputs in model.smk) ---
+    inputs = {
+        "network": rp("<results>/{name}/build/model.nc"),
+        "m49": "data/curated/M49-codes.csv",
+        "health_risk_breakpoints": rp(
+            "<processing>/{name}/health/risk_breakpoints.csv"
+        ),
+        "health_cluster_cause": rp(
+            "<processing>/{name}/health/cluster_cause_baseline.csv"
+        ),
+        "health_cause_log": rp("<processing>/{name}/health/cause_log_breakpoints.csv"),
+        "health_cluster_summary": rp("<processing>/{name}/health/cluster_summary.csv"),
+        "health_clusters": rp("<processing>/{name}/health/country_clusters.csv"),
+        "health_derived_tmrel": rp("<processing>/{name}/health/derived_tmrel.csv"),
+        "health_cluster_risk_baseline": rp(
+            "<processing>/{name}/health/cluster_risk_baseline.csv"
+        ),
+        "food_groups": "data/curated/food_groups.csv",
+        "baseline_diet": rp("<processing>/{name}/baseline_diet.csv"),
+    }
+
+    # Conditional inputs
+    if eff["food_incentives"]["enabled"]:
+        sources = eff["food_incentives"]["sources"]
+        if not sources:
+            raise ValueError(
+                f"Scenario {scenario}: food_incentives enabled but sources is empty"
+            )
+        inputs["food_incentives"] = [
+            source.format(name=name, scenario=scenario) for source in sources
+        ]
+
+    utility_cfg = eff["food_utility_piecewise"]
+    if utility_cfg["enabled"]:
+        baseline_name = eff["consumer_values"]["baseline_scenario"]
+        inputs["food_utility_piecewise"] = rp(
+            f"<results>/{{name}}/consumer_values/{baseline_name}/utility_blocks.csv"
+        )
+
+    equal_source = eff["food_groups"]["equal_by_country_source"]
+    if equal_source:
+        inputs["food_group_equal"] = equal_source.format(name=name, scenario=scenario)
+
+    macronutrient_cfg = eff["macronutrients"]
+    if any(
+        isinstance(bounds, dict) and bounds.get("equal_to_baseline")
+        for bounds in macronutrient_cfg.values()
+    ):
+        inputs["nutrition"] = "data/curated/nutrition.csv"
+
+    cal_cfg = eff["grazing"]["grassland_forage_calibration"]
+    if cal_cfg["enabled"]:
+        inputs["grassland_yield_correction"] = cal_cfg["grassland_yield_correction"]
+        inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
+        inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
+
+    # Add population input for inline analysis
+    if inline_analysis:
+        inputs["population"] = rp("<processing>/{name}/population.csv")
+
+    # --- Params (mirrors rule params in model.smk / analysis.smk) ---
+    params = {
+        # Solve params
+        "health_enabled": eff["health"]["enabled"],
+        "health_risk_factors": eff["health"]["risk_factors"],
+        "health_risk_cause_map": eff["health"]["risk_cause_map"],
+        "health_value_per_yll": eff["health"]["value_per_yll"],
+        "ghg_price": eff["emissions"]["ghg_price"],
+        "solver": eff["solving"]["solver"],
+        "solver_options": solver_options_with_overrides(eff),
+        "io_api": eff["solving"]["io_api"],
+        "calculate_fixed_duals": eff["solving"]["calculate_fixed_duals"],
+        "netcdf": eff["netcdf"],
+        "macronutrients": macronutrient_cfg,
+        "food_group_constraints": eff["food_groups"]["constraints"],
+        "enforce_baseline": eff["validation"]["enforce_baseline_diet"],
+        "production_stability": eff["validation"]["production_stability"],
+        "animal_growth_cap": eff["validation"]["animal_growth_cap"],
+        "food_utility_piecewise": utility_cfg,
+        "fix_within_group_ratios": eff["food_groups"]["fix_within_group_ratios"],
+        "sensitivity": eff.get("sensitivity", {}),
+        "forage_calibration_enabled": cal_cfg["enabled"],
+        "forage_overlap_crops": eff["grazing"]["forage_overlap_crops"],
+        "enforce_baseline_feed": eff["validation"]["enforce_baseline_feed"],
+        # New params (formerly smk.config accesses)
+        "regional_limit": eff["land"]["regional_limit"],
+        "biofuel_demand_scale": eff["biomass"]["biofuel_demand_scale"],
+        "ghg_pricing_enabled": eff["emissions"]["ghg_pricing_enabled"],
+        "food_incentives_enabled": eff["food_incentives"]["enabled"],
+        "equal_by_country_source": equal_source,
+        "slack_marginal_cost": eff["validation"]["slack_marginal_cost"],
+        "residue_max_feed_fraction": eff["residues"]["max_feed_fraction"],
+        "residue_max_feed_fraction_by_region": eff["residues"][
+            "max_feed_fraction_by_region"
+        ],
+        "countries": eff["countries"],
+        "export_for_tuning": eff["solving"].get("export_for_tuning", False),
+    }
+
+    # Analysis params (for inline analysis)
+    if inline_analysis:
+        params["ch4_gwp"] = eff["emissions"]["ch4_to_co2_factor"]
+        params["n2o_gwp"] = eff["emissions"]["n2o_to_co2_factor"]
+
+    # --- Outputs ---
+    if inline_analysis:
+        outputs = {
+            out_name: rp(
+                f"<results>/{{name}}/analysis/scen-{{scenario}}/{out_name}.parquet"
+            )
+            for out_name in ANALYSIS_OUTPUTS
+        }
+    else:
+        outputs = {
+            "network": rp("<results>/{name}/solved/model_scen-{scenario}.nc"),
+        }
+
+    # --- Log ---
+    if inline_analysis:
+        log = rp("<logs>/{name}/solve_and_analyze_model_scen-{scenario}.log")
+    else:
+        log = rp("<logs>/{name}/solve_model_scen-{scenario}.log")
+
+    return {
+        "scenario": scenario,
+        "inputs": inputs,
+        "params": params,
+        "outputs": outputs,
+        "log": log,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Export a JSON manifest for cluster solve+analyze jobs."
+    )
+    parser.add_argument("configfile", help="Path to the config YAML file")
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Output manifest path (default: .batch/manifest_{name}.json)",
+    )
+    parser.add_argument(
+        "--scenarios",
+        nargs="*",
+        help="Only include these scenarios (default: all)",
+    )
+    parser.add_argument(
+        "--exclude",
+        nargs="*",
+        default=[],
+        help="Exclude these scenarios (supports shell-style wildcards)",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip scenarios whose outputs already exist",
+    )
+    args = parser.parse_args()
+
+    configfile = Path(args.configfile).resolve()
+    default_config = PROJECT_ROOT / "config" / "default.yaml"
+    config = load_merged_config(default_config, configfile)
+
+    name = config["name"]
+    inline_analysis = config["solving"]["inline_analysis"]
+
+    # Resolve path roots
+    paths_cfg = config.get("paths", {})
+    path_roots = {
+        "results": resolve_path_root(paths_cfg.get("results_root", "results")),
+        "processing": resolve_path_root(paths_cfg.get("processing_root", "processing")),
+        "logs": resolve_path_root(paths_cfg.get("logs_root", "logs")),
+        "benchmarks": resolve_path_root(paths_cfg.get("benchmarks_root", "benchmarks")),
+    }
+
+    # Get scenarios (expand once, reuse for all entries)
+    all_scenarios = expand_scenario_defs(config.get("scenarios") or {})
+    scenario_defs = all_scenarios
+    if args.scenarios:
+        scenario_names = args.scenarios
+        missing = set(scenario_names) - set(all_scenarios)
+        if missing:
+            print(
+                f"Warning: unknown scenarios: {', '.join(sorted(missing))}",
+                file=sys.stderr,
+            )
+            scenario_names = [s for s in scenario_names if s in all_scenarios]
+    else:
+        scenario_names = sorted(all_scenarios)
+
+    # Apply exclusions (supports fnmatch-style wildcards)
+    if args.exclude:
+        import fnmatch
+
+        excluded = set()
+        for pattern in args.exclude:
+            excluded.update(fnmatch.filter(scenario_names, pattern))
+        if excluded:
+            scenario_names = [s for s in scenario_names if s not in excluded]
+            print(f"Excluded {len(excluded)} scenarios", file=sys.stderr)
+
+    print(f"Config: {configfile.name} (name={name})", file=sys.stderr)
+    print(
+        f"Mode: {'inline_analysis' if inline_analysis else 'separate solve+analyze'}",
+        file=sys.stderr,
+    )
+    print(f"Total scenarios: {len(scenario_names)}", file=sys.stderr)
+
+    # Strip scenarios key from config before building entries (it's large
+    # and not needed — scenario_defs is already expanded).
+    config.pop("scenarios", None)
+
+    # Build manifest entries
+    entries = []
+    skipped = 0
+    for scenario in scenario_names:
+        entry = build_scenario_entry(
+            config, scenario, name, path_roots, inline_analysis, scenario_defs
+        )
+        if args.skip_existing:
+            # Check if all outputs exist
+            all_exist = all(Path(p).exists() for p in entry["outputs"].values())
+            if all_exist:
+                skipped += 1
+                continue
+        entries.append(entry)
+
+    if skipped:
+        print(f"Skipped {skipped} scenarios with existing outputs", file=sys.stderr)
+    print(f"Manifest entries: {len(entries)}", file=sys.stderr)
+
+    # Factor out params that are identical across all scenarios (structural
+    # config keys that cannot vary per-scenario).  This dramatically reduces
+    # manifest size when there are many scenarios.
+    shared_params = {}
+    structural_keys = [
+        "slack_marginal_cost",
+        "residue_max_feed_fraction",
+        "residue_max_feed_fraction_by_region",
+        "countries",
+        "forage_overlap_crops",
+        "enforce_baseline_feed",
+    ]
+    if entries:
+        for key in structural_keys:
+            if key in entries[0]["params"]:
+                shared_params[key] = entries[0]["params"][key]
+        for entry in entries:
+            for key in structural_keys:
+                entry["params"].pop(key, None)
+
+    # Build manifest
+    manifest = {
+        "config_name": name,
+        "config_file": str(configfile),
+        "inline_analysis": inline_analysis,
+        "solving": {
+            "mem_mb": config["solving"]["mem_mb"],
+            "runtime": config["solving"]["runtime"],
+            "time_limit": config["solving"]["time_limit"],
+            "threads": int(config["solving"]["threads"]),
+        },
+        "shared_params": shared_params,
+        "scenarios": entries,
+    }
+
+    # Write manifest
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        batch_dir = PROJECT_ROOT / ".batch"
+        batch_dir.mkdir(exist_ok=True)
+        output_path = batch_dir / f"manifest_{name}.json"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+
+    print(f"Manifest written to: {output_path}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

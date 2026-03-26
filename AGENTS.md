@@ -234,6 +234,19 @@ Notes:
 - Retrieval / downloading rules and scripts make network calls; when running such rules you will need to ask for permission to run outside the sandbox in order to get network access.
 - Never rerun retrieval rules without explicitly being instructed to do so. This includes implicit calls like an indiscriminate use of the `--forceall` Snakemake argument.
 
+### HPC Cluster Workflow
+
+For large-scale runs (e.g., GSA with 24k+ scenarios), solves are executed on an HPC cluster **without Snakemake** to avoid DAG construction overhead and filesystem latency. The workflow uses a manifest-based approach:
+
+1. **`tools/export-solve-manifest`** (local): Generates a JSON manifest containing fully-resolved inputs, params, and outputs for each scenario. This mirrors the logic in the `solve_model` / `solve_and_analyze_model` Snakemake rules but runs independently.
+2. **`tools/sync-solve-inputs`** (local): Syncs built model, processing files, manifest, and scripts to the cluster.
+3. **`tools/batch-solve`** (cluster): Submits SLURM array jobs that call `tools/cluster-solve` per scenario.
+4. **`tools/cluster-solve`** (cluster): Reads a manifest entry, constructs a lightweight namespace shim, and calls `run_solve` / `run_analysis` directly — no Snakemake imports.
+
+**Important**: When adding or changing inputs/params on the `solve_model` or `solve_and_analyze_model` rules, you **must** also update `tools/export-solve-manifest` to include the same inputs/params in the manifest. The manifest generator is intentionally decoupled from Snakemake for performance (13s vs ~5min via the Snakemake API for 24k scenarios). See the comments on the rules in `workflow/rules/model.smk` and `workflow/rules/analysis.smk`.
+
+See `notes/sherlock_workflow.org` for the step-by-step cluster workflow.
+
 ## Testing
 
 Integration tests live in `tests/` and use pytest with the Snakemake Python API. They exercise the full workflow pipeline using a lightweight configuration (`tests/config/test.yaml`) with reduced spatial resolution and a small crop subset, outputting to `results/test/`.

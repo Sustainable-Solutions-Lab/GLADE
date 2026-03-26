@@ -57,6 +57,8 @@ _ANALYSIS_OUTPUTS = {
 
 if config["solving"]["inline_analysis"]:
 
+    # NOTE: When changing inputs or params on solve_and_analyze_model, also
+    # update tools/export-solve-manifest which mirrors these for the HPC manifest.
     rule solve_and_analyze_model:
         """Solve the model and run analysis in one process (no intermediate .nc).
 
@@ -121,6 +123,31 @@ if config["solving"]["inline_analysis"]:
             ]["grassland_forage_calibration"]["enabled"],
             forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
             enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
+            regional_limit=lambda w: get_effective_config(w.scenario)["land"][
+                "regional_limit"
+            ],
+            biofuel_demand_scale=lambda w: get_effective_config(w.scenario)["biomass"][
+                "biofuel_demand_scale"
+            ],
+            ghg_pricing_enabled=lambda w: get_effective_config(w.scenario)[
+                "emissions"
+            ]["ghg_pricing_enabled"],
+            food_incentives_enabled=lambda w: get_effective_config(w.scenario)[
+                "food_incentives"
+            ]["enabled"],
+            equal_by_country_source=lambda w: get_effective_config(w.scenario)[
+                "food_groups"
+            ]["equal_by_country_source"],
+            slack_marginal_cost=config["validation"]["slack_marginal_cost"],
+            residue_max_feed_fraction=config["residues"]["max_feed_fraction"],
+            residue_max_feed_fraction_by_region=config["residues"][
+                "max_feed_fraction_by_region"
+            ],
+            countries=config["countries"],
+            export_for_tuning=lambda w: get_effective_config(w.scenario)[
+                "solving"
+            ].get("export_for_tuning", False),
+            netcdf=lambda w: get_effective_config(w.scenario)["netcdf"],
             scenario_hash=lambda w: scenario_override_hash(w.scenario),
             # --- analysis params ---
             ch4_gwp=config["emissions"]["ch4_to_co2_factor"],

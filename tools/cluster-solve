@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Run solve (+ optional inline analysis) for a single scenario from a manifest.
+
+This script replaces Snakemake on the cluster.  It reads a pre-computed
+manifest entry, constructs a lightweight namespace shim that satisfies the
+``run_solve`` / ``run_analysis`` interfaces, and executes directly.
+
+Usage:
+    tools/cluster-solve <manifest.json> <scenario>
+    tools/cluster-solve <manifest.json> --index <N>
+"""
+
+import argparse
+import json
+import logging
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def build_namespace(entry: dict, shared_params: dict | None = None) -> SimpleNamespace:
+    """Build a snakemake-like namespace from a manifest entry.
+
+    The returned object has ``.input``, ``.params``, ``.output``, ``.log``,
+    and ``.wildcards`` attributes that mirror how Snakemake passes data to
+    scripts.
+
+    Parameters
+    ----------
+    entry : dict
+        Per-scenario manifest entry.
+    shared_params : dict or None
+        Structural params shared across all scenarios (factored out of
+        per-scenario entries to reduce manifest size).
+    """
+    # Build input namespace.  List-valued inputs (e.g. food_incentives) are
+    # stored as lists; scalar inputs as plain strings.
+    inputs = entry["inputs"]
+    input_ns = SimpleNamespace(**inputs)
+
+    # Build params namespace (merge shared params first, per-scenario overrides)
+    all_params = dict(shared_params or {})
+    all_params.update(entry["params"])
+    params_ns = SimpleNamespace(**all_params)
+
+    # Build output namespace
+    output_ns = SimpleNamespace(**entry["outputs"])
+
+    # Build wildcards namespace
+    wildcards_ns = SimpleNamespace(scenario=entry["scenario"])
+
+    # Build log (list, as Snakemake provides)
+    log_path = entry["log"]
+
+    smk = SimpleNamespace(
+        input=input_ns,
+        params=params_ns,
+        output=output_ns,
+        wildcards=wildcards_ns,
+        log=[log_path],
+    )
+    return smk
+
+
+def run_scenario(
+    entry: dict, inline_analysis: bool, shared_params: dict | None = None
+) -> bool:
+    """Run solve (+analysis) for a single scenario.  Returns True on success."""
+    scenario = entry["scenario"]
+    log_path = entry["log"]
+
+    # Ensure output and log directories exist
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    for path in entry["outputs"].values():
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Set up logging (same as the Snakemake scripts do)
+    from workflow.scripts.logging_config import setup_script_logging
+    from workflow.scripts.solve_model.core import _ShadowPriceLogFilter, run_solve
+
+    logger = setup_script_logging(log_path)
+    logging.getLogger("pypsa.optimization.optimize").addFilter(_ShadowPriceLogFilter())
+
+    logger.info("cluster-solve: scenario=%s", scenario)
+
+    smk = build_namespace(entry, shared_params)
+    n = run_solve(smk, logger)
+
+    if n is None:
+        logger.warning("Solve failed for scenario %s", scenario)
+        if inline_analysis:
+            # Write empty analysis outputs
+            from workflow.scripts.analysis.analyze_model import write_empty_outputs
+
+            write_empty_outputs(smk.output)
+        else:
+            # Write empty network file
+            Path(smk.output.network).touch()
+        return False
+
+    if inline_analysis:
+        # Run analysis in-memory (same as solve_and_analyze_model.py)
+        from workflow.scripts.analysis.analyze_model import run_analysis
+
+        output_paths = {
+            attr: getattr(smk.output, attr)
+            for attr in vars(smk.output)
+            if isinstance(getattr(smk.output, attr), str)
+            and getattr(smk.output, attr).endswith(".parquet")
+        }
+
+        run_analysis(
+            n,
+            output_paths=output_paths,
+            food_groups_path=smk.input.food_groups,
+            m49_codes_path=smk.input.m49,
+            risk_breakpoints_path=smk.input.health_risk_breakpoints,
+            health_cluster_cause_path=smk.input.health_cluster_cause,
+            health_cause_log_path=smk.input.health_cause_log,
+            health_clusters_path=smk.input.health_clusters,
+            population_path=smk.input.population,
+            derived_tmrel_path=smk.input.health_derived_tmrel,
+            ghg_price=float(smk.params.ghg_price),
+            ch4_gwp=float(smk.params.ch4_gwp),
+            n2o_gwp=float(smk.params.n2o_gwp),
+            value_per_yll=float(smk.params.health_value_per_yll),
+            health_risk_factors=list(smk.params.health_risk_factors),
+            logger=logger,
+        )
+    else:
+        # Write solved network to disk
+        netcdf_config = smk.params.netcdf
+        n.export_to_netcdf(
+            smk.output.network,
+            compression=netcdf_config["compression"],
+            float32=netcdf_config["float32"],
+        )
+
+    logger.info("Done: scenario=%s", scenario)
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run solve+analyze for a single scenario from a manifest."
+    )
+    parser.add_argument("manifest", help="Path to the manifest JSON file")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("scenario", nargs="?", help="Scenario name to solve")
+    group.add_argument(
+        "--index", type=int, help="Index into the manifest's scenario list"
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip if all outputs already exist",
+    )
+    args = parser.parse_args()
+
+    with open(args.manifest) as f:
+        manifest = json.load(f)
+
+    inline_analysis = manifest["inline_analysis"]
+    shared_params = manifest.get("shared_params", {})
+    entries = manifest["scenarios"]
+
+    # Find the requested entry
+    if args.index is not None:
+        if args.index < 0 or args.index >= len(entries):
+            print(
+                f"Error: index {args.index} out of range (0-{len(entries)-1})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        entry = entries[args.index]
+    else:
+        entry = next((e for e in entries if e["scenario"] == args.scenario), None)
+        if entry is None:
+            print(
+                f"Error: scenario '{args.scenario}' not found in manifest",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    if args.skip_existing:
+        all_exist = all(Path(p).exists() for p in entry["outputs"].values())
+        if all_exist:
+            print(f"All outputs exist for {entry['scenario']}, skipping.")
+            sys.exit(0)
+
+    success = run_scenario(entry, inline_analysis, shared_params)
+    sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()

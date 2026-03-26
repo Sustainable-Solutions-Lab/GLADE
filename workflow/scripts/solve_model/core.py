@@ -18,7 +18,6 @@ import xarray as xr
 from workflow.scripts import constants
 from workflow.scripts.build_model.utils import _per_capita_mass_to_mt_per_year
 from workflow.scripts.population import get_country_population
-from workflow.scripts.snakemake_utils import apply_scenario_config
 from workflow.scripts.solve_model.food_utility import (
     add_piecewise_food_utility,
     pop_piecewise_food_utility_value,
@@ -599,14 +598,26 @@ def add_food_incentives_to_objective(
 
 
 def build_residue_feed_fraction_by_country(
-    config: dict, m49_path: str
+    max_feed_fraction_by_region: dict,
+    countries: list[str],
+    m49_path: str,
 ) -> dict[str, float]:
-    """Build per-country residue feed fraction overrides from config."""
-    overrides = config["residues"]["max_feed_fraction_by_region"]
+    """Build per-country residue feed fraction overrides from config.
+
+    Parameters
+    ----------
+    max_feed_fraction_by_region : dict
+        Region/subregion/country-specific residue feed fraction overrides.
+    countries : list[str]
+        ISO-alpha3 country codes being modeled.
+    m49_path : str
+        Path to M49 codes CSV.
+    """
+    overrides = max_feed_fraction_by_region
     if not overrides:
         return {}
 
-    countries = [str(country).upper() for country in config["countries"]]
+    countries = [str(country).upper() for country in countries]
 
     m49_df = pd.read_csv(m49_path, sep=";", encoding="utf-8-sig", comment="#")
     m49_df = m49_df[m49_df["ISO-alpha3 Code"].notna()]
@@ -1082,9 +1093,6 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     global logger
     logger = _logger
 
-    # Apply scenario config overrides based on wildcard
-    apply_scenario_config(smk.config, smk.wildcards.scenario)
-
     n = pypsa.Network(smk.input.network)
 
     # Apply sensitivity adjustments (moved from build_model to allow shared builds)
@@ -1106,13 +1114,11 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         )
 
     # Rescale land supply generators if scenario regional_limit differs from build
-    _apply_regional_limit_scaling(n, smk.config["land"]["regional_limit"])
-    _apply_biofuel_demand_scaling(
-        n, float(smk.config["biomass"]["biofuel_demand_scale"])
-    )
+    _apply_regional_limit_scaling(n, smk.params.regional_limit)
+    _apply_biofuel_demand_scaling(n, float(smk.params.biofuel_demand_scale))
 
     # Add GHG pricing to the objective if enabled
-    if smk.config["emissions"]["ghg_pricing_enabled"]:
+    if smk.params.ghg_pricing_enabled:
         ghg_price = float(smk.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
 
@@ -1120,7 +1126,7 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     # The build uses the base config value; scenarios may override it.
     _apply_health_pricing(n, float(smk.params.health_value_per_yll))
 
-    incentives_enabled = bool(smk.config["food_incentives"]["enabled"])
+    incentives_enabled = bool(smk.params.food_incentives_enabled)
     piecewise_utility_cfg = smk.params.food_utility_piecewise
     piecewise_utility_enabled = bool(piecewise_utility_cfg["enabled"])
 
@@ -1149,14 +1155,14 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     # consumption links to baseline via p_set. Both must happen BEFORE
     # create_model() so PyPSA includes them in the linopy model.
     per_country_equal: dict[str, dict[str, float]] | None = None
-    equal_source = smk.config["food_groups"]["equal_by_country_source"]
+    equal_source = smk.params.equal_by_country_source
     enforce_baseline = bool(smk.params.enforce_baseline)
     if enforce_baseline and equal_source:
         raise ValueError(
             "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
         )
     if enforce_baseline:
-        slack_cost = float(smk.config["validation"]["slack_marginal_cost"])
+        slack_cost = float(smk.params.slack_marginal_cost)
         matched_baseline = _match_baseline_to_consume_links(
             prepared_baseline_df, consume_links, population_map
         )
@@ -1268,16 +1274,18 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     )
 
     # Add residue feed limit constraints
-    max_feed_fraction = float(smk.config["residues"]["max_feed_fraction"])
+    max_feed_fraction = float(smk.params.residue_max_feed_fraction)
     max_feed_fraction_by_country = build_residue_feed_fraction_by_country(
-        smk.config, smk.input.m49
+        smk.params.residue_max_feed_fraction_by_region,
+        smk.params.countries,
+        smk.input.m49,
     )
     add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
     # Add production stability constraints (per-link for both crops and animals)
     stability_cfg = smk.params.production_stability
     if stability_cfg["enabled"]:
-        slack_marginal_cost = float(smk.config["validation"]["slack_marginal_cost"])
+        slack_marginal_cost = float(smk.params.slack_marginal_cost)
         add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
 
     # Add animal growth cap constraints (independent of production stability)
@@ -1318,9 +1326,7 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         )
 
     # Export fully-constructed model to MPS for Gurobi parameter tuning
-    if smk.config["solving"].get("export_for_tuning") and hasattr(
-        smk.output, "network"
-    ):
+    if smk.params.export_for_tuning and hasattr(smk.output, "network"):
         output_path = Path(smk.output.network).with_suffix(".mps")
         logger.info("Exporting model to %s for tuning...", output_path)
         gp_model = n.model.to_gurobipy(env=gurobi_env)

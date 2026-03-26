@@ -75,6 +75,25 @@ if [[ -d "results/${CONFIG_NAME}/consumer_values" ]]; then
     SOURCES+=("results/${CONFIG_NAME}/consumer_values/")
 fi
 
+# Manifest file for cluster-solve (if it exists).
+if [[ -f ".batch/manifest_${CONFIG_NAME}.json" ]]; then
+    SOURCES+=(".batch/manifest_${CONFIG_NAME}.json")
+fi
+
+# Workflow scripts (needed by cluster-solve on the remote).
+SOURCES+=("workflow/scripts/")
+
+# Config files (needed for pixi environment on remote).
+SOURCES+=("$CONFIG_FILE")
+SOURCES+=("config/default.yaml")
+
+# Tools needed on the remote.
+SOURCES+=("tools/cluster-solve")
+SOURCES+=("tools/batch-solve")
+
+# Workflow package __init__ files (needed for imports by cluster-solve).
+SOURCES+=("workflow/__init__.py")
+
 # Check that the main directories exist.
 for src in "${SOURCES[@]}"; do
     if [[ ! -e "$src" ]]; then
