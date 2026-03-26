@@ -42,7 +42,6 @@
   Consider running with -n first and potentially running with --touch to prevent rerunning solve_model,analyze_model
 
 * Notes
-- The manifest-based workflow (export-solve-manifest + cluster-solve + batch-solve) replaces the Snakemake-based batch-smk approach.
 - cluster-solve runs solve+analyze directly without Snakemake, avoiding DAG construction overhead and HPC I/O latency issues.
 - Baselines must be solved locally first since they generate consumer values that GSA scenarios depend on.
 - The --skip-existing flag on export-solve-manifest avoids re-including scenarios that were already solved in previous runs.

@@ -245,7 +245,7 @@ For large-scale runs (e.g., GSA with 24k+ scenarios), solves are executed on an 
 
 **Important**: When adding or changing inputs/params on the `solve_model` or `solve_and_analyze_model` rules, you **must** also update `tools/export-solve-manifest` to include the same inputs/params in the manifest. The manifest generator is intentionally decoupled from Snakemake for performance (13s vs ~5min via the Snakemake API for 24k scenarios). See the comments on the rules in `workflow/rules/model.smk` and `workflow/rules/analysis.smk`.
 
-See `notes/sherlock_workflow.org` for the step-by-step cluster workflow.
+See `docs/cluster_execution.rst` for full documentation.
 
 ## Testing
 

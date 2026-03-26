@@ -5,9 +5,8 @@
 
 """Submit solve jobs as a SLURM array using a pre-built manifest.
 
-Unlike ``batch-smk``, this tool does NOT use Snakemake on the cluster.
 Each array element runs ``tools/cluster-solve`` directly for its assigned
-batch of scenarios.
+batch of scenarios, without requiring Snakemake on the cluster.
 
 Usage:
     tools/batch-solve --manifest .batch/manifest_gsa.json [options]
