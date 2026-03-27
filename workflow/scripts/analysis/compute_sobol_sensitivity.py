@@ -16,6 +16,8 @@ elif method == "rf":
     from workflow.scripts.analysis.compute_rf_sensitivity import run
 elif method == "mars":
     from workflow.scripts.analysis.compute_mars_sensitivity import run
+elif method == "xgb":
+    from workflow.scripts.analysis.compute_xgb_sensitivity import run
 else:
     raise ValueError(f"Unknown sensitivity method '{method}'")
 

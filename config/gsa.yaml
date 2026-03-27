@@ -194,7 +194,16 @@ sensitivity_analysis:
         max_degree: 2
         penalty: 3.0
         n_knots: 25
-        log_transform: [yll]
+    xgb:
+      grid_resolution: 15
+      method_options:
+        n_estimators: 5000
+        max_depth: 4
+        learning_rate: 0.02
+        subsample: 0.8
+        colsample_bytree: 0.8
+        min_child_weight: 5
+        early_stopping_rounds: 50
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020
