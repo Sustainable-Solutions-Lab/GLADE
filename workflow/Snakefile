@@ -95,7 +95,7 @@ wildcard_constraints:
     lu_class=r"GL-[a-z]+",  # LUIcube land-use class (e.g., GL-owl, GL-notrees)
     variable=r"[a-zA-Z]+",  # LUIcube variable (e.g., area, HANPPharv, NPPeco)
     group=r"[a-zA-Z0-9\-]+",  # Sensitivity scenario group (e.g. gsa, gsa-l1-0p05)
-    method=r"pce|rf",  # Surrogate fitting method
+    method=r"pce|rf|mars",  # Surrogate fitting method
 
 
 ALL_RULE_TARGETS = [

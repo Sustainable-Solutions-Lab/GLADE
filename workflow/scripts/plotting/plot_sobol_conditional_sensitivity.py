@@ -149,6 +149,14 @@ def _label_areas(
         placed.append((best_idx, y_center))
 
 
+OUTPUT_UNITS = {
+    "total_cost": "bn USD",
+    "ghg_emissions": "MtCO\u2082eq",
+    "land_use": "Mha",
+    "yll": "million YLL",
+}
+
+
 def _plot_for_x(
     df: pd.DataFrame,
     x_column: str,
@@ -157,9 +165,22 @@ def _plot_for_x(
     output_pdf: Path,
     color_overrides: dict[str, str] | None = None,
     group_order: list[str] | None = None,
+    exclude_parameters: set[str] | None = None,
 ) -> None:
+    # Exclude specified parameters (e.g., the other slice parameter)
+    if exclude_parameters:
+        df = df[~df["parameter"].isin(exclude_parameters)]
+
+    # Compute variance-weighted metric: S1_cond * sqrt(conditional_variance).
+    # This gives each parameter's contribution to the conditional standard
+    # deviation in output units.  The total stack height ~ std(Y|slice).
+    df = df.copy()
+    cond_std = np.sqrt(df["conditional_variance"].clip(lower=0.0))
+    df["variance_contribution"] = df[metric_column].clip(lower=0.0) * cond_std
+    plot_metric = "variance_contribution"
+
     aggregated = (
-        df.groupby(["output", x_column, "parameter"], as_index=False)[metric_column]
+        df.groupby(["output", x_column, "parameter"], as_index=False)[plot_metric]
         .mean()
         .sort_values(["output", x_column, "parameter"])
     )
@@ -170,7 +191,6 @@ def _plot_for_x(
     available = set(aggregated["parameter"].unique())
     if group_order:
         parameters = [p for p in group_order if p in available]
-        # Append any parameters not in the group config
         for p in sorted(available):
             if p not in parameters:
                 parameters.append(p)
@@ -180,7 +200,7 @@ def _plot_for_x(
         else:
             rank_data = aggregated
         parameters = (
-            rank_data.groupby("parameter")[metric_column]
+            rank_data.groupby("parameter")[plot_metric]
             .mean()
             .sort_values(ascending=False)
             .index.tolist()
@@ -194,7 +214,6 @@ def _plot_for_x(
         n_rows,
         n_cols,
         figsize=(6.8 * n_cols, 3.8 * n_rows),
-        sharey=True,
         squeeze=False,
     )
 
@@ -206,7 +225,7 @@ def _plot_for_x(
         ax = axes.flat[i]
         sub = aggregated[aggregated["output"] == output]
         pivot = (
-            sub.pivot(index=x_column, columns="parameter", values=metric_column)
+            sub.pivot(index=x_column, columns="parameter", values=plot_metric)
             .fillna(0.0)
             .sort_index()
         )
@@ -223,6 +242,7 @@ def _plot_for_x(
 
         x = pivot.index.to_numpy(dtype=float)
         y_arrays = [pivot[param].to_numpy(dtype=float) for param in output_parameters]
+        total_height = np.sum(y_arrays, axis=0)
         ax.stackplot(
             x,
             y_arrays,
@@ -231,12 +251,19 @@ def _plot_for_x(
             linewidth=0.5,
             alpha=0.95,
         )
-        _label_areas(ax, x, y_arrays, output_parameters, colors)
+        _label_areas(
+            ax,
+            x,
+            y_arrays,
+            output_parameters,
+            colors,
+            min_height=0.08 * np.max(total_height) if np.max(total_height) > 0 else 0,
+        )
         ax.set_xscale("log")
         ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
         ax.xaxis.set_minor_formatter(mticker.NullFormatter())
         ax.set_xlim(x.min(), x.max())
-        ax.set_ylim(0.0, 1.0)
+        ax.set_ylim(0.0, None)
         ax.grid(axis="y", alpha=0.3)
         err_value = error_by_output.get(output)
         err_suffix = (
@@ -246,8 +273,9 @@ def _plot_for_x(
         )
         ax.set_title(f"{OUTPUT_LABELS.get(output, output)}{err_suffix}")
         ax.set_xlabel(X_LABELS.get(x_column, x_column))
-        if i % n_cols == 0:
-            ax.set_ylabel("Explained Variability Fraction (S1)")
+        units = OUTPUT_UNITS.get(output, "")
+        unit_str = f" ({units})" if units else ""
+        ax.set_ylabel(f"Conditional Std. Dev.{unit_str}")
 
     # Reverse legend order to match bottom-to-top stacking
     legend_handles = [
@@ -269,8 +297,10 @@ def _plot_for_x(
     fig.text(
         0.01,
         0.01,
-        "Areas are conditional first-order Sobol shares. "
-        "Error bands: <0.01 excellent, <0.05 very good, <0.1 acceptable, <0.2 weak, >=0.2 poor.",
+        "Stacked areas show each parameter\u2019s contribution to conditional "
+        "standard deviation (S\u2081 \u00d7 \u03c3). "
+        "Error bands: <0.01 excellent, <0.05 very good, <0.1 acceptable, "
+        "<0.2 weak, \u22650.2 poor.",
         fontsize=8,
         alpha=0.8,
     )
@@ -345,6 +375,7 @@ def main() -> None:
         output_value_per_yll_pdf,
         color_overrides=color_overrides,
         group_order=group_order,
+        exclude_parameters={"ghg_price"},
     )
     logger.info("Wrote %s", output_value_per_yll_pdf)
 
@@ -357,6 +388,7 @@ def main() -> None:
         output_ghg_price_pdf,
         color_overrides=color_overrides,
         group_order=group_order,
+        exclude_parameters={"value_per_yll"},
     )
     logger.info("Wrote %s", output_ghg_price_pdf)
 

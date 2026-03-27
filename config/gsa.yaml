@@ -179,14 +179,22 @@ sensitivity_analysis:
   threads: 6
   methods:
     pce:
-      grid_resolution: 20
+      grid_resolution: 15
       method_options:
         n_mc_conditional: 2048
         cross_truncation: 0.8
     rf:
-      grid_resolution: 20
+      grid_resolution: 15
       method_options:
         n_estimators: 500
+    mars:
+      grid_resolution: 15
+      method_options:
+        max_terms: 50
+        max_degree: 2
+        penalty: 3.0
+        n_knots: 25
+        log_transform: [yll]
 
 # Set planning horizon and baseline year to match GDD baseline data (2018)
 planning_horizon: 2020

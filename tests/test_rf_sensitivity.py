@@ -10,10 +10,26 @@ import pytest
 from scipy.stats.qmc import Sobol
 
 from workflow.scripts.analysis.compute_rf_sensitivity import (
-    conditional_sobol_rf,
+    conditional_sobol_rf_batch,
     fit_random_forest,
     sobol_from_rf,
 )
+
+
+def conditional_sobol_rf(
+    model, distribution, n_params, slice_indices, slice_values, n_mc=2**13, seed=0
+):
+    """Single-point wrapper around the batch conditional Sobol function."""
+    results = conditional_sobol_rf_batch(
+        model,
+        distribution,
+        n_params,
+        slice_indices,
+        [slice_values],
+        n_mc=n_mc,
+        seed=seed,
+    )
+    return results[0]
 
 
 class TestRandomForestFitting:
