@@ -281,6 +281,10 @@ properties:
                 type: number
                 exclusiveMinimum: 0
                 description: "Mt DM floor (scaled to Mha-eq internally). Hard mode: minimum animal baseline to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+              l1_cost:
+                type: ["number", "null"]
+                minimum: 0
+                description: "Optional override: bn USD per Mt DM deviation. When set, bypasses automatic Mha-equivalent scaling and uses this cost directly in native animal feed units. When null, uses the parent l1_cost with automatic scaling."
           land_conversion:
             type: object
             required: [enabled]

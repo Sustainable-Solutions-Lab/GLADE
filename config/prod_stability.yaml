@@ -4,10 +4,9 @@
 
 # Production Stability Sensitivity Analysis
 # ------------------------------------------
-# Sweeps the L1 production stability cost parameter to understand how
-# results depend on production stability strength. Two scenario groups:
-#   - l1_{cost}_base: GHG=0, YLL=0 (pure cost minimization + stability)
-#   - l1_{cost}_priced: representative GHG+YLL pricing (ghg=200, yll=5000)
+# 5x5 log-log grid sweep of crop/grassland L1 cost (Mha) and animal L1
+# cost (Mt DM, native units) to map out land-area deviation as a function
+# of both penalty strengths.
 
 name: "prod_stability"
 scenarios:
@@ -36,14 +35,21 @@ scenarios:
         equal_to_baseline: true
 
   _generators:
-    # L1 cost sweep without health/emissions pricing (yll=0, ghg=0)
-    - name: l1_{cost}_base
+    # 5x5 grid: crop_cost x animal_cost (both log-spaced)
+    - name: grid_c{crop_cost}_a{animal_cost}
+      mode: grid
       parameters:
-        cost:
+        crop_cost:
           space: log
-          start: 0.05
+          start: 0.01
           stop: 1
-          num: 6
+          num: 5
+          name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
+        animal_cost:
+          space: log
+          start: 0.01
+          stop: 1
+          num: 5
           name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
       template:
         validation:
@@ -51,7 +57,9 @@ scenarios:
             enabled: true
             penalty_mode: "l1"
             deviation_type: "absolute"
-            l1_cost: "{cost}"
+            l1_cost: "{crop_cost}"
+            animals:
+              l1_cost: "{animal_cost}"
         emissions:
           ghg_price: 0
         health:
@@ -59,26 +67,6 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-
-    # L1 cost sweep with health + emissions pricing (yll=5000, ghg=200)
-    # - name: l1_{cost}_priced
-    #   parameters:
-    #     cost:
-    #       values: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100]
-    #       name_format: "lambda x: str(x).replace('.', 'p')"
-    #   template:
-    #     validation:
-    #       production_stability:
-    #         enabled: true
-    #         penalty_mode: "l1"
-    #         l1_cost: "{cost}"
-    #     health:
-    #       value_per_yll: 5000
-    #     emissions:
-    #       ghg_price: 200
-    #     macronutrients:
-    #       cal:
-    #         equal_to_baseline: true
 
 # Align with sensitivity.yaml
 planning_horizon: 2020
@@ -91,22 +79,18 @@ food_utility_piecewise:
 validation:
   use_actual_yields: true
 
-health:
-  region_clusters: 15
-  intake_grid_points: 8
-
 plotting:
   comparison_scenarios: "all"
 
 solving:
-  solver: "gurobi"
+  solver: "highs"
   io_api: "direct"
   threads: 2
   mem_mb: 9000
   runtime: 20
 
 remote_solve:
-  enabled: false
+  enabled: true
   local_scenarios: ["baseline"]
   host: "shr"
   workdir: "~/food-opt-scratch"

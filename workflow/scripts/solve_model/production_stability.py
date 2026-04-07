@@ -165,30 +165,42 @@ def add_production_stability_constraints(
     # --- ANIMAL FEED USE ---
     animals_cfg = stability_cfg["animals"]
     if animals_cfg["enabled"]:
-        # Compute dynamic scaling coefficient for absolute mode so that
-        # animal feed deviations (in Mt DM) are converted to Mha-equivalent
+        # Determine animal L1/quadratic cost and scaling.
+        # If animals.l1_cost is set, use it directly in native Mt DM units
+        # (no scaling). Otherwise, compute a dynamic scaling coefficient so
+        # that animal feed deviations (Mt DM) are converted to Mha-equivalent
         # units, making the shared l1_cost/quadratic_cost comparable across
         # crop/grassland (Mha) and animal (Mt DM) components.
-        animal_scale = 1.0
-        if stability_cfg["deviation_type"] == "absolute":
-            crop_links = links_df[links_df["carrier"] == "crop_production"]
-            grass_links = links_df[links_df["carrier"] == "grassland_production"]
-            total_area = (
-                crop_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
-                + grass_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
-            )
-            animal_links = links_df[links_df["carrier"] == "animal_production"]
-            total_feed = animal_links.get(
-                "baseline_feed_use_mt_dm", pd.Series(dtype=float)
-            ).sum()
-            if total_feed > 0:
-                animal_scale = total_area / total_feed
+        animal_l1_cost_override = animals_cfg.get("l1_cost")
+        if animal_l1_cost_override is not None:
+            animal_l1_cost = float(animal_l1_cost_override)
+            animal_scale = 1.0
             logger.info(
-                "Animal scaling: %.4f Mha/Mt (area=%.1f, feed=%.1f)",
-                animal_scale,
-                total_area,
-                total_feed,
+                "Using animal-specific L1 cost: %.4f bn USD/Mt DM (no scaling)",
+                animal_l1_cost,
             )
+        else:
+            animal_l1_cost = stability_cfg["l1_cost"]
+            animal_scale = 1.0
+            if stability_cfg["deviation_type"] == "absolute":
+                crop_links = links_df[links_df["carrier"] == "crop_production"]
+                grass_links = links_df[links_df["carrier"] == "grassland_production"]
+                total_area = (
+                    crop_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
+                    + grass_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
+                )
+                animal_links = links_df[links_df["carrier"] == "animal_production"]
+                total_feed = animal_links.get(
+                    "baseline_feed_use_mt_dm", pd.Series(dtype=float)
+                ).sum()
+                if total_feed > 0:
+                    animal_scale = total_area / total_feed
+                logger.info(
+                    "Animal scaling: %.4f Mha/Mt (area=%.1f, feed=%.1f)",
+                    animal_scale,
+                    total_area,
+                    total_feed,
+                )
 
         if penalty_mode == "hard":
             _add_animal_hard_constraints(
@@ -200,7 +212,7 @@ def add_production_stability_constraints(
                 link_p,
                 links_df,
                 stability_cfg["deviation_type"],
-                stability_cfg["l1_cost"],
+                animal_l1_cost,
                 animals_cfg["min_baseline"],
                 animal_scale,
             )
