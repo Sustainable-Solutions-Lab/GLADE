@@ -22,6 +22,7 @@ conversion correction, and exogenous forage supply.
 """
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 import pypsa
@@ -171,6 +172,13 @@ def compute_grassland_calibration(
     exogenous_forage_path : str
         Output path for exogenous forage CSV.
     """
+    if Path(network_path).stat().st_size == 0:
+        raise ValueError(
+            f"Solved network file is empty: {network_path}\n"
+            "This usually means the solve step failed (e.g. model was infeasible). "
+            "Check the solve log for details."
+        )
+
     n = pypsa.Network(network_path)
 
     # --- Grassland forage output per country ---
