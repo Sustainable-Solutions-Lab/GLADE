@@ -758,7 +758,7 @@ The LUC pipeline harmonises several global datasets to the common grid:
 * Land cover fractions and forest masks from Copernicus ESA CCI land cover (:ref:`copernicus-land-cover`)
 * Above-ground biomass from ESA Biomass CCI v6.0 (:ref:`esa-biomass-cci`)
 * Soil organic carbon stocks (0–30 cm) from ISRIC SoilGrids 2.0 (:ref:`soilgrids-soc`), scaled to 1 m depth using IPCC Tier 1 factors
-* Natural forest regrowth rates from Cook-Patton & Griscom (2020) (:ref:`cook-patton-regrowth`), representing the carbon that would accumulate if previously cleared land were reforested
+* Natural forest regrowth rates from Cook-Patton & Griscom (2020) (:ref:`cook-patton-regrowth`), representing the carbon that would accumulate if previously cleared land were reforested, masked by a biome-based reforestation eligibility layer from Hayek et al. (2024) (:ref:`hayek-reforestation-mask`) to exclude native grasslands and open savannas
 * IPCC Tier 1 below-ground biomass ratios, soil depletion factors, and agricultural equilibrium assumptions stored in ``data/curated/luc_zone_parameters.csv``
 
 These layers are reprojected, resampled, and combined by dedicated Snakemake rules to produce per-cell biomass/SOC stocks, forest masks, and regrowth rates ready for downstream processing. The figure below summarises the harmonised rasters on the common model grid.
@@ -819,17 +819,54 @@ Both cropland sources use the GAEZ "land equipped for irrigation" share raster t
 Spared land regrowth
 ~~~~~~~~~~~~~~~~~~~~
 
-Regrowth sequestration rates from Cook-Patton et al. (2020) represent **young regenerating forest** (0-30 years) on previously cleared or degraded land. The spared-land LEF is simply the negated regrowth rate:
+Regrowth sequestration rates from Cook-Patton et al. [#cook_patton]_ represent **young regenerating forest** (first ~30 years) on previously cleared or degraded land. The spared-land LEF is simply the negated regrowth rate:
 
 .. math::
 
    \mathrm{LEF}_{\mathrm{spared}} = -R_i
 
-Pixels without regrowth potential have :math:`R_i = 0` from the Cook-Patton data, so they naturally receive zero credit. Spared LEFs are area-weighted by ``cropland_frac`` (for spared cropland) or ``pasture_frac`` (for spared grassland) during aggregation, so only land currently under agriculture contributes.
+Spared LEFs are area-weighted by ``cropland_frac`` (for spared cropland) or ``pasture_frac`` (for spared grassland) during aggregation, so only land currently under agriculture contributes.
+
+Reforestation eligibility mask
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Not all grassland or cropland would naturally return to forest if abandoned. Native grasslands, open savannas, and arid shrublands are stable non-forest ecosystems whose conversion to forest is ecologically inappropriate and whose carbon sequestration potential under reforestation is negligible [#veldman]_. Applying forest regrowth rates to such areas would substantially overestimate sequestration potential.
+
+The workflow therefore applies a **biome-based reforestation mask** that restricts regrowth credits to pixels where forest could plausibly regrow. The mask is derived from the biome classification and potential vegetation carbon estimates in Hayek et al. [#hayek]_, following their methodology:
+
+* **Biomes 1--8** (tropical/subtropical/temperate/boreal forest and woodland types): eligible for reforestation (mask = 1).
+* **Biome 9** (savanna): eligible only where potential vegetation carbon exceeds a configurable threshold (``luc.savanna_pvc_threshold``, default 75 MgC/ha). Pixels above the threshold are classified as closed, woody savanna with reforestation potential; pixels below are treated as open savanna without forest potential.
+* **Biomes 10--15** (grassland, shrubland, tundra, desert, polar): not eligible (mask = 0).
+* **No data** (e.g., ocean, ice): eligible by default (conservative; no clipping where data is absent).
+
+The mask is applied in ``prepare_luc_inputs.py`` immediately after loading the Cook-Patton regrowth raster: pixels where the mask is zero have their regrowth rate set to zero. This zeroing propagates through LEF aggregation, so the affected region/class combinations receive zero sequestration credit in the optimisation.
+
+The 75 MgC/ha savanna threshold follows Hayek et al. [#hayek]_, who adopted it from their earlier work [#hayek_2021]_ as a pragmatic boundary between carbon-dense woody savannas (where cattle removal would likely trigger reforestation) and open, fire-maintained savannas (where tree cover is climatically or edaphically limited). While any single threshold is inevitably a simplification of the savanna--forest continuum, the value is consistent with the ecological literature on savanna--forest bistability [#veldman]_.
 
 Only baseline cropland (existing managed area) and current grassland pools (both convertible and marginal) can be spared in the optimisation; newly converted land must first revert to the baseline pool before becoming eligible for regrowth credits.
 
 Network links that implement this behaviour use the ``spare_*`` naming scheme: ``spare_land_*`` links pull from ``land:existing_cropland:*`` buses, and ``spare_existing_grassland_*`` links pull from ``land:existing_grassland_convertible:*`` and ``land:existing_grassland_marginal:*`` buses. Both produce to dedicated spared-land sinks with CO₂ outputs proportional to the spared LEF.
+
+.. raw:: html
+
+   <details>
+   <summary><strong>Discussion: choice of regrowth dataset</strong></summary>
+
+.. rubric:: Why Cook-Patton rates with a Hayek biome mask?
+
+Three global datasets were evaluated for estimating carbon sequestration potential on spared land. Each has distinct strengths and weaknesses; the chosen combination aims to use the strongest element of each.
+
+**Cook-Patton et al. (2020)** [#cook_patton]_ provides the most empirically grounded estimates: a random forest model trained on 13,112 georeferenced field measurements of aboveground carbon accumulation, mapped at 1 km resolution. Key limitations: (i) the map is "wall-to-wall" within forest and savanna biomes, predicting non-zero rates even in native grasslands where reforestation would not occur; (ii) it measures only aboveground biomass (belowground is estimated post-hoc via IPCC root:shoot ratios; soil carbon is not spatially modelled); (iii) the model explains less than half the variance in accumulation rates (R² = 0.45); and (iv) 96% of training data comes from just 10 countries. A 2025 follow-up by the same group [#fesenmyer]_ found that applying ecological safeguards (excluding native grasslands, biodiversity-sensitive areas) reduced estimated reforestation area by 71--92%.
+
+**Hayek et al. (2024)** [#hayek]_ provides net ecosystem productivity (NEP) from the LPJmL dynamic global vegetation model, accounting for decomposition losses that Cook-Patton does not. It also includes a biome classification that distinguishes forest-potential pixels from native grasslands. Key limitations: (i) all flux estimates come from a single process model (LPJmL), with no multi-model validation; (ii) LPJmL is known to overestimate forest extent in fire-maintained savannas because it poorly represents fire--vegetation feedbacks; (iii) the 75 MgC/ha savanna threshold is a pragmatic cutoff without formal ecological derivation; and (iv) recovery trajectories assume no fire, drought, or successional failure during regrowth. In pixel-level comparisons, Hayek NEP gives ~1.3× higher rates than Cook-Patton where both datasets overlap, and has non-zero values on ~1,570 Mha of grassland where Cook-Patton is zero---likely reflecting the LPJmL forest-in-savanna bias.
+
+**Searchinger et al. (2018)** [#searchinger]_ provides LPJmL vegetation and soil carbon stocks **corrected by biome to literature values**, making them more observationally grounded than raw LPJmL output. However, at 0.5° resolution (~55 km) these data cannot resolve within-region land quality gradients captured by the model's resource class system (each 0.5° pixel covers 36 model grid cells). Converting stocks to rates also requires assumptions about current agricultural carbon content and recovery timescales, adding uncertainty.
+
+The chosen approach---**Cook-Patton rates masked by Hayek biomes**---combines the strengths of each dataset: empirical, high-resolution accumulation rates applied only where an independent biome classification indicates forest could plausibly regrow. This addresses the main weakness of using Cook-Patton alone (spurious credits on native grasslands) while avoiding dependence on process-model rates that lack field validation.
+
+.. raw:: html
+
+   </details>
 
 .. _fig-luc-lef:
 
@@ -854,3 +891,31 @@ The current implementation makes several simplifying assumptions that should be 
 * **Soil organic carbon depth**: SOC stocks in the 0-30 cm layer (from SoilGrids) are scaled to 1 m depth using zone-specific factors from ``data/curated/luc_zone_parameters.csv``. **TODO**: These factors require verification against IPCC 2006/2019 Guidelines Volume 4 Chapter 2 to ensure they match the intended Tier 1 methodology.
 
 * **Managed flux**: Set to zero everywhere (:math:`M_{i,u} = 0`), meaning ongoing emissions from agricultural management (e.g., peat oxidation, tillage-induced decomposition) are not currently modeled. Future work could incorporate organic soil maps and management-specific emission factors.
+
+.. rubric:: References
+
+.. [#cook_patton] Cook-Patton, S. C. et al., 2020: Mapping carbon accumulation
+   potential from global natural forest regrowth. *Nature*, **585**\ (7826),
+   545--550. https://doi.org/10.1038/s41586-020-2686-x
+
+.. [#hayek] Hayek, M. N. et al., 2024: Opportunities for carbon sequestration
+   from removing or intensifying pasture-based beef production. *Proceedings of
+   the National Academy of Sciences*, **121**\ (46), e2405758121.
+   https://doi.org/10.1073/pnas.2405758121
+
+.. [#hayek_2021] Hayek, M. N. et al., 2021: The carbon opportunity cost of
+   animal-sourced food production on land. *Nature Sustainability*, **4**,
+   202--209. https://doi.org/10.1038/s41893-020-00603-4
+
+.. [#veldman] Veldman, J. W. et al., 2015: Where tree planting and forest
+   expansion are bad for biodiversity and ecosystem services. *BioScience*,
+   **65**\ (10), 1011--1018. https://doi.org/10.1093/biosci/biv118
+
+.. [#fesenmyer] Fesenmyer, K. A., Cook-Patton, S. C. et al., 2025: Addressing
+   critiques refines global estimates of reforestation potential for climate
+   change mitigation. *Nature Communications*, **16**, 2614.
+   https://doi.org/10.1038/s41467-025-57696-4
+
+.. [#searchinger] Searchinger, T. D. et al., 2018: Assessing the efficiency of
+   changes in land use for mitigating climate change. *Nature*, **564**\ (7735),
+   249--253. https://doi.org/10.1038/s41586-018-0757-z

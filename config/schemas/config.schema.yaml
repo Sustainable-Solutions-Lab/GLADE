@@ -580,6 +580,7 @@ properties:
       - horizon_years
       - managed_flux_mode
       - forest_fraction_threshold
+      - savanna_pvc_threshold
       - cropland_source
     additionalProperties: false
     properties:
@@ -596,6 +597,10 @@ properties:
         minimum: 0
         maximum: 1
         description: "Minimum forest fraction to apply regrowth sequestration"
+      savanna_pvc_threshold:
+        type: number
+        minimum: 0
+        description: "Potential vegetation carbon threshold (MgC/ha) for classifying savanna pixels as forest-eligible for reforestation. Pixels in biome 9 (savanna) with pvC >= this threshold are treated as closed savanna with reforestation potential. From Hayek et al. (2024)."
       cropland_source:
         type: string
         enum: [gaez, esa]

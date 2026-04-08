@@ -495,6 +495,31 @@ Cook-Patton & Griscom -- Forest Carbon Accumulation Potential
 
 **Usage**: Estimating carbon sequestration potential (Mg C/ha/yr) from natural forest restoration and regrowth for land sparing credits.
 
+.. _hayek-reforestation-mask:
+
+Hayek et al. -- Carbon Opportunity Areas in Global Beef Pastures
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: Hayek, M. N. et al. / New York University
+
+**Description**: Geospatial data supplement to Hayek et al. (2024), providing biome classifications, potential vegetation carbon stocks, and carbon accumulation rates for global pasture areas. This project uses the biome layer (band 1 of ``pastures_coi_Geospatial.tif``) and potential vegetation carbon stocks (``pastures_coi_pvC_stack.tif``) to build a binary reforestation eligibility mask. Biomes 1--8 are classified as forest-potential; biome 9 (savanna) is split at a 75 MgC/ha potential vegetation carbon threshold; biomes 10--15 are non-forest.
+
+**Version**: v1 (2024); GeoTIFF files on Zenodo
+
+**Coverage**:
+  * Spatial: Global, 5 arcminute resolution (~9 km)
+  * Temporal: Present-day conditions
+
+**Access**: https://doi.org/10.5281/zenodo.12688280
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+**Citation**: Hayek, M. N., Piipponen, J., Resare Sahlin, K., Kummu, M., McClelland, S. C. & Carlson, K. M. (2024). Opportunities for carbon sequestration from removing or intensifying pasture-based beef production. *Proceedings of the National Academy of Sciences*, 121(46), e2405758121. https://doi.org/10.1073/pnas.2405758121
+
+**Retrieval**: Automatic via the ``download_hayek_reforestation_biomes`` and ``download_hayek_reforestation_pvc`` rules. Two GeoTIFFs (~5.4 MB and ~37 MB) are downloaded with curl to ``data/downloads/hayek_reforestation/``. No registration or API key required.
+
+**Usage**: Building a binary reforestation eligibility mask (``processing/shared/luc/reforestation_mask.nc``) to restrict Cook-Patton regrowth credits to biomes where forest could plausibly regrow. See :ref:`luc-spared-land-filtering` for details.
+
 LUIcube -- Global Land-Use Intensity Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

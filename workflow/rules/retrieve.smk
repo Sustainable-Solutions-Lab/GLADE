@@ -874,6 +874,44 @@ rule download_forest_carbon_accumulation_1km:
         """
 
 
+rule download_hayek_reforestation_biomes:
+    output:
+        "data/downloads/hayek_reforestation/pastures_coi_Geospatial.tif",
+    params:
+        url="https://zenodo.org/records/12688280/files/pastures_coi_Geospatial.tif",
+    resources:
+        runtime="10m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_hayek_reforestation_biomes.log",
+    benchmark:
+        "<benchmarks>/shared/download_hayek_reforestation_biomes.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule download_hayek_reforestation_pvc:
+    output:
+        "data/downloads/hayek_reforestation/pastures_coi_pvC_stack.tif",
+    params:
+        url="https://zenodo.org/records/12688280/files/pastures_coi_pvC_stack.tif",
+    resources:
+        runtime="10m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_hayek_reforestation_pvc.log",
+    benchmark:
+        "<benchmarks>/shared/download_hayek_reforestation_pvc.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
 rule retrieve_eurostat_fodder:
     input:
         m49_codes="data/curated/M49-codes.csv",

@@ -151,12 +151,35 @@ rule resample_regrowth:
         "../scripts/resample_forest_carbon_accumulation.py"
 
 
+rule build_reforestation_mask:
+    input:
+        grid=rules.build_luc_grid.output.grid,
+        geospatial="data/downloads/hayek_reforestation/pastures_coi_Geospatial.tif",
+        pvc="data/downloads/hayek_reforestation/pastures_coi_pvC_stack.tif",
+    params:
+        savanna_pvc_threshold=config["luc"]["savanna_pvc_threshold"],
+    output:
+        mask=f"{shared_luc_dir}/reforestation_mask.nc",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=1000,
+    log:
+        "<logs>/shared/build_reforestation_mask.log",
+    benchmark:
+        "<benchmarks>/shared/build_reforestation_mask.tsv"
+    script:
+        "../scripts/build_reforestation_mask.py"
+
+
 rule prepare_luc_inputs:
     input:
         classes="<processing>/{name}/resource_classes.nc",
         land_cover=rules.resample_land_cover.output.fractions,
         luicube=rules.resample_luicube_grassland.output[0],
         regrowth=rules.resample_regrowth.output.regrowth,
+        reforestation_mask=rules.build_reforestation_mask.output.mask,
         agb="data/downloads/esa_biomass_cci_v6_0.nc",
         soc="data/downloads/soilgrids_ocs_0-30cm_mean.tif",
     params:

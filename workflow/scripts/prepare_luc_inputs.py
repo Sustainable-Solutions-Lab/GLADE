@@ -312,6 +312,16 @@ def main() -> None:
         regrowth_path, target_shape, target_transform, target_crs
     )
 
+    # Apply reforestation mask: zero out regrowth in biomes where forest
+    # cannot plausibly regrow (native grasslands, open savannas, etc.).
+    # Mask built from Hayek et al. (2024) biome classification.
+    mask_path: str = snakemake.input.reforestation_mask  # type: ignore[name-defined]
+    mask_ds = xr.load_dataset(mask_path)
+    reforestation_mask = mask_ds["reforestation_mask"].values.astype(bool)
+    if reforestation_mask.shape != target_shape:
+        raise ValueError("reforestation mask grid does not match resource_classes grid")
+    regrowth_tc = np.where(reforestation_mask, regrowth_tc, 0.0)
+
     lc_ds = xr.Dataset(
         {
             "forest_fraction": (("y", "x"), forest_frac.astype(np.float32)),
