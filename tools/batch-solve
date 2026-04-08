@@ -5,19 +5,20 @@
 
 """Submit solve jobs as a SLURM array using a pre-built manifest.
 
+Unlike ``batch-smk``, this tool does NOT use Snakemake on the cluster.
 Each array element runs ``tools/cluster-solve`` directly for its assigned
-batch of scenarios, without requiring Snakemake on the cluster.
+batch of scenarios.
 
 Usage:
     tools/batch-solve --manifest .batch/manifest_gsa.json [options]
 """
 
 import argparse
-from datetime import datetime
 import math
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -159,7 +160,7 @@ def main():
 
     n_batches = math.ceil(n_scenarios / args.batch_size)
 
-    print("\nBatch layout:")
+    print(f"\nBatch layout:")
     print(f"  Scenarios: {n_scenarios}")
     print(f"  Batch size: {args.batch_size}")
     print(f"  Array elements: {n_batches}")

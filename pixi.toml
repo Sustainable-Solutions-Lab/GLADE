@@ -62,7 +62,7 @@ psycopg2 = ">=2.9,<3"
 
 [pypi-dependencies]
 # Workflow engine
-snakemake = ">=9.17, <10"
+snakemake = { path = "vendor/snakemake", editable = true }
 # Custom forks of SLURM executor plugins with parallel group job dispatch
 snakemake-executor-plugin-slurm = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm.git", tag = "v2.2.0+food.opt" }
 snakemake-executor-plugin-slurm-jobstep = { git = "https://github.com/koen-vg/snakemake-executor-plugin-slurm-jobstep.git", tag = "v0.4.0+food.opt" }

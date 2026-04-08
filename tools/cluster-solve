@@ -17,8 +17,8 @@ Usage:
 import argparse
 import json
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -86,7 +86,9 @@ def run_scenario(
     from workflow.scripts.solve_model.core import _ShadowPriceLogFilter, run_solve
 
     logger = setup_script_logging(log_path)
-    logging.getLogger("pypsa.optimization.optimize").addFilter(_ShadowPriceLogFilter())
+    logging.getLogger("pypsa.optimization.optimize").addFilter(
+        _ShadowPriceLogFilter()
+    )
 
     logger.info("cluster-solve: scenario=%s", scenario)
 
@@ -181,7 +183,9 @@ def main():
             sys.exit(1)
         entry = entries[args.index]
     else:
-        entry = next((e for e in entries if e["scenario"] == args.scenario), None)
+        entry = next(
+            (e for e in entries if e["scenario"] == args.scenario), None
+        )
         if entry is None:
             print(
                 f"Error: scenario '{args.scenario}' not found in manifest",
