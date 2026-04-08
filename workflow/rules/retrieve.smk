@@ -396,6 +396,8 @@ rule extract_unsd_sdg:
 
 
 rule download_gaez_yield_data:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_yield_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",
     params:
@@ -419,6 +421,8 @@ rule download_gaez_yield_data:
 
 
 rule download_gaez_water_requirement_data:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_water_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",
     params:
@@ -440,6 +444,8 @@ rule download_gaez_water_requirement_data:
 
 
 rule download_gaez_suitability_data:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_suitability_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",
     params:
@@ -483,6 +489,8 @@ rule download_gaez_multiple_cropping_zone:
 
 
 rule download_gaez_growing_season_start:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_growing_season_start_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",
     params:
@@ -505,6 +513,8 @@ rule download_gaez_growing_season_start:
 
 
 rule download_gaez_growing_season_length:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_growing_season_length_{climate_model}_{period}_{climate_scenario}_{input_level}_{water_supply}_{crop}.tif",
     params:
@@ -527,6 +537,8 @@ rule download_gaez_growing_season_length:
 
 
 rule download_gaez_actual_yield:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_actual_yield_{water_supply}_{crop}.tif",
     params:
@@ -550,6 +562,8 @@ rule download_gaez_actual_yield:
 
 
 rule download_gaez_harvested_area:
+    input:
+        mapping="data/curated/gaez_crop_code_mapping.csv",
     output:
         "data/downloads/gaez_harvested_area_{water_supply}_{crop}.tif",
     params:
