@@ -1414,17 +1414,27 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         # Store production stability penalty cost for objective breakdown.
         # L1/quadratic penalties are linopy-level terms not visible to PyPSA
         # statistics; record them in metadata so the breakdown can account
-        # for them.
+        # for them.  Animal costs may differ from the top-level l1_cost
+        # when animals.l1_cost is overridden in config.
+        animals_cfg = stability_cfg["animals"]
+        animal_l1_override = animals_cfg.get("l1_cost")
+        animal_l1 = (
+            float(animal_l1_override)
+            if animal_l1_override is not None
+            else float(stability_cfg.get("l1_cost", 0))
+        )
         stability_cost = 0.0
-        for var_name, cost_key in [
-            ("crop_stability_abs_dev", "l1_cost"),
-            ("grassland_stability_abs_dev", "l1_cost"),
-            ("animal_stability_abs_dev", "l1_cost"),
-            ("land_conversion_stability_abs_dev", "l1_cost"),
+        for var_name, cost in [
+            ("crop_stability_abs_dev", float(stability_cfg.get("l1_cost", 0))),
+            ("grassland_stability_abs_dev", float(stability_cfg.get("l1_cost", 0))),
+            ("animal_stability_abs_dev", animal_l1),
+            (
+                "land_conversion_stability_abs_dev",
+                float(stability_cfg.get("l1_cost", 0)),
+            ),
         ]:
             if var_name in n.model.variables:
                 sol = n.model.variables[var_name].solution
-                cost = float(stability_cfg.get(cost_key, 0))
                 stability_cost += cost * float(sol.sum())
         for var_name, cost_key in [
             ("crop_stability_dev", "quadratic_cost"),

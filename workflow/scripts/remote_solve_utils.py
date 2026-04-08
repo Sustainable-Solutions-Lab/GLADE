@@ -330,6 +330,7 @@ def build_remote_smk_command(
             "--allowed-rules",
             "solve_model",
             "--nolock",
+            "--rerun-incomplete",
             "-j1",
             target_rel,
         ]
