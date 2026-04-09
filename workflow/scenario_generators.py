@@ -513,8 +513,13 @@ def _expand_generator(spec: dict) -> dict:
         name_values = {k: name_formatters[k](v) for k, v in values.items()}
         name_values["sample_id"] = idx
         scenario_name = name_template.format(**name_values)
-        # Substitute values into template (using original values)
-        scenario_config = _substitute_values(copy.deepcopy(template), values)
+        # Build substitution dict: raw values plus formatted variants.
+        # When a parameter has name_format, {param_fmt} gives the formatted
+        # string in templates (useful for cross-referencing scenario names).
+        sub_values = dict(values)
+        for k in values:
+            sub_values[f"{k}_fmt"] = str(name_values[k])
+        scenario_config = _substitute_values(copy.deepcopy(template), sub_values)
         scenarios[scenario_name] = scenario_config
 
     return scenarios
