@@ -110,6 +110,11 @@ baseline_year: 2020
 food_utility_piecewise:
   enabled: true
 
+# Fallback baseline for the inherited `default` scenario; per-grid-point
+# baselines are still selected individually via each scenario's template.
+consumer_values:
+  baseline_scenario: "baseline_off"
+
 validation:
   use_actual_yields: true
 

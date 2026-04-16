@@ -8,9 +8,14 @@
 # across uncertain model parameters. Surrogate-based sensitivity analysis
 # (PCE, Random Forest) is configured separately under `sensitivity_analysis`.
 #
-# The analysis is replicated at three L1 production-stability costs (0.22,
-# 0.05, 0.5). Each L1 value has its own baseline scenario so that consumer
-# values / piecewise utility blocks are correctly calibrated.
+# The analysis is replicated at three production-stability regimes:
+#   default (calibrated):  l1_cost=0.12,  animals.l1_cost=0.033
+#   lower  (÷ √10):        l1_cost=0.038, animals.l1_cost=0.010
+#   higher (× √10):        l1_cost=0.38,  animals.l1_cost=0.10
+# Both penalties are scaled together by half an order of magnitude so they
+# remain balanced around the calibration point (see
+# notebooks/prod_stability_calibration.ipynb). Each regime has its own
+# baseline scenario for consumer-values calibration.
 
 name: "gsa"
 scenarios:
@@ -32,8 +37,8 @@ scenarios:
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
   #   - ghg_price: 0-300 (GHG price, slice parameter)
   #
-  # Each generator group is replicated at three L1 production-stability costs
-  # (0.22, 0.05, 0.5) with matching baseline scenarios for calibration.
+  # Each generator group is replicated at the three production-stability
+  # regimes described above, each with its own calibration baseline scenario.
 
   # Baseline scenarios for calibrating piecewise food utility blocks.
   # One per L1 cost so that consumer values (dual variables) reflect the
@@ -48,25 +53,29 @@ scenarios:
     health:
       value_per_yll: 0
 
-  baseline_l1_0p05:
+  baseline_l1_low:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.05
+        l1_cost: 0.038
+        animals:
+          l1_cost: 0.010
 
-  baseline_l1_0p5:
+  baseline_l1_high:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.5
+        l1_cost: 0.38
+        animals:
+          l1_cost: 0.10
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
 
   _generators:
-    # --- Default L1 (0.22) ---
+    # --- Default stability regime (calibrated): l1_cost=0.12, animals.l1_cost=0.033 ---
     - name: gsa_{sample_id}
       mode: sensitivity
       samples: 8192
@@ -142,8 +151,8 @@ scenarios:
         consumer_values:
           baseline_scenario: "baseline"
 
-    # --- L1 = 0.05 ---
-    - name: gsa-l1-0p05_{sample_id}
+    # --- Lower stability (÷ √10 on both penalties): l1=0.038, animals.l1=0.010 ---
+    - name: gsa-l1-low_{sample_id}
       mode: sensitivity
       samples: 8192
       slice_parameters: [value_per_yll, ghg_price]
@@ -153,12 +162,14 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            l1_cost: 0.05
+            l1_cost: 0.038
+            animals:
+              l1_cost: 0.010
         consumer_values:
-          baseline_scenario: "baseline_l1_0p05"
+          baseline_scenario: "baseline_l1_low"
 
-    # --- L1 = 0.5 ---
-    - name: gsa-l1-0p5_{sample_id}
+    # --- Higher stability (× √10 on both penalties): l1=0.38, animals.l1=0.10 ---
+    - name: gsa-l1-high_{sample_id}
       mode: sensitivity
       samples: 8192
       slice_parameters: [value_per_yll, ghg_price]
@@ -168,9 +179,11 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            l1_cost: 0.5
+            l1_cost: 0.38
+            animals:
+              l1_cost: 0.10
         consumer_values:
-          baseline_scenario: "baseline_l1_0p5"
+          baseline_scenario: "baseline_l1_high"
 
 # Surrogate-based sensitivity analysis methods.
 # Each method is applied independently to the same solved GSA scenarios.
@@ -219,7 +232,9 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.22
+    l1_cost: 0.12
+    animals:
+      l1_cost: 0.033
 
 # Compare all scenarios in plots
 plotting:

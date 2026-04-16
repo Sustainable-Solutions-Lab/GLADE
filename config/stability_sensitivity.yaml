@@ -1,0 +1,238 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Alternative production-stability regimes for GHG/YLL sensitivity
+# ----------------------------------------------------------------
+# Replicates the scenarios from sensitivity.yaml at two additional
+# production-stability regimes in addition to the calibrated default:
+#
+#   default (calibrated):   l1_cost=0.12,  animals.l1_cost=0.033
+#   lower  (÷ √10 each):    l1_cost=0.038, animals.l1_cost=0.010
+#   higher (× √10 each):    l1_cost=0.38,  animals.l1_cost=0.10
+#
+# Both parameters are scaled together by half an order of magnitude so the
+# two penalties remain balanced around the (~5% land, ~5% feed) calibration
+# point from notebooks/prod_stability_calibration.ipynb.
+#
+# Kept separate from sensitivity.yaml because these are only used when the
+# sensitivity of headline results to the stability regime itself needs to
+# be reported (e.g. supplementary material).
+
+name: "stability_sensitivity"
+scenarios:
+  # Per-variant baselines for consumer-values calibration.
+  baseline_l1_low: &baseline_low
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.038
+        animals:
+          l1_cost: 0.010
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  baseline_l1_high: &baseline_high
+    <<: *baseline_low
+    validation:
+      enforce_baseline_diet: true
+      production_stability:
+        l1_cost: 0.38
+        animals:
+          l1_cost: 0.10
+
+  _generators:
+    # --- Zero-point scenarios at alternative stability regimes -------------
+    - name: "{prefix}_l1_low"
+      parameters:
+        prefix:
+          values: ["ghg_0", "yll_0", "ghg_yll_0"]
+      template: &zero_low
+        emissions:
+          ghg_price: 0
+        health:
+          value_per_yll: 0
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 0.038
+            animals:
+              l1_cost: 0.010
+        consumer_values:
+          baseline_scenario: "baseline_l1_low"
+
+    - name: "{prefix}_l1_high"
+      parameters:
+        prefix:
+          values: ["ghg_0", "yll_0", "ghg_yll_0"]
+      template:
+        <<: *zero_low
+        validation:
+          production_stability:
+            l1_cost: 0.38
+            animals:
+              l1_cost: 0.10
+        consumer_values:
+          baseline_scenario: "baseline_l1_high"
+
+    # --- GHG price sensitivity at alternative stability regimes ------------
+    - name: "ghg_{ghg}_l1_low"
+      parameters:
+        ghg: &ghg_range
+          space: log
+          start: 5
+          stop: 500
+          num: &num_points 10
+          round: true
+      template: &ghg_low
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: 0
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 0.038
+            animals:
+              l1_cost: 0.010
+        consumer_values:
+          baseline_scenario: "baseline_l1_low"
+
+    - name: "ghg_{ghg}_l1_high"
+      parameters:
+        ghg: *ghg_range
+      template:
+        <<: *ghg_low
+        validation:
+          production_stability:
+            l1_cost: 0.38
+            animals:
+              l1_cost: 0.10
+        consumer_values:
+          baseline_scenario: "baseline_l1_high"
+
+    # --- YLL value sensitivity at alternative stability regimes ------------
+    - name: "yll_{yll}_l1_low"
+      parameters:
+        yll: &yll_range
+          space: log
+          start: 50
+          stop: 100000
+          num: *num_points
+          round: true
+      template: &yll_low
+        emissions:
+          ghg_price: 0
+        health:
+          value_per_yll: "{yll}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 0.038
+            animals:
+              l1_cost: 0.010
+        consumer_values:
+          baseline_scenario: "baseline_l1_low"
+
+    - name: "yll_{yll}_l1_high"
+      parameters:
+        yll: *yll_range
+      template:
+        <<: *yll_low
+        validation:
+          production_stability:
+            l1_cost: 0.38
+            animals:
+              l1_cost: 0.10
+        consumer_values:
+          baseline_scenario: "baseline_l1_high"
+
+    # --- Combined GHG+YLL sensitivity at alternative stability regimes -----
+    - name: ghg_yll_{ghg}_l1_low
+      mode: zip
+      parameters:
+        ghg: *ghg_range
+        yll: *yll_range
+      template: &ghg_yll_low
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: "{yll}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        validation:
+          production_stability:
+            l1_cost: 0.038
+            animals:
+              l1_cost: 0.010
+        consumer_values:
+          baseline_scenario: "baseline_l1_low"
+
+    - name: ghg_yll_{ghg}_l1_high
+      mode: zip
+      parameters:
+        ghg: *ghg_range
+        yll: *yll_range
+      template:
+        <<: *ghg_yll_low
+        validation:
+          production_stability:
+            l1_cost: 0.38
+            animals:
+              l1_cost: 0.10
+        consumer_values:
+          baseline_scenario: "baseline_l1_high"
+
+planning_horizon: 2020
+baseline_year: 2020
+
+food_utility_piecewise:
+  enabled: true
+
+# Top-level stability set to the calibrated pair; alternative regimes above
+# override it with explicit (crop, animal) pairs scaled by ±half an order of
+# magnitude around the calibration point.
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+    l1_cost: 0.12
+    animals:
+      l1_cost: 0.033
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  mem_mb: 10000
+  runtime: 20
+
+remote_solve:
+  enabled: false
+  local_scenarios: []
+  host: "shr"
+  workdir: "~/food-opt-scratch"
+  pixi_env: "gurobi"
+  use_slurm: true
+  slurm_account: "sjdavis"
+  slurm_partition: "owners"
+  sync_pixi_files: false
+  ssh_options: []
+  rsync_options: []
+  preflight_check: true
