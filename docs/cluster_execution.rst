@@ -111,7 +111,7 @@ GSA scenarios depend on.  Solve them with Snakemake::
     # Locally: build model + solve baselines + first GSA scenarios
     SMK_MEM_MAX=40G tools/smk -e gurobi -j5 \
         --configfile config/gsa.yaml \
-        -- results/gsa/analysis/scen-gsa{,-l1-0p05,-l1-0p5}_0/objective_breakdown.parquet
+        -- results/gsa/analysis/scen-gsa{,-l1-low,-l1-high}_0/objective_breakdown.parquet
 
 **2. Export the manifest**
 
@@ -129,6 +129,11 @@ This writes ``.batch/manifest_gsa.json`` in ~15 seconds.
 Transfer inputs, manifest, and scripts::
 
     tools/sync-solve-inputs gsa.yaml <ssh-host> </path/to/remote/food-opt>
+
+If the remote path is given with ``~`` (e.g. ``~/food-opt``), single-quote it so
+the local shell does not expand it to the local home directory::
+
+    tools/sync-solve-inputs gsa.yaml <ssh-host> '~/food-opt'
 
 **4. Submit on the cluster**
 

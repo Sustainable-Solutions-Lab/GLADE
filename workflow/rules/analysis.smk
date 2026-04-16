@@ -214,7 +214,7 @@ else:
 def _sensitivity_generator_group(gen):
     """Extract the group name from a sensitivity generator name pattern.
 
-    E.g. "gsa_{sample_id}" -> "gsa", "gsa-l1-0p05_{sample_id}" -> "gsa-l1-0p05".
+    E.g. "gsa_{sample_id}" -> "gsa", "gsa-l1-low_{sample_id}" -> "gsa-l1-low".
     """
     return gen["name"].split("_{")[0]
 

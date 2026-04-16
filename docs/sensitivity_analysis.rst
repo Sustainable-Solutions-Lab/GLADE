@@ -842,7 +842,7 @@ automatically.
        results/gsa/analysis/sobol_global_indices_gsa_rf.parquet
 
 Output paths use two wildcards: ``{group}`` identifies the scenario sampling
-group (e.g., ``gsa``, ``gsa-l1-0p05``) and ``{method}`` selects the surrogate
+group (e.g., ``gsa``, ``gsa-l1-low``) and ``{method}`` selects the surrogate
 (``pce`` or ``rf``). Both methods consume the same solved scenarios.
 
 .. note::
