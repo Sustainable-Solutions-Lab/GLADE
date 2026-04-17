@@ -3243,7 +3243,7 @@ packages:
 - pypi: ./
   name: food-opt-workflow
   version: 0.0.1
-  sha256: 9f7a196fed5a63be3674a3d586e14344e34c1c0579e65329d4d8923ba8766980
+  sha256: 7121f51d1a0e50f52671acb3b8b31e9f58116946e773a7f935b30f151bb58386
   requires_python: '>=3.13'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/fqdn-1.5.1-pyhd8ed1ab_1.conda
@@ -8127,7 +8127,7 @@ packages:
 - pypi: ./tools/snakemake-logger-plugin-compact
   name: snakemake-logger-plugin-compact
   version: 0.1.0
-  sha256: eb70e7308a6dc3ebeacffe27185b88de0fc917b77e8027980c4b0697b0159f1b
+  sha256: cb6f9a172be17c7028c79159d8c9ba1ed6a8cff748ada636a678a607a02898a8
   requires_dist:
   - rich
   requires_python: '>=3.12'
