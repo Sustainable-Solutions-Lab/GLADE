@@ -1,5 +1,5 @@
 """
-SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
@@ -9,15 +9,15 @@ from osgeo import gdal, osr
 gdal.UseExceptions()
 osr.UseExceptions()
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-from affine import Affine
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
-import numpy as np
-import pandas as pd
-import xarray as xr
+from affine import Affine  # noqa: E402
+from exactextract import exact_extract  # noqa: E402
+from exactextract.raster import NumPyRasterSource  # noqa: E402
+import geopandas as gpd  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import xarray as xr  # noqa: E402
 
 CO2_PER_C = 44.0 / 12.0
 ZONE_ORDER = ["tropical", "temperate", "boreal"]

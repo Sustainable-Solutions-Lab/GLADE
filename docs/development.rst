@@ -1,4 +1,4 @@
-.. SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+.. SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 ..
 .. SPDX-License-Identifier: CC-BY-4.0
 
@@ -88,7 +88,7 @@ SPDX headers (required in all source files):
 
 .. code-block:: python
 
-   # SPDX-FileCopyrightText: 2025 <Author>
+   # SPDX-FileCopyrightText: 2026 <Author>
    #
    # SPDX-License-Identifier: GPL-3.0-or-later
 

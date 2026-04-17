@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath("../workflow/scripts"))
 
 # Project information
 project = "food-opt"
-copyright = "2025, Koen van Greevenbroek"
+copyright = "2026, Koen van Greevenbroek"
 author = "Koen van Greevenbroek"
 release = "0.1.0"
 

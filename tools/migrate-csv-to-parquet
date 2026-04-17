@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 """One-off migration: convert analysis CSVs to Parquet in-place.

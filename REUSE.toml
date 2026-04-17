@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
@@ -29,13 +29,13 @@ SPDX-License-Identifier = "LicenseRef-IHME-NonCommercial"
 [[annotations]]
 path = "data/curated/M49-codes.csv"
 precedence = "override"
-SPDX-FileCopyrightText = "2025 United Nations Statistics Division"
+SPDX-FileCopyrightText = "2026 United Nations Statistics Division"
 SPDX-License-Identifier = "CC0-1.0"
 
 [[annotations]]
 path = "data/curated/**.csv"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "PDDL-1.0"
 
 # IFA FUBC dataset (bundled due to Dryad API access restrictions)
@@ -48,32 +48,32 @@ SPDX-License-Identifier = "CC0-1.0"
 [[annotations]]
 path = "docs/_static/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC-BY-4.0"
 
 [[annotations]]
 path = "pixi.lock"
 precedence = "override"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC0-1.0"
 
 # Auto-generated benchmark outputs (gitignored)
 [[annotations]]
 path = "benchmarks/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
 # Jupyter notebooks: JSON format makes inline SPDX headers difficult to parse
 [[annotations]]
 path = "notebooks/*.ipynb"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
 # Tutorial notebooks rendered into the docs by MyST-NB.
 [[annotations]]
 path = "docs/tutorials/*.ipynb"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC-BY-4.0"

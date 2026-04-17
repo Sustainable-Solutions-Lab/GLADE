@@ -1,4 +1,4 @@
-#+COMMENT: SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#+COMMENT: SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 #+COMMENT: SPDX-License-Identifier: CC-BY-4.0
 
 * Parameter selection for global sensitivity analysis

@@ -1,4 +1,4 @@
-<!-- SPDX-FileCopyrightText: 2025 Koen van Greevenbroek -->
+<!-- SPDX-FileCopyrightText: 2026 Koen van Greevenbroek -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
 # Validation Mode: ~500 Mt Grain Food Shortfall Analysis
