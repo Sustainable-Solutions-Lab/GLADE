@@ -25,7 +25,20 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx_autodoc_typehints",
+    "myst_nb",
 ]
+
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".ipynb": "myst-nb",
+}
+
+# MyST-NB: render committed outputs as-is; never execute notebooks at build
+# time. Tutorial notebooks are executed locally by the author after solving
+# the corresponding scenarios, then committed with their outputs intact (see
+# .gitattributes for the nbstripout exemption).
+nb_execution_mode = "off"
+myst_enable_extensions = ["dollarmath", "colon_fence"]
 
 templates_path = ["_templates"]
 exclude_patterns = [
@@ -34,6 +47,8 @@ exclude_patterns = [
     ".DS_Store",
     ".uv-cache",
     "*/.uv-cache/*",
+    # Developer README for the docs directory; not part of the rendered site.
+    "README.md",
 ]
 
 # HTML output options

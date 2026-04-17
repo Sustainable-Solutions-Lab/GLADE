@@ -4,3 +4,7 @@
 *.ipynb filter=nbstripout
 *.zpln filter=nbstripout
 *.ipynb diff=ipynb
+
+# Tutorial notebooks are rendered into the docs and must keep their outputs
+# committed so MyST-NB can display them. Disable nbstripout for this subtree.
+docs/tutorials/*.ipynb -filter

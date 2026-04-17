@@ -32,7 +32,16 @@ fi
 
 SMK_ARGS=("$@")
 
-echo "=== Step 1/2: Building validation figures ==="
+# Resolve the pixi environment chosen via -e/--env so the notebook execution
+# step below uses the same environment as the Snakemake invocations.
+PIXI_ENV="dev-gurobi"
+for ((i = 0; i < ${#SMK_ARGS[@]}; i++)); do
+  case "${SMK_ARGS[$i]}" in
+    -e|--env) PIXI_ENV="${SMK_ARGS[$((i + 1))]}" ;;
+  esac
+done
+
+echo "=== Step 1/3: Building validation figures ==="
 tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_validation.yaml -- \
     docs/_static/figures/validation_crop_production.svg \
     docs/_static/figures/validation_crop_production.png \
@@ -47,5 +56,25 @@ tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_validation.yaml -- \
     docs/_static/figures/validation_grassland_calibration.svg \
     docs/_static/figures/validation_grassland_calibration.png
 
-echo "=== Step 2/2: Building doc figures and Sphinx docs ==="
+echo "=== Step 2/3: Solving tutorial scenarios and executing notebooks ==="
+# The two tutorial configs drive the companion notebooks in docs/tutorials/.
+# analyze_all_scenarios is the narrowest target that builds every analysis
+# parquet for every configured scenario without triggering the `rule all`
+# plot suite (which expects a `scen-default`). Snakemake only re-solves
+# scenarios whose inputs changed, so repeated runs are cheap.
+tools/smk "${SMK_ARGS[@]}" --configfile config/tutorial/01_ghg_prices.yaml -- \
+    analyze_all_scenarios
+tools/smk "${SMK_ARGS[@]}" --configfile config/tutorial/02_consumer_values.yaml -- \
+    analyze_all_scenarios \
+    results/tutorial_02/consumer_values/baseline/values.csv
+
+# Bake the current solve outputs into the committed notebooks so MyST-NB can
+# render them. Executed in place; nbstripout is disabled for this subtree
+# via .gitattributes so the outputs survive commit.
+pixi run -e "${PIXI_ENV}" jupyter nbconvert \
+    --to notebook --execute --inplace \
+    docs/tutorials/tutorial_01_analysis.ipynb \
+    docs/tutorials/tutorial_02_analysis.ipynb
+
+echo "=== Step 3/3: Building doc figures and Sphinx docs ==="
 tools/smk "${SMK_ARGS[@]}" --configfile docs/config/doc_figures.yaml -- build_docs

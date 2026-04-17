@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Tutorial 2 — Letting diet respond via consumer values
+# -----------------------------------------------------
+# Extends Tutorial 1 by allowing the diet itself to adapt to rising GHG prices,
+# rather than being held fixed. The approach:
+#
+#   1. A `baseline` scenario with `validation.enforce_baseline_diet=true`
+#      solves the model with today's observed diet. The shadow prices of the
+#      food-group equality constraints are the "consumer values" — each food
+#      group's marginal utility in bn USD / Mt.
+#   2. Subsequent scenarios drop `enforce_baseline_diet` and instead enable a
+#      piecewise diminishing-marginal-utility curve calibrated from those
+#      consumer values. The optimizer then trades off "move away from today's
+#      diet" against GHG costs.
+#
+# Note: `food_utility_piecewise.enabled=true` is mutually exclusive with
+# `validation.enforce_baseline_diet=true`. The baseline scenario disables the
+# piecewise curve; non-baseline scenarios disable baseline-diet enforcement.
+#
+# See docs/tutorial.rst (Part 2) for a walkthrough.
+
+name: "tutorial_02"
+
+# See config/tutorial/01_ghg_prices.yaml for the rationale on target_count.
+aggregation:
+  regions:
+    target_count: 200
+
+planning_horizon: 2020
+baseline_year: 2020
+
+# Enable the piecewise food-utility curve globally. It is switched off for the
+# baseline scenario below so that scenario can fix consumption instead.
+food_utility_piecewise:
+  enabled: true
+  n_blocks: 4           # Number of utility steps per (food, country)
+  decline_factor: 0.7   # Each successive block is worth 70% of the previous
+  total_width_multiplier: 2.0  # Curve spans 2x baseline consumption
+
+# Use the `baseline` scenario defined below as the source for consumer values.
+consumer_values:
+  baseline_scenario: "baseline"
+
+scenarios:
+  # Fixes consumption at the observed 2020 diet; the solver's dual variables on
+  # the per-food-group equality constraints are extracted as consumer values.
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+
+  # GHG price + flexible diet: consumption can deviate from baseline, paying
+  # the piecewise utility cost to do so. We also hold total caloric intake
+  # per country equal to its baseline level so the optimiser can reshape the
+  # diet but not shrink it away. Without this floor, rising GHG prices drive
+  # total consumption toward zero, which doesn't represent a plausible
+  # policy response.
+  ghg_mid:
+    emissions:
+      ghg_price: 50
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+  ghg_high:
+    emissions:
+      ghg_price: 200
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+health:
+  value_per_yll: 0
+
+plotting:
+  comparison_scenarios: "all"

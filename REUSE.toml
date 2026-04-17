@@ -70,3 +70,10 @@ path = "notebooks/*.ipynb"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Tutorial notebooks rendered into the docs by MyST-NB.
+[[annotations]]
+path = "docs/tutorials/*.ipynb"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Koen van Greevenbroek"
+SPDX-License-Identifier = "CC-BY-4.0"

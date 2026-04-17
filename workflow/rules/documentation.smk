@@ -889,6 +889,9 @@ rule build_docs:
         # Documentation source files
         "docs/conf.py",
         glob("docs/**/*.rst", recursive=True),
+        # Tutorial notebooks (rendered via MyST-NB; executed ahead of time
+        # by tools/build-docs so their outputs are baked into the JSON).
+        glob("docs/tutorials/*.ipynb"),
     output:
         "docs/_build/html/index.html",
     group:

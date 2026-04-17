@@ -373,7 +373,7 @@ GADM (Global Administrative Areas) v4.1
 
 **Access**: https://gadm.org/
 
-**License**: Free for academic/non-commercial use with attribution; redistribution not allowed; commercial use requires permission (`License <https://gadm.org/license.html>`_)
+**License**: Free for academic/non-commercial use with attribution; redistribution not allowed; commercial use requires permission (`License <https://gadm.org/license.html>`__)
 
 **Citation**: GADM (2024). Global Administrative Areas, version 4.1. https://gadm.org/
 
@@ -396,9 +396,9 @@ Copernicus Satellite Land Cover
   * Spatial: Global (Plate Carree projection), 300 m resolution
   * Temporal: Annual (with approximately one-year publication delay)
 
-**Access**: https://cds.climate.copernicus.eu/datasets/satellite-land-cover (`API documentation <https://cds.climate.copernicus.eu/how-to-api>`_)
+**Access**: https://cds.climate.copernicus.eu/datasets/satellite-land-cover (`API documentation <https://cds.climate.copernicus.eu/how-to-api>`__)
 
-**License**: Multiple licenses apply including ESA CCI licence, CC-BY licence, and VITO licence. Users must also cite the Climate Data Store entry and provide attribution to the Copernicus program. (`Terms of use <https://cds.climate.copernicus.eu/terms-of-use>`_)
+**License**: Multiple licenses apply including ESA CCI licence, CC-BY licence, and VITO licence. Users must also cite the Climate Data Store entry and provide attribution to the Copernicus program. (`Terms of use <https://cds.climate.copernicus.eu/terms-of-use>`__)
 
 **Citation**: Copernicus Climate Change Service, Climate Data Store, (2019): Land cover classification gridded maps from 1992 to present derived from satellite observation. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). https://doi.org/10.24381/cds.006f2c9a
 
@@ -432,7 +432,7 @@ ESA Biomass CCI -- Global Above-Ground Biomass
 
 **Access**: https://catalogue.ceda.ac.uk/uuid/95913ffb6467447ca72c4e9d8cf30501
 
-**License**: ESA CCI Biomass Terms and Conditions. Public data available to both registered and non-registered users. (`License <https://artefacts.ceda.ac.uk/licences/specific_licences/esacci_biomass_terms_and_conditions_v2.pdf>`_)
+**License**: ESA CCI Biomass Terms and Conditions. Public data available to both registered and non-registered users. (`License <https://artefacts.ceda.ac.uk/licences/specific_licences/esacci_biomass_terms_and_conditions_v2.pdf>`__)
 
 **Citation**: Santoro, M.; Cartus, O. (2025): ESA Biomass Climate Change Initiative (Biomass_cci): Global datasets of forest above-ground biomass for the years 2007, 2010, 2015, 2016, 2017, 2018, 2019, 2020, 2021 and 2022, v6.0. NERC EDS Centre for Environmental Data Analysis. https://doi.org/10.5285/95913ffb6467447ca72c4e9d8cf30501
 
@@ -583,8 +583,8 @@ IMF World Economic Outlook -- GDP per Capita
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Provider**: International Monetary Fund (IMF) |
-**Access**: https://www.imf.org/external/datamapper/NGDPDPC@WEO (`API documentation <https://www.imf.org/external/datamapper/api/help>`_) |
-**License**: Free to use with attribution (`Terms of use <https://www.imf.org/en/about/copyright-and-terms#data>`_)
+**Access**: https://www.imf.org/external/datamapper/NGDPDPC@WEO (`API documentation <https://www.imf.org/external/datamapper/api/help>`__) |
+**License**: Free to use with attribution (`Terms of use <https://www.imf.org/en/about/copyright-and-terms#data>`__)
 
 GDP per capita estimates (current prices, USD) from the World Economic Outlook database (indicator ``NGDPDPC``). Retrieved automatically via the IMF DataMapper API (no API key required). Output: ``processing/{name}/gdp_per_capita.csv``. Used by ``prepare_health_costs`` for multi-objective country clustering based on geography, GDP similarity, and population balance.
 
@@ -629,7 +629,7 @@ IHME GBD 2023 -- Mortality Rates
 .. _ihme-relative-risks:
 
 IHME GBD 2019 -- Relative Risk Curves
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Provider**: Institute for Health Metrics and Evaluation (IHME)
 
@@ -747,7 +747,7 @@ Water Footprint Network -- Monthly Blue Water Availability
 **Usage**: Constraining irrigated crop production by basin-level water availability.
 
 Huang et al. -- Gridded Irrigation Water Withdrawals
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Provider**: Huang et al. (2018), HESS
 
@@ -784,7 +784,7 @@ USDA FoodData Central
 **Coverage**:
   * Content: Macronutrient composition (protein, carbohydrates, total lipid/fat, energy/calories)
 
-**Access**: https://fdc.nal.usda.gov/ (web interface) or via REST API (`API documentation <https://fdc.nal.usda.gov/api-guide.html>`_)
+**Access**: https://fdc.nal.usda.gov/ (web interface) or via REST API (`API documentation <https://fdc.nal.usda.gov/api-guide.html>`__)
 
 **License**: Public domain under CC0 1.0 Universal (CC0 1.0). No permission needed for use, but USDA requests attribution.
 

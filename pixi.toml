@@ -102,6 +102,7 @@ sphinx-autodoc-typehints = ">=3.5.2,<4" # Type hint support for Sphinx
 furo = ">=2024.8.6,<2025"            # Clean Sphinx theme
 pydot = ">=4.0.1,<5"                 # Python interface to Graphviz for workflow diagrams
 make = ">=4.4,<5"                    # Build tool for Sphinx Makefile
+myst-nb = ">=1.1, <2"                # Render Jupyter notebooks in Sphinx
 
 [feature.dev.pypi-dependencies]
 snakefmt = ">=0.11.4, <0.12"         # Snakemake code formatter

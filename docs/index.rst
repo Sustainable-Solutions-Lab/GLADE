@@ -70,6 +70,7 @@ Dietary constraints ensure that each country's population meets nutritional requ
    :maxdepth: 2
 
    introduction
+   tutorial
    model_framework
    land_use
    crop_production

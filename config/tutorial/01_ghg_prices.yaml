@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2025 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Tutorial 1 — GHG price sweep at a fixed (baseline) diet
+# -------------------------------------------------------
+# Three scenarios that share an identical, observed baseline diet and differ
+# only in the carbon price applied to the objective. Because consumption is
+# fixed, any differences between scenarios come entirely from how production,
+# trade, and land use reorganise under a rising GHG cost.
+#
+# See docs/tutorial.rst (Part 1) for a walkthrough.
+
+name: "tutorial_01"
+
+# Reduced spatial resolution so the tutorial completes in a few minutes on a
+# laptop after the one-off data download. 200 is the smallest value the
+# default country list admits without enabling cross-border clustering.
+aggregation:
+  regions:
+    target_count: 200
+
+# Match observed 2020 data so the fixed-diet baseline is well defined.
+planning_horizon: 2020
+baseline_year: 2020
+
+scenarios:
+  # No carbon price. All scenarios below share enforce_baseline_diet=true, so
+  # consumption is held at the observed 2020 diet and only production shifts.
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    emissions:
+      ghg_price: 0
+
+  ghg_mid:
+    validation:
+      enforce_baseline_diet: true
+    emissions:
+      ghg_price: 50
+
+  ghg_high:
+    validation:
+      enforce_baseline_diet: true
+    emissions:
+      ghg_price: 200
+
+# This tutorial does not use health costs.
+health:
+  value_per_yll: 0
+
+# Compare all three scenarios in auto-generated plots.
+plotting:
+  comparison_scenarios: "all"
