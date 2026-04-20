@@ -19,7 +19,7 @@ filesystem latency.
 Overview
 --------
 
-The workflow has four phases:
+The workflow has five phases:
 
 1. **Build & calibrate** (local): Run Snakemake to build the model and solve
    any prerequisite scenarios (e.g., baselines that generate consumer values
@@ -31,8 +31,13 @@ The workflow has four phases:
 3. **Sync & submit** (local → cluster): Transfer inputs, manifest, and tools
    to the cluster, then submit a SLURM job array.
 
-4. **Collect results** (cluster → local): Sync analysis outputs back for
-   post-processing.
+4. **Fit surrogate in place** (cluster): Run the ``build_surrogate`` rule
+   via ``srun`` on a short-queue partition.  The per-scenario analysis
+   outputs live on cluster scratch and the fitted bundle is ~20 MB, so
+   bringing the computation to the data avoids a large rsync back-and-forth.
+
+5. **Collect results** (cluster → local): Sync the surrogate bundle (and
+   any Sobol parquets) back for post-processing.
 
 Prerequisites
 -------------
@@ -44,8 +49,11 @@ On the cluster:
 - Passwordless SSH access from your local machine (key-based auth or an
   active ``ControlMaster`` session).
 
-The cluster does **not** need a full Snakemake installation.  Only the
-``pixi`` environment with the solver and Python dependencies is required.
+A Snakemake installation on the cluster is **optional**: it is only needed
+to run the lightweight ``build_surrogate`` rule in phase 4.  The ``pixi``
+environment already pins Snakemake, so no extra installation is required.
+The heavy-weight solve phase still runs via ``tools/cluster-solve`` and
+does not go through Snakemake.
 
 Tools
 -----
@@ -149,17 +157,55 @@ Monitor progress::
 
     squeue -u $USER -n solve_gsa
 
-**5. Collect results**
+**5. Fit the surrogate on the cluster (optional but recommended)**
 
-Sync analysis outputs back to your local machine::
+The scalar analysis outputs (objective breakdown, emissions, land use,
+YLL totals) fed into the surrogate add up to ~100 MB–1 GB across a
+full GSA sweep, but the fitted surrogate itself is ~20 MB.  Fitting in
+place on the cluster and only transferring the bundle (plus the Sobol
+parquets) avoids moving the per-scenario analysis back and forth.  A
+single ``srun`` on the ``dev`` partition suffices — the fit is a few
+minutes of CPU on 8k samples::
+
+    # On the cluster
+    cd <path/to/remote/food-opt>
+    srun --partition=dev --cpus-per-task=2 --mem=8G --time=15:00 \
+        tools/smk -j2 --configfile config/gsa.yaml \
+        --allowed-rules build_surrogate \
+        -- results/gsa/surrogates/surrogate_gsa_xgb.pkl
+
+The method (``xgb``/``pce``/``rf``/``mars``) is a wildcard of the rule;
+``sensitivity_analysis.default_surrogate`` in the config picks the
+default when downstream consumers (uncertainty plots, notebooks) load
+a bundle without specifying a method.
+
+Repeat the command for each ``{group}`` needed (e.g., ``gsa-l1-low``,
+``gsa-l1-high``) and for alternative surrogate types if you want to
+compare them.
+
+**6. Collect results**
+
+Sync the surrogate bundles and Sobol analysis outputs back to your local
+machine (the raw per-scenario analysis can stay on the cluster if you
+only need downstream plots)::
 
     rsync -a --info=progress2 \
-        "<ssh-host>:</path/to/remote/food-opt>/results/gsa/analysis/" \
+        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/surrogates/" \
+        results/gsa/surrogates
+
+    rsync -a --info=progress2 \
+        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/analysis/sobol_*.parquet" \
+        results/gsa/analysis/
+
+If you *do* need the full per-scenario analysis locally, sync that too::
+
+    rsync -a --info=progress2 \
+        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/analysis/" \
         results/gsa/analysis
 
-**6. Post-processing**
+**7. Post-processing**
 
-Run downstream analysis (e.g., PCE sensitivity) locally using Snakemake::
+Compute Sobol indices and render plots locally from the synced bundle::
 
     tools/smk -j20 --configfile config/gsa.yaml \
         --allowed-rules compute_sobol_sensitivity <other_rules> \
