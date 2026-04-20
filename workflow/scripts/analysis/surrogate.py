@@ -34,8 +34,11 @@ from workflow.scripts.analysis.mars import Earth
 logger = logging.getLogger(__name__)
 
 
-OUTPUT_COLUMNS: tuple[str, ...] = ("total_cost", "ghg_emissions", "land_use", "yll")
 SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "mars", "xgb")
+# Methods that natively accept a 2-D target and train all outputs with a
+# shared structure.  XGBoost uses ``multi_strategy='multi_output_tree'``;
+# sklearn's RandomForestRegressor accepts ``y`` of shape ``(n, n_out)``.
+_MULTI_OUTPUT_METHODS: tuple[str, ...] = ("xgb", "rf")
 
 
 @dataclass
@@ -53,8 +56,8 @@ class SurrogateBundle:
     param_names
         Ordered parameter names (same order as the design matrix columns).
     output_columns
-        Output targets the surrogate was trained on (subset of
-        :data:`OUTPUT_COLUMNS`).
+        Output targets the surrogate was trained on (names declared in
+        ``sensitivity_analysis.outputs``).
     models
         Per-output surrogate payload.  Shape depends on the method:
 
@@ -77,6 +80,31 @@ class SurrogateBundle:
     validation: dict[str, dict]
     n_train: int
     n_test: int
+
+
+@dataclass
+class MultiOutputPayload:
+    """Bundle payload for methods that train all outputs jointly.
+
+    Wraps a single fitted estimator whose ``predict(x)`` returns a
+    ``(n_samples, n_outputs)`` matrix of standardized predictions.  Each
+    payload corresponds to one output column (``output_index``) and knows
+    how to invert the per-output standardization (mean/std) applied during
+    fitting.  Pickle deduplicates the shared ``model`` across per-output
+    payloads via its memo table, so the bundle carries one estimator, not
+    one per output.
+    """
+
+    model: Any
+    output_index: int
+    target_mean: float
+    target_std: float
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        pred = self.model.predict(x)
+        if pred.ndim == 1:
+            pred = pred.reshape(-1, 1)
+        return pred[:, self.output_index] * self.target_std + self.target_mean
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +253,81 @@ def fit_xgboost(
     }
 
 
+def fit_xgboost_multi(
+    x_design: np.ndarray,
+    y_mat: np.ndarray,
+    x_val: np.ndarray | None = None,
+    y_val_mat: np.ndarray | None = None,
+    n_estimators: int = 5000,
+    max_depth: int = 4,
+    learning_rate: float = 0.02,
+    subsample: float = 0.8,
+    colsample_bytree: float = 0.8,
+    min_child_weight: int = 5,
+    early_stopping_rounds: int = 50,
+    n_jobs: int = 1,
+    random_state: int = 42,
+) -> dict:
+    """Fit a single multi-output XGBoost (shared tree structure).
+
+    Uses ``multi_strategy='multi_output_tree'`` (XGBoost >= 2.0) so all
+    outputs share the split structure, with vector-valued leaves.  Early
+    stopping, when enabled, uses the mean RMSE across outputs; targets
+    should be standardized beforehand so no single output dominates the
+    stopping criterion.
+    """
+    model = XGBRegressor(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        learning_rate=learning_rate,
+        subsample=subsample,
+        colsample_bytree=colsample_bytree,
+        min_child_weight=min_child_weight,
+        n_jobs=n_jobs,
+        random_state=random_state,
+        tree_method="hist",
+        multi_strategy="multi_output_tree",
+    )
+    fit_kwargs = {"verbose": False}
+    if x_val is not None and y_val_mat is not None:
+        model.set_params(early_stopping_rounds=early_stopping_rounds)
+        fit_kwargs["eval_set"] = [(x_val, y_val_mat)]
+    model.fit(x_design, y_mat, **fit_kwargs)
+
+    actual_rounds = (
+        model.best_iteration + 1 if hasattr(model, "best_iteration") else n_estimators
+    )
+    return {"model": model, "n_estimators": actual_rounds, "n_samples": len(y_mat)}
+
+
+def fit_random_forest_multi(
+    x_design: np.ndarray,
+    y_mat: np.ndarray,
+    n_estimators: int = 500,
+    n_jobs: int = 1,
+    random_state: int = 42,
+) -> dict:
+    """Fit a multi-output Random Forest regressor with OOB predictions.
+
+    sklearn's :class:`RandomForestRegressor` accepts a 2-D ``y`` natively;
+    each tree regresses all outputs jointly and splits use the averaged
+    impurity across outputs.
+    """
+    rf = RandomForestRegressor(
+        n_estimators=n_estimators,
+        oob_score=True,
+        n_jobs=n_jobs,
+        random_state=random_state,
+    )
+    rf.fit(x_design, y_mat)
+    return {
+        "model": rf,
+        "oob_prediction": rf.oob_prediction_,
+        "n_estimators": n_estimators,
+        "n_samples": len(y_mat),
+    }
+
+
 def fit_mars(
     x_design: np.ndarray,
     y: np.ndarray,
@@ -298,36 +401,47 @@ def fit_bundle(
     models: dict[str, Any] = {}
     validation: dict[str, dict] = {}
 
-    for col in available_columns:
-        y_train = outputs_train[col].values
-        y_test = outputs_test[col].values if outputs_test is not None else None
+    if method in _MULTI_OUTPUT_METHODS:
+        models, validation = _fit_multi_output(
+            method,
+            x_train,
+            x_test,
+            outputs_train,
+            outputs_test,
+            available_columns,
+            method_options,
+            n_threads,
+        )
+    else:
+        for col in available_columns:
+            y_train = outputs_train[col].values
+            y_test = outputs_test[col].values if outputs_test is not None else None
 
-        if method == "pce":
-            payload, val = _fit_pce_one(
-                x_train, y_train, x_test, y_test, joint_dist, method_options, n_threads
-            )
-        elif method == "rf":
-            payload, val = _fit_rf_one(
-                x_train, y_train, x_test, y_test, method_options, n_threads
-            )
-        elif method == "xgb":
-            payload, val = _fit_xgb_one(
-                x_train, y_train, x_test, y_test, method_options, n_threads
-            )
-        elif method == "mars":
-            payload, val = _fit_mars_one(
-                x_train, y_train, x_test, y_test, col, method_options
-            )
-        else:
-            raise AssertionError(f"unreachable method {method!r}")
+            if method == "pce":
+                payload, val = _fit_pce_one(
+                    x_train,
+                    y_train,
+                    x_test,
+                    y_test,
+                    joint_dist,
+                    method_options,
+                    n_threads,
+                )
+            elif method == "mars":
+                payload, val = _fit_mars_one(
+                    x_train, y_train, x_test, y_test, col, method_options
+                )
+            else:
+                raise AssertionError(f"unreachable method {method!r}")
 
+            models[col] = payload
+            validation[col] = val
+
+    for col, val in validation.items():
         val["output"] = col
         val["n_train"] = n_train
         val["n_test"] = n_holdout
         val["method"] = method
-
-        models[col] = payload
-        validation[col] = val
 
         if val["validation_error"] > 0.1:
             logger.warning(
@@ -389,70 +503,110 @@ def _fit_pce_one(x_train, y_train, x_test, y_test, joint_dist, opts, n_jobs):
     return payload, val
 
 
-def _fit_rf_one(x_train, y_train, x_test, y_test, opts, n_jobs):
-    n_estimators = opts.get("n_estimators", 500)
-    result = fit_random_forest(
-        x_train, y_train, n_estimators=n_estimators, n_jobs=n_jobs
+def _r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    ss_res = float(np.sum((y_true - y_pred) ** 2))
+    ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+    return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+
+def _fit_multi_output(
+    method: str,
+    x_train: np.ndarray,
+    x_test: np.ndarray | None,
+    outputs_train: pd.DataFrame,
+    outputs_test: pd.DataFrame | None,
+    available_columns: list[str],
+    opts: dict,
+    n_jobs: int,
+) -> tuple[dict[str, Any], dict[str, dict]]:
+    """Fit a single shared-structure estimator for all outputs.
+
+    Standardizes each output column to mean 0, std 1 before fitting so the
+    shared-tree objective (and RMSE-based early stopping for XGBoost) is
+    not dominated by the output with the largest absolute scale.  Each
+    per-output payload is a :class:`MultiOutputPayload` holding the shared
+    estimator plus the column index and per-output mean/std.  Validation
+    metrics are computed per output on the original (unstandardized) scale.
+    """
+    y_train = outputs_train[available_columns].values.astype(float)
+    y_test = (
+        outputs_test[available_columns].values.astype(float)
+        if outputs_test is not None
+        else None
     )
-    if x_test is not None and y_test is not None:
-        y_pred = result["model"].predict(x_test)
-        ss_res = np.sum((y_test - y_pred) ** 2)
-        ss_tot = np.sum((y_test - np.mean(y_test)) ** 2)
-        r2_test = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        holdout_error = 1 - r2_test
+    target_mean = y_train.mean(axis=0)
+    target_std = y_train.std(axis=0)
+    # Constant columns would lead to divide-by-zero; fall back to unit scale.
+    safe_std = np.where(target_std > 0, target_std, 1.0)
+    y_train_std = (y_train - target_mean) / safe_std
+    y_test_std = (y_test - target_mean) / safe_std if y_test is not None else None
+
+    if method == "xgb":
+        fit_result = fit_xgboost_multi(
+            x_train,
+            y_train_std,
+            x_val=x_test,
+            y_val_mat=y_test_std,
+            n_estimators=opts.get("n_estimators", 5000),
+            max_depth=opts.get("max_depth", 4),
+            learning_rate=opts.get("learning_rate", 0.02),
+            subsample=opts.get("subsample", 0.8),
+            colsample_bytree=opts.get("colsample_bytree", 0.8),
+            min_child_weight=opts.get("min_child_weight", 5),
+            early_stopping_rounds=opts.get("early_stopping_rounds", 50),
+            n_jobs=n_jobs,
+        )
+        shared_model = fit_result["model"]
+        extra_val: dict[str, Any] = {"n_estimators": fit_result["n_estimators"]}
+    elif method == "rf":
+        fit_result = fit_random_forest_multi(
+            x_train,
+            y_train_std,
+            n_estimators=opts.get("n_estimators", 500),
+            n_jobs=n_jobs,
+        )
+        shared_model = fit_result["model"]
+        extra_val = {"n_estimators": fit_result["n_estimators"]}
     else:
-        r2_test = None
-        holdout_error = None
+        raise AssertionError(f"unsupported multi-output method {method!r}")
 
-    oob_error = result["validation_error"]
-    validation_error = holdout_error if holdout_error is not None else oob_error
+    models: dict[str, Any] = {}
+    validation: dict[str, dict] = {}
+    for j, col in enumerate(available_columns):
+        payload = MultiOutputPayload(
+            model=shared_model,
+            output_index=j,
+            target_mean=float(target_mean[j]),
+            target_std=float(safe_std[j]),
+        )
+        y_train_col = y_train[:, j]
+        y_pred_train = payload.predict(x_train)
+        r2_train = _r2(y_train_col, y_pred_train)
 
-    val = {
-        "validation_error": validation_error,
-        "oob_error": oob_error,
-        "r2_train": result["r2"],
-        "r2_test": r2_test,
-        "n_estimators": result["n_estimators"],
-    }
-    return result["model"], val
+        if x_test is not None and y_test is not None:
+            y_test_col = y_test[:, j]
+            y_pred_test = payload.predict(x_test)
+            r2_test = _r2(y_test_col, y_pred_test)
+            validation_error = 1.0 - r2_test
+        else:
+            r2_test = None
+            validation_error = 1.0 - r2_train
 
+        val = {
+            "validation_error": validation_error,
+            "r2_train": r2_train,
+            "r2_test": r2_test,
+            **extra_val,
+        }
+        if method == "rf":
+            oob_pred_col = shared_model.oob_prediction_[:, j]
+            val["oob_error"] = 1.0 - _r2(
+                y_train_col, oob_pred_col * safe_std[j] + target_mean[j]
+            )
+        models[col] = payload
+        validation[col] = val
 
-def _fit_xgb_one(x_train, y_train, x_test, y_test, opts, n_jobs):
-    result = fit_xgboost(
-        x_train,
-        y_train,
-        x_val=x_test,
-        y_val=y_test,
-        n_estimators=opts.get("n_estimators", 5000),
-        max_depth=opts.get("max_depth", 4),
-        learning_rate=opts.get("learning_rate", 0.02),
-        subsample=opts.get("subsample", 0.8),
-        colsample_bytree=opts.get("colsample_bytree", 0.8),
-        min_child_weight=opts.get("min_child_weight", 5),
-        early_stopping_rounds=opts.get("early_stopping_rounds", 50),
-        n_jobs=n_jobs,
-    )
-    if x_test is not None and y_test is not None:
-        y_pred = result["model"].predict(x_test)
-        ss_res = np.sum((y_test - y_pred) ** 2)
-        ss_tot = np.sum((y_test - np.mean(y_test)) ** 2)
-        r2_test = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        holdout_error = 1 - r2_test
-    else:
-        r2_test = None
-        holdout_error = None
-
-    validation_error = (
-        holdout_error if holdout_error is not None else (1.0 - result["r2"])
-    )
-
-    val = {
-        "validation_error": validation_error,
-        "r2_train": result["r2"],
-        "r2_test": r2_test,
-        "n_estimators": result["n_estimators"],
-    }
-    return result["model"], val
+    return models, validation
 
 
 def _fit_mars_one(x_train, y_train, x_test, y_test, col, opts):

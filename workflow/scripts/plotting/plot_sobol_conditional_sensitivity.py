@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
+from workflow.scripts.analysis.sensitivity_common import output_display
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
 
@@ -27,13 +28,12 @@ METADATA_COLUMNS = {
     "ST_cond",
     "conditional_variance",
 }
-OUTPUT_ORDER = ["total_cost", "ghg_emissions", "land_use", "yll"]
-OUTPUT_LABELS = {
-    "total_cost": "Total Cost",
-    "ghg_emissions": "GHG Emissions",
-    "land_use": "Land Use",
-    "yll": "Years of Life Lost",
-}
+# Populated from ``sensitivity_analysis.outputs`` in main().  Kept at module
+# scope so the helper plotting functions below can read them without
+# threading extra arguments through the call graph.
+OUTPUT_ORDER: list[str] = []
+OUTPUT_LABELS: dict[str, str] = {}
+OUTPUT_UNITS: dict[str, str] = {}
 X_LABELS = {
     "value_per_yll": "Value per YLL (USD per YLL)",
     "ghg_price": "GHG Price (USD per tCO2e)",
@@ -147,14 +147,6 @@ def _label_areas(
             clip_on=True,
         )
         placed.append((best_idx, y_center))
-
-
-OUTPUT_UNITS = {
-    "total_cost": "bn USD",
-    "ghg_emissions": "MtCO\u2082eq",
-    "land_use": "Mha",
-    "yll": "million YLL",
-}
 
 
 def _plot_for_x(
@@ -322,6 +314,9 @@ def main() -> None:
     metric_column = str(snakemake.params.metric)  # type: ignore[attr-defined]
     color_overrides = dict(snakemake.params.parameter_colors)  # type: ignore[attr-defined]
     group_order = list(snakemake.params.parameter_group_order)  # type: ignore[attr-defined]
+    outputs_spec = dict(snakemake.params.outputs_spec)  # type: ignore[attr-defined]
+    global OUTPUT_ORDER, OUTPUT_LABELS, OUTPUT_UNITS
+    OUTPUT_ORDER, OUTPUT_LABELS, OUTPUT_UNITS = output_display(outputs_spec)
 
     if not input_path.exists():
         raise FileNotFoundError(f"Missing conditional indices file: {input_path}")

@@ -1118,6 +1118,63 @@ remote_solve:
   rsync_options: []  # Extra rsync CLI args
   preflight_check: true  # If true, create remote workdir before syncing
 
+# --- section: sensitivity_analysis ---
+# Full defaults (holdout_fraction, threads, default_surrogate, methods) are
+# set in each GSA-style config (see e.g. config/gsa.yaml); here we only
+# declare the scalar output vocabulary, shared across sensitivity configs.
+sensitivity_analysis:
+  # Scalar outputs extracted from each scenario's analysis directory and
+  # fit by the surrogate. Each entry declares:
+  #   source:   parquet filename under analysis/scen-<scenario>/
+  #   reducer:  reducer registered in
+  #             workflow.scripts.analysis.sensitivity_common.REDUCERS
+  #   (extras): kwargs forwarded to the reducer (e.g. column name)
+  #   label:    human-readable axis label used by plots
+  #   units:    axis-label suffix used by uncertainty-band plots
+  # Order here defines the display order in Sobol plots.
+  outputs:
+    total_cost:
+      source: objective_breakdown.parquet
+      reducer: row_sum
+      label: Total Cost
+      units: bn USD
+    co2:
+      source: net_emissions.parquet
+      reducer: filter_sum
+      filter_col: gas
+      filter_value: co2
+      value_col: mtco2eq
+      label: "CO\u2082 Emissions"
+      units: "MtCO\u2082eq"
+    ch4:
+      source: net_emissions.parquet
+      reducer: filter_sum
+      filter_col: gas
+      filter_value: ch4
+      value_col: mtco2eq
+      label: "CH\u2084 Emissions"
+      units: "MtCO\u2082eq"
+    n2o:
+      source: net_emissions.parquet
+      reducer: filter_sum
+      filter_col: gas
+      filter_value: n2o
+      value_col: mtco2eq
+      label: "N\u2082O Emissions"
+      units: "MtCO\u2082eq"
+    land_use:
+      source: land_use.parquet
+      reducer: column_sum
+      column: area_mha
+      label: Land Use
+      units: Mha
+    yll:
+      source: health_totals.parquet
+      reducer: column_sum
+      column: yll_myll
+      label: Years of Life Lost
+      units: million YLL
+
 # --- section: plotting ---
 plotting:
   comparison_scenarios:

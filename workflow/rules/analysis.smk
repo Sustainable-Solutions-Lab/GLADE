@@ -345,6 +345,7 @@ rule build_surrogate:
         generator_spec=lambda w: _sensitivity_generator(w),
         method_config=_sensitivity_method_config,
         holdout_fraction=lambda w: config["sensitivity_analysis"]["holdout_fraction"],
+        outputs_spec=lambda w: config["sensitivity_analysis"]["outputs"],
     output:
         surrogate="<results>/{name}/surrogates/surrogate_{group}_{method}.pkl",
         validation="<results>/{name}/surrogates/surrogate_validation_{group}_{method}.parquet",

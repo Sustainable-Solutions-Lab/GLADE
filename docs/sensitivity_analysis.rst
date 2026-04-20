@@ -889,7 +889,7 @@ Per (group, method) combination, the workflow writes:
 .. csv-table::
    :header: Column, Type, Description
 
-   ``output``, string, "Output metric (``total_cost``, ``ghg_emissions``, ``land_use``, ``yll``)"
+   ``output``, string, "Output metric (``total_cost``, ``co2``, ``ch4``, ``n2o``, ``land_use``, ``yll``; per-gas emissions are in MtCO\u2082eq)"
    ``parameter``, string, "Parameter name from generator spec"
    ``S1``, float, "First-order Sobol index"
    ``ST``, float, "Total-order Sobol index"
@@ -965,8 +965,12 @@ Interpreting Results
   on the output.
 
 **Example interpretation**: If ``yield_factor`` has :math:`S_1 = 0.6` for
-``ghg_emissions``, then 60% of the variance in GHG emissions is explained by
-crop yield uncertainty alone.
+``co2``, then 60% of the variance in net CO\u2082 emissions is explained by
+crop yield uncertainty alone.  Total GHG emissions are the sum of the
+``co2``, ``ch4``, and ``n2o`` outputs (all in MtCO\u2082eq); for tree methods
+(RF, XGBoost) fit with a shared multi-output structure, that sum is also the
+direct surrogate prediction for total emissions, as linear relations between
+outputs are preserved exactly under MSE loss.
 
 **Validation quality**:
 

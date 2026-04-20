@@ -15,15 +15,12 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+from workflow.scripts.analysis.sensitivity_common import output_display
 from workflow.scripts.logging_config import setup_script_logging
 
-OUTPUT_ORDER = ["total_cost", "ghg_emissions", "land_use", "yll"]
-OUTPUT_LABELS = {
-    "total_cost": "Total Cost",
-    "ghg_emissions": "GHG Emissions",
-    "land_use": "Land Use",
-    "yll": "Years of Life Lost",
-}
+# Populated from ``sensitivity_analysis.outputs`` in main().
+OUTPUT_ORDER: list[str] = []
+OUTPUT_LABELS: dict[str, str] = {}
 X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
 L1_COLUMN = "prod_stability_cost"
@@ -104,6 +101,9 @@ def main() -> None:
     allowed_parameters = list(snakemake.params.allowed_parameters)  # type: ignore[attr-defined]
     parameter = str(snakemake.wildcards.parameter)  # type: ignore[attr-defined]
     l1_value = getattr(snakemake.params, "l1_value", None)
+    outputs_spec = dict(snakemake.params.outputs_spec)  # type: ignore[attr-defined]
+    global OUTPUT_ORDER, OUTPUT_LABELS
+    OUTPUT_ORDER, OUTPUT_LABELS, _ = output_display(outputs_spec)
 
     if parameter not in allowed_parameters:
         raise ValueError(

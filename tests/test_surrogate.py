@@ -37,26 +37,30 @@ GEN_SPEC = {
 }
 
 
+_COLUMNS = ["total_cost", "co2", "ch4", "n2o", "land_use", "yll"]
+
+
 def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     """Deterministic design + scalar outputs matching OUTPUT_COLUMNS shape."""
     rng = np.random.default_rng(0)
     x = rng.random((n, 2))
     x[:, 1] = 2 * x[:, 1] - 1  # map to [-1, 1] matching GEN_SPEC
 
-    # Two distinct response surfaces, one smooth, one with interactions, so a
-    # failure to route predict() through the right bundle entry shows up.
+    # Two distinct response surfaces, one smooth, one with interactions, plus
+    # heterogeneously scaled outputs, so a failure to route predict() through
+    # the right bundle entry (or to rescale correctly) shows up.
     y_smooth = 3 * x[:, 0] + 2 * x[:, 1]
     y_interact = 1.0 + x[:, 0] ** 2 + 0.5 * x[:, 0] * x[:, 1]
 
     df = pd.DataFrame(
         {
             "scenario": [f"synth_{i}" for i in range(n)],
-            # fit_bundle expects the same column set as OUTPUT_COLUMNS; stub the
-            # other two so the NaN-dropping logic doesn't remove everything.
-            "total_cost": y_smooth,
-            "ghg_emissions": y_smooth,
-            "land_use": y_interact,
-            "yll": y_interact,
+            "total_cost": 1000.0 * y_smooth,
+            "co2": -50.0 * y_smooth,
+            "ch4": 5.0 * y_interact,
+            "n2o": 3.0 * y_interact,
+            "land_use": 100.0 * y_interact,
+            "yll": 10.0 * y_smooth,
         }
     )
     return x, df
@@ -78,7 +82,7 @@ def test_bundle_save_load_predict_parity(tmp_path: Path, method, method_config):
         method=method,
         x_design=x,
         outputs_df=outputs_df,
-        available_columns=["total_cost", "ghg_emissions", "land_use", "yll"],
+        available_columns=_COLUMNS,
         generator_spec=GEN_SPEC,
         method_config=method_config,
         holdout_fraction=0.2,
@@ -86,12 +90,7 @@ def test_bundle_save_load_predict_parity(tmp_path: Path, method, method_config):
     )
     assert isinstance(bundle, SurrogateBundle)
     assert bundle.method == method
-    assert set(bundle.output_columns) == {
-        "total_cost",
-        "ghg_emissions",
-        "land_use",
-        "yll",
-    }
+    assert set(bundle.output_columns) == set(_COLUMNS)
     assert bundle.n_train + bundle.n_test == len(x)
 
     path = tmp_path / f"surrogate_{method}.pkl"

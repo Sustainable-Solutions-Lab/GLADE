@@ -770,6 +770,7 @@ rule plot_sobol_conditional_sensitivity:
         metric="S1_cond",
         parameter_colors=parameter_colors,
         parameter_group_order=parameter_group_order,
+        outputs_spec=config["sensitivity_analysis"]["outputs"],
     group:
         "analysis_plot"
     resources:
@@ -793,6 +794,7 @@ rule plot_sobol_joint_conditional_contour:
     params:
         metric="S1_cond",
         allowed_parameters=sobol_non_slice_parameters,
+        outputs_spec=config["sensitivity_analysis"]["outputs"],
     group:
         "analysis_plot"
     resources:
@@ -818,6 +820,7 @@ rule plot_sobol_joint_conditional_phase_diagram:
         allowed_parameters=sobol_non_slice_parameters,
         parameter_colors=parameter_colors,
         parameter_group_order=parameter_group_order,
+        outputs_spec=config["sensitivity_analysis"]["outputs"],
     group:
         "analysis_plot"
     resources:

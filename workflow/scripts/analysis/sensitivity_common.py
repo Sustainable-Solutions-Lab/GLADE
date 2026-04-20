@@ -2,35 +2,39 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Shared utilities for sensitivity analysis methods (PCE, RF, etc.).
+"""Shared utilities for surrogate-based sensitivity analysis.
 
-Functions extracted here are used by both the PCE and RF sensitivity
-analysis scripts.
+Two responsibilities:
+
+1. Reconstruct the Sobol design matrix from a generator spec (so all
+   callers re-read the same physical-parameter samples deterministically).
+2. Load the per-scenario scalar outputs declared in
+   ``sensitivity_analysis.outputs`` using a small registry of parquet
+   reducers.  Adding a new scalar output is a config-only edit as long as
+   one of the existing reducers fits; adding a new reducer is one function
+   plus an ``@register`` decorator.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
+import pandas as pd
 import pyarrow.parquet as pq
 from scipy.stats.qmc import Sobol
 
 from workflow.scenario_generators import build_joint_distribution
+
+# ---------------------------------------------------------------------------
+# Sobol design reconstruction.
+# ---------------------------------------------------------------------------
 
 
 def reconstruct_samples(generator_spec: dict) -> np.ndarray:
     """Regenerate the Sobol design matrix from the generator spec.
 
     Deterministic given the same seed and sample count.
-
-    Parameters
-    ----------
-    generator_spec : dict
-        Generator specification with parameters, samples, and seed.
-
-    Returns
-    -------
-    np.ndarray
-        N x D matrix in physical parameter space.
     """
     param_names = list(generator_spec["parameters"].keys())
     d = len(param_names)
@@ -41,18 +45,98 @@ def reconstruct_samples(generator_spec: dict) -> np.ndarray:
 
     sampler = Sobol(d, scramble=True, seed=seed)
     unit_samples = sampler.random(n_samples)
-    physical_samples = joint_dist.inv(unit_samples.T)  # shape (d, n_samples)
-    return physical_samples.T  # shape (n_samples, d)
+    physical_samples = joint_dist.inv(unit_samples.T)
+    return physical_samples.T
 
 
-def _read_column_sum(path: Path, column: str) -> float:
-    """Read a single column from a parquet file and return its sum.
+# ---------------------------------------------------------------------------
+# Declarative outputs: config parsing + reducer registry.
+# ---------------------------------------------------------------------------
 
-    Uses pyarrow directly to avoid materializing a full pandas DataFrame,
-    which matters for large files like land_use.parquet (~52k rows, ~12 MB
-    decompressed).  Over thousands of scenarios the avoided allocations
-    prevent significant memory accumulation from allocator fragmentation.
+
+@dataclass(frozen=True)
+class OutputSpec:
+    """A single surrogate target declared in ``sensitivity_analysis.outputs``."""
+
+    name: str
+    source: str
+    reducer: str
+    label: str
+    units: str
+    reducer_kwargs: dict[str, Any]
+
+
+# Keys consumed directly by OutputSpec; everything else in an output entry
+# is forwarded verbatim to the reducer as keyword arguments.
+_RESERVED_KEYS: frozenset[str] = frozenset({"source", "reducer", "label", "units"})
+
+
+def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
+    """Parse the ``sensitivity_analysis.outputs`` config block into specs.
+
+    Preserves insertion order from the YAML mapping so downstream displays
+    (Sobol plot panels, validation parquet rows) follow the config order.
     """
+    specs = []
+    for name, entry in cfg.items():
+        kwargs = {k: v for k, v in entry.items() if k not in _RESERVED_KEYS}
+        specs.append(
+            OutputSpec(
+                name=name,
+                source=entry["source"],
+                reducer=entry["reducer"],
+                label=entry["label"],
+                units=entry["units"],
+                reducer_kwargs=kwargs,
+            )
+        )
+    return specs
+
+
+def output_display(cfg: dict) -> tuple[list[str], dict[str, str], dict[str, str]]:
+    """Return ``(order, labels, units)`` for the Sobol plotting scripts."""
+    order = list(cfg.keys())
+    labels = {k: v["label"] for k, v in cfg.items()}
+    units = {k: v["units"] for k, v in cfg.items()}
+    return order, labels, units
+
+
+REDUCERS: dict[str, Callable[..., float]] = {}
+
+
+def register(name: str) -> Callable[[Callable], Callable]:
+    """Decorator: register ``fn`` as a reducer under ``name``.
+
+    Reducers take the scenario parquet path as their first positional
+    argument and any number of keyword arguments forwarded from the
+    output's config entry.  They must return a single float (``np.nan``
+    when the file is missing or lacks the expected columns, so failed
+    solves are visible to the scenario-dropping step in build_surrogate).
+    """
+
+    def decorator(fn: Callable[..., float]) -> Callable[..., float]:
+        if name in REDUCERS:
+            raise ValueError(f"Reducer {name!r} already registered")
+        REDUCERS[name] = fn
+        return fn
+
+    return decorator
+
+
+@register("row_sum")
+def _row_sum(path: Path) -> float:
+    """Sum of all columns of a single-row parquet (e.g. objective breakdown)."""
+    if not path.exists() or path.stat().st_size == 0:
+        return np.nan
+    table = pq.read_table(path)
+    if table.num_rows == 0:
+        return np.nan
+    return float(sum(table.column(i)[0].as_py() for i in range(table.num_columns)))
+
+
+@register("column_sum")
+def _column_sum(path: Path, *, column: str) -> float:
+    """Sum of one named column across all rows."""
     if not path.exists() or path.stat().st_size == 0:
         return np.nan
     schema = pq.read_schema(path)
@@ -64,71 +148,55 @@ def _read_column_sum(path: Path, column: str) -> float:
     return float(table.column(column).to_numpy().sum())
 
 
-def _read_row_sum(path: Path) -> float:
-    """Read a single-row parquet and return the sum of all columns."""
-    if not path.exists() or path.stat().st_size == 0:
-        return np.nan
-    table = pq.read_table(path)
-    if table.num_rows == 0:
-        return np.nan
-    return float(sum(table.column(i)[0].as_py() for i in range(table.num_columns)))
-
-
-def _read_yll(path: Path) -> float:
-    """Read the YLL total, trying column names in priority order."""
+@register("filter_sum")
+def _filter_sum(
+    path: Path,
+    *,
+    filter_col: str,
+    filter_value: str,
+    value_col: str,
+) -> float:
+    """Sum of ``value_col`` over rows where ``filter_col == filter_value``."""
     if not path.exists() or path.stat().st_size == 0:
         return np.nan
     schema = pq.read_schema(path)
-    col_names = schema.names
-    for candidate in ("yll_myll", "yll_million", "total_yll"):
-        if candidate in col_names:
-            return _read_column_sum(path, candidate)
-    return np.nan
+    if filter_col not in schema.names or value_col not in schema.names:
+        return np.nan
+    table = pq.read_table(path, columns=[filter_col, value_col])
+    if table.num_rows == 0:
+        return np.nan
+    keys = table.column(filter_col).to_pylist()
+    values = table.column(value_col).to_numpy()
+    mask = np.fromiter((k == filter_value for k in keys), dtype=bool, count=len(keys))
+    return float(values[mask].sum())
+
+
+# ---------------------------------------------------------------------------
+# Scenario output loading.
+# ---------------------------------------------------------------------------
 
 
 def load_scenario_outputs(
     analysis_dir: Path,
     scenario_names: list[str],
-) -> "pd.DataFrame":
-    """Load and aggregate scalar outputs from sensitivity scenarios.
+    specs: list[OutputSpec],
+) -> pd.DataFrame:
+    """Extract each spec's scalar from every scenario and return a DataFrame.
 
-    Reads only the needed columns via pyarrow to avoid materializing full
-    DataFrames (land_use.parquet alone is ~12 MB per scenario).
-
-    Parameters
-    ----------
-    analysis_dir : Path
-        Base analysis directory (results/{name}/analysis/)
-    scenario_names : list[str]
-        Ordered scenario names matching sample generation order.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with one row per scenario and columns for each output metric.
+    One row per scenario; one column per spec (plus ``scenario``).  Missing
+    or schema-less parquets yield ``NaN`` so the caller can drop failed
+    solves before fitting.
     """
-    import pandas as pd
-
-    scenarios = np.empty(len(scenario_names), dtype=object)
-    total_cost = np.empty(len(scenario_names))
-    ghg_emissions = np.empty(len(scenario_names))
-    land_use = np.empty(len(scenario_names))
-    yll = np.empty(len(scenario_names))
-
+    n = len(scenario_names)
+    columns: dict[str, list] = {
+        "scenario": list(scenario_names),
+        **{spec.name: [np.nan] * n for spec in specs},
+    }
     for i, scenario_name in enumerate(scenario_names):
-        d = analysis_dir / f"scen-{scenario_name}"
-        scenarios[i] = scenario_name
-        total_cost[i] = _read_row_sum(d / "objective_breakdown.parquet")
-        ghg_emissions[i] = _read_column_sum(d / "net_emissions.parquet", "mtco2eq")
-        land_use[i] = _read_column_sum(d / "land_use.parquet", "area_mha")
-        yll[i] = _read_yll(d / "health_totals.parquet")
-
-    return pd.DataFrame(
-        {
-            "scenario": scenarios,
-            "total_cost": total_cost,
-            "ghg_emissions": ghg_emissions,
-            "land_use": land_use,
-            "yll": yll,
-        }
-    )
+        scen_dir = analysis_dir / f"scen-{scenario_name}"
+        for spec in specs:
+            reducer = REDUCERS[spec.reducer]
+            columns[spec.name][i] = reducer(
+                scen_dir / spec.source, **spec.reducer_kwargs
+            )
+    return pd.DataFrame(columns)

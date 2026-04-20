@@ -17,16 +17,13 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+from workflow.scripts.analysis.sensitivity_common import output_display
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
 
-OUTPUT_ORDER = ["total_cost", "ghg_emissions", "land_use", "yll"]
-OUTPUT_LABELS = {
-    "total_cost": "Total Cost",
-    "ghg_emissions": "GHG Emissions",
-    "land_use": "Land Use",
-    "yll": "Years of Life Lost",
-}
+# Populated from ``sensitivity_analysis.outputs`` in main().
+OUTPUT_ORDER: list[str] = []
+OUTPUT_LABELS: dict[str, str] = {}
 X_COLUMN = "ghg_price"
 Y_COLUMN = "value_per_yll"
 L1_COLUMN = "prod_stability_cost"
@@ -216,6 +213,9 @@ def main() -> None:
     color_overrides = dict(snakemake.params.parameter_colors)  # type: ignore[attr-defined]
     group_order = list(snakemake.params.parameter_group_order)  # type: ignore[attr-defined]
     l1_value = getattr(snakemake.params, "l1_value", None)
+    outputs_spec = dict(snakemake.params.outputs_spec)  # type: ignore[attr-defined]
+    global OUTPUT_ORDER, OUTPUT_LABELS
+    OUTPUT_ORDER, OUTPUT_LABELS, _ = output_display(outputs_spec)
 
     if not input_path.exists():
         raise FileNotFoundError(f"Missing conditional joint indices file: {input_path}")
