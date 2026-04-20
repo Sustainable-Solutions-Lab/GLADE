@@ -247,7 +247,10 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 6
+  # 2 solver threads runs more efficiently at scale on the cluster (more jobs in
+  # parallel per node).  Each GSA solve is small enough that single-thread gurobi
+  # is already near-optimal; hyperthreading gives diminishing returns.
+  threads: 2
   mem_mb: 9000
   time_limit: 60  # Hard limit
   runtime: 30     # Initial limit before retries for more favourable slurm scheduling
