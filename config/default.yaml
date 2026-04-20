@@ -1119,10 +1119,43 @@ remote_solve:
   preflight_check: true  # If true, create remote workdir before syncing
 
 # --- section: sensitivity_analysis ---
-# Full defaults (holdout_fraction, threads, default_surrogate, methods) are
-# set in each GSA-style config (see e.g. config/gsa.yaml); here we only
-# declare the scalar output vocabulary, shared across sensitivity configs.
+# Defaults for surrogate-based global sensitivity analysis. GSA configs
+# (see e.g. config/gsa.yaml) deep-merge their overrides on top of this.
+# Non-GSA configs never run the surrogate rules but still need the block
+# to satisfy schema validation.
 sensitivity_analysis:
+  holdout_fraction: 0.15
+  threads: 6
+  # Method downstream consumers (uncertainty-band plots, notebooks) use when
+  # no explicit choice is given. Must match a key under ``methods``.
+  default_surrogate: xgb
+  methods:
+    pce:
+      grid_resolution: 15
+      method_options:
+        n_mc_conditional: 2048
+        cross_truncation: 0.8
+    rf:
+      grid_resolution: 15
+      method_options:
+        n_estimators: 500
+    mars:
+      grid_resolution: 15
+      method_options:
+        max_terms: 50
+        max_degree: 2
+        penalty: 3.0
+        n_knots: 25
+    xgb:
+      grid_resolution: 15
+      method_options:
+        n_estimators: 5000
+        max_depth: 4
+        learning_rate: 0.02
+        subsample: 0.8
+        colsample_bytree: 0.8
+        min_child_weight: 5
+        early_stopping_rounds: 50
   # Scalar outputs extracted from each scenario's analysis directory and
   # fit by the surrogate. Each entry declares:
   #   source:   parquet filename under analysis/scen-<scenario>/
