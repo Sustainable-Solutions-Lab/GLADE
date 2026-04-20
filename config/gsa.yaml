@@ -35,7 +35,7 @@ scenarios:
   #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
   #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
   #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
-  #   - ghg_price: 0-300 (GHG price, slice parameter)
+  #   - ghg_price: 0-500 (GHG price, slice parameter)
   #
   # Each generator group is replicated at the three production-stability
   # regimes described above, each with its own calibration baseline scenario.
