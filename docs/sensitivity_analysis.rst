@@ -28,15 +28,22 @@ A parameter with :math:`S_1 \approx S_T` influences the output mainly through
 its direct effect. A parameter with :math:`S_T \gg S_1` is involved in
 significant interactions with other parameters.
 
-This implementation supports two surrogate modelling approaches:
+This implementation supports four surrogate modelling approaches:
 
 - **Polynomial Chaos Expansion (PCE)**: Computes Sobol indices analytically
   from a polynomial approximation to the model response.
-- **Random Forest (RF)**: Computes Sobol indices via Monte Carlo permutation
-  of a fitted random forest ensemble.
+- **Random Forest (RF)**, **XGBoost (XGB)**, and
+  **Multivariate Adaptive Regression Splines (MARS)**: Tree- and
+  spline-based regressors; Sobol indices are computed via Saltelli
+  pick-freeze Monte Carlo on the fitted surrogate.
 
-Both methods are fitted to the same set of solved model scenarios, enabling
-direct comparison of surrogate quality and derived sensitivity indices.
+All four share a single fitting pipeline (the ``build_surrogate`` rule)
+that persists the trained model as a pickled :class:`SurrogateBundle`
+alongside a validation parquet.  The bundle is the single artifact
+consumed by downstream rules and notebooks: Sobol-index computation,
+uncertainty-band plots, and policy sweeps all load the bundle instead of
+refitting.  Which surrogate is used for a given downstream consumer is
+controlled by ``sensitivity_analysis.default_surrogate`` in the config.
 
 
 Methodology
@@ -819,9 +826,10 @@ probability distribution.
 Running the Analysis
 --------------------
 
-The sensitivity analysis requires three stages: build all sampled scenarios,
-solve them, then fit surrogates. Snakemake handles all dependencies
-automatically.
+The sensitivity analysis has four stages: build sampled scenarios, solve
+them, fit a surrogate over the scalar outputs, and compute Sobol indices
+(or other diagnostics) from the surrogate. Snakemake handles all
+dependencies automatically.
 
 **Run the full pipeline** (build + solve + analyze for all samples):
 
@@ -829,21 +837,32 @@ automatically.
 
    tools/smk -j4 --configfile config/gsa.yaml
 
-**Run just the surrogate analysis step** (after scenarios are already solved):
+**Fit a surrogate only** (after scenarios are already solved):
 
 .. code-block:: bash
 
-   # PCE analysis for the default scenario group
+   # XGBoost surrogate for the default scenario group
    tools/smk -j4 --configfile config/gsa.yaml -- \
-       results/gsa/analysis/sobol_global_indices_gsa_pce.parquet
+       results/gsa/surrogates/surrogate_gsa_xgb.pkl
 
-   # RF analysis for the same scenarios
+The ``build_surrogate`` rule writes a pickled :class:`SurrogateBundle` (the
+trained model, generator spec, and parameter metadata) plus a flat
+validation parquet.  The bundle is consumed by downstream rules and
+notebooks (policy sweeps, uncertainty-band plots).
+
+**Compute Sobol indices from a surrogate**:
+
+.. code-block:: bash
+
    tools/smk -j4 --configfile config/gsa.yaml -- \
-       results/gsa/analysis/sobol_global_indices_gsa_rf.parquet
+       results/gsa/analysis/sobol_global_indices_gsa_xgb.parquet
 
 Output paths use two wildcards: ``{group}`` identifies the scenario sampling
 group (e.g., ``gsa``, ``gsa-l1-low``) and ``{method}`` selects the surrogate
-(``pce`` or ``rf``). Both methods consume the same solved scenarios.
+type (``pce``, ``rf``, ``mars``, ``xgb``).  All methods consume the same
+solved scenarios, and ``sensitivity_analysis.default_surrogate`` selects the
+surrogate downstream consumers (notebooks, uncertainty plots) load by
+default.
 
 .. note::
 
@@ -855,8 +874,15 @@ group (e.g., ``gsa``, ``gsa-l1-low``) and ``{method}`` selects the surrogate
 Output Files
 ------------
 
-Four Parquet files are written to ``results/{name}/analysis/`` per
-(group, method) combination:
+Per (group, method) combination, the workflow writes:
+
+- A pickled surrogate bundle at
+  ``results/{name}/surrogates/surrogate_{group}_{method}.pkl``.  Loaded via
+  :func:`workflow.scripts.analysis.surrogate.load_bundle`.
+- A flat validation parquet at
+  ``results/{name}/surrogates/surrogate_validation_{group}_{method}.parquet``
+  (surrogate fit quality per output target).
+- Three Sobol parquets at ``results/{name}/analysis/``:
 
 **sobol_global_indices_{group}_{method}.parquet** — Global Sobol indices
 
@@ -889,7 +915,9 @@ One row per (output, parameter, conditioning-value combination).
 Same schema as above, but conditioned on *all* slice parameters simultaneously
 over a 2D grid. Used by the dominant factor phase diagram plot.
 
-**sobol_validation_{group}_{method}.parquet** — Surrogate quality metrics
+**surrogate_validation_{group}_{method}.parquet** — Surrogate quality metrics
+(lives under ``surrogates/``, not ``analysis/``, because it describes the
+surrogate fit rather than the Sobol indices).
 
 .. csv-table::
    :header: Column, Type, Description
@@ -900,10 +928,11 @@ over a 2D grid. Used by the dominant factor phase diagram plot.
    ``r2_test``, float, "R² on holdout data (null if holdout disabled)"
    ``n_train``, int, "Number of training samples"
    ``n_test``, int, "Number of holdout samples"
-   ``method``, string, "Surrogate method (``pce`` or ``rf``)"
+   ``method``, string, "Surrogate method (``pce``, ``rf``, ``mars``, ``xgb``)"
 
 Additional method-specific columns: ``loo_error``, ``n_terms``,
-``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators`` (RF).
+``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators``
+(RF); ``n_estimators`` (XGB); ``gcv``, ``n_basis`` (MARS).
 
 **Plots**
 

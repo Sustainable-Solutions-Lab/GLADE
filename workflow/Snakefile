@@ -83,6 +83,10 @@ localrules:
     sobol_plots,
 
 
+# Underscore is reserved as the separator between adjacent wildcards in output
+# paths (e.g. "sobol_global_indices_{group}_{method}.parquet"), so wildcard
+# constraints deliberately exclude "_" -- use hyphens inside wildcard values
+# (e.g. group "gsa-fd" rather than "gsa_fd").
 wildcard_constraints:
     climate_model=r"[a-zA-Z0-9\-]+",
     period=r"[A-Z0-9]+",
@@ -91,7 +95,7 @@ wildcard_constraints:
     water_supply=r"[ri]",
     crop=r"[a-zA-Z0-9\-]+",
     item=r"[a-zA-Z0-9_-]+",
-    scenario=r"[a-zA-Z0-9_\-]+",  # Scenario preset wildcard
+    scenario=r"[a-zA-Z0-9_\-]+",  # Scenario preset wildcard (underscores allowed)
     lu_class=r"GL-[a-z]+",  # LUIcube land-use class (e.g., GL-owl, GL-notrees)
     variable=r"[a-zA-Z]+",  # LUIcube variable (e.g., area, HANPPharv, NPPeco)
     group=r"[a-zA-Z0-9\-]+",  # Sensitivity scenario group (e.g. gsa, gsa-l1-low)

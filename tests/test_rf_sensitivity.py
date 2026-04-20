@@ -9,19 +9,26 @@ import numpy as np
 import pytest
 from scipy.stats.qmc import Sobol
 
-from workflow.scripts.analysis.compute_rf_sensitivity import (
-    conditional_sobol_rf_batch,
+from workflow.scripts.analysis.surrogate import (
+    conditional_sobol_mc,
     fit_random_forest,
-    sobol_from_rf,
+    sobol_from_predict,
 )
+
+
+def sobol_from_rf(model, distribution, n_params, n_mc=2**14, seed=0):
+    """Adapter so existing tests can pass model objects instead of callables."""
+    return sobol_from_predict(
+        model.predict, distribution, n_params, n_mc=n_mc, seed=seed
+    )
 
 
 def conditional_sobol_rf(
     model, distribution, n_params, slice_indices, slice_values, n_mc=2**13, seed=0
 ):
     """Single-point wrapper around the batch conditional Sobol function."""
-    results = conditional_sobol_rf_batch(
-        model,
+    results = conditional_sobol_mc(
+        model.predict,
         distribution,
         n_params,
         slice_indices,

@@ -9,11 +9,20 @@ import numpy as np
 import pytest
 from scipy.stats.qmc import Sobol
 
-from workflow.scripts.analysis.compute_mars_sensitivity import fit_mars
-from workflow.scripts.analysis.compute_rf_sensitivity import (
-    conditional_sobol_rf_batch,
-    sobol_from_rf,
+from workflow.scripts.analysis.surrogate import (
+    conditional_sobol_mc,
+    fit_mars,
+    sobol_from_predict,
 )
+
+conditional_sobol_rf_batch = conditional_sobol_mc
+
+
+def sobol_from_rf(model, distribution, n_params, n_mc=2**14, seed=0):
+    """Adapter so existing tests can pass model objects instead of callables."""
+    return sobol_from_predict(
+        model.predict, distribution, n_params, n_mc=n_mc, seed=seed
+    )
 
 
 class TestMARSFitting:
@@ -123,7 +132,7 @@ class TestMARSConditionalSobol:
 
         # Condition on parameter 0 (largest contributor)
         batch_results = conditional_sobol_rf_batch(
-            result["model"],
+            result["model"].predict,
             dist,
             3,
             [0],

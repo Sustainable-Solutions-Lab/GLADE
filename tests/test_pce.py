@@ -14,11 +14,13 @@ from workflow.scenario_generators import (
     _validate_distribution_spec,
     build_chaospy_distribution,
 )
-from workflow.scripts.analysis.compute_pce_sensitivity import (
-    conditional_sobol,
+from workflow.scripts.analysis.surrogate import (
+    conditional_sobol_pce,
     fit_pce,
     sobol_from_pce,
 )
+
+conditional_sobol = conditional_sobol_pce
 
 
 class TestDistributionParsing:
@@ -228,7 +230,9 @@ class TestPCEFitting:
         result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
         assert result["r2"] > 0.99
 
-        s1, s_total = sobol_from_pce(result["coefficients"], result["multi_indices"], 2)
+        s1, _s_total = sobol_from_pce(
+            result["coefficients"], result["multi_indices"], 2
+        )
         # For Y = X1^2 + X2 with X_i ~ U(-1,1):
         # Var(X1^2) = E[X1^4] - E[X1^2]^2 = 1/5 - 1/9 = 4/45
         # Var(X2) = 1/3
@@ -282,9 +286,8 @@ class TestConditionalSobol:
         )
 
         # Condition on parameter 0 at its midpoint
-        s1_c, st_c, cond_var = conditional_sobol(
+        _s1_c, _st_c, cond_var = conditional_sobol(
             coefficients,
-            result["expansion"],
             multi_indices,
             dist,
             3,
@@ -308,9 +311,8 @@ class TestConditionalSobol:
         result = fit_pce(x, y, dist, max_degree=3, cross_truncation=0.75)
 
         # Condition on X2 (the irrelevant param)
-        s1_c, st_c, cond_var = conditional_sobol(
+        s1_c, _st_c, _cond_var = conditional_sobol(
             result["coefficients"],
-            result["expansion"],
             result["multi_indices"],
             dist,
             3,
@@ -340,7 +342,6 @@ class TestConditionalSobol:
 
         s1_low, _, var_low = conditional_sobol(
             result["coefficients"],
-            result["expansion"],
             result["multi_indices"],
             dist,
             3,
@@ -349,7 +350,6 @@ class TestConditionalSobol:
         )
         s1_high, _, var_high = conditional_sobol(
             result["coefficients"],
-            result["expansion"],
             result["multi_indices"],
             dist,
             3,
@@ -389,7 +389,6 @@ class TestConditionalSobol:
         s2, s3 = 0.2, 0.8
         s1_cond, _, _ = conditional_sobol(
             result["coefficients"],
-            result["expansion"],
             result["multi_indices"],
             dist,
             4,

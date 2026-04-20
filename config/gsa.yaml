@@ -190,6 +190,10 @@ scenarios:
 sensitivity_analysis:
   holdout_fraction: 0.15
   threads: 6
+  # Downstream consumers (notebooks, uncertainty-band plots) load the bundle for
+  # this method when no explicit choice is provided.  Must match a key under
+  # ``methods``.
+  default_surrogate: xgb
   methods:
     pce:
       grid_resolution: 15

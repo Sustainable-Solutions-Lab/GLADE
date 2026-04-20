@@ -37,6 +37,8 @@ scenarios:
 
 sensitivity_analysis:
   holdout_fraction: 0.15
+  threads: 2
+  default_surrogate: pce
   methods:
     pce:
       grid_resolution: 10

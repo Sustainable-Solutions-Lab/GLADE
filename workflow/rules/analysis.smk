@@ -326,30 +326,61 @@ def _sensitivity_slice_grid(wildcards):
     return grid
 
 
-rule compute_sobol_sensitivity:
-    """Compute global sensitivity indices from ensemble scenario runs.
+rule build_surrogate:
+    """Fit a surrogate model over the GSA Sobol design and persist it.
 
-    Dispatches to either PCE or Random Forest based on the ``{method}``
-    wildcard, reading method-specific settings from
-    ``sensitivity_analysis.methods.<method>`` in config.
+    Produces a :class:`SurrogateBundle` pickle plus a flat validation
+    parquet (surrogate fit quality per output target).  Downstream rules
+    (Sobol computation, uncertainty-band plots) load the pickle and do
+    not refit.
 
-    The {group} wildcard identifies the scenario sampling group (e.g., "gsa"),
-    while {method} selects the surrogate fitting approach ("pce" or "rf").
+    The {group} wildcard identifies the scenario sampling group (e.g.,
+    "gsa"); {method} selects the surrogate type (one of the keys under
+    ``sensitivity_analysis.methods``).
     """
     input:
         _sensitivity_scenario_inputs,
     params:
         scenario_names=_sensitivity_scenario_names,
         generator_spec=lambda w: _sensitivity_generator(w),
-        method=lambda w: w.method,
         method_config=_sensitivity_method_config,
         holdout_fraction=lambda w: config["sensitivity_analysis"]["holdout_fraction"],
+    output:
+        surrogate="<results>/{name}/surrogates/surrogate_{group}_{method}.pkl",
+        validation="<results>/{name}/surrogates/surrogate_validation_{group}_{method}.parquet",
+    threads: lambda w: config["sensitivity_analysis"]["threads"]
+    group:
+        "analysis_plot"
+    resources:
+        runtime="10m",
+        mem_mb=4000,
+    log:
+        "<logs>/{name}/build_surrogate_{group}_{method}.log",
+    benchmark:
+        "<benchmarks>/{name}/build_surrogate_{group}_{method}.tsv"
+    script:
+        "../scripts/analysis/build_surrogate.py"
+
+
+rule compute_sobol_sensitivity:
+    """Compute global and conditional Sobol indices from a surrogate bundle.
+
+    Loads the pickle produced by ``build_surrogate`` and evaluates Sobol
+    indices: analytically for PCE, Saltelli pick-freeze MC for the
+    regressor-based surrogates (RF, MARS, XGB).
+
+    The {group} wildcard identifies the scenario sampling group (e.g.,
+    "gsa"); {method} selects which surrogate to use.
+    """
+    input:
+        surrogate="<results>/{name}/surrogates/surrogate_{group}_{method}.pkl",
+    params:
+        method_config=_sensitivity_method_config,
         slice_grid=_sensitivity_slice_grid,
     output:
         global_indices="<results>/{name}/analysis/sobol_global_indices_{group}_{method}.parquet",
         conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",
         conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
     threads: lambda w: config["sensitivity_analysis"]["threads"]
     group:
         "analysis_plot"

@@ -1648,7 +1648,7 @@ properties:
   sensitivity_analysis:
     type: object
     description: "Configuration for surrogate-based sensitivity analysis methods"
-    required: [holdout_fraction, threads, methods]
+    required: [holdout_fraction, threads, default_surrogate, methods]
     additionalProperties: false
     properties:
       holdout_fraction:
@@ -1660,6 +1660,9 @@ properties:
         type: integer
         minimum: 1
         description: "Number of threads for sensitivity analysis (controls sklearn n_jobs and BLAS)"
+      default_surrogate:
+        type: string
+        description: "Surrogate method downstream consumers (e.g. uncertainty-band plots, notebooks) pick when no method is specified explicitly.  Must match a key under ``methods``."
       methods:
         type: object
         description: "Surrogate method configs keyed by method name (e.g. pce, rf)"

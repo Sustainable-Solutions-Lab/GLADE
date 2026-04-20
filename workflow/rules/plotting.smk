@@ -762,7 +762,7 @@ rule plot_sobol_conditional_sensitivity:
     """Plot stacked conditional Sobol shares vs policy slice parameters."""
     input:
         conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
+        validation="<results>/{name}/surrogates/surrogate_validation_{group}_{method}.parquet",
     output:
         value_per_yll_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_value_per_yll_{group}_{method}.pdf",
         ghg_price_pdf="<results>/{name}/plots/sobol_conditional_s1_vs_ghg_price_{group}_{method}.pdf",
@@ -787,7 +787,7 @@ rule plot_sobol_joint_conditional_contour:
     """Plot conditional Sobol surface for one non-slice parameter."""
     input:
         conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
+        validation="<results>/{name}/surrogates/surrogate_validation_{group}_{method}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_s1_surface_{parameter}_{group}_{method}.pdf",
     params:
@@ -810,7 +810,7 @@ rule plot_sobol_joint_conditional_phase_diagram:
     """Plot dominant non-slice sensitivity parameter across 2D policy space."""
     input:
         conditional_joint_indices="<results>/{name}/analysis/sobol_conditional_joint_indices_{group}_{method}.parquet",
-        validation="<results>/{name}/analysis/sobol_validation_{group}_{method}.parquet",
+        validation="<results>/{name}/surrogates/surrogate_validation_{group}_{method}.parquet",
     output:
         pdf="<results>/{name}/plots/sobol_conditional_dominant_factor_{group}_{method}.pdf",
     params:
