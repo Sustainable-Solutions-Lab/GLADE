@@ -50,7 +50,7 @@ scenarios:
         yll:
           space: log
           start: 50
-          stop: 100000
+          stop: 50000
           num: 10
           round: true
       template:
@@ -80,24 +80,6 @@ validation:
     animals:
       l1_cost: 0.033
 
-water:
-  supply_scenario: "current_use"
-
-residues:
-  max_feed_fraction_by_region:
-    Asia: 0.70
-
-grazing:
-  # Slightly higher utilization rate matches grassland supply with feed demand
-  isimip_utilization_rate: 0.60
-
-land:
-  regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
-
-health:
-  region_clusters: 15
-  intake_grid_points: 8  # Number of grid knots over empirical RR range
-
 # Compare all scenarios in plots
 plotting:
   comparison_scenarios: "all"
@@ -105,7 +87,7 @@ plotting:
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 8
+  threads: 2
   mem_mb: 9000
   runtime: 20
 
@@ -117,7 +99,7 @@ remote_solve:
   pixi_env: "gurobi"
   use_slurm: true
   slurm_account: "sjdavis"
-  slurm_partition: "owners"
+  slurm_partition: "owners,serc"
   sync_pixi_files: false
   ssh_options: []
   rsync_options: []
