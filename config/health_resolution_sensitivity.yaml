@@ -67,9 +67,6 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.12
-    animals:
-      l1_cost: 0.033
 
 animal_products:
   # Use regionalized feed efficiency values

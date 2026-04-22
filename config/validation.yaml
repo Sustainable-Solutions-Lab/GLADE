@@ -2,13 +2,17 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
+# Validation
+# ----------
+# Runs the model in validation mode (actual yields, enforced baseline diet
+# and feed) to compare model behaviour against observed 2020 outcomes.
+# This config does *not* regenerate the grassland forage calibration; use
+# ``config/calibration/grassland.yaml`` (or ``tools/calibrate grassland``)
+# for that.
+
 name: "validation"
 scenarios:
   default: {}
-  uncalibrated:
-    grazing:
-      grassland_forage_calibration:
-        enabled: false
 
 planning_horizon: 2020
 
@@ -24,15 +28,6 @@ validation:
 cost_calibration:
   enabled: false
 
-grazing:
-  grassland_forage_calibration:
-    generate: true
-    scenario: uncalibrated
-
-# macronutrients:
-#   cal:
-#     min: 2400
-
 health:
   value_per_yll: 0
 
@@ -43,5 +38,3 @@ solving:
   io_api: "direct"
   solver: "gurobi"
   threads: 2
-  # options_gurobi:
-  #   DualReductions: 0

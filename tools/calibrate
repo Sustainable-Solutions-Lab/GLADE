@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Orchestrator for the three calibrations that feed the default workflow.
+#
+# Dependency order (upstream data changed → rerun in this order):
+#   1. grassland  → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage}.csv
+#   2. cost       → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
+#   3. stability  → data/curated/calibration/prod_stability_l1.yaml
+#
+# Usage:
+#   tools/calibrate                # run all three in order
+#   tools/calibrate grassland      # one step
+#   tools/calibrate cost
+#   tools/calibrate stability
+#   tools/calibrate --check        # report which calibrations are stale (no execution)
+#
+# All steps invoke ``tools/smk`` under the hood; any extra flags after the
+# subcommand are passed through.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+GRASSLAND_TARGETS=(
+  data/curated/calibration/grassland_yield.csv
+  data/curated/calibration/fodder_conversion.csv
+  data/curated/calibration/exogenous_forage.csv
+)
+COST_TARGETS=(
+  data/curated/calibration/crop_cost.csv
+  data/curated/calibration/grassland_cost.csv
+  data/curated/calibration/animal_cost.csv
+)
+STABILITY_TARGETS=(
+  data/curated/calibration/prod_stability_l1.yaml
+)
+
+# Split argv into (targets, passthrough) at a `--` separator.
+#   split_args <target1> <target2> ... -- <passthrough...>
+# On return, $TARGETS_ARR and $PASSTHROUGH_ARR global arrays hold each side.
+split_args() {
+  TARGETS_ARR=()
+  PASSTHROUGH_ARR=()
+  local seen_sep=0
+  for arg in "$@"; do
+    if [[ "$arg" == "--" && $seen_sep -eq 0 ]]; then
+      seen_sep=1
+      continue
+    fi
+    if [[ $seen_sep -eq 0 ]]; then
+      TARGETS_ARR+=("$arg")
+    else
+      PASSTHROUGH_ARR+=("$arg")
+    fi
+  done
+}
+
+run_step() {
+  local label="$1" configfile="$2"
+  shift 2
+  split_args "$@"
+  echo "[calibrate] $label -- tools/smk --configfile $configfile ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
+  tools/smk --configfile "$configfile" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
+}
+
+check_step() {
+  local label="$1" configfile="$2"
+  shift 2
+  split_args "$@"
+  local out
+  if ! out=$(tools/smk --configfile "$configfile" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
+    printf '  [error]      %-10s (dry-run failed; see output below)\n' "$label"
+    printf '%s\n' "$out" | sed 's/^/    /'
+    return 2
+  fi
+  # Snakemake prints "Nothing to be done" when everything is up-to-date.
+  if echo "$out" | grep -q "Nothing to be done"; then
+    printf '  [up-to-date] %-10s\n' "$label"
+  else
+    printf '  [STALE]      %-10s (run: tools/calibrate %s)\n' "$label" "$label"
+  fi
+}
+
+cmd="${1:-all}"
+shift || true
+
+case "$cmd" in
+  -h|--help|help)
+    sed -n '7,22p' "$0"
+    exit 0
+    ;;
+  --check|check)
+    echo "[calibrate] Checking staleness (no execution) ..."
+    rc=0
+    check_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@" || rc=$?
+    check_step cost      config/calibration/cost.yaml      "${COST_TARGETS[@]}"      -- "$@" || rc=$?
+    check_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@" || rc=$?
+    exit "$rc"
+    ;;
+  all)
+    run_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@"
+    run_step cost      config/calibration/cost.yaml      "${COST_TARGETS[@]}"      -- "$@"
+    run_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@"
+    ;;
+  grassland)
+    run_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@"
+    ;;
+  cost)
+    run_step cost config/calibration/cost.yaml "${COST_TARGETS[@]}" -- "$@"
+    ;;
+  stability)
+    run_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@"
+    ;;
+  *)
+    echo "[calibrate] Unknown subcommand: $cmd" >&2
+    echo "Usage: tools/calibrate [all|grassland|cost|stability|--check]" >&2
+    exit 2
+    ;;
+esac

@@ -77,7 +77,12 @@ validation:
     enabled: false
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
-    l1_cost: 0.12  # bn USD per Mha deviation (crops/grassland). Calibrated jointly with animals.l1_cost to bring both land-use and animal-feed deviations to ~5% of observed 2020 totals (see notebooks/prod_stability_calibration.ipynb).
+    # L1 penalty costs live directly under production_stability with scope-
+    # specific names. String "calibrated" resolves at solve time from
+    # data/curated/calibration/prod_stability_l1.yaml; a number overrides.
+    # Regenerate the calibration with `tools/calibrate stability`.
+    land_l1_cost: "calibrated"  # bn USD per Mha deviation (crops + grassland, shared)
+    animal_feed_l1_cost: "calibrated"  # bn USD per Mt DM deviation (animal feed use). Set to null to fall back to automatic Mha-equivalent scaling from land_l1_cost.
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
       enabled: true
@@ -94,7 +99,6 @@ validation:
       max_relative_deviation: 0.2
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline: 0.00001  # Mt DM floor (scaled to Mha-eq internally). Hard mode: ignore near-zero baselines below this threshold. Relative penalty modes: denominator floor for near-zero/zero baselines.
-      l1_cost: 0.033  # bn USD per Mt DM deviation. Calibrated jointly with parent l1_cost; see notebooks/prod_stability_calibration.ipynb. Set to null to fall back to automatic Mha-equivalent scaling from parent l1_cost.
     land_conversion:
       enabled: true  # Penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline
   animal_growth_cap:
@@ -1071,6 +1075,18 @@ cost_calibration:
   crop_correction_csv: "data/curated/calibration/crop_cost.csv"
   grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
   animal_correction_csv: "data/curated/calibration/animal_cost.csv"
+
+# --- section: prod_stability_calibration ---
+# Calibrated L1 production-stability penalty costs (land vs. animal feed).
+# Read at solve time whenever ``validation.production_stability.land_l1_cost``
+# or ``.animal_feed_l1_cost`` is set to the sentinel string ``"calibrated"``.
+# Generated from a 5x5 log-log grid sweep; see config/calibration/stability.yaml and
+# tools/calibrate stability.
+prod_stability_calibration:
+  enabled: true       # Resolve the "calibrated" sentinel at solve time from the file below
+  generate: false     # Generate the file from the grid sweep (breaks DAG cycle when true)
+  target_deviation_pct: 5.0  # Target deviation (% of baseline) used for contour intersection
+  calibrated_l1_yaml: "data/curated/calibration/prod_stability_l1.yaml"
 
 # --- section: solving ---
 solving:

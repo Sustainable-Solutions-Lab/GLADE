@@ -30,6 +30,7 @@ from workflow.scripts.solve_model.health import (
 from workflow.scripts.solve_model.production_stability import (
     add_animal_growth_cap_constraints,
     add_production_stability_constraints,
+    resolve_calibrated_l1_costs,
 )
 
 # Module-level logger (replaced by run_solve's caller)
@@ -1282,8 +1283,14 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     )
     add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
-    # Add production stability constraints (per-link for both crops and animals)
-    stability_cfg = smk.params.production_stability
+    # Add production stability constraints (per-link for both crops and animals).
+    # Resolve the "calibrated" sentinel before any downstream code reads
+    # l1_cost, even when stability is disabled (callers still touch
+    # stability_cfg after the optimisation, e.g. for objective breakdown).
+    calibrated_l1_yaml = getattr(smk.input, "prod_stability_calibration", None)
+    stability_cfg = resolve_calibrated_l1_costs(
+        smk.params.production_stability, calibrated_l1_yaml
+    )
     if stability_cfg["enabled"]:
         slack_marginal_cost = float(smk.params.slack_marginal_cost)
         add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
@@ -1414,23 +1421,25 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         # Store production stability penalty cost for objective breakdown.
         # L1/quadratic penalties are linopy-level terms not visible to PyPSA
         # statistics; record them in metadata so the breakdown can account
-        # for them.  Animal costs may differ from the top-level l1_cost
-        # when animals.l1_cost is overridden in config.
-        animals_cfg = stability_cfg["animals"]
-        animal_l1_override = animals_cfg.get("l1_cost")
+        # for them.  Animal costs may differ from land_l1_cost when
+        # animal_feed_l1_cost is set explicitly.
+        animal_l1_override = stability_cfg.get("animal_feed_l1_cost")
         animal_l1 = (
             float(animal_l1_override)
             if animal_l1_override is not None
-            else float(stability_cfg.get("l1_cost", 0))
+            else float(stability_cfg.get("land_l1_cost", 0))
         )
         stability_cost = 0.0
         for var_name, cost in [
-            ("crop_stability_abs_dev", float(stability_cfg.get("l1_cost", 0))),
-            ("grassland_stability_abs_dev", float(stability_cfg.get("l1_cost", 0))),
+            ("crop_stability_abs_dev", float(stability_cfg.get("land_l1_cost", 0))),
+            (
+                "grassland_stability_abs_dev",
+                float(stability_cfg.get("land_l1_cost", 0)),
+            ),
             ("animal_stability_abs_dev", animal_l1),
             (
                 "land_conversion_stability_abs_dev",
-                float(stability_cfg.get("l1_cost", 0)),
+                float(stability_cfg.get("land_l1_cost", 0)),
             ),
         ]:
             if var_name in n.model.variables:

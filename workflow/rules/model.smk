@@ -264,6 +264,19 @@ def solve_model_inputs(w):
         inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
         inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
 
+    # Production-stability L1 calibration: include the calibrated-L1 YAML
+    # when the scenario's stability config contains the "calibrated" sentinel
+    # on either l1 cost key. Resolution happens in
+    # solve_model/production_stability.py at solve time.
+    ps_cal_cfg = eff_cfg["prod_stability_calibration"]
+    if ps_cal_cfg["enabled"]:
+        stab = eff_cfg["validation"]["production_stability"]
+        if (
+            stab.get("land_l1_cost") == "calibrated"
+            or stab.get("animal_feed_l1_cost") == "calibrated"
+        ):
+            inputs["prod_stability_calibration"] = ps_cal_cfg["calibrated_l1_yaml"]
+
     return inputs
 
 

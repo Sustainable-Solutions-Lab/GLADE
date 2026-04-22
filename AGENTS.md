@@ -295,6 +295,27 @@ pixi run -e dev pytest -v         # verbose output
 - Use commit messages in `<type>: <imperative summary>` format (e.g., `fix: handle empty scenario list`).
 - Prefer one of these types: `feat`, `fix`, `refactor`, `docs`, `tests`, `chore`, `perf`.
 
+## Calibration
+
+Three calibrations feed the default workflow. Their outputs live under
+`data/curated/calibration/` and are git-tracked; builds depend on them.
+When upstream data or build logic changes materially, regenerate in this
+order:
+
+1. **grassland** — `config/calibration/grassland.yaml` → `grassland_yield.csv`,
+   `fodder_conversion.csv`, `exogenous_forage.csv`.
+2. **cost** — `config/calibration/cost.yaml` → `crop_cost.csv`,
+   `grassland_cost.csv`, `animal_cost.csv`.
+3. **stability** — `config/calibration/stability.yaml` → `prod_stability_l1.yaml`
+   (calibrated L1 penalty costs; resolved at solve time when
+   `validation.production_stability.land_l1_cost` or `.animal_feed_l1_cost`
+   is the sentinel string `"calibrated"`).
+
+Single entrypoint: `tools/calibrate` (`all` by default; `grassland`,
+`cost`, `stability`, or `--check` for staleness). `tools/smk` prints a
+one-line reminder when `data/curated/` inputs are newer than the oldest
+calibration artefact. See `docs/calibration.rst` for the full story.
+
 ## Configuration Validation
 
 The project uses automatic configuration validation via JSON Schema to ensure all config files are complete and well-formed.

@@ -90,6 +90,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "plotting",
     "remote_solve",
     "netcdf",
+    "prod_stability_calibration.enabled",
 }
 
 

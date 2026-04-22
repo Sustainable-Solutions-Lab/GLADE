@@ -47,6 +47,7 @@ required:
   - animal_costs
   - crop_costs
   - cost_calibration
+  - prod_stability_calibration
   - solving
   - remote_solve
   - plotting
@@ -213,10 +214,21 @@ properties:
             type: number
             minimum: 0
             description: "Cost coefficient for quadratic deviation penalty (bn USD per deviation² unit)"
-          l1_cost:
-            type: number
-            minimum: 0
-            description: "Cost coefficient for L1 (absolute value) deviation penalty (bn USD per Mt deviation for absolute, bn USD per unit relative deviation for relative)"
+          land_l1_cost:
+            oneOf:
+              - type: number
+                minimum: 0
+              - type: string
+                enum: ["calibrated"]
+            description: "L1 penalty on crop + grassland land-use deviation (bn USD per Mha). Set to \"calibrated\" to resolve from data/curated/calibration/prod_stability_l1.yaml at solve time."
+          animal_feed_l1_cost:
+            oneOf:
+              - type: number
+                minimum: 0
+              - type: string
+                enum: ["calibrated"]
+              - type: "null"
+            description: "L1 penalty on animal feed-use deviation (bn USD per Mt DM). Set to \"calibrated\" to resolve at solve time; a number overrides; null falls back to automatic Mha-equivalent scaling from land_l1_cost."
           deviation_type:
             type: string
             enum: ["absolute", "relative"]
@@ -281,10 +293,6 @@ properties:
                 type: number
                 exclusiveMinimum: 0
                 description: "Mt DM floor (scaled to Mha-eq internally). Hard mode: minimum animal baseline to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
-              l1_cost:
-                type: ["number", "null"]
-                minimum: 0
-                description: "Optional override: bn USD per Mt DM deviation. When set, bypasses automatic Mha-equivalent scaling and uses this cost directly in native animal feed units. When null, uses the parent l1_cost with automatic scaling."
           land_conversion:
             type: object
             required: [enabled]
@@ -292,7 +300,7 @@ properties:
             properties:
               enabled:
                 type: boolean
-                description: "Whether to penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline. Uses parent penalty_mode and l1_cost/quadratic_cost. Hard mode is skipped (zero baselines would forbid all conversion)."
+                description: "Whether to penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline. Uses parent penalty_mode and land_l1_cost/quadratic_cost. Hard mode is skipped (zero baselines would forbid all conversion)."
       animal_growth_cap:
         type: object
         required: [enabled, max_relative_increase, min_baseline]
@@ -1519,6 +1527,26 @@ properties:
       animal_correction_csv:
         type: string
         description: "Path to animal cost calibration correction CSV"
+
+  prod_stability_calibration:
+    type: object
+    required: [enabled, generate, target_deviation_pct, calibrated_l1_yaml]
+    additionalProperties: false
+    description: "Calibrated L1 production-stability penalty costs, resolved at solve time from a YAML file when land_l1_cost or animal_feed_l1_cost is the sentinel \"calibrated\"."
+    properties:
+      enabled:
+        type: boolean
+        description: "Resolve the \"calibrated\" sentinel at solve time by reading calibrated_l1_yaml"
+      generate:
+        type: boolean
+        description: "Generate the calibrated file from the prod-stability grid sweep (breaks DAG cycle when true)"
+      target_deviation_pct:
+        type: number
+        exclusiveMinimum: 0
+        description: "Target baseline-deviation used for the contour intersection (% of observed baseline totals)"
+      calibrated_l1_yaml:
+        type: string
+        description: "Path to the YAML file holding calibrated land_l1_cost and animal_feed_l1_cost"
 
   solving:
     type: object

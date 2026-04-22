@@ -192,6 +192,15 @@ def build_scenario_entry(
         inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
         inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
 
+    ps_cal_cfg = eff["prod_stability_calibration"]
+    if ps_cal_cfg["enabled"]:
+        stab = eff["validation"]["production_stability"]
+        if (
+            stab.get("land_l1_cost") == "calibrated"
+            or stab.get("animal_feed_l1_cost") == "calibrated"
+        ):
+            inputs["prod_stability_calibration"] = ps_cal_cfg["calibrated_l1_yaml"]
+
     # Add population input for inline analysis
     if inline_analysis:
         inputs["population"] = rp("<processing>/{name}/population.csv")

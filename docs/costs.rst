@@ -161,12 +161,14 @@ The resulting cost estimates vary substantially across crops and countries, refl
 Calibration Correction
 ^^^^^^^^^^^^^^^^^^^^^^
 
-An optional additive calibration correction adjusts production costs for crops, grassland, and animals based on shadow prices from a model solved with tight production stability constraints.  When the model is forced to reproduce observed production levels (±1%), the dual variables on those constraints reveal how much each production link's cost would need to change to make the observed allocation cost-optimal.  These duals are extracted as additive corrections and applied at build time.
+An optional additive calibration correction adjusts production costs for
+crops, grassland, and animals based on shadow prices from a model solved
+with tight production-stability constraints. The corrections are
+additive, clipped to zero (no negative costs), and applied at build time
+whenever ``cost_calibration.enabled`` is true (the default).
 
-* **Correction files**: ``data/curated/calibration/crop_cost.csv``, ``grassland_cost.csv``, ``animal_cost.csv``
-* **Application**: Additive corrections to marginal costs; clipped to zero (no negative costs)
-* **Configuration**: Controlled by top-level ``cost_calibration`` section (disabled by default)
-* **Generation**: ``tools/smk --configfile config/cost_calibration.yaml -- data/curated/calibration/crop_cost.csv data/curated/calibration/grassland_cost.csv data/curated/calibration/animal_cost.csv``
+Regenerate with ``tools/calibrate cost``. See :ref:`calibration` for the
+full dependency graph and algorithm.
 
 Livestock Costs
 ~~~~~~~~~~~~~~~

@@ -33,12 +33,15 @@ Penalty modes (L1/quadratic) apply to all links so zero-baseline links also
 incur a stability cost when activated.
 """
 
+import copy
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,65 @@ LAND_CONVERSION_CARRIERS = [
     "spare_land",
     "spare_existing_grassland",
 ]
+
+CALIBRATED_SENTINEL = "calibrated"
+
+
+def resolve_calibrated_l1_costs(
+    stability_cfg: dict, calibrated_l1_yaml: str | None
+) -> dict:
+    """Return ``stability_cfg`` with the ``"calibrated"`` sentinel resolved.
+
+    ``validation.production_stability.land_l1_cost`` and
+    ``validation.production_stability.animal_feed_l1_cost`` may each be set
+    to the string ``"calibrated"``; when they are, we look up the calibrated
+    numeric values in ``calibrated_l1_yaml`` (produced by
+    ``compute_prod_stability_calibration``).
+
+    The input dict is not mutated. If no sentinel is present, returns the
+    input unchanged.
+    """
+
+    def _needs_lookup(cfg: dict) -> bool:
+        return (
+            cfg.get("land_l1_cost") == CALIBRATED_SENTINEL
+            or cfg.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL
+        )
+
+    if not _needs_lookup(stability_cfg):
+        return stability_cfg
+
+    if calibrated_l1_yaml is None:
+        raise ValueError(
+            "validation.production_stability contains the sentinel "
+            f"'{CALIBRATED_SENTINEL}' but no calibrated-L1 YAML was provided "
+            "to the solve. Check that prod_stability_calibration.enabled is "
+            "true and that the file exists."
+        )
+
+    path = Path(calibrated_l1_yaml)
+    with path.open() as f:
+        calibrated = yaml.safe_load(f)
+    land_val = float(calibrated["land_l1_cost"])
+    animal_feed_val = float(calibrated["animal_feed_l1_cost"])
+
+    resolved = copy.deepcopy(stability_cfg)
+    if resolved.get("land_l1_cost") == CALIBRATED_SENTINEL:
+        resolved["land_l1_cost"] = land_val
+        logger.info(
+            "Resolved production_stability.land_l1_cost='calibrated' -> %.6f (from %s)",
+            land_val,
+            path,
+        )
+    if resolved.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL:
+        resolved["animal_feed_l1_cost"] = animal_feed_val
+        logger.info(
+            "Resolved production_stability.animal_feed_l1_cost='calibrated' -> %.6f "
+            "(from %s)",
+            animal_feed_val,
+            path,
+        )
+    return resolved
 
 
 def add_production_stability_constraints(
@@ -110,7 +172,7 @@ def add_production_stability_constraints(
                 "crop_production",
                 "crop",
                 stability_cfg["deviation_type"],
-                stability_cfg["l1_cost"],
+                stability_cfg["land_l1_cost"],
                 crops_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -147,7 +209,7 @@ def add_production_stability_constraints(
                 "grassland_production",
                 "grassland",
                 stability_cfg["deviation_type"],
-                stability_cfg["l1_cost"],
+                stability_cfg["land_l1_cost"],
                 grassland_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -166,21 +228,21 @@ def add_production_stability_constraints(
     animals_cfg = stability_cfg["animals"]
     if animals_cfg["enabled"]:
         # Determine animal L1/quadratic cost and scaling.
-        # If animals.l1_cost is set, use it directly in native Mt DM units
+        # If animal_feed_l1_cost is set, use it directly in native Mt DM units
         # (no scaling). Otherwise, compute a dynamic scaling coefficient so
         # that animal feed deviations (Mt DM) are converted to Mha-equivalent
-        # units, making the shared l1_cost/quadratic_cost comparable across
+        # units, making land_l1_cost/quadratic_cost comparable across
         # crop/grassland (Mha) and animal (Mt DM) components.
-        animal_l1_cost_override = animals_cfg.get("l1_cost")
+        animal_l1_cost_override = stability_cfg.get("animal_feed_l1_cost")
         if animal_l1_cost_override is not None:
             animal_l1_cost = float(animal_l1_cost_override)
             animal_scale = 1.0
             logger.info(
-                "Using animal-specific L1 cost: %.4f bn USD/Mt DM (no scaling)",
+                "Using animal_feed_l1_cost directly: %.4f bn USD/Mt DM (no scaling)",
                 animal_l1_cost,
             )
         else:
-            animal_l1_cost = stability_cfg["l1_cost"]
+            animal_l1_cost = stability_cfg["land_l1_cost"]
             animal_scale = 1.0
             if stability_cfg["deviation_type"] == "absolute":
                 crop_links = links_df[links_df["carrier"] == "crop_production"]
@@ -602,8 +664,7 @@ def _add_animal_hard_constraints(
         )
         m.objective += slack_marginal_cost * animal_slack.sum()
         logger.info(
-            "Added animal feed use slack variables for %d links "
-            "(cost=%.1f bn USD/Mt)",
+            "Added animal feed use slack variables for %d links (cost=%.1f bn USD/Mt)",
             len(link_names),
             slack_marginal_cost,
         )

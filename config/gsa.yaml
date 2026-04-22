@@ -9,13 +9,13 @@
 # (PCE, Random Forest) is configured separately under `sensitivity_analysis`.
 #
 # The analysis is replicated at three production-stability regimes:
-#   default (calibrated):  l1_cost=0.12,  animals.l1_cost=0.033
-#   lower  (÷ √10):        l1_cost=0.038, animals.l1_cost=0.010
-#   higher (× √10):        l1_cost=0.38,  animals.l1_cost=0.10
-# Both penalties are scaled together by half an order of magnitude so they
-# remain balanced around the calibration point (see
-# notebooks/prod_stability_calibration.ipynb). Each regime has its own
-# baseline scenario for consumer-values calibration.
+#   default (calibrated):  land_l1_cost/animal_feed_l1_cost from calibration file
+#   lower  (÷ √10):        land_l1_cost=0.038, animal_feed_l1_cost=0.010
+#   higher (× √10):        land_l1_cost=0.38,  animal_feed_l1_cost=0.10
+# The lower/higher numeric variants are hand-scaled ±½ order of magnitude
+# around the calibrated central values (~0.12 crop, ~0.033 animal). If the
+# calibrated values drift meaningfully, rescale these variants to match.
+# Each regime has its own baseline scenario for consumer-values calibration.
 
 name: "gsa"
 scenarios:
@@ -58,24 +58,22 @@ scenarios:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.038
-        animals:
-          l1_cost: 0.010
+        land_l1_cost: 0.038
+        animal_feed_l1_cost: 0.010
 
   baseline_l1_high:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.38
-        animals:
-          l1_cost: 0.10
+        land_l1_cost: 0.38
+        animal_feed_l1_cost: 0.10
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
 
   _generators:
-    # --- Default stability regime (calibrated): l1_cost=0.12, animals.l1_cost=0.033 ---
+    # --- Default stability regime (calibrated, resolved at solve time) ---
     - name: gsa_{sample_id}
       mode: sensitivity
       samples: 8192
@@ -162,9 +160,8 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            l1_cost: 0.038
-            animals:
-              l1_cost: 0.010
+            land_l1_cost: 0.038
+            animal_feed_l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -179,9 +176,8 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            l1_cost: 0.38
-            animals:
-              l1_cost: 0.10
+            land_l1_cost: 0.38
+            animal_feed_l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -236,9 +232,6 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.12
-    animals:
-      l1_cost: 0.033
 
 # Compare all scenarios in plots
 plotting:

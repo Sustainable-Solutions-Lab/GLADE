@@ -7,13 +7,14 @@
 # Replicates the scenarios from sensitivity.yaml at two additional
 # production-stability regimes in addition to the calibrated default:
 #
-#   default (calibrated):   l1_cost=0.12,  animals.l1_cost=0.033
-#   lower  (÷ √10 each):    l1_cost=0.038, animals.l1_cost=0.010
-#   higher (× √10 each):    l1_cost=0.38,  animals.l1_cost=0.10
+#   default (calibrated):   land_l1_cost/animal_feed_l1_cost from calibration file
+#   lower  (÷ √10 each):    land_l1_cost=0.038, animal_feed_l1_cost=0.010
+#   higher (× √10 each):    land_l1_cost=0.38,  animal_feed_l1_cost=0.10
 #
-# Both parameters are scaled together by half an order of magnitude so the
-# two penalties remain balanced around the (~5% land, ~5% feed) calibration
-# point from notebooks/prod_stability_calibration.ipynb.
+# The lower/higher numeric values are hand-scaled ±½ order of magnitude
+# around the calibrated central values (~0.12 crop, ~0.033 animal). If the
+# calibrated values drift meaningfully after regenerating via
+# ``tools/calibrate stability``, rescale the numeric variants below to match.
 #
 # Kept separate from sensitivity.yaml because these are only used when the
 # sensitivity of headline results to the stability regime itself needs to
@@ -26,9 +27,8 @@ scenarios:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.038
-        animals:
-          l1_cost: 0.010
+        land_l1_cost: 0.038
+        animal_feed_l1_cost: 0.010
     food_utility_piecewise:
       enabled: false
     emissions:
@@ -41,9 +41,8 @@ scenarios:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        l1_cost: 0.38
-        animals:
-          l1_cost: 0.10
+        land_l1_cost: 0.38
+        animal_feed_l1_cost: 0.10
 
   _generators:
     # --- Zero-point scenarios at alternative stability regimes -------------
@@ -61,9 +60,8 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 0.038
-            animals:
-              l1_cost: 0.010
+            land_l1_cost: 0.038
+            animal_feed_l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -75,9 +73,8 @@ scenarios:
         <<: *zero_low
         validation:
           production_stability:
-            l1_cost: 0.38
-            animals:
-              l1_cost: 0.10
+            land_l1_cost: 0.38
+            animal_feed_l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -100,9 +97,8 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 0.038
-            animals:
-              l1_cost: 0.010
+            land_l1_cost: 0.038
+            animal_feed_l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -113,9 +109,8 @@ scenarios:
         <<: *ghg_low
         validation:
           production_stability:
-            l1_cost: 0.38
-            animals:
-              l1_cost: 0.10
+            land_l1_cost: 0.38
+            animal_feed_l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -138,9 +133,8 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 0.038
-            animals:
-              l1_cost: 0.010
+            land_l1_cost: 0.038
+            animal_feed_l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -151,9 +145,8 @@ scenarios:
         <<: *yll_low
         validation:
           production_stability:
-            l1_cost: 0.38
-            animals:
-              l1_cost: 0.10
+            land_l1_cost: 0.38
+            animal_feed_l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -173,9 +166,8 @@ scenarios:
             equal_to_baseline: true
         validation:
           production_stability:
-            l1_cost: 0.038
-            animals:
-              l1_cost: 0.010
+            land_l1_cost: 0.038
+            animal_feed_l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -188,9 +180,8 @@ scenarios:
         <<: *ghg_yll_low
         validation:
           production_stability:
-            l1_cost: 0.38
-            animals:
-              l1_cost: 0.10
+            land_l1_cost: 0.38
+            animal_feed_l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -200,8 +191,9 @@ baseline_year: 2020
 food_utility_piecewise:
   enabled: true
 
-# Top-level stability set to the calibrated pair; alternative regimes above
-# override it with explicit (crop, animal) pairs scaled by ±half an order of
+# Top-level stability uses the calibrated pair (resolved at solve time from
+# data/curated/calibration/prod_stability_l1.yaml). Alternative regimes above
+# override with explicit (crop, animal) pairs scaled by ±half an order of
 # magnitude around the calibration point.
 validation:
   use_actual_yields: true
@@ -209,9 +201,6 @@ validation:
     enabled: true
     penalty_mode: "l1"
     deviation_type: "absolute"
-    l1_cost: 0.12
-    animals:
-      l1_cost: 0.033
 
 plotting:
   comparison_scenarios: "all"

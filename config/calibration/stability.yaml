@@ -2,17 +2,30 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Production Stability Sensitivity Analysis
-# ------------------------------------------
-# 5x5 log-log grid sweep of crop/grassland L1 cost (Mha) and animal L1
-# cost (Mt DM, native units) to map out land-area deviation as a function
-# of both penalty strengths.
+# Production Stability L1 Calibration
+# -----------------------------------
+# 5x5 log-log grid sweep of land L1 cost (Mha) and animal-feed L1 cost
+# (Mt DM) to locate the pair at which both land-use and animal-feed
+# deviations reach the target percentage of observed 2020 totals.
+# ``compute_prod_stability_calibration`` then writes the calibrated
+# values to ``data/curated/calibration/prod_stability_l1.yaml``.
 #
 # Each grid point gets its own baseline scenario so that consumer values
 # (piecewise food utility blocks) are calibrated under the matching
 # production-stability regime.
+#
+# Usage:
+#   tools/calibrate stability
+#
+# Or equivalently:
+#   tools/smk --configfile config/calibration/stability.yaml -- \
+#     data/curated/calibration/prod_stability_l1.yaml
+#
+# Note: 50 full-model solves (25 baselines + 25 grid points) run here.
+# Configure ``remote_solve`` in a local config override if you want to
+# offload the solves to an HPC cluster.
 
-name: "prod_stability"
+name: "stability_calibration"
 scenarios:
   # Baseline for the zero-stability reference scenario
   baseline_off:
@@ -67,9 +80,8 @@ scenarios:
             enabled: true
             penalty_mode: "l1"
             deviation_type: "absolute"
-            l1_cost: "{crop_cost}"
-            animals:
-              l1_cost: "{animal_cost}"
+            land_l1_cost: "{crop_cost}"
+            animal_feed_l1_cost: "{animal_cost}"
         food_utility_piecewise:
           enabled: false
         emissions:
@@ -89,9 +101,8 @@ scenarios:
             enabled: true
             penalty_mode: "l1"
             deviation_type: "absolute"
-            l1_cost: "{crop_cost}"
-            animals:
-              l1_cost: "{animal_cost}"
+            land_l1_cost: "{crop_cost}"
+            animal_feed_l1_cost: "{animal_cost}"
         consumer_values:
           baseline_scenario: "baseline_c{crop_cost_fmt}_a{animal_cost_fmt}"
         emissions:
@@ -102,7 +113,6 @@ scenarios:
           cal:
             equal_to_baseline: true
 
-# Align with sensitivity.yaml
 planning_horizon: 2020
 baseline_year: 2020
 
@@ -117,6 +127,18 @@ consumer_values:
 
 validation:
   use_actual_yields: true
+  # Every grid scenario overrides land_l1_cost to a numeric grid value; set a
+  # numeric default here to avoid leaking the base-config "calibrated"
+  # sentinel into the baseline scenarios (which have stability disabled).
+  production_stability:
+    land_l1_cost: 0.1
+    animal_feed_l1_cost: 0.1
+
+# We are generating the calibration file from the grid results; don't
+# attempt to resolve the sentinel at solve time.
+prod_stability_calibration:
+  enabled: false
+  generate: true
 
 plotting:
   comparison_scenarios: "all"
@@ -127,43 +149,3 @@ solving:
   threads: 2
   mem_mb: 9000
   runtime: 45
-
-remote_solve:
-  enabled: true
-  local_scenarios:
-    - "baseline_off"
-    - "baseline_c0p01_a0p01"
-    - "baseline_c0p01_a0p0316"
-    - "baseline_c0p01_a0p1"
-    - "baseline_c0p01_a0p3162"
-    - "baseline_c0p01_a1p0"
-    - "baseline_c0p0316_a0p01"
-    - "baseline_c0p0316_a0p0316"
-    - "baseline_c0p0316_a0p1"
-    - "baseline_c0p0316_a0p3162"
-    - "baseline_c0p0316_a1p0"
-    - "baseline_c0p1_a0p01"
-    - "baseline_c0p1_a0p0316"
-    - "baseline_c0p1_a0p1"
-    - "baseline_c0p1_a0p3162"
-    - "baseline_c0p1_a1p0"
-    - "baseline_c0p3162_a0p01"
-    - "baseline_c0p3162_a0p0316"
-    - "baseline_c0p3162_a0p1"
-    - "baseline_c0p3162_a0p3162"
-    - "baseline_c0p3162_a1p0"
-    - "baseline_c1p0_a0p01"
-    - "baseline_c1p0_a0p0316"
-    - "baseline_c1p0_a0p1"
-    - "baseline_c1p0_a0p3162"
-    - "baseline_c1p0_a1p0"
-  host: "shr"
-  workdir: "~/food-opt-scratch"
-  pixi_env: "gurobi"
-  use_slurm: true
-  slurm_account: "sjdavis"
-  slurm_partition: "owners"
-  sync_pixi_files: false
-  ssh_options: []
-  rsync_options: []
-  preflight_check: true
