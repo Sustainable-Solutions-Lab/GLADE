@@ -3,9 +3,14 @@
 # SPDX-License-Identifier: CC-BY-4.0
 
 # Standalone validation configuration for documentation figures.
-# Based on config/validation.yaml but with gurobi solver for consistency
-# with other doc configs. Unlike a scenario override, top-level settings
-# here are visible to processing rules that read config[...] directly.
+# Mirrors config/validation.yaml but writes to results/doc_validation/ so
+# documentation runs don't clobber the main validation workspace.
+#
+# We skip the ``uncalibrated`` scenario here: the grassland-forage
+# calibration CSVs in ``data/curated/calibration/`` are committed to the
+# repo, so the default ``grassland_forage_calibration`` block in
+# ``config/default.yaml`` (``enabled: true, generate: false``) consumes
+# them directly and there's no need to regenerate.
 
 name: "doc_validation"
 scenarios:
@@ -21,26 +26,17 @@ validation:
   disable_spared_cropland: true
   disable_spared_grassland: true
   slack_marginal_cost: 10
-  grassland_yield_multiplier: 1.2
 
-water:
-  supply_scenario: current_use
-
-residues:
-  max_feed_fraction_by_region:
-    Asia: 0.70
-
-grazing:
-  isimip_utilization_rate: 0.60
-
-land:
-  regional_limit: 1.
+cost_calibration:
+  enabled: false
 
 health:
-  enabled: false
+  value_per_yll: 0
 
 emissions:
   ghg_pricing_enabled: false
 
 solving:
+  io_api: "direct"
   solver: "gurobi"
+  threads: 2
