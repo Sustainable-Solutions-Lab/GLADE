@@ -1,7 +1,0 @@
-# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
-#
-# SPDX-License-Identifier: CC-BY-4.0
-
-[submodule "paper"]
-	path = paper
-	url = https://git.overleaf.com/6994e5856a6b4b9e39c9e5f6

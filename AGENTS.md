@@ -31,6 +31,8 @@ Provide clear expectations and a safe, efficient workflow so agents can make sma
 - `tests/`: pytest integration tests using the Snakemake Python API; run via `pixi run -e dev test`.
 - `vendor/`: Custom branches of PyPSA and linopy for reference, though not used as local dependencies.
 
+The paper manuscript and its figure notebooks live in a separate repo at `../paper/` (sibling of this one). Those notebooks import from `workflow/` via `sys.path` and read from `results/` here — see `../paper/notebooks/README.md` for the exact configs and Snakemake targets each figure depends on. Do not re-add a `paper/` submodule or reintroduce `notebooks/paper_figures/` here.
+
 ## Model Structure
 
 The model represents global food systems as a PyPSA network where commodities flow through a supply chain from land/resources to human nutrition. The `build_model` rule (in `workflow/rules/model.smk`) orchestrates construction via `workflow/scripts/build_model.py`, which calls functions from the modular `workflow/scripts/build_model/` package.
