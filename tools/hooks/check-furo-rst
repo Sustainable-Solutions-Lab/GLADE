@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Reject .rst patterns that the Furo theme renders as in-page errors
+# but that Sphinx does not flag as a build warning. Runs as a prek hook;
+# prek passes the list of staged .rst files as arguments.
+
+set -euo pipefail
+
+status=0
+
+for file in "$@"; do
+    # `.. contents::` — Furo renders a red error block instead of a ToC.
+    if grep -nE '^\.\. contents::' "$file" >/dev/null; then
+        echo "error: $file contains a \`.. contents::\` directive." >&2
+        echo "       Furo renders this as an in-page error. Remove it and rely on the sidebar ToC." >&2
+        grep -nE '^\.\. contents::' "$file" >&2
+        status=1
+    fi
+done
+
+exit "$status"

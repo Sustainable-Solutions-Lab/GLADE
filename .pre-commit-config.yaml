@@ -28,3 +28,8 @@ repos:
         stages: [post-checkout]
         always_run: true
         pass_filenames: false
+      - id: check-furo-rst
+        name: reject Furo-incompatible .rst directives
+        entry: tools/hooks/check-furo-rst
+        language: script
+        files: \.rst$
