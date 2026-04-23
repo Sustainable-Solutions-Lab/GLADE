@@ -302,7 +302,7 @@ def add_production_stability_constraints(
                 n,
                 link_p,
                 links_df,
-                stability_cfg["l1_cost"],
+                stability_cfg["land_l1_cost"],
             )
         elif penalty_mode == "quadratic":
             _add_land_conversion_quadratic_penalty(
