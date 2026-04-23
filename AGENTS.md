@@ -386,6 +386,7 @@ The workflow validates that all required credentials are present at startup (bef
 - When adding features or changing behavior, update relevant documentation sections in `docs/*.rst`.
 - Build docs locally: `cd docs && make html` (requires `pixi install --environment dev`).
 - Documentation is version-controlled and builds automatically on ReadTheDocs.
+- **No in-page tables of contents**: the Furo theme renders a sidebar ToC on every page and explicitly rejects in-page `.. contents::` directives (it injects a red error block into the rendered HTML). Rely on Furo's sidebar and on section headings; do not add `.. contents::` to any `.rst` file.
 
 ### Documentation Figures
 

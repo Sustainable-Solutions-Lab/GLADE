@@ -12,10 +12,6 @@ The model incorporates production costs for both crop and livestock systems to r
 
 This page provides an overview of how production costs are sourced, processed, and applied throughout the model.
 
-.. contents::
-   :local:
-   :depth: 2
-
 Cost Categories
 ---------------
 

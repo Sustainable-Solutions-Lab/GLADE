@@ -7,10 +7,6 @@
 Calibration
 ===========
 
-.. contents::
-   :local:
-   :depth: 2
-
 The default workflow relies on three separate calibrations that each
 transform outputs of a dedicated solve into a git-tracked input consumed
 by every subsequent solve. Running ``tools/calibrate`` regenerates all
