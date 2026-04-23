@@ -126,10 +126,65 @@ Script: ``workflow/scripts/extract_cost_calibration.py``.
 Production-stability L1 calibration
 -----------------------------------
 
-The model uses an :math:`L_1` penalty on per-link deviation from
-baseline production (both land-use and animal-feed). The penalty
-coefficients are calibrated so the optimal solution exhibits ~5 %
-deviation on each axis:
+Motivation
+~~~~~~~~~~
+
+A pure cost-minimisation solve of a global food system model is free
+to reorganise production arbitrarily: if a country produces wheat more
+cheaply than its neighbour, the optimiser will shift the neighbour's
+entire wheat output across the border. This is unrealistic — real
+production patterns reflect a long tail of frictions (rotations,
+contracts, infrastructure, labour, insurance, policy) that the model
+does not represent. Without a counterweight, the optimal allocation
+diverges sharply from observed production and analyses that build on
+top (marginal-cost attribution, counterfactual comparisons, sensitivity
+analysis) become uninterpretable.
+
+The model therefore adds a **production-stability penalty** that
+discourages departures from the observed-year baseline. Every crop,
+grassland and animal-feed production link :math:`\ell` carries a linear
+:math:`L_1` term in the objective,
+
+.. math::
+
+   \sum_{\ell \in \text{crop,grass}} \ell^c_1 \cdot
+   |x_\ell - \bar x_\ell|
+   \;+\;
+   \sum_{\ell \in \text{animal}} \ell^a_1 \cdot
+   |x_\ell - \bar x_\ell|,
+
+where :math:`\bar x_\ell` is the baseline activity of the link (area in
+Mha for crops / grassland, feed use in Mt DM for animals) and
+:math:`\ell^c_1`, :math:`\ell^a_1` are the two penalty coefficients
+calibrated here. The :math:`L_1` form is deliberate: it is piecewise
+linear (so the LP stays an LP), and it produces *sparse* deviations —
+links either match the baseline exactly or pay a proportional cost to
+move.
+
+Why two coefficients?
+~~~~~~~~~~~~~~~~~~~~~
+
+Land activity and animal-feed activity are measured in different units
+and have different baseline totals (roughly 4,000 Mha of land vs
+6,500 Mt DM of feed). A single shared coefficient would penalise one
+axis much more strongly than the other. Splitting the penalty into a
+crop/grassland coefficient :math:`\ell^c_1` (bn USD per Mha of
+deviation) and an animal-feed coefficient :math:`\ell^a_1` (bn USD per
+Mt DM) lets us tune each axis independently.
+
+Calibration target
+~~~~~~~~~~~~~~~~~~
+
+We pick :math:`(\ell^c_1, \ell^a_1)` so that the optimal solution
+exhibits **~5 %** total deviation on each axis (summed absolute
+deviation divided by the baseline total). The 5 % target is a
+compromise: large enough that the optimiser can still express
+meaningful shifts in response to scenarios (carbon prices, diet
+changes, yield shocks), small enough that the resulting production
+pattern stays recognisably close to observed production and
+interpretation remains tractable.
+
+Formally the calibration solves
 
 .. math::
 
@@ -138,24 +193,59 @@ deviation on each axis:
    \quad
    \big\lVert \text{feed\_dev}(\ell^c_1, \ell^a_1) - 5\,\%\big\rVert.
 
-``config/calibration/stability.yaml`` defines a 5 × 5 log-spaced grid on
-:math:`10^{-2} \ldots 10^0` for each coefficient; each grid point is
-solved with a matching baseline scenario for the piecewise consumer-
-value blocks. ``compute_prod_stability_calibration`` computes the 5 %
-contour in each dimension (log-linear interpolation) and returns their
-intersection via a fixed-point iteration on
-:math:`\ell^c_1 \mapsto \ell^a_{1,\text{feed=5\%}}(\ell^c_1)`
-and :math:`\ell^a_1 \mapsto \ell^c_{1,\text{land=5\%}}(\ell^a_1)`.
-No rounding is applied; the exact intersection is written to
-``prod_stability_l1.yaml`` and resolved at solve time whenever the
-sentinel ``"calibrated"`` is present.
+Grid sweep and intersection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``config/calibration/stability.yaml`` defines a 5 × 5 log-spaced grid
+on :math:`10^{-2} \ldots 10^0` for each coefficient; each grid point is
+solved against a matching baseline scenario for the piecewise
+consumer-value blocks. ``compute_prod_stability_calibration`` then
+
+#. interpolates, row-by-row, the animal_cost at which **feed**
+   deviation crosses 5 % (a 1-D curve in the plane), and analogously
+   the crop_cost at which **land** deviation crosses 5 % column-by-
+   column,
+#. iterates
+   :math:`\ell^c_1 \mapsto \ell^a_{1,\text{feed=5\%}}(\ell^c_1)`
+   and
+   :math:`\ell^a_1 \mapsto \ell^c_{1,\text{land=5\%}}(\ell^a_1)`
+   to a fixed point — the unique :math:`(\ell^c_1, \ell^a_1)` pair
+   that hits 5 % on both axes simultaneously,
+#. writes the exact intersection (no rounding) to
+   ``data/curated/calibration/prod_stability_l1.yaml``. It is resolved
+   at solve time wherever the sentinel ``"calibrated"`` appears in
+   ``validation.production_stability.land_l1_cost`` or
+   ``.animal_feed_l1_cost``.
+
+The figure below illustrates the calibration geometry using
+representative values from an actual sweep.
+
+.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/prod_stability_calibration.png
+   :width: 100%
+   :alt: Production-stability L1 calibration: land-use deviation, feed deviation, and their 5% contours
+
+   Production-stability L1 calibration on the
+   :math:`(\ell^c_1, \ell^a_1)` plane. *Left:* total land-use
+   deviation (crop + grassland) from baseline, as a percentage of the
+   baseline land total. The 5 % contour is essentially flat in
+   :math:`\ell^a_1` — raising the animal-feed penalty barely changes
+   land-use deviation once the crop penalty is past the knee.
+   *Middle:* animal-feed deviation, which is driven almost entirely
+   by :math:`\ell^a_1`; its 5 % contour is essentially flat in
+   :math:`\ell^c_1`. *Right:* the two 5 % contours overlaid; their
+   intersection (★) is the calibrated pair at which *both* deviations
+   equal 5 %. The near-orthogonality of the two contours is precisely
+   why the fixed-point iteration converges in a handful of steps.
+
+Implementation
+~~~~~~~~~~~~~~
 
 Rule: ``compute_prod_stability_calibration`` in
 ``workflow/rules/animals.smk``. Script:
 ``workflow/scripts/compute_prod_stability_calibration.py``. Diagnostic
 heatmaps live in ``notebooks/prod_stability_calibration.ipynb``; the
 notebook is no longer part of the workflow but is useful for visual
-sanity-checking of the grid.
+sanity-checking of the grid after a resolve.
 
 Staleness detection
 -------------------

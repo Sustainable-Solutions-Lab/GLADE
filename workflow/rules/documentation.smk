@@ -65,6 +65,8 @@ DOC_FIGURES = [
     # Cost figures
     "costs_crop_cost_map",
     "costs_crop_cost_distribution",
+    # Calibration figures
+    "prod_stability_calibration",
 ]
 
 # Validation figures use the doc_validation config (separate from doc_figures)
@@ -137,6 +139,26 @@ rule doc_fig_land_flows:
         "<benchmarks>/shared/doc_fig_land_flows.tsv"
     script:
         "../scripts/doc_figures/land_flows.py"
+
+
+rule doc_fig_prod_stability_calibration:
+    """Generate illustrative three-panel figure for the production-stability L1 calibration."""
+    input:
+        style=DOC_FIG_STYLE,
+    output:
+        svg="docs/_static/figures/prod_stability_calibration.svg",
+        png="docs/_static/figures/prod_stability_calibration.png",
+    group:
+        "analysis_plot"
+    resources:
+        runtime="5m",
+        mem_mb=1000,
+    log:
+        "<logs>/shared/doc_fig_prod_stability_calibration.log",
+    benchmark:
+        "<benchmarks>/shared/doc_fig_prod_stability_calibration.tsv"
+    script:
+        "../scripts/doc_figures/prod_stability_calibration.py"
 
 
 rule doc_fig_land_resource_classes:
