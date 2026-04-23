@@ -171,25 +171,31 @@ def compute_calibration(
         }
     ).sort_index()
 
-    if not np.isfinite(feed_contour).any() or not np.isfinite(land_contour).any():
-        raise ValueError(
-            f"Target deviation {target_pct}% is outside the grid range on at "
-            "least one axis. Widen the grid in config/calibration/stability.yaml."
-        )
+    missing_feed = feed_contour.index[~np.isfinite(feed_contour)].tolist()
+    missing_land = land_contour.index[~np.isfinite(land_contour)].tolist()
+    if missing_feed or missing_land:
+        msg = [
+            f"Target deviation {target_pct}% is not bracketed by the grid on "
+            "at least one axis. Widen start/stop in "
+            "config/calibration/stability.yaml._generators[*].parameters.",
+        ]
+        if missing_feed:
+            msg.append(
+                f"  feed contour: no animal_cost bracket at crop_cost={missing_feed}"
+            )
+        if missing_land:
+            msg.append(
+                f"  land contour: no crop_cost bracket at animal_cost={missing_land}"
+            )
+        raise ValueError("\n".join(msg))
 
     # Fixed-point iteration: cc -> animal_cost at feed-target -> crop_cost at land-target.
+    cc_grid = feed_contour.index.to_numpy()
+    ac_grid = land_contour.index.to_numpy()
     cc = float(feed_contour.index[np.abs(feed_contour.values - 0.033).argmin()])
     for _ in range(100):
-        ac = _interp_xy(
-            feed_contour.index.to_numpy(),
-            feed_contour.to_numpy(),
-            cc,
-        )
-        cc_new = _interp_xy(
-            land_contour.index.to_numpy(),
-            land_contour.to_numpy(),
-            ac,
-        )
+        ac = _interp_xy(cc_grid, feed_contour.to_numpy(), cc)
+        cc_new = _interp_xy(ac_grid, land_contour.to_numpy(), ac)
         if abs(np.log(cc_new) - np.log(cc)) < 1e-6:
             cc = cc_new
             break
@@ -198,7 +204,21 @@ def compute_calibration(
         raise RuntimeError(
             "Contour-intersection fixed point did not converge within 100 iterations."
         )
-    ac = _interp_xy(feed_contour.index.to_numpy(), feed_contour.to_numpy(), cc)
+    ac = _interp_xy(cc_grid, feed_contour.to_numpy(), cc)
+
+    # Intersection must lie strictly within the grid; otherwise np.interp
+    # silently clamps and we'd report an edge value as the calibrated pair.
+    cc_lo, cc_hi = float(cc_grid.min()), float(cc_grid.max())
+    ac_lo, ac_hi = float(ac_grid.min()), float(ac_grid.max())
+    if not (cc_lo <= cc <= cc_hi and ac_lo <= ac <= ac_hi):
+        raise ValueError(
+            f"Contour intersection (crop_cost={cc:.4g}, animal_cost={ac:.4g}) "
+            f"falls outside the grid range "
+            f"(crop_cost in [{cc_lo:.4g}, {cc_hi:.4g}], "
+            f"animal_cost in [{ac_lo:.4g}, {ac_hi:.4g}]). "
+            "Shift start/stop in config/calibration/stability.yaml._generators"
+            "[*].parameters to bracket the intersection."
+        )
 
     logger.info(
         "Contour intersection at target %.1f%%: land_l1_cost=%.6f, "

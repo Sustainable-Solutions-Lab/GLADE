@@ -74,9 +74,9 @@ The wrapper invokes ``tools/smk`` with the matching config and the
 appropriate output targets. Any extra flags are passed through, e.g.
 ``tools/calibrate cost -j8 --slurm``.
 
-Solves for the stability step are typically offloaded to the HPC cluster
-via ``remote_solve`` (see :doc:`cluster_execution`); the 25 grid points
-each take several minutes with Gurobi.
+Solves for the stability step can be offloaded to the HPC cluster via
+``remote_solve`` (see :doc:`cluster_execution`); the 9 grid points
+(plus 9 matching baselines) each take several minutes with Gurobi.
 
 Consuming the calibrated values
 -------------------------------
@@ -192,10 +192,15 @@ Formally the calibration solves
 Grid sweep and intersection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``config/calibration/stability.yaml`` defines a 5 × 5 log-spaced grid
-on :math:`10^{-2} \ldots 10^0` for each coefficient; each grid point is
-solved against a matching baseline scenario for the piecewise
-consumer-value blocks. ``compute_prod_stability_calibration`` then
+``config/calibration/stability.yaml`` defines a narrow 3 × 3 log-spaced
+grid that brackets the known intersection (roughly
+:math:`\ell^c_1 \approx 0.1`, :math:`\ell^a_1 \approx 0.033`) with half
+a decade of cushion on each side; each grid point is solved against a
+matching baseline scenario for the piecewise consumer-value blocks.
+If an upstream data update pushes the intersection outside the grid,
+``compute_prod_stability_calibration`` fails with an error pointing at
+``config/calibration/stability.yaml`` so the bounds can be widened or
+shifted. Given a valid grid the script
 
 #. interpolates, row-by-row, the animal_cost at which **feed**
    deviation crosses 5 % (a 1-D curve in the plane), and analogously
