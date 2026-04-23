@@ -10,10 +10,10 @@
 #
 # The analysis is replicated at three production-stability regimes:
 #   default (calibrated):  land_l1_cost/animal_feed_l1_cost from calibration file
-#   lower  (÷ √10):        land_l1_cost=0.038, animal_feed_l1_cost=0.010
-#   higher (× √10):        land_l1_cost=0.38,  animal_feed_l1_cost=0.10
+#   lower  (÷ √10):        land_l1_cost=0.0323,  animal_feed_l1_cost=0.01075
+#   higher (× √10):        land_l1_cost=0.3233,  animal_feed_l1_cost=0.1075
 # The lower/higher numeric variants are hand-scaled ±½ order of magnitude
-# around the calibrated central values (~0.12 crop, ~0.033 animal). If the
+# around the calibrated central values (~0.102 crop, ~0.034 animal). If the
 # calibrated values drift meaningfully, rescale these variants to match.
 # Each regime has its own baseline scenario for consumer-values calibration.
 
@@ -58,16 +58,16 @@ scenarios:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        land_l1_cost: 0.038
-        animal_feed_l1_cost: 0.010
+        land_l1_cost: 0.0323
+        animal_feed_l1_cost: 0.01075
 
   baseline_l1_high:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
       production_stability:
-        land_l1_cost: 0.38
-        animal_feed_l1_cost: 0.10
+        land_l1_cost: 0.3233
+        animal_feed_l1_cost: 0.1075
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
@@ -149,7 +149,7 @@ scenarios:
         consumer_values:
           baseline_scenario: "baseline"
 
-    # --- Lower stability (÷ √10 on both penalties): l1=0.038, animals.l1=0.010 ---
+    # --- Lower stability (÷ √10 on both penalties): l1=0.0323, animals.l1=0.01075 ---
     - name: gsa-l1-low_{sample_id}
       mode: sensitivity
       samples: 8192
@@ -160,12 +160,12 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            land_l1_cost: 0.038
-            animal_feed_l1_cost: 0.010
+            land_l1_cost: 0.0323
+            animal_feed_l1_cost: 0.01075
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
-    # --- Higher stability (× √10 on both penalties): l1=0.38, animals.l1=0.10 ---
+    # --- Higher stability (× √10 on both penalties): l1=0.3233, animals.l1=0.1075 ---
     - name: gsa-l1-high_{sample_id}
       mode: sensitivity
       samples: 8192
@@ -176,8 +176,8 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            land_l1_cost: 0.38
-            animal_feed_l1_cost: 0.10
+            land_l1_cost: 0.3233
+            animal_feed_l1_cost: 0.1075
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -244,7 +244,7 @@ solving:
   # parallel per node).  Each GSA solve is small enough that single-thread gurobi
   # is already near-optimal; hyperthreading gives diminishing returns.
   threads: 2
-  mem_mb: 9000
+  mem_mb: 8000
   time_limit: 60  # Hard limit
   runtime: 30     # Initial limit before retries for more favourable slurm scheduling
   inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
