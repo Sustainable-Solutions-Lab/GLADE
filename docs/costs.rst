@@ -154,6 +154,8 @@ The resulting cost estimates vary substantially across crops and countries, refl
    by category.  Vegetables and fruits have the highest and most variable costs,
    while cereals and legumes cluster at lower levels.
 
+.. _cost-calibration-correction:
+
 Calibration Correction
 ^^^^^^^^^^^^^^^^^^^^^^
 

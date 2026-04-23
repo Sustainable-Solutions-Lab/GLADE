@@ -227,7 +227,6 @@ def _format_axes(ax, crop_costs: np.ndarray, animal_costs: np.ndarray, title: st
     ax.set_yticks(crop_costs)
     ax.set_yticklabels([_format_tick(v) for v in crop_costs])
     ax.set_xlabel(r"$\ell^a_1$  [bn USD / Mt DM]", fontsize=FONT_SIZES["label"])
-    ax.set_ylabel(r"$\ell^c_1$  [bn USD / Mha]", fontsize=FONT_SIZES["label"])
     ax.set_title(title, fontsize=FONT_SIZES["title"])
     ax.tick_params(labelsize=FONT_SIZES["tick"])
     ax.minorticks_off()
@@ -242,9 +241,12 @@ def _plot_intersection(
     animal_costs: np.ndarray,
     intersection: tuple[float, float],
 ) -> None:
-    """Overlay the two target contours with the intersection marked."""
-    xx, yy = np.meshgrid(animal_costs, crop_costs)
+    """Overlay the two target contours with the intersection marked.
 
+    Contours are drawn from the same log-linear interpolation that
+    ``compute_intersection`` uses, so the intersection marker lands
+    exactly on their crossing.
+    """
     # Light shaded region indicating the calibration search area.
     xe, ye = _log_edges(animal_costs), _log_edges(crop_costs)
     ax.pcolormesh(
@@ -257,42 +259,58 @@ def _plot_intersection(
         shading="flat",
     )
 
-    land_cs = ax.contour(
-        xx,
-        yy,
-        land_grid,
-        levels=[TARGET_PCT],
-        colors=COLORS["primary"],
-        linewidths=2.0,
+    # Land 5% contour: for each animal_cost column, the crop_cost at which
+    # land deviation crosses the target.
+    land5 = np.array(
+        [
+            _interp_cost(crop_costs, land_grid[:, j], TARGET_PCT)
+            for j in range(len(animal_costs))
+        ]
     )
-    feed_cs = ax.contour(
-        xx,
-        yy,
-        feed_grid,
-        levels=[TARGET_PCT],
-        colors=COLORS["accent"],
-        linewidths=2.0,
+    # Feed 5% contour: for each crop_cost row, the animal_cost at which
+    # feed deviation crosses the target.
+    feed5 = np.array(
+        [
+            _interp_cost(animal_costs, feed_grid[i, :], TARGET_PCT)
+            for i in range(len(crop_costs))
+        ]
     )
 
-    # Manual legend via proxy artists (contour sets don't register with ax.legend).
-    from matplotlib.lines import Line2D
+    ax.plot(
+        animal_costs,
+        land5,
+        color=COLORS["primary"],
+        linewidth=2.0,
+        solid_capstyle="round",
+    )
+    ax.plot(
+        feed5,
+        crop_costs,
+        color=COLORS["accent"],
+        linewidth=2.0,
+        solid_capstyle="round",
+    )
 
-    handles = [
-        Line2D([0], [0], color=COLORS["primary"], lw=2.0, label="Land-use 5% contour"),
-        Line2D(
-            [0], [0], color=COLORS["accent"], lw=2.0, label="Animal feed 5% contour"
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="*",
-            color="none",
-            markerfacecolor="black",
-            markeredgecolor="black",
-            markersize=10,
-            label="Calibrated intersection",
-        ),
-    ]
+    # Inline labels near each contour (replaces a legend). Placed far
+    # from the intersection annotation to avoid overlap.
+    ax.text(
+        animal_costs[0],
+        land5[0] * 0.65,
+        "Land 5%",
+        color=COLORS["primary"],
+        fontsize=FONT_SIZES["annotation"],
+        ha="left",
+        va="top",
+    )
+    ax.text(
+        feed5[-1] * 1.3,
+        crop_costs[-1] * 0.9,
+        "Feed 5%",
+        color=COLORS["accent"],
+        fontsize=FONT_SIZES["annotation"],
+        ha="left",
+        va="top",
+    )
 
     cc, ac = intersection
     ax.plot(ac, cc, marker="*", color="black", markersize=14, zorder=10)
@@ -309,19 +327,7 @@ def _plot_intersection(
         },
     )
 
-    ax.legend(
-        handles=handles,
-        fontsize=FONT_SIZES["legend"],
-        loc="lower left",
-        frameon=True,
-        facecolor="white",
-        edgecolor="#cccccc",
-    )
-
     _format_axes(ax, crop_costs, animal_costs, "Contour intersection")
-
-    # Silence unused-variable warnings from the typed contour references.
-    _ = land_cs, feed_cs
 
 
 def main() -> None:
@@ -333,33 +339,36 @@ def main() -> None:
     logger.info("Illustrative intersection: crop_cost=%.3f, animal_cost=%.3f", cc, ac)
 
     fig, axes = plt.subplots(
-        1, 3, figsize=(FIGURE_WIDTH, FIGURE_WIDTH / 2.7), constrained_layout=True
+        1,
+        3,
+        figsize=(FIGURE_WIDTH, FIGURE_WIDTH / 3),
+        sharey=True,
+        constrained_layout=True,
     )
+    for ax in axes:
+        ax.set_box_aspect(1)
 
-    mesh_land = _plot_heatmap(
+    _plot_heatmap(
         axes[0],
         LAND_DEV_PCT,
         CROP_COSTS,
         ANIMAL_COSTS,
-        "Land-use deviation [%]",
+        "Land deviation [%]",
         contour_color=COLORS["accent"],
     )
-    mesh_feed = _plot_heatmap(
+    _plot_heatmap(
         axes[1],
         FEED_DEV_PCT,
         CROP_COSTS,
         ANIMAL_COSTS,
-        "Animal feed deviation [%]",
+        "Feed deviation [%]",
         contour_color=COLORS["accent"],
     )
     _plot_intersection(
         axes[2], LAND_DEV_PCT, FEED_DEV_PCT, CROP_COSTS, ANIMAL_COSTS, (cc, ac)
     )
 
-    for ax, mesh in zip(axes[:2], [mesh_land, mesh_feed]):
-        cb = fig.colorbar(mesh, ax=ax, shrink=0.85, pad=0.04)
-        cb.ax.tick_params(labelsize=FONT_SIZES["colorbar_tick"])
-        cb.set_label("% of baseline", fontsize=FONT_SIZES["colorbar_label"])
+    axes[0].set_ylabel(r"$\ell^c_1$  [bn USD / Mha]", fontsize=FONT_SIZES["label"])
 
     save_doc_figure(fig, snakemake.output.svg, format="svg")  # type: ignore[name-defined]
     save_doc_figure(fig, snakemake.output.png, format="png", dpi=300)  # type: ignore[name-defined]

@@ -25,21 +25,21 @@ anything.
      - Config
      - Produces
      - Purpose
-   * - ``grassland``
+   * - :ref:`grassland <grassland-calibration>`
      - ``config/calibration/grassland.yaml``
      - ``grassland_yield.csv``,
        ``fodder_conversion.csv``,
        ``exogenous_forage.csv``
      - Per-country corrections that balance grassland / fodder supply
        against ruminant-forage demand.
-   * - ``cost``
+   * - :ref:`cost <cost-calibration>`
      - ``config/calibration/cost.yaml``
      - ``crop_cost.csv``,
        ``grassland_cost.csv``,
        ``animal_cost.csv``
      - Additive production-cost corrections derived from stability-
        constraint duals (observed allocation → optimal allocation).
-   * - ``stability``
+   * - :ref:`stability <prod-stability-calibration>`
      - ``config/calibration/stability.yaml``
      - ``prod_stability_l1.yaml``
      - The L1 penalty pair :math:`(\ell^c_1, \ell^a_1)` that brings both
@@ -50,12 +50,14 @@ Dependency order
 
 When upstream data or build logic changes, rerun in this order:
 
-#. **grassland** — other calibrations solve against a model that already
-   has the grassland corrections applied.
-#. **cost** — the cost-calibration solve uses the calibrated grassland
-   behaviour to extract duals that make economic sense.
-#. **stability** — the L1 grid sweep uses both previous corrections so
-   that the observed 5 % contours reflect the fully-calibrated baseline.
+#. :ref:`grassland <grassland-calibration>` — other calibrations solve
+   against a model that already has the grassland corrections applied.
+#. :ref:`cost <cost-calibration>` — the cost-calibration solve uses the
+   calibrated grassland behaviour to extract duals that make economic
+   sense.
+#. :ref:`stability <prod-stability-calibration>` — the L1 grid sweep
+   uses both previous corrections so that the observed 5 % contours
+   reflect the fully-calibrated baseline.
 
 Running the calibrations
 ------------------------
@@ -85,16 +87,19 @@ All three outputs are consumed automatically by the default workflow
 when their configuration blocks are enabled (the default):
 
 * ``grazing.grassland_forage_calibration.enabled: true`` loads the three
-  grassland CSVs at solve time.
+  grassland CSVs at solve time (see :ref:`grassland-forage-calibration`).
 * ``cost_calibration.enabled: true`` loads the three cost-correction
-  CSVs at build time.
+  CSVs at build time (see :ref:`cost-calibration-correction`).
 * ``prod_stability_calibration.enabled: true`` resolves the sentinel
   ``"calibrated"`` in
   ``validation.production_stability.land_l1_cost`` and
   ``.animal_feed_l1_cost`` from
-  ``data/curated/calibration/prod_stability_l1.yaml`` at solve time.
+  ``data/curated/calibration/prod_stability_l1.yaml`` at solve time
+  (see :ref:`production-stability-bounds` for the config reference).
   Scenarios that want an explicit numeric value simply override the
   sentinel with a number.
+
+.. _grassland-calibration:
 
 Grassland calibration
 ---------------------
@@ -105,19 +110,24 @@ algorithm. The relevant rule is ``compute_grassland_calibration`` in
 ``config/calibration/grassland.yaml`` and is ``false`` everywhere else,
 which breaks the otherwise circular dependency.
 
+.. _cost-calibration:
+
 Cost calibration
 ----------------
 
 Derived from the dual variables on hard production-stability constraints
-(±1 %). When the model is forced to reproduce observed production
+(±1 %; see :ref:`production-stability-bounds` for how these bounds are
+configured). When the model is forced to reproduce observed production
 levels, :math:`\mu^+_\ell - \mu^-_\ell` on each constraint indicates how
 much the link's marginal cost would need to shift for the observed
 allocation to be cost-optimal. The per-group median becomes an additive
-correction. See :doc:`costs` for how the corrections are applied at
-build time.
+correction. See :ref:`cost-calibration-correction` for how the
+corrections are applied at build time.
 
 Rule: ``extract_cost_calibration`` in ``workflow/rules/crops.smk``.
 Script: ``workflow/scripts/extract_cost_calibration.py``.
+
+.. _prod-stability-calibration:
 
 Production-stability L1 calibration
 -----------------------------------
@@ -134,10 +144,11 @@ contracts, infrastructure, labour, insurance, policy) that the model
 does not represent. Without a counterweight, the optimal allocation
 diverges sharply from observed production and analyses that build on
 top (marginal-cost attribution, counterfactual comparisons, sensitivity
-analysis) become uninterpretable.
+analysis) become different to relate to the current food system.
 
-The model therefore adds a **production-stability penalty** that
-discourages departures from the observed-year baseline. Every crop,
+The model therefore adds a **production-stability penalty** (see
+:ref:`production-stability-bounds` for the full configuration reference)
+that discourages departures from the observed-year baseline. Every crop,
 grassland and animal-feed production link :math:`\ell` carries a linear
 :math:`L_1` term in the objective,
 
@@ -149,13 +160,11 @@ grassland and animal-feed production link :math:`\ell` carries a linear
    \sum_{\ell \in \text{animal}} \ell^a_1 \cdot
    |x_\ell - \bar x_\ell|,
 
-where :math:`\bar x_\ell` is the baseline activity of the link (area in
-Mha for crops / grassland, feed use in Mt DM for animals) and
+where :math:`\bar x_\ell` is the baseline activity of the link (area
+in Mha for crops / grassland, feed use in Mt DM for animals) and
 :math:`\ell^c_1`, :math:`\ell^a_1` are the two penalty coefficients
-calibrated here. The :math:`L_1` form is deliberate: it is piecewise
-linear (so the LP stays an LP), and it produces *sparse* deviations —
-links either match the baseline exactly or pay a proportional cost to
-move.
+calibrated here. The :math:`L_1` form is convenient: it can be
+implemented linearly so the LP stays an LP.
 
 Why two coefficients?
 ~~~~~~~~~~~~~~~~~~~~~
@@ -216,7 +225,7 @@ shifted. Given a valid grid the script
    ``data/curated/calibration/prod_stability_l1.yaml``. It is resolved
    at solve time wherever the sentinel ``"calibrated"`` appears in
    ``validation.production_stability.land_l1_cost`` or
-   ``.animal_feed_l1_cost``.
+   ``.animal_feed_l1_cost`` (see :ref:`production-stability-bounds`).
 
 The figure below illustrates the calibration geometry using
 representative values from an actual sweep.
@@ -247,6 +256,10 @@ Rule: ``compute_prod_stability_calibration`` in
 heatmaps live in ``notebooks/prod_stability_calibration.ipynb``; the
 notebook is no longer part of the workflow but is useful for visual
 sanity-checking of the grid after a resolve.
+
+The calibrated L1 cost is also used as a slice parameter in the
+sensitivity analysis; see :ref:`sensitivity-prod-stability-cost` for the
+range, distribution, and rationale.
 
 Staleness detection
 -------------------

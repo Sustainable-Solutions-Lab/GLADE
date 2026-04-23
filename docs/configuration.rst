@@ -364,6 +364,8 @@ according to ``food_utility_piecewise.decline_factor``.
 ``food_utility_piecewise`` cannot be combined with
 ``validation.enforce_baseline_diet`` in the same scenario.
 
+.. _production-stability-bounds:
+
 Production Stability Bounds
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

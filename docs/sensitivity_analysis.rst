@@ -640,6 +640,8 @@ Individual risk factor keys (e.g., ``whole_grains: 0.5``) remain supported and
 take precedence over group keys when both are specified. However, specifying
 both a group key and an individual key for the same risk factor raises an error.
 
+.. _sensitivity-prod-stability-cost:
+
 Production stability cost (``prod_stability_cost``: 0.05–0.5, slice parameter)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
