@@ -40,7 +40,6 @@ the 2020 baseline by enabling several flags:
      disable_spared_cropland: true    # No cropland retirement
      disable_spared_grassland: true   # No grassland retirement
      slack_marginal_cost: 10          # bn USD per Mt/Mha slack penalty
-     grassland_yield_multiplier: 1.2  # Calibration knob for grassland yields
 
 These settings collectively remove the optimizer's degrees of freedom:
 

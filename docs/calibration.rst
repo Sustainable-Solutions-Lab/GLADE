@@ -252,10 +252,7 @@ Implementation
 
 Rule: ``compute_prod_stability_calibration`` in
 ``workflow/rules/animals.smk``. Script:
-``workflow/scripts/compute_prod_stability_calibration.py``. Diagnostic
-heatmaps live in ``notebooks/prod_stability_calibration.ipynb``; the
-notebook is no longer part of the workflow but is useful for visual
-sanity-checking of the grid after a resolve.
+``workflow/scripts/compute_prod_stability_calibration.py``.
 
 The calibrated L1 cost is also used as a slice parameter in the
 sensitivity analysis; see :ref:`sensitivity-prod-stability-cost` for the
