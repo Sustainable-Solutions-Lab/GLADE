@@ -199,10 +199,10 @@ def _plot_food_slack(
             .reindex(all_groups, fill_value=0.0)
         )
 
+    plot_df["total"] = plot_df["overconsumption"] + plot_df["underconsumption"]
     if plot_df.empty:
         group_totals = pd.Series(0.0, index=all_groups)
     else:
-        plot_df["total"] = plot_df["overconsumption"] + plot_df["underconsumption"]
         group_totals = (
             plot_df.groupby("food_group")["total"]
             .sum()
