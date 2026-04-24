@@ -86,7 +86,7 @@ solving:
   io_api: "direct"
   threads: 2
   mem_mb: 9000
-  runtime: 20
+  runtime: 60
 
 remote_solve:
   enabled: true
