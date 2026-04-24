@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Healthy & Sustainable Diet Scenario
+# -----------------------------------
+# Single (GHG, YLL) operating point used for the "transition to healthy
+# & sustainable diets" subsection of the paper. Round-number anchors:
+# GHG price 100 USD/tCO2-eq, life valued at 5000 USD/YLL (the lower
+# bound of the conventional VSL range, see paper main text).
+#
+# Mirrors the solve-time setup of config/ghg_yll_grid.yaml (same
+# planning horizon, baseline year, food-utility piecewise blocks,
+# production-stability penalties), so the baseline calibrates against
+# the same diet that ghg_yll_grid uses.
+
+name: "healthy_sustainable"
+scenarios:
+  # Baseline scenario for calibrating piecewise food utility blocks
+  # (dual variables). Identical structure to ghg_yll_grid's baseline.
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # Zero-pricing optimum (reference point for the transition).
+  reference:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+  # Central healthy & sustainable point.
+  central:
+    emissions:
+      ghg_price: 100
+    health:
+      value_per_yll: 5000
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+# Set planning horizon and baseline year to match GDD baseline data (2018)
+planning_horizon: 2020
+baseline_year: 2020
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+  production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 4
+  mem_mb: 10000
+  runtime: 60
