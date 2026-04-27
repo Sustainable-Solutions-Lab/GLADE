@@ -4,10 +4,15 @@
 
 """Compute Sobol sensitivity indices from a persisted surrogate bundle.
 
-The surrogate (PCE, RF, MARS, or XGBoost) is built in the ``build_surrogate``
-rule; this script loads it and emits three parquet files: global Sobol
-indices, conditional indices per slice parameter, and joint conditional
-indices across all slice parameters.
+The surrogate (PCE, RF, MARS, or XGBoost) is built in the
+``build_surrogate`` rule; this script loads it and emits three parquet
+files: global Sobol indices, conditional indices per slice parameter,
+and joint conditional indices across all slice parameters.
+
+Only outputs listed in ``sensitivity_analysis.sobol.outputs`` are
+decomposed — vector outputs typically live in the bundle for downstream
+prediction but are excluded from Sobol to keep the parquet/plot fan-out
+bounded.
 """
 
 from pathlib import Path
@@ -15,6 +20,10 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scenario_generators import build_joint_distribution
+from workflow.scripts.analysis.sensitivity_common import (
+    parse_outputs_spec,
+    sobol_columns,
+)
 from workflow.scripts.analysis.surrogate import (
     load_bundle,
     sobol_rows_from_bundle,
@@ -32,23 +41,26 @@ def run(snakemake) -> None:
     logger.info("Thread limit set to %d", n_threads)
 
     bundle = load_bundle(Path(snakemake.input.surrogate))
-    logger.info(
-        "Loaded %s surrogate for outputs %s",
-        bundle.method,
-        bundle.output_columns,
-    )
-
-    method_config = dict(snakemake.params.method_config)
+    sobol_config = dict(snakemake.params.sobol_config)
     slice_grid = dict(snakemake.params.slice_grid)
-    method_options = dict(method_config.get("method_options", {}))
+    outputs_spec = parse_outputs_spec(dict(snakemake.params.outputs_spec))
+
+    columns = sobol_columns(sobol_config, outputs_spec, bundle.output_columns)
+    logger.info(
+        "Loaded %s surrogate (%d outputs); computing Sobol for %d allowlisted columns",
+        bundle.method,
+        len(bundle.output_columns),
+        len(columns),
+    )
 
     distribution, _ = build_joint_distribution(bundle.generator_spec)
 
     global_rows, conditional_rows, conditional_joint_rows = sobol_rows_from_bundle(
         bundle,
         distribution,
-        method_options,
+        sobol_config,
         slice_grid,
+        columns=columns,
     )
 
     global_path = Path(snakemake.output.global_indices)

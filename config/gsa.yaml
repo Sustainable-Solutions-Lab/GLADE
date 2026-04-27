@@ -34,7 +34,7 @@ scenarios:
   #   - fcr_factor: 0.8-1.2 uniform (20% uncertainty in feed conversion ratios)
   #   - rr_protective: 0-1 (grouped quantile for protective risk factors)
   #   - rr_harmful: 0-1 (grouped quantile for harmful risk factors)
-  #   - value_per_yll: 0-20000 (YLL valuation, slice parameter)
+  #   - value_per_yll: 50-50000 (YLL valuation, slice parameter; log-uniform)
   #   - ghg_price: 0-500 (GHG price, slice parameter)
   #
   # Each generator group is replicated at the three production-stability
@@ -124,7 +124,7 @@ scenarios:
         value_per_yll:
           distribution: log_uniform
           lower: 50
-          upper: 100000
+          upper: 50000
         ghg_price:
           distribution: log_uniform
           lower: 5
@@ -146,6 +146,9 @@ scenarios:
           value_per_yll: "{value_per_yll}"
         emissions:
           ghg_price: "{ghg_price}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
         consumer_values:
           baseline_scenario: "baseline"
 
@@ -191,24 +194,7 @@ sensitivity_analysis:
   # ``methods``.
   default_surrogate: xgb
   methods:
-    pce:
-      grid_resolution: 15
-      method_options:
-        n_mc_conditional: 2048
-        cross_truncation: 0.8
-    rf:
-      grid_resolution: 15
-      method_options:
-        n_estimators: 500
-    mars:
-      grid_resolution: 15
-      method_options:
-        max_terms: 50
-        max_degree: 2
-        penalty: 3.0
-        n_knots: 25
     xgb:
-      grid_resolution: 15
       method_options:
         n_estimators: 5000
         max_depth: 4

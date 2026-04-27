@@ -97,42 +97,11 @@ scenarios:
         emissions:
           ghg_price: "{ghg_price}"
 
-# Surrogate-based sensitivity analysis methods.
-# Each method is applied independently to the same solved GSA scenarios.
-sensitivity_analysis:
-  holdout_fraction: 0.15
-  threads: 6
-  # Downstream consumers (notebooks, uncertainty-band plots) load the bundle for
-  # this method when no explicit choice is provided.  Must match a key under
-  # ``methods``.
-  default_surrogate: xgb
-  methods:
-    pce:
-      grid_resolution: 15
-      method_options:
-        n_mc_conditional: 2048
-        cross_truncation: 0.8
-    rf:
-      grid_resolution: 15
-      method_options:
-        n_estimators: 500
-    mars:
-      grid_resolution: 15
-      method_options:
-        max_terms: 50
-        max_degree: 2
-        penalty: 3.0
-        n_knots: 25
-    xgb:
-      grid_resolution: 15
-      method_options:
-        n_estimators: 5000
-        max_depth: 4
-        learning_rate: 0.02
-        subsample: 0.8
-        colsample_bytree: 0.8
-        min_child_weight: 5
-        early_stopping_rounds: 50
+# Surrogate-based sensitivity analysis: methods, Sobol settings, and
+# outputs are inherited from default.yaml.  Vector outputs
+# (foods, feed_categories) carry near-zero variance with
+# enforce_baseline_diet but cost almost nothing to fit, so we leave
+# them in place rather than overriding.
 
 # Match GDD baseline data (2018) via planning horizon / baseline year.
 planning_horizon: 2020

@@ -1676,24 +1676,28 @@ properties:
   sensitivity_analysis:
     type: object
     description: "Configuration for surrogate-based sensitivity analysis methods"
-    required: [outputs, holdout_fraction, threads, default_surrogate, methods]
+    required: [outputs, holdout_fraction, threads, default_surrogate, methods, sobol]
     additionalProperties: false
     properties:
       outputs:
         type: object
-        description: "Scalar outputs extracted from each scenario and fit by the surrogate. Keys are the output names used in bundles/parquets; values declare source parquet, reducer, and display metadata. See workflow/scripts/analysis/sensitivity_common.py for available reducers."
+        description: "Surrogate targets extracted from each scenario.  Each entry is either scalar (one float per scenario) or vector (a dict[str, float] expanded to one column per element).  See workflow/scripts/analysis/sensitivity_common.py for available reducers."
         minProperties: 1
         additionalProperties:
           type: object
           required: [source, reducer, label, units]
           additionalProperties: true
           properties:
+            kind:
+              type: string
+              enum: [scalar, vector]
+              description: "Output cardinality.  Scalar reducers return a float; vector reducers return a dict[str, float] expanded to one column per element."
             source:
               type: string
               description: "Parquet filename under analysis/scen-<scenario>/"
             reducer:
               type: string
-              description: "Name of a reducer registered in sensitivity_common.REDUCERS (row_sum, column_sum, filter_sum)"
+              description: "Name of a reducer registered in sensitivity_common.REDUCERS (row_sum, column_sum, filter_sum, pivot_column)"
             label:
               type: string
               description: "Axis label used in plots"
@@ -1712,18 +1716,37 @@ properties:
       default_surrogate:
         type: string
         description: "Surrogate method downstream consumers (e.g. uncertainty-band plots, notebooks) pick when no method is specified explicitly.  Must match a key under ``methods``."
+      sobol:
+        type: object
+        required: [outputs, grid_resolution, n_mc_global, n_mc_conditional]
+        additionalProperties: false
+        description: "Sobol-index settings, shared across surrogate methods."
+        properties:
+          outputs:
+            type: array
+            minItems: 1
+            items: {type: string}
+            description: "Allowlist of OutputSpec names whose Sobol indices are computed and plotted.  Vector specs may be listed but bring per-element fan-out across MC samples and plot rules."
+          grid_resolution:
+            type: integer
+            minimum: 2
+            description: "Number of conditioning grid points for slice parameters"
+          n_mc_global:
+            type: integer
+            minimum: 64
+            description: "Monte Carlo sample count for global Sobol indices"
+          n_mc_conditional:
+            type: integer
+            minimum: 64
+            description: "Monte Carlo sample count per conditioning grid point"
       methods:
         type: object
         description: "Surrogate method configs keyed by method name (e.g. pce, rf)"
         patternProperties:
           "^[a-z_]+$":
             type: object
-            additionalProperties: true
+            additionalProperties: false
             properties:
-              grid_resolution:
-                type: integer
-                minimum: 2
-                description: "Number of conditioning grid points for slice parameters"
               method_options:
                 type: object
                 additionalProperties: true

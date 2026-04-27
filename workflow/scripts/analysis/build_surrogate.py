@@ -4,11 +4,12 @@
 
 """Fit a surrogate model over the GSA Sobol design.
 
-Consumes the scalar scenario outputs declared in
-``sensitivity_analysis.outputs`` and writes a :class:`SurrogateBundle`
-pickle plus a flat validation parquet.  The surrogate method is selected
-via the ``{method}`` wildcard.  Downstream rules (Sobol computation,
-uncertainty plots) load the pickle and do not refit.
+Consumes the per-scenario outputs declared in
+``sensitivity_analysis.outputs`` (scalar and vector) and writes a
+:class:`SurrogateBundle` pickle plus a flat validation parquet.  The
+surrogate method is selected via the ``{method}`` wildcard.  Downstream
+rules (Sobol computation, uncertainty plots) load the pickle and do not
+refit.
 """
 
 from pathlib import Path
@@ -16,9 +17,11 @@ from pathlib import Path
 import numpy as np
 
 from workflow.scripts.analysis.sensitivity_common import (
+    expanded_output_columns,
     load_scenario_outputs,
     parse_outputs_spec,
     reconstruct_samples,
+    vector_output_columns,
 )
 from workflow.scripts.analysis.surrogate import (
     fit_bundle,
@@ -49,7 +52,6 @@ def run(snakemake) -> None:
     analysis_dir = Path(snakemake.input[0]).parents[1]
     logger.info("Using analysis directory: %s", analysis_dir)
 
-    # Reconstruct the Sobol design, select the rows for scenarios we have.
     x_design_full = reconstruct_samples(generator_spec)
     prefix = generator_spec["name"].removesuffix("{sample_id}")
     sample_indices = np.array([int(s.removeprefix(prefix)) for s in scenario_names])
@@ -64,37 +66,44 @@ def run(snakemake) -> None:
     outputs_df = load_scenario_outputs(analysis_dir, scenario_names, outputs_spec)
     logger.info("Loaded outputs for %d scenarios", len(outputs_df))
 
-    output_names = [spec.name for spec in outputs_spec]
-    failed_mask = outputs_df[output_names].isna().any(axis=1)
+    output_columns = expanded_output_columns(outputs_spec, outputs_df)
+    vector_columns = vector_output_columns(outputs_spec, outputs_df)
+    n_scalar = len(output_columns) - len(vector_columns)
+    logger.info(
+        "Output columns: %d scalar, %d vector elements", n_scalar, len(vector_columns)
+    )
+
+    # Drop scenarios where any scalar output failed.  Vector outputs use
+    # zero-fill semantics (an absent food == zero global mass), so a NaN
+    # there genuinely signals a broken solve and we treat it identically.
+    failed_mask = outputs_df[output_columns].isna().any(axis=1)
     n_failed = int(failed_mask.sum())
     if n_failed > 0:
         failed_scenarios = outputs_df.loc[failed_mask, "scenario"].tolist()
         logger.warning(
-            "Dropping %d failed scenarios (empty outputs): %s",
+            "Dropping %d failed scenarios (NaN outputs): %s",
             n_failed,
-            failed_scenarios,
+            failed_scenarios[:10] + (["..."] if n_failed > 10 else []),
         )
         outputs_df = outputs_df[~failed_mask].reset_index(drop=True)
         x_design = x_design[~failed_mask.values]
 
     if outputs_df.empty:
         raise ValueError("No scenarios survived NaN filtering; nothing to fit")
-    logger.info("Analyzing outputs: %s", output_names)
 
     bundle = fit_bundle(
         method=method,
         x_design=x_design,
         outputs_df=outputs_df,
-        available_columns=output_names,
+        available_columns=output_columns,
         generator_spec=generator_spec,
         method_config=method_config,
         holdout_fraction=holdout_fraction,
         n_threads=n_threads,
+        vector_columns=vector_columns,
     )
 
-    surrogate_path = Path(snakemake.output.surrogate)
-    save_bundle(bundle, surrogate_path)
-    logger.info("Wrote surrogate bundle to %s", surrogate_path)
+    save_bundle(bundle, Path(snakemake.output.surrogate))
 
     validation_path = Path(snakemake.output.validation)
     validation_path.parent.mkdir(parents=True, exist_ok=True)

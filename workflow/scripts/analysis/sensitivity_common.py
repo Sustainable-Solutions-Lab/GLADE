@@ -4,15 +4,22 @@
 
 """Shared utilities for surrogate-based sensitivity analysis.
 
-Two responsibilities:
+Three responsibilities:
 
 1. Reconstruct the Sobol design matrix from a generator spec (so all
    callers re-read the same physical-parameter samples deterministically).
-2. Load the per-scenario scalar outputs declared in
+2. Load the per-scenario outputs declared in
    ``sensitivity_analysis.outputs`` using a small registry of parquet
-   reducers.  Adding a new scalar output is a config-only edit as long as
-   one of the existing reducers fits; adding a new reducer is one function
-   plus an ``@register`` decorator.
+   reducers.  Outputs come in two flavours:
+
+   - ``scalar`` (default): one float per scenario, one column in the
+     loaded DataFrame.
+   - ``vector``: a dict ``{element: float}`` per scenario, expanded into
+     one column per element (named ``{spec.name}.{element}``) using the
+     union of element keys observed across the scenario set.
+
+3. Resolve the Sobol allowlist (``sensitivity_analysis.sobol.outputs``)
+   into the concrete column names downstream consumers iterate over.
 """
 
 from dataclasses import dataclass
@@ -54,6 +61,9 @@ def reconstruct_samples(generator_spec: dict) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+VECTOR_KEY_SEP = "."  # foods.wheat, feed_categories.ruminant_grain, ...
+
+
 @dataclass(frozen=True)
 class OutputSpec:
     """A single surrogate target declared in ``sensitivity_analysis.outputs``."""
@@ -63,12 +73,15 @@ class OutputSpec:
     reducer: str
     label: str
     units: str
+    kind: str  # "scalar" | "vector"
     reducer_kwargs: dict[str, Any]
 
 
 # Keys consumed directly by OutputSpec; everything else in an output entry
 # is forwarded verbatim to the reducer as keyword arguments.
-_RESERVED_KEYS: frozenset[str] = frozenset({"source", "reducer", "label", "units"})
+_RESERVED_KEYS: frozenset[str] = frozenset(
+    {"source", "reducer", "label", "units", "kind"}
+)
 
 
 def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
@@ -80,6 +93,11 @@ def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
     specs = []
     for name, entry in cfg.items():
         kwargs = {k: v for k, v in entry.items() if k not in _RESERVED_KEYS}
+        kind = entry.get("kind", "scalar")
+        if kind not in ("scalar", "vector"):
+            raise ValueError(
+                f"Output '{name}': unknown kind '{kind}' (expected 'scalar' or 'vector')"
+            )
         specs.append(
             OutputSpec(
                 name=name,
@@ -87,6 +105,7 @@ def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
                 reducer=entry["reducer"],
                 label=entry["label"],
                 units=entry["units"],
+                kind=kind,
                 reducer_kwargs=kwargs,
             )
         )
@@ -101,7 +120,40 @@ def output_display(cfg: dict) -> tuple[list[str], dict[str, str], dict[str, str]
     return order, labels, units
 
 
-REDUCERS: dict[str, Callable[..., float]] = {}
+def expand_vector_column(spec_name: str, key: str) -> str:
+    """Canonical column name for one element of a vector output."""
+    return f"{spec_name}{VECTOR_KEY_SEP}{key}"
+
+
+def sobol_columns(
+    sobol_cfg: dict, specs: list[OutputSpec], available: list[str]
+) -> list[str]:
+    """Resolve the Sobol allowlist into expanded output-column names.
+
+    ``sobol_cfg["outputs"]`` lists OutputSpec names.  Scalar names map to
+    themselves; vector names expand to all of their per-element columns
+    that are actually present in ``available`` (the bundle's column set).
+    """
+    by_name = {spec.name: spec for spec in specs}
+    allow: list[str] = []
+    available_set = set(available)
+    for name in sobol_cfg["outputs"]:
+        if name not in by_name:
+            raise ValueError(
+                f"sobol.outputs references unknown output '{name}'; "
+                f"known: {sorted(by_name)}"
+            )
+        spec = by_name[name]
+        if spec.kind == "scalar":
+            if name in available_set:
+                allow.append(name)
+        else:
+            prefix = f"{name}{VECTOR_KEY_SEP}"
+            allow.extend(c for c in available if c.startswith(prefix))
+    return allow
+
+
+REDUCERS: dict[str, Callable[..., float | dict[str, float]]] = {}
 
 
 def register(name: str) -> Callable[[Callable], Callable]:
@@ -109,12 +161,14 @@ def register(name: str) -> Callable[[Callable], Callable]:
 
     Reducers take the scenario parquet path as their first positional
     argument and any number of keyword arguments forwarded from the
-    output's config entry.  They must return a single float (``np.nan``
-    when the file is missing or lacks the expected columns, so failed
-    solves are visible to the scenario-dropping step in build_surrogate).
+    output's config entry.  Scalar reducers return a single ``float``;
+    vector reducers return a ``dict[str, float]``.  Either may return
+    ``np.nan`` / ``{}`` when the file is missing or lacks the expected
+    columns, so failed solves are visible to the scenario-dropping step
+    in build_surrogate.
     """
 
-    def decorator(fn: Callable[..., float]) -> Callable[..., float]:
+    def decorator(fn):
         if name in REDUCERS:
             raise ValueError(f"Reducer {name!r} already registered")
         REDUCERS[name] = fn
@@ -171,9 +225,38 @@ def _filter_sum(
     return float(values[mask].sum())
 
 
+@register("pivot_column")
+def _pivot_column(path: Path, *, key_col: str, value_col: str) -> dict[str, float]:
+    """Group ``value_col`` by ``key_col``, summing duplicate keys.
+
+    Vector reducer.  Used to extract per-(food, country) or per-category
+    series and reduce them across the non-key dimension.  Returns ``{}``
+    for missing/empty parquets so the scenario is still observable
+    (vector columns will be zero-filled at expansion time).
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    schema = pq.read_schema(path)
+    if key_col not in schema.names or value_col not in schema.names:
+        return {}
+    table = pq.read_table(path, columns=[key_col, value_col])
+    if table.num_rows == 0:
+        return {}
+    keys = table.column(key_col).to_pylist()
+    values = table.column(value_col).to_numpy()
+    out: dict[str, float] = {}
+    for k, v in zip(keys, values):
+        out[str(k)] = out.get(str(k), 0.0) + float(v)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Scenario output loading.
 # ---------------------------------------------------------------------------
+
+
+def _reduce(spec: OutputSpec, path: Path) -> float | dict[str, float]:
+    return REDUCERS[spec.reducer](path, **spec.reducer_kwargs)
 
 
 def load_scenario_outputs(
@@ -181,22 +264,67 @@ def load_scenario_outputs(
     scenario_names: list[str],
     specs: list[OutputSpec],
 ) -> pd.DataFrame:
-    """Extract each spec's scalar from every scenario and return a DataFrame.
+    """Extract each spec's value(s) from every scenario.
 
-    One row per scenario; one column per spec (plus ``scenario``).  Missing
-    or schema-less parquets yield ``NaN`` so the caller can drop failed
-    solves before fitting.
+    Scalar specs contribute one column; vector specs contribute one
+    column per element observed across the scenario set, named
+    ``{spec.name}.{element}``, with absent elements zero-filled.  Failed
+    or empty scalar reductions become ``NaN`` so the caller can drop the
+    affected scenarios before fitting.
     """
     n = len(scenario_names)
-    columns: dict[str, list] = {
-        "scenario": list(scenario_names),
-        **{spec.name: [np.nan] * n for spec in specs},
-    }
-    for i, scenario_name in enumerate(scenario_names):
+    raw: dict[str, list] = {spec.name: [] for spec in specs}
+    for scenario_name in scenario_names:
         scen_dir = analysis_dir / f"scen-{scenario_name}"
         for spec in specs:
-            reducer = REDUCERS[spec.reducer]
-            columns[spec.name][i] = reducer(
-                scen_dir / spec.source, **spec.reducer_kwargs
-            )
-    return pd.DataFrame(columns)
+            raw[spec.name].append(_reduce(spec, scen_dir / spec.source))
+
+    columns: dict[str, list] = {"scenario": list(scenario_names)}
+    for spec in specs:
+        if spec.kind == "scalar":
+            columns[spec.name] = raw[spec.name]
+            continue
+        # Vector: union-of-keys reindex with zero fill.
+        keys: list[str] = []
+        seen: set[str] = set()
+        for d in raw[spec.name]:
+            for k in d:
+                if k not in seen:
+                    seen.add(k)
+                    keys.append(k)
+        keys.sort()
+        for k in keys:
+            col = expand_vector_column(spec.name, k)
+            columns[col] = [d.get(k, 0.0) for d in raw[spec.name]]
+    return pd.DataFrame(columns, index=range(n))
+
+
+def expanded_output_columns(
+    specs: list[OutputSpec], outputs_df: pd.DataFrame
+) -> list[str]:
+    """Return the ordered list of value columns produced by ``load_scenario_outputs``.
+
+    Preserves spec order; within a vector spec, elements follow their
+    sorted order (matching the loader).
+    """
+    cols: list[str] = []
+    for spec in specs:
+        if spec.kind == "scalar":
+            cols.append(spec.name)
+        else:
+            prefix = f"{spec.name}{VECTOR_KEY_SEP}"
+            cols.extend(c for c in outputs_df.columns if c.startswith(prefix))
+    return cols
+
+
+def vector_output_columns(
+    specs: list[OutputSpec], outputs_df: pd.DataFrame
+) -> set[str]:
+    """Subset of ``expanded_output_columns`` originating from vector specs."""
+    out: set[str] = set()
+    for spec in specs:
+        if spec.kind != "vector":
+            continue
+        prefix = f"{spec.name}{VECTOR_KEY_SEP}"
+        out.update(c for c in outputs_df.columns if c.startswith(prefix))
+    return out

@@ -296,22 +296,25 @@ def _sensitivity_method_config(wildcards):
     return dict(methods[method])
 
 
+def _sensitivity_sobol_config(wildcards):
+    """Return the ``sensitivity_analysis.sobol`` config block."""
+    return dict(config["sensitivity_analysis"]["sobol"])
+
+
 def _sensitivity_slice_grid(wildcards):
     """Build a conditioning grid for slice parameters.
 
     Returns a dict mapping each slice parameter name to a list of grid
     values between its min and max.  Log-uniform parameters get
     log-spaced grids; all others get linearly-spaced grids.  Grid
-    resolution is read from the method config under
-    ``sensitivity_analysis.methods``.
+    resolution is read from ``sensitivity_analysis.sobol.grid_resolution``.
     """
     import numpy as _np
 
     from scenario_generators import build_chaospy_distribution
 
     generator = _sensitivity_generator(wildcards)
-    method_cfg = _sensitivity_method_config(wildcards)
-    n_grid = method_cfg.get("grid_resolution", 100)
+    n_grid = int(config["sensitivity_analysis"]["sobol"]["grid_resolution"])
     slice_params = generator.get("slice_parameters", [])
     grid = {}
     for sp in slice_params:
@@ -376,8 +379,9 @@ rule compute_sobol_sensitivity:
     input:
         surrogate="<results>/{name}/surrogates/surrogate_{group}_{method}.pkl",
     params:
-        method_config=_sensitivity_method_config,
+        sobol_config=_sensitivity_sobol_config,
         slice_grid=_sensitivity_slice_grid,
+        outputs_spec=lambda w: config["sensitivity_analysis"]["outputs"],
     output:
         global_indices="<results>/{name}/analysis/sobol_global_indices_{group}_{method}.parquet",
         conditional_indices="<results>/{name}/analysis/sobol_conditional_indices_{group}_{method}.parquet",

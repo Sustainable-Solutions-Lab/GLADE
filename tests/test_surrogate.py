@@ -134,3 +134,48 @@ def test_unknown_method_raises():
             holdout_fraction=0.0,
             n_threads=1,
         )
+
+
+@pytest.mark.parametrize("method", ["pce", "mars"])
+def test_vector_outputs_blocked_for_scalar_only_methods(method):
+    """PCE and MARS must reject any vector-derived columns."""
+    x, outputs_df = _build_design(n=64)
+    outputs_df["foods.wheat"] = outputs_df["total_cost"] * 0.001
+    with pytest.raises(NotImplementedError, match="does not support vector outputs"):
+        fit_bundle(
+            method=method,
+            x_design=x,
+            outputs_df=outputs_df,
+            available_columns=[*_COLUMNS, "foods.wheat"],
+            generator_spec=GEN_SPEC,
+            method_config={"method_options": {"max_terms": 8, "max_degree": 1}},
+            holdout_fraction=0.0,
+            n_threads=1,
+            vector_columns={"foods.wheat"},
+        )
+
+
+def test_xgb_handles_vector_outputs():
+    """A vector-derived column fits cleanly through the multi-output path."""
+    x, outputs_df = _build_design(n=128)
+    # Two correlated "foods" with different scales.
+    outputs_df["foods.wheat"] = 200.0 * x[:, 0] + 50.0
+    outputs_df["foods.rice"] = -30.0 * x[:, 1] + 10.0
+    cols = [*_COLUMNS, "foods.wheat", "foods.rice"]
+
+    bundle = fit_bundle(
+        method="xgb",
+        x_design=x,
+        outputs_df=outputs_df,
+        available_columns=cols,
+        generator_spec=GEN_SPEC,
+        method_config={"method_options": {"n_estimators": 100, "max_depth": 3}},
+        holdout_fraction=0.2,
+        n_threads=1,
+        vector_columns={"foods.wheat", "foods.rice"},
+    )
+    assert set(bundle.output_columns) == set(cols)
+    # Predict shape / scale: foods.wheat is in the 50-250 range.
+    y = predict(bundle, "foods.wheat", x[:8])
+    assert y.shape == (8,)
+    assert 0 < y.mean() < 500

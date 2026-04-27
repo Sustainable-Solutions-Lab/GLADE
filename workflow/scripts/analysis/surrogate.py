@@ -367,16 +367,32 @@ def fit_bundle(
     method_config: dict,
     holdout_fraction: float,
     n_threads: int = 1,
+    vector_columns: set[str] | None = None,
 ) -> SurrogateBundle:
     """Fit a :class:`SurrogateBundle` for all available output columns.
 
     The caller is expected to have already dropped NaN-bearing scenarios
     from ``x_design`` and ``outputs_df``.  Train/test split is done here
     so all methods see the same partition.
+
+    ``vector_columns``, if supplied, names columns originating from
+    vector outputs.  Vector outputs are only supported by the
+    multi-output methods (``xgb``, ``rf``); requesting ``pce`` or
+    ``mars`` on a bundle that contains any vector column raises
+    :class:`NotImplementedError`.
     """
     if method not in SUPPORTED_METHODS:
         raise ValueError(
             f"Unknown surrogate method '{method}'. " f"Supported: {SUPPORTED_METHODS}"
+        )
+
+    vector_columns = vector_columns or set()
+    if vector_columns and method not in _MULTI_OUTPUT_METHODS:
+        raise NotImplementedError(
+            f"Method '{method}' does not support vector outputs; "
+            f"vector columns present: {sorted(vector_columns)[:3]}... "
+            f"Use one of {_MULTI_OUTPUT_METHODS} or remove the vector "
+            f"specs from sensitivity_analysis.outputs."
         )
 
     joint_dist, param_names = build_joint_distribution(generator_spec)
@@ -443,9 +459,14 @@ def fit_bundle(
         val["n_test"] = n_holdout
         val["method"] = method
 
-        if val["validation_error"] > 0.1:
-            logger.warning(
-                "High validation error (%.3f) for '%s' (%s) -- surrogate may be inaccurate",
+        # Vector elements (e.g. minor foods) often have tiny global mass
+        # and noisy targets; only flag genuinely poor scalar fits at the
+        # warning level, log vector outliers more quietly.
+        threshold = 0.25 if col in vector_columns else 0.1
+        if val["validation_error"] > threshold:
+            level = logger.info if col in vector_columns else logger.warning
+            level(
+                "High validation error (%.3f) for '%s' (%s)",
                 val["validation_error"],
                 col,
                 method,
@@ -659,6 +680,13 @@ def save_bundle(bundle: SurrogateBundle, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         pickle.dump(bundle, f, protocol=pickle.HIGHEST_PROTOCOL)
+    logger.info(
+        "Wrote %s bundle (%d outputs, %.1f MB) to %s",
+        bundle.method,
+        len(bundle.output_columns),
+        path.stat().st_size / (1024 * 1024),
+        path,
+    )
 
 
 def load_bundle(path: Path) -> SurrogateBundle:
@@ -1088,16 +1116,24 @@ def build_pce_basis_cache(
 def sobol_rows_from_bundle(
     bundle: SurrogateBundle,
     distribution: cp.Distribution,
-    method_options: dict,
+    sobol_config: dict,
     slice_grid: dict[str, list[float]],
+    columns: list[str] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Compute all Sobol rows (global, conditional, joint-conditional)."""
+    """Compute all Sobol rows (global, conditional, joint-conditional).
+
+    Iterates over ``columns`` if given (e.g. the resolved
+    ``sensitivity_analysis.sobol.outputs`` allowlist), otherwise over
+    every column in the bundle.  ``sobol_config`` carries the MC sample
+    counts (``n_mc_global``, ``n_mc_conditional``).
+    """
     param_names = bundle.param_names
     slice_param_names = bundle.generator_spec.get("slice_parameters", [])
     slice_indices = [param_names.index(sp) for sp in slice_param_names]
 
-    n_mc_global = int(method_options.get("n_mc_global", 2**14))
-    n_mc_conditional = int(method_options.get("n_mc_conditional", 2**13))
+    n_mc_global = int(sobol_config["n_mc_global"])
+    n_mc_conditional = int(sobol_config["n_mc_conditional"])
+    output_columns = columns if columns is not None else bundle.output_columns
 
     pce_cache = None
     if slice_indices and slice_grid and bundle.method == "pce":
@@ -1111,7 +1147,11 @@ def sobol_rows_from_bundle(
     conditional_rows: list[dict] = []
     conditional_joint_rows: list[dict] = []
 
-    for col in bundle.output_columns:
+    for col in output_columns:
+        if col not in bundle.models:
+            raise KeyError(
+                f"Sobol output '{col}' missing from bundle (has {len(bundle.models)} columns)"
+            )
         s1, s_total = global_sobol_for_output(
             bundle, col, distribution, n_mc=n_mc_global
         )
