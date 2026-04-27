@@ -16,12 +16,20 @@ scenarios:
     health:
       value_per_yll: 0
 
+  # Explicit anchor for Figure 1's representative price (would otherwise
+  # fall between geomspace samples).
+  ghg_50:
+    emissions:
+      ghg_price: 50
+    health:
+      value_per_yll: 0
+
   _generators:
     - name: ghg_{ghg}
       parameters:
         ghg:
           space: log
-          start: 10
+          start: 5
           stop: 500
           num: 20
           round: true
