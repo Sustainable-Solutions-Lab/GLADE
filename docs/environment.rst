@@ -795,7 +795,7 @@ Cropland baseline data source
 
 The model can derive baseline cropland area from two sources, controlled by ``luc.cropland_source``:
 
-* **"gaez"** (default): Uses GAEZ RES06-HAR (2010-2019 average harvested area) summed across all crop modules. This ensures consistency with production stability constraints that also use GAEZ data. When multiple model crops map to the same RES06 module (e.g., oat, rye, and buckwheat all map to OCE), the module's harvested area is counted only once to avoid double-counting.
+* **"gaez"** (default): Uses GAEZ RES06-HAR (harvested area downscaled from FAOSTAT 2019-2021 3-year average) summed across all crop modules. This ensures consistency with production stability constraints that also use GAEZ data. When multiple model crops map to the same RES06 module (e.g., oat, rye, and buckwheat all map to OCE), the module's harvested area is counted only once to avoid double-counting.
 
 * **"esa"**: Uses ESA CCI land cover satellite data to identify pixels classified as cropland. This approach may show different spatial patterns than GAEZ, particularly in areas with multi-cropping or mixed land use.
 

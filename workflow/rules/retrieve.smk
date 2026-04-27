@@ -542,7 +542,7 @@ rule download_gaez_actual_yield:
     output:
         "data/downloads/gaez_actual_yield_{water_supply}_{crop}.tif",
     params:
-        # RES06-YLD: Actual yields (2010-2019 average)
+        # RES06-YLD: Actual yields, downscaled from FAOSTAT 2019-2021 3-year average
         # INPUT codes: WSI (irrigated), WSR (rainfed), WST (total)
         # Note: Uses different input naming convention than RES05
         gcs_url=lambda w: (
@@ -567,7 +567,7 @@ rule download_gaez_harvested_area:
     output:
         "data/downloads/gaez_harvested_area_{water_supply}_{crop}.tif",
     params:
-        # RES06-HAR: Harvested area (2010-2019 average)
+        # RES06-HAR: Harvested area, downscaled from FAOSTAT 2019-2021 3-year average
         # INPUT codes: WSI (irrigated), WSR (rainfed), WST (total)
         gcs_url=lambda w: (
             f"gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAPSET/RES06-HAR/"
