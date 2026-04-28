@@ -1248,6 +1248,22 @@ sensitivity_analysis:
       value_col: mt_dm
       label: Feed by category (global)
       units: Mt DM
+    yll_by_cause:
+      kind: vector
+      source: health_attribution.parquet
+      reducer: pivot_column
+      key_col: cause
+      value_col: yll_myll
+      label: YLL by disease cause
+      units: million YLL
+    yll_by_food_group:
+      kind: vector
+      source: health_attribution.parquet
+      reducer: pivot_column
+      key_col: food_group
+      value_col: yll_myll
+      label: YLL by dietary risk factor
+      units: million YLL
 
 # --- section: plotting ---
 plotting:
