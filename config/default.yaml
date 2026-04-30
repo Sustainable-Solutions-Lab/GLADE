@@ -697,7 +697,7 @@ aggregation:
   # Method used to rank gridcells before binning them into unweighted within-region quantiles.
   # - "max_yield": maximum crop yield in each gridcell (uses actual yields when validation.use_actual_yields is true)
   # - "regional_crop_mix_actual_yield": actual-yield-only score weighted by the region's current harvested crop mix
-  resource_class_score: "max_yield"
+  resource_class_score: "regional_crop_mix_actual_yield"
   # Data source for determining irrigated land area when aggregating by region/resource class.
   # - "current": use GAEZ "land equipped for irrigation" dataset (same area for all crops)
   # - "potential": use GAEZ irrigated suitability rasters (crop-specific potential area)
