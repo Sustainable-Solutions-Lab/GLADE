@@ -63,6 +63,9 @@ validation:
     penalty_mode: "l1"
     deviation_type: "absolute"
 
+aggregation:
+  resource_class_score: "regional_crop_mix_actual_yield"
+
 plotting:
   comparison_scenarios: "all"
 

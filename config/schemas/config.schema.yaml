@@ -1208,6 +1208,7 @@ properties:
       - simplify_tolerance_km
       - simplify_min_area_km
       - resource_class_quantiles
+      - resource_class_score
       - irrigated_area_source
     additionalProperties: false
     properties:
@@ -1243,6 +1244,12 @@ properties:
           minimum: 0
           maximum: 1
         description: "Quantiles for resource class binning"
+      resource_class_score:
+        type: string
+        enum:
+          - max_yield
+          - regional_crop_mix_actual_yield
+        description: "Method used to score gridcells before unweighted within-region quantile binning. The regional crop-mix actual-yield method requires validation.use_actual_yields=true."
       irrigated_area_source:
         type: string
         enum: [current, potential]

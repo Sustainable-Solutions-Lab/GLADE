@@ -77,15 +77,54 @@ rule build_regions:
         "../scripts/build_regions.py"
 
 
+_RESOURCE_CLASS_SCORE = config["aggregation"]["resource_class_score"]
+_RESOURCE_CLASS_WATER_SUPPLIES = ["r", "i"]
+_RESOURCE_CLASS_FDD_CROPS = set(config["fodder_decomposition"]["fdd_crops"]) & set(
+    config["crops"]
+)
+
+
+def _resource_class_rasters(kind):
+    return [
+        gaez_path(kind, water_supply, crop)
+        for water_supply in _RESOURCE_CLASS_WATER_SUPPLIES
+        for crop in config["crops"]
+    ]
+
+
+def _compute_resource_class_inputs(wildcards):
+    yield_kind = (
+        "actual_yield" if config["validation"]["use_actual_yields"] else "yield"
+    )
+    inputs = {
+        "yields": _resource_class_rasters(yield_kind),
+        "regions": f"<processing>/{wildcards.name}/regions.geojson",
+        "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
+        "moisture_content": "data/curated/crop_moisture_content.csv",
+    }
+    if _RESOURCE_CLASS_SCORE == "regional_crop_mix_actual_yield":
+        inputs.update(
+            {
+                "harvested_area": _resource_class_rasters("harvested_area"),
+                "crop_mapping": "data/curated/gaez_crop_code_mapping.csv",
+                "faostat_production": f"<processing>/{wildcards.name}/faostat_crop_production.csv",
+            }
+        )
+        if _RESOURCE_CLASS_FDD_CROPS:
+            inputs["fdd_shares"] = f"<processing>/{wildcards.name}/fdd_area_shares.csv"
+    return inputs
+
+
 rule compute_resource_classes:
     input:
-        yields=(
-            [gaez_path("yield", "r", crop) for crop in config["crops"]]
-            + [gaez_path("yield", "i", crop) for crop in config["crops"]]
-        ),
-        regions="<processing>/{name}/regions.geojson",
+        unpack(_compute_resource_class_inputs),
     params:
         resource_class_quantiles=config["aggregation"]["resource_class_quantiles"],
+        resource_class_score=_RESOURCE_CLASS_SCORE,
+        use_actual_yields=config["validation"]["use_actual_yields"],
+        crops=config["crops"],
+        water_supplies=_RESOURCE_CLASS_WATER_SUPPLIES,
+        non_food_crops=config["non_food_crops"],
     output:
         classes="<processing>/{name}/resource_classes.nc",
     group:

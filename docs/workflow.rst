@@ -63,7 +63,7 @@ Data Preparation Rules
   * **Input**: All GAEZ yield rasters, regions
   * **Output**: ``processing/{name}/resource_classes.nc``
   * **Script**: ``workflow/scripts/compute_resource_classes.py``
-  * **Purpose**: Define yield quantile classes within each region
+  * **Purpose**: Define within-region productivity quantile classes from the configured resource-class score
 
 **aggregate_class_areas**
   * **Input**: Resource classes, suitability rasters, regions

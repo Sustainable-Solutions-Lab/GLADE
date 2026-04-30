@@ -119,7 +119,24 @@ This stratification allows the model to:
 - Avoid optimistic bias from averaging yields across heterogeneous land
 - Capture marginal land-use decisions at the extensive margin
 
-Resource classes are computed from GAEZ yield potentials by taking the maximum attainable yield across all crops for each gridcell, then binning into quantiles within each region.
+Resource classes are computed by assigning a productivity score to every
+gridcell, then binning those scores into unweighted quantiles within each
+region. With the default ``aggregation.resource_class_score: "max_yield"``,
+the score is the maximum modelled crop yield in the gridcell. This uses GAEZ
+potential-yield rasters in standard runs and GAEZ actual-yield rasters when
+``validation.use_actual_yields`` is enabled.
+
+For validation-style runs anchored to current production systems,
+``aggregation.resource_class_score`` can instead be set to
+``"regional_crop_mix_actual_yield"``. This mode is
+only valid with ``validation.use_actual_yields: true``. It normalizes each
+crop/water yield raster by that crop/water combination's global
+harvested-area-weighted median actual yield, then scores every gridcell by a
+weighted average of those normalized yields using the region's current
+harvested crop mix as weights. Missing crop yields in a gridcell are ignored
+rather than treated as zero, and cells with no valid actual-yield score are
+left unclassified. The final class boundaries remain ordinary within-region
+gridcell quantiles.
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/land_resource_classes.png
    :width: 50%
