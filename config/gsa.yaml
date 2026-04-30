@@ -230,7 +230,7 @@ solving:
   # parallel per node).  Each GSA solve is small enough that single-thread gurobi
   # is already near-optimal; hyperthreading gives diminishing returns.
   threads: 2
-  mem_mb: 8000
+  mem_mb: 10000
   time_limit: 60  # Hard limit
   runtime: 30     # Initial limit before retries for more favourable slurm scheduling
   inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
