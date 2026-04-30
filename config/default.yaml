@@ -688,7 +688,7 @@ health:
 # --- section: aggregation ---
 aggregation:
   regions:
-    target_count: 400
+    target_count: 750
     allow_cross_border: false
     method: "kmeans"
   simplify_tolerance_km: 5
