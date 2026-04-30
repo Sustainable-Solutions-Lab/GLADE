@@ -1311,23 +1311,25 @@ plotting:
     # Sensitivity parameter colors and groups (tab20b palette).
     # Group order determines stacking order; colors within a group are adjacent hues.
     parameter_groups:
-      Emissions:                                    # greens; darkness ∝ GWP100
-        color: "#8ca252"
-        parameters:
-          ch4_factor: "#b5cf6b"
-          n2o_factor: "#8ca252"
-          luc_factor: "#cedb9c"
-      Agricultural:                                 # blues, light → dark
-        color: "#6b6ecf"
-        parameters:
-          yield_factor: "#9c9ede"
-          fcr_factor: "#6b6ecf"
-          flw_factor: "#5254a3"
+      # Group order = stacking order (bottom → top); colours within each
+      # group ramp light → dark from bottom to top.
       "Health risk":                                # reds, light → dark
         color: "#d6616b"
         parameters:
           rr_protective: "#e7969c"
           rr_harmful: "#d6616b"
+      Agricultural:                                 # blues, light → dark
+        color: "#5254a3"
+        parameters:
+          flw_factor: "#9c9ede"
+          yield_factor: "#6b6ecf"
+          fcr_factor: "#5254a3"
+      Emissions:                                    # greens, light → dark
+        color: "#8ca252"
+        parameters:
+          luc_factor: "#cedb9c"
+          ch4_factor: "#b5cf6b"
+          n2o_factor: "#8ca252"
       "Policy valuation":                           # purples, light → dark
         color: "#ce6dbd"
         parameters:
