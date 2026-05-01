@@ -38,6 +38,7 @@ It also raises errors for unrecognized component patterns to ensure the
 analysis is updated when the model structure changes.
 """
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -119,6 +120,7 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
             "animal_production": "Animal production",
             "biomass_crop": "Biomass routing",
             "biomass_byproduct": "Biomass routing",
+            "biomass_disposal": "Biomass routing",
             "biofuel": "Biomass routing",
             "fiber_demand": "Biomass routing",
             "emission_aggregation": "Emissions aggregation",
@@ -234,6 +236,49 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     food_utility_cost = n.meta.get("food_utility_cost", 0.0)
     if food_utility_cost:
         total["Consumer values"] = total.get("Consumer values", 0.0) + food_utility_cost
+
+    # Bounded negative cost-calibration corrections (subsidies up to baseline)
+    # are linopy-level objective terms on auxiliary variables not visible to
+    # PyPSA statistics. Recover them exactly from solved dispatch:
+    # the LP optimum of aux ∈ [0, baseline], aux ≤ p with negative rate is
+    # aux* = min(p, baseline), so contribution = rate · min(p, baseline).
+    for carrier, category, rate_col, baseline_col in [
+        (
+            "crop_production",
+            "Crop production",
+            "bounded_subsidy_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
+            "grassland_production",
+            "Crop production",
+            "bounded_subsidy_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
+            "animal_production",
+            "Animal production",
+            "bounded_subsidy_bnusd_per_mt",
+            "baseline_feed_use_mt_dm",
+        ),
+    ]:
+        links = n.links.static
+        if rate_col not in links.columns or baseline_col not in links.columns:
+            continue
+        sub = links[
+            (links["carrier"] == carrier)
+            & (links[rate_col] < 0)
+            & (links[baseline_col] > 0)
+        ]
+        if sub.empty:
+            continue
+        rates = sub[rate_col].astype(float).to_numpy()
+        baselines = sub[baseline_col].astype(float).to_numpy()
+        p = n.links.dynamic.p0.loc[:, sub.index].sum(axis=0).to_numpy()
+        aux = np.minimum(np.maximum(p, 0.0), baselines)
+        cost = float((rates * aux).sum())
+        if abs(cost) > 1e-12:
+            total[category] = total.get(category, 0.0) + cost
 
     extracted_sum = total.sum()
     model_objective = n.objective
