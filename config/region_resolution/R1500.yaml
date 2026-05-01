@@ -2,17 +2,17 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Spatial-resolution sensitivity (200 regions).
-# Mirrors healthy_sustainable.yaml's solve-time setup at the central
-# (GHG=100, YLL=5000) operating point. The full grid lives in
-# config/region_resolution/R{200,300,400,600,750,900,1300,2000}.yaml and
+# Spatial-resolution sensitivity (1500 regions).
+# Mirrors central.yaml's solve-time setup at the central
+# (GHG=50, YLL=5000) operating point. The full grid lives in
+# config/region_resolution/R{250,500,750,1000,1500,2000}.yaml and
 # is consumed by ../paper/scripts/si_region_resolution_*.py.
 
-name: "region_resolution_R600"
+name: "region_resolution_R1500"
 
 aggregation:
   regions:
-    target_count: 600
+    target_count: 1500
 
 scenarios:
   baseline:
@@ -27,7 +27,7 @@ scenarios:
 
   central:
     emissions:
-      ghg_price: 100
+      ghg_price: 50
     health:
       value_per_yll: 5000
     macronutrients:

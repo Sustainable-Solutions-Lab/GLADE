@@ -2,19 +2,20 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Healthy & Sustainable Diet Scenario
-# -----------------------------------
-# Single (GHG, YLL) operating point used for the "transition to healthy
-# & sustainable diets" subsection of the paper. Round-number anchors:
-# GHG price 100 USD/tCO2-eq, life valued at 5000 USD/YLL (the lower
-# bound of the conventional VSL range, see paper main text).
+# Central Healthy & Sustainable Diet Scenario
+# -------------------------------------------
+# Single (GHG, YLL) operating point used as the central case in the
+# paper's "transition to healthy & sustainable diets" subsection.
+# Round-number anchors: GHG price 50 USD/tCO2-eq, life valued at
+# 5000 USD/YLL (the lower bound of the conventional VSL range, see
+# paper main text).
 #
 # Mirrors the solve-time setup of config/ghg_yll_grid.yaml (same
 # planning horizon, baseline year, food-utility piecewise blocks,
 # production-stability penalties), so the baseline calibrates against
 # the same diet that ghg_yll_grid uses.
 
-name: "healthy_sustainable"
+name: "central"
 scenarios:
   # Baseline scenario for calibrating piecewise food utility blocks
   # (dual variables). Identical structure to ghg_yll_grid's baseline.
@@ -41,7 +42,7 @@ scenarios:
   # Central healthy & sustainable point.
   central:
     emissions:
-      ghg_price: 100
+      ghg_price: 50
     health:
       value_per_yll: 5000
     macronutrients:
