@@ -57,7 +57,7 @@ multicropping links (where multiple crops share the same land).
 
    ``crop``, string, —, "Crop identifier"
    ``region``, string, —, "Production region identifier"
-   ``resource_class``, string, —, "Land suitability class (e.g., ``VS``, ``S``, ``MS``)"
+   ``resource_class``, int, —, "Land suitability class (0 = least productive, higher integers = more productive; number of classes set by ``aggregation.resource_class_quantiles``)"
    ``water_supply``, string, —, "Water regime (``rainfed`` or ``irrigated``)"
    ``country``, string, —, "ISO 3166-1 alpha-3 country code"
    ``area_mha``, float, Mha, "Cultivated area in million hectares"

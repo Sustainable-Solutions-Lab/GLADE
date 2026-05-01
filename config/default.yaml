@@ -61,7 +61,7 @@ netcdf:
 
 # --- section: validation ---
 validation:
-  use_actual_yields: false
+  use_actual_yields: true
   use_actual_production: false
   enforce_baseline_diet: false # Set food consumption equal to current day values
   enforce_baseline_feed: false # Fix animal feed use to GLEAM baseline values

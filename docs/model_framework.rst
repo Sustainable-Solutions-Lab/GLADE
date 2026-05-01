@@ -212,9 +212,9 @@ Solver selection and options are configured in ``config/default.yaml``:
 Model Scale
 -----------
 
-Typical model dimensions (for the default configuration with 400 regions):
+Typical model dimensions (for the default configuration with 750 regions):
 
-* **Regions**: 400 sub-national optimization regions
+* **Regions**: 750 sub-national optimization regions
 * **Crops**: ~70 crop types
 * **Resource classes**: 3-4 yield quality classes per region
 * **Variables**: ~1-5 million decision variables

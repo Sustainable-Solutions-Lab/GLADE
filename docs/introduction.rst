@@ -62,7 +62,7 @@ The model covers:
   carbon fluxes, fertilizer nitrogen balances, and basin-level water limits.
 
 Spatial resolution is configurable: the world is divided into sub-national
-optimization regions (typically 100–400), each with its own land endowment,
+optimization regions (typically 100–750), each with its own land endowment,
 crop yields, water budget, and dietary requirements. Input geophysical data
 is used at 0.05° × 0.05° resolution before aggregation.
 
@@ -77,7 +77,7 @@ System requirements
 * **Disk space**: plan for ~30 GB total (raw downloads, processed data,
   environment, results for a few scenarios).
 * **Memory**: 8 GB is enough for low-resolution scenarios (e.g. the tutorial
-  configurations with 100 regions); full-resolution solves at 400 regions
+  configurations with 100 regions); full-resolution solves at 750 regions
   typically need 16–32 GB.
 * **Solver**: the open-source `HiGHS <https://highs.dev/>`_ solver is
   installed automatically and suffices for most cases.

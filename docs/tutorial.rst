@@ -46,7 +46,7 @@ A few things to note:
 * ``name: "tutorial_01"`` controls the output directory: everything lands
   under ``results/tutorial_01/``.
 * ``aggregation.regions.target_count: 200`` keeps the LP small enough to
-  solve in minutes. The full-resolution default is 400; values below 200
+  solve in minutes. The full-resolution default is 750; values below 200
   fail the per-country clustering step because there are more countries in
   the default list than regions.
 * ``planning_horizon`` and ``baseline_year`` are both 2020, aligning the
