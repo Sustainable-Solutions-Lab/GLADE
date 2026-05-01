@@ -75,6 +75,11 @@ scenarios:
       cal:
         equal_to_baseline: true
 
+# Use observed yields where available so the resource-class scoring (which
+# now defaults to ``regional_crop_mix_actual_yield``) has the data it needs.
+validation:
+  use_actual_yields: true
+
 health:
   value_per_yll: 0
 

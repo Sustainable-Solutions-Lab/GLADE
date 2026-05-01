@@ -45,6 +45,11 @@ scenarios:
     emissions:
       ghg_price: 200
 
+# Use observed yields where available so the resource-class scoring (which
+# now defaults to ``regional_crop_mix_actual_yield``) has the data it needs.
+validation:
+  use_actual_yields: true
+
 # This tutorial does not use health costs.
 health:
   value_per_yll: 0
