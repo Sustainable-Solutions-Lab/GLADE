@@ -23,6 +23,8 @@ vendor
 /.batch/
 /.cache/
 /.tmp/
+notes/
+notes.org
 docs/_static/figures/*
 
 # Secrets (never commit credentials)
