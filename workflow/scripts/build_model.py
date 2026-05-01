@@ -628,6 +628,8 @@ if __name__ == "__main__":
     biomass_byproducts = [b for b in byproduct_list if b not in fiber_items]
     biomass.add_biomass_byproduct_links(n, cfg_countries, biomass_byproducts)
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)
+    biomass_disposal_foods = list(biomass_cfg["disposal_foods"])
+    biomass.add_biomass_disposal_links(n, cfg_countries, biomass_disposal_foods)
     if biofuel_baseline_df is not None:
         biomass.add_biofuel_links(n, biofuel_baseline_df)
     if enforce_fiber_demand:

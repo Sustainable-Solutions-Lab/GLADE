@@ -90,6 +90,47 @@ def add_biomass_byproduct_links(
     )
 
 
+def add_biomass_disposal_links(
+    n: pypsa.Network, countries: Iterable[str], foods: Iterable[str]
+) -> None:
+    """Allow human-consumed foods to be routed to biomass for disposal.
+
+    Unlike ``add_biomass_byproduct_links`` (which routes items already excluded
+    from human diets), this function targets foods that remain part of the diet
+    but are jointly produced as forced co-products of other commodity demands
+    (e.g. cottonseed-oil from cotton-fiber-driven cotton production). Without
+    this route, the model can only dispose of surplus via food slack at the
+    validation slack price, which both inflates the objective and biases the
+    consumer-value duals on the diet-equality constraints.
+    """
+    combos = pd.MultiIndex.from_product(
+        [foods, countries], names=["item", "country"]
+    ).to_frame(index=False)
+    combos["bus0"] = "food:" + combos["item"] + ":" + combos["country"]
+    combos["bus1"] = "biomass:" + combos["country"]
+    bus_index = n.buses.static.index
+    combos = combos[combos["bus0"].isin(bus_index) & combos["bus1"].isin(bus_index)]
+    if combos.empty:
+        return
+
+    combos["name"] = "biomass:disposal_" + combos["item"] + ":" + combos["country"]
+    combos = combos.set_index("name")
+
+    carrier = "biomass_disposal"
+    if carrier not in n.carriers.static.index:
+        n.carriers.add(carrier, unit="MtDM")
+
+    n.links.add(
+        combos.index,
+        bus0=combos["bus0"],
+        bus1=combos["bus1"],
+        carrier=carrier,
+        p_nom_extendable=True,
+        country=combos["country"],
+        food=combos["item"],
+    )
+
+
 def add_biomass_crop_links(
     n: pypsa.Network, countries: Iterable[str], crops: Iterable[str]
 ) -> None:

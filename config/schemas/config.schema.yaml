@@ -964,7 +964,7 @@ properties:
 
   biomass:
     type: object
-    required: [crops, marginal_values_usd_per_tonne, enforce_baseline_demand, biofuel_demand_scale, biogas_crop_demand, enforce_fiber_demand]
+    required: [crops, marginal_values_usd_per_tonne, enforce_baseline_demand, biofuel_demand_scale, biogas_crop_demand, enforce_fiber_demand, disposal_foods]
     additionalProperties: false
     properties:
       crops:
@@ -991,6 +991,13 @@ properties:
       enforce_fiber_demand:
         type: boolean
         description: "When true, enforce baseline fiber demand (cotton lint) from FAOSTAT FBS"
+      disposal_foods:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        description: "Foods that remain part of the diet but can also be routed to biomass for disposal (forced co-products of other commodity demands)."
 
   trade:
     type: object

@@ -549,6 +549,12 @@ biomass:
   biofuel_demand_scale: 1.0  # Solve-time multiplier on enforced biofuel/industrial and biogas demand
   biogas_crop_demand: "data/curated/biogas_crop_demand.csv"  # Biogas crop demand (silage maize); null to disable
   enforce_fiber_demand: true  # Enforce baseline fiber demand (cotton lint) from FAOSTAT FBS
+  # Foods that remain part of the diet but can also be routed to biomass for
+  # disposal. Useful for foods that are forced co-products of other commodity
+  # demands (e.g. cottonseed-oil is jointly produced when cotton is grown for
+  # fiber). Without this route the model would dump excess via food slack.
+  disposal_foods:
+  - cottonseed-oil
 
 # --- section: trade ---
 trade:
