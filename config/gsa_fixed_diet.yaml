@@ -134,7 +134,7 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 2
-  mem_mb: 11000
+  mem_mb: 7500
   # Fixed-diet runs are pure LPs (no MIP from piecewise utility/health valuation)
   # and typically solve in <1 min. Keep budgets tight so SLURM allocations
   # are small and scheduling stays favourable.
