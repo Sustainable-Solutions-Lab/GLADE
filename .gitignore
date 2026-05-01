@@ -5,6 +5,8 @@
 .snakemake
 results
 processing
+bundle
+notes
 # Notebooks (exploratory, not tracked by default)
 notebooks/*
 !notebooks/sensitivity_utils.py

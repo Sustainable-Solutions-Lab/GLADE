@@ -77,3 +77,24 @@ path = "docs/tutorials/*.ipynb"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# Data-bundle README/ATTRIBUTIONS/CITATION templates: rendered into the
+# bundle archive at build time. SPDX kept out of the templates themselves
+# so the rendered output stays clean.
+[[annotations]]
+path = [
+    "docs/data_bundle/README.template.md",
+    "docs/data_bundle/ATTRIBUTIONS.template.md",
+    "docs/data_bundle/CITATION.template.cff",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# Local notes (gitignored). Kept covered for REUSE compliance when the
+# directory exists in the working tree.
+[[annotations]]
+path = "notes/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
+SPDX-License-Identifier = "CC-BY-4.0"

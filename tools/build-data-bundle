@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Build the food-opt data bundle for Zenodo upload.
+#
+# Drives the full prep pipeline using config/data_bundle.yaml, then runs the
+# package_data_bundle Snakemake rule to stage files, render templates, and
+# produce a Zenodo-ready zip + manifest under bundle/<version>/.
+#
+# Update procedure:
+#   1. Make sure data/manually_downloaded/ has fresh GDD + IHME files.
+#   2. Bump data_bundle.version in config/data_bundle.yaml.
+#   3. Run this script.
+#   4. Upload bundle/<version>/food-opt-data-bundle-<version>.zip to Zenodo.
+#   5. Record the new DOI in config/default.yaml under data_bundle.zenodo_doi.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Forward any extra args to tools/smk (e.g. -j8, --dry-run, --forcerun rule).
+exec tools/smk --configfile config/data_bundle.yaml "$@" -- build_data_bundle

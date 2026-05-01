@@ -15,6 +15,7 @@ from .consumer_values import validate_consumer_values
 from .country_regions import validate_country_regions
 from .crop_food_pathways import validate_crop_food_pathways
 from .crop_groups import validate_crop_groups
+from .data_bundle import validate_data_bundle
 from .food_groups import validate_food_groups
 from .gaez_crop_mapping import validate_gaez_crop_mapping
 from .health_map import validate_health_map
@@ -29,6 +30,7 @@ Validator = Callable[[dict, Path], None]
 _CHECKS: dict[str, Validator] = {
     "config_schema": validate_config_schema,
     "restricted_data": validate_restricted_data,
+    "data_bundle": validate_data_bundle,
     "consumer_values": validate_consumer_values,
     "optimal_taxes": validate_optimal_taxes,
     "country_regions": validate_country_regions,

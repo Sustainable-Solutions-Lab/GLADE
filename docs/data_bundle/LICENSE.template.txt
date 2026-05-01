@@ -1,0 +1,52 @@
+food-opt data bundle {{VERSION}}
+Copyright (c) 2026 Koen van Greevenbroek and the food-opt contributors
+
+This bundle is licensed under the Creative Commons
+Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+
+You are free to:
+
+  - Share — copy and redistribute the material in any medium or format
+  - Adapt — remix, transform, and build upon the material
+
+Under the following terms:
+
+  - Attribution — You must give appropriate credit, provide a link to
+    the license, and indicate if changes were made. You may do so in
+    any reasonable manner, but not in any way that suggests the
+    licensor endorses you or your use.
+
+  - NonCommercial — You may not use the material for commercial
+    purposes.
+
+The full legal code is available at:
+
+  https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+THIRD-PARTY DATA NOTICES
+
+This bundle contains derivative works built from third-party datasets
+whose original terms remain in force. See ATTRIBUTIONS.md for the full
+list. In particular:
+
+  - Files derived from IHME Global Burden of Disease data must carry
+    the source identifier
+        "Source: Institute for Health Metrics and Evaluation.
+         Used with permission. All rights reserved."
+    in any downstream publication that uses them.
+
+  - Files derived from the Global Dietary Database (Tufts University)
+    require attribution to the GDD and Tufts University whenever used.
+
+  - The Copernicus Climate Change Service Land Cover product retains
+    its CC-BY-with-attribution requirement; see ATTRIBUTIONS.md for
+    citation text.
+
+Use of this bundle implies acceptance of all third-party data terms
+in addition to CC BY-NC 4.0.
+
+NO WARRANTY
+
+THE BUNDLE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.

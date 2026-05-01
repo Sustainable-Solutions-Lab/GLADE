@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Configuration used to build the food-opt data bundle for Zenodo upload.
+#
+# The bundle re-distributes processed derivatives of restricted-license
+# datasets (GDD, IHME GBD) plus convenience artifacts derived from
+# redistributable rasters (Copernicus Land Cover, Cook-Patton regrowth,
+# LUIcube grassland) under CC BY-NC 4.0.
+#
+# This config inherits from config/default.yaml. It runs the local prep
+# pipelines (data_bundle.enabled = false here, deliberately) so the
+# package_data_bundle rule can collect their outputs into a bundle archive.
+#
+# To regenerate the bundle:
+#   1. Ensure data/manually_downloaded/ has the latest GDD + IHME files.
+#   2. Bump data_bundle.version below.
+#   3. Run: tools/build-data-bundle
+#   4. Upload bundle/<version>/food-opt-data-bundle-<version>.zip to Zenodo.
+#   5. Record the new DOI in config/default.yaml under data_bundle.zenodo_doi.
+
+name: "data_bundle"
+
+# baseline_year is locked to 2020 by convention; the bundle is only built and
+# distributed for this reference year. Other years require the raw data path.
+baseline_year: 2020
+
+data_bundle:
+  enabled: false           # We are BUILDING, not consuming.
+  version: "v0.1.0-dev"
+  zenodo_doi: ""
+  destination: "data/bundled/zenodo"

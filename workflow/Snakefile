@@ -17,8 +17,10 @@ os.makedirs("data/downloads", exist_ok=True)
 configfile: "config/default.yaml"
 
 
-# Load and merge secrets from file or environment variables
-secrets = load_secrets_with_env_fallback(Path.cwd())
+# Load and merge secrets from file or environment variables. Pass the active
+# config so the credential check only requires keys for services that will
+# actually be used.
+secrets = load_secrets_with_env_fallback(Path.cwd(), config=config)
 config.setdefault("credentials", {}).update(secrets)
 
 
@@ -39,13 +41,9 @@ def _resolve_path_root(raw_path: str, key: str) -> str:
 
 PATH_ROOTS = {
     "results": _resolve_path_root(config["paths"]["results_root"], "results_root"),
-    "processing": _resolve_path_root(
-        config["paths"]["processing_root"], "processing_root"
-    ),
+    "processing": _resolve_path_root(config["paths"]["processing_root"], "processing_root"),
     "logs": _resolve_path_root(config["paths"]["logs_root"], "logs_root"),
-    "benchmarks": _resolve_path_root(
-        config["paths"]["benchmarks_root"], "benchmarks_root"
-    ),
+    "benchmarks": _resolve_path_root(config["paths"]["benchmarks_root"], "benchmarks_root"),
 }
 
 
@@ -73,6 +71,7 @@ include: "rules/consumer_values.smk"
 include: "rules/optimal_taxes.smk"
 include: "rules/yield_gaps.smk"
 include: "rules/luc.smk"
+include: "rules/data_bundle.smk"
 include: "rules/documentation.smk"
 
 

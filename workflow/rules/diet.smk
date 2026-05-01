@@ -20,7 +20,7 @@ rule prepare_gdd_dietary_intake:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         stimulant_brewed_to_dry=config["diet"]["stimulant_brewed_to_dry"],
     output:
-        diet="<processing>/{name}/gdd_dietary_intake.csv",
+        diet="<processing>/{name}/gdd_dietary_intake_built.csv",
     group:
         "prep"
     resources:
@@ -154,7 +154,7 @@ rule prepare_gbd_dietary_risk_exposure:
     params:
         reference_year=config["baseline_year"],
     output:
-        exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        exposure="<processing>/{name}/gbd_dietary_risk_exposure_built.csv",
     group:
         "prep"
     resources:

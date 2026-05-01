@@ -18,7 +18,7 @@ rule prepare_gbd_mortality:
         causes=config["health"]["causes"],
         reference_year=config["baseline_year"],
     output:
-        mortality="<processing>/{name}/health/gbd_mortality_rates.csv",
+        mortality="<processing>/{name}/health/gbd_mortality_rates_built.csv",
     group:
         "prep"
     resources:
@@ -42,7 +42,7 @@ rule prepare_relative_risks:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         alternative_rr=config["health"]["alternative_rr"],
     output:
-        relative_risks="<processing>/{name}/health/relative_risks.csv",
+        relative_risks="<processing>/{name}/health/relative_risks_built.csv",
     group:
         "prep"
     resources:

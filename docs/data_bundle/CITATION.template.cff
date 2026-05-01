@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this data bundle, please cite both the bundle and the underlying data providers (see ATTRIBUTIONS.md)."
+title: "food-opt data bundle"
+version: "{{VERSION}}"
+date-released: "{{BUILD_DATE}}"
+license: CC-BY-NC-4.0
+type: dataset
+authors:
+  - family-names: van Greevenbroek
+    given-names: Koen
+    affiliation: "Stanford University, Department of Earth System Science"
+identifiers:
+  - type: doi
+    value: "{{ZENODO_DOI}}"
+    description: "Zenodo DOI for this bundle release"
+repository-code: "https://github.com/koen-vg/food-opt"
+keywords:
+  - food systems
+  - optimization
+  - global burden of disease
+  - dietary intake
+  - land cover
+  - PyPSA
+abstract: >
+  Processed-data companion archive for the food-opt global food systems
+  optimization model. Bundles per-country baseline diet, mortality
+  rates, dietary relative risks, dietary risk exposures, resampled
+  Copernicus land cover, Cook-Patton forest regrowth, and LUIcube
+  grassland — all derived from publicly accessible source datasets,
+  packaged for convenience under CC BY-NC 4.0. See ATTRIBUTIONS.md
+  for source citations and required attributions.

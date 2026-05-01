@@ -41,6 +41,24 @@ currency_base_year: 2024
 downloads:
   show_progress: true
 
+# --- section: data_bundle ---
+# Optional Zenodo data bundle of processed derivatives of restricted-license
+# datasets (GDD, IHME GBD) plus convenience artifacts derived from Copernicus
+# Land Cover, Cook-Patton regrowth, and LUIcube grassland. When enabled, the
+# workflow downloads the bundle instead of preparing those files from raw
+# manual downloads.
+#
+# The bundle is published under CC BY-NC 4.0 with attribution to the original
+# data providers. It is only compatible with `baseline_year: 2020` and with
+# `countries`, `food_groups.included`, `health.causes`, `health.risk_factors`
+# being subsets of the values used to build the bundle (see manifest.yaml in
+# the bundle directory).
+data_bundle:
+  enabled: false                     # Use bundle instead of raw prep pipelines
+  version: "v0.0.0-dev"              # Bundle version to download / produce
+  zenodo_doi: ""                     # DOI of the Zenodo record for this version
+  destination: "data/bundled/zenodo" # Local directory where the bundle is unpacked
+
 # --- section: paths ---
 # Root directories for workflow artifacts. Defaults keep everything under the
 # project directory, but these can be redirected (e.g. to scratch storage).
@@ -972,7 +990,7 @@ data:
   usda:
     # API credentials: configure in config/secrets.yaml or via USDA_API_KEY environment variable
     # See config/secrets.yaml.example for setup instructions
-    retrieve_nutrition: true  # Set to true to fetch nutrition data from USDA instead of using the provided data
+    retrieve_nutrition: false  # When true, fetch fresh nutrition data from the USDA API (requires USDA_API_KEY); when false, use the in-tree CC0 file at data/curated/nutrition.csv
     # Nutrient mapping: internal name -> USDA FoodData Central name
     # USDA names must match nutrient names in FoodData Central exactly
     nutrients:
