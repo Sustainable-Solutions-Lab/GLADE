@@ -26,14 +26,13 @@ scenarios:
   default: {}
 
   baseline:
-    # Fixed consumption to extract consumer values (dual variables)
+    # Fixed consumption to extract consumer values (dual variables).
+    # Mirrors the `baseline` scenario in config/gsa.yaml so that the
+    # extracted values match what GSA scenarios calibrate against.
     validation:
       enforce_baseline_diet: true
     food_utility_piecewise:
       enabled: false
-    food_groups:
-      fix_within_group_ratios:
-        enabled: true
     emissions:
       ghg_price: 0
     health:
