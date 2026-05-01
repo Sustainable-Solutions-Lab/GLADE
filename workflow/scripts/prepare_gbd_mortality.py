@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Process IHME GBD mortality data to replace DIA death rates.
+"""Process IHME GBD mortality data into per-country death rates.
 
 Downloads from IHME GBD Results Tool should include:
 - Measure: Deaths (Rate)

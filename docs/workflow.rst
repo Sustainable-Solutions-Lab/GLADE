@@ -126,7 +126,7 @@ Data Preparation Rules
   * **Purpose**: Estimate marginal pasture area (grassland that is unsuitable for cropland even after accounting for convertible cropland/forest cover) so grazing can draw from a dedicated land pool without competing with cropland-suitable hectares
 
 **prepare_health_costs**
-  * **Input**: Regions, DIA health data, population
+  * **Input**: Regions, dietary intake, IHME relative risks, GBD mortality rates, population, life table, GDP per capita
   * **Output**: ``processing/{name}/health/*.csv`` (risk breakpoints, dose-response, clusters)
   * **Script**: ``workflow/scripts/prepare_health_costs.py``
   * **Purpose**: Compute health cluster parameters for DALY calculations

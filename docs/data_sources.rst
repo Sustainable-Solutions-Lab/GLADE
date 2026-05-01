@@ -673,7 +673,7 @@ IHME GBD 2019 -- Dietary Risk Exposure Estimates
 
 **Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
 
-**Retrieval**: Not yet integrated into the Snakemake workflow. Data is available under ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
+**Retrieval**: Processed via ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py`` from ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
 
 **Manual download steps**:
 
@@ -681,15 +681,6 @@ IHME GBD 2019 -- Dietary Risk Exposure Estimates
 2. Log in to your IHME account.
 3. Download ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip`` (direct link: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip).
 4. Extract the ZIP file and place the resulting directory as ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA``.
-
-DIA Health Impact Inputs (Diet Impact Assessment)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Provider**: WHO-DIA (Marco Springmann) |
-**Access**: https://github.com/marco-spr/WHO-DIA |
-**License**: GPL-3.0
-
-Epidemiological inputs used by the Diet Impact Assessment (DIA) model to translate dietary exposures into health burdens. We copy a minimal subset covering dietary risk relative-risk schedules, baseline consumption, mortality, demographic structure, and regional values of a statistical life year. CSV snapshots dated 2021-05-28 (diet, risk schedules, demographics) and 2021-10-18 (VSL region table).
 
 .. _gdd-dietary-intake:
 
@@ -826,7 +817,6 @@ Most datasets used in this project require attribution. Some disallow redistribu
 * **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
 * **Eurostat copyright** (Eurostat apro_cpsh1): Free reuse with attribution
 * **Open access** (Huang et al. irrigation, UNSD SDG, IMF WEO): Free to use with attribution/citation
-* **GPL-3.0** (DIA Health Inputs): Copyleft; derived works must use same license
 
 **Restrictive licenses (non-commercial use and/or no redistribution)**:
 
