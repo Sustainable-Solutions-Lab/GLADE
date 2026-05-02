@@ -297,8 +297,10 @@ class TestObjectiveValidation:
 
     def test_mismatch_raises(self, solved_network):
         """ValueError when objective doesn't match extracted costs."""
-        solved_network._objective *= 2.0  # Double the objective
-        with pytest.raises(ValueError, match="tolerance"):
+        # Use a large additive shift well above the absolute tolerance
+        # floor so the check trips regardless of objective magnitude.
+        solved_network._objective += 5.0
+        with pytest.raises(ValueError, match="differ from model objective"):
             extract_objective_breakdown(solved_network)
 
 

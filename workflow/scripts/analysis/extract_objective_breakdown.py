@@ -42,8 +42,11 @@ import numpy as np
 import pandas as pd
 import pypsa
 
-# Relative tolerance for objective validation
-OBJECTIVE_RTOL = 0.01  # 1% tolerance
+# Tolerance for objective validation. Uses max(rtol, atol) so scenarios
+# with near-zero objective (positive/negative components nearly cancel)
+# don't trip the check on rounding noise.
+OBJECTIVE_RTOL = 0.01  # 1% relative tolerance
+OBJECTIVE_ATOL = 0.01  # 0.01 bnUSD absolute floor
 
 
 def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
@@ -283,21 +286,22 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     extracted_sum = total.sum()
     model_objective = n.objective
 
-    # Validate against model objective
-    if model_objective != 0:
-        rel_error = abs(extracted_sum - model_objective) / abs(model_objective)
-        if rel_error > OBJECTIVE_RTOL:
-            raise ValueError(
-                f"Extracted costs ({extracted_sum:.6f}) differ from model objective "
-                f"({model_objective:.6f}) by {rel_error * 100:.2f}% "
-                f"(tolerance: {OBJECTIVE_RTOL * 100:.2f}%). "
-                f"Categories found: {total.to_dict()}"
-            )
-    else:
-        if abs(extracted_sum) > 1e-6:
-            raise ValueError(
-                f"Model objective is zero but extracted costs sum to {extracted_sum:.6f}"
-            )
+    # Validate against model objective using max(rtol, atol). Near-zero
+    # objectives (positive/negative components nearly cancel) trip pure
+    # rtol on rounding noise, so atol provides a floor.
+    abs_error = abs(extracted_sum - model_objective)
+    if abs_error > max(OBJECTIVE_ATOL, OBJECTIVE_RTOL * abs(model_objective)):
+        rel_pct = (
+            abs_error / abs(model_objective) * 100
+            if model_objective != 0
+            else float("inf")
+        )
+        raise ValueError(
+            f"Extracted costs ({extracted_sum:.6f}) differ from model objective "
+            f"({model_objective:.6f}) by {abs_error:.6f} ({rel_pct:.2f}%). "
+            f"Tolerance: max({OBJECTIVE_RTOL * 100:.2f}%, {OBJECTIVE_ATOL:.4f} bnUSD). "
+            f"Categories found: {total.to_dict()}"
+        )
 
     # Convert to single-row DataFrame
     result = total.to_frame().T
