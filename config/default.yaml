@@ -105,6 +105,26 @@ validation:
     enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
     max_relative_increase: 0.1  # Maximum relative increase from baseline (0.1 = +10%)
     min_baseline: 0.00001  # Mt DM floor; ignore near-zero baselines below this threshold
+  crop_growth_cap:
+    # Per-(crop, country) hard upper bound on harvested area at
+    # ``(1 + max_relative_increase) * sum_baseline``. Aggregates across
+    # regions, resource classes and water-supply types within each
+    # country, preserving within-country reallocation freedom while
+    # bounding total country-level expansion of any single crop.
+    #
+    # The cap is a *backstop* against ridiculous expansion (e.g. the
+    # canonical olive-USA case where a -0.40 bnUSD/Mha cost correction
+    # calibrated at baseline 0.04 Mha drives 19× expansion under L1).
+    # It is intentionally generous: under realistic dietary-shift
+    # scenarios legumes can grow by 300-400% globally, so the per-country
+    # cap must accommodate substantial crop-level shifts. The
+    # principled fix to the cost-calibration leakage lives in
+    # build_model.py (negative corrections applied only up to baseline
+    # area, not extrapolated linearly); the cap remains as a structural
+    # safety net.
+    enabled: true
+    max_relative_increase: 10.0  # +1000% (11× baseline)
+    min_baseline: 0.0001  # Mha floor; ignore near-zero baselines below this threshold
 
 # --- section: food_incentives ---
 food_incentives:
@@ -549,12 +569,27 @@ biomass:
   biofuel_demand_scale: 1.0  # Solve-time multiplier on enforced biofuel/industrial and biogas demand
   biogas_crop_demand: "data/curated/biogas_crop_demand.csv"  # Biogas crop demand (silage maize); null to disable
   enforce_fiber_demand: true  # Enforce baseline fiber demand (cotton lint) from FAOSTAT FBS
-  # Foods that remain part of the diet but can also be routed to biomass for
-  # disposal. Useful for foods that are forced co-products of other commodity
-  # demands (e.g. cottonseed-oil is jointly produced when cotton is grown for
-  # fiber). Without this route the model would dump excess via food slack.
+  # Foods that stay part of the diet but can additionally be routed to biomass
+  # for disposal. Without this outlet the model dumps surplus via food slack
+  # (visible as large negative duals on the food consumption equality).
+  # Two patterns of "real-world non-food demand" justify a disposal route:
+  #   - Forced co-products of non-food commodity demand (e.g. cottonseed-oil
+  #     is jointly produced when cotton is grown for fiber).
+  #   - Crops where actual production exceeds what the modelled diet absorbs,
+  #     reflecting unrepresented uses (post-harvest losses beyond food-group
+  #     waste factors, birdseed/forage, coir/coconut by-products, etc.).
+  # See docs/configuration.rst for guidance on adding to this list.
   disposal_foods:
   - cottonseed-oil
+  - sesame-oil
+  - sesame-seed
+  - groundnut-oil
+  - groundnut
+  - coconut-oil
+  - coconut
+  - foxtail-millet
+  - chickpea
+  - gram
 
 # --- section: trade ---
 trade:

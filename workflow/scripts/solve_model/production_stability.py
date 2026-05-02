@@ -938,6 +938,204 @@ def add_animal_growth_cap_constraints(
         type="animal_growth_cap",
     )
 
+
+# ─── Bounded negative cost-calibration corrections (two-tier) ─────────────
+
+
+def add_bounded_subsidy_constraints(
+    n: pypsa.Network,
+    carriers: list[str] = (
+        "crop_production",
+        "grassland_production",
+        "animal_production",
+    ),
+) -> None:
+    """Apply negative cost-calibration corrections only up to the baseline.
+
+    Cost calibration extracts duals at the ±1% hard bound, which represent
+    the local marginal-cost gradient *at baseline production*. Applied as
+    a flat per-Mha (or per-Mt-DM-feed) correction at any production level
+    under L1 stability, a moderate negative correction calibrated on a
+    small baseline can drive runaway expansion (the canonical olive-USA
+    case at -0.40 bnUSD/Mha calibrated on 0.04 Mha would grow olive 19x
+    if unbounded; the magnitude cap by itself doesn't help because the
+    pathological case has a moderate gradient, not a large one).
+
+    The two-tier resolution: positive corrections are applied additively
+    at all levels (already done in build_model). Negative corrections
+    (subsidies) are stored as a per-link
+    ``bounded_subsidy_bnusd_per_<unit>`` attribute and applied here only
+    on the first ``baseline_<...>`` units of dispatch. Beyond baseline,
+    the subsidy stops contributing — production faces uncorrected base
+    cost. This preserves the calibration's local-gradient interpretation
+    exactly and bounds the per-link subsidy budget at
+    ``correction x baseline``.
+
+    Implementation: for each link with a non-zero subsidy, an auxiliary
+    variable ``aux_p ∈ [0, baseline]`` is introduced together with the
+    constraint ``aux_p <= link_p``. The objective gains
+    ``rate x aux_p`` (rate is negative, so the model maximises
+    ``aux_p`` up to ``min(p, baseline)``).
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network containing the model. Expected to have per-link
+        attributes ``bounded_subsidy_bnusd_per_<unit>`` and a baseline
+        column matching the carrier (``baseline_area_mha`` for crop /
+        grassland; ``baseline_feed_use_mt_dm`` for animals).
+    carriers : list[str]
+        Link carriers to scan; controls which subsidies are activated.
+    """
+    m = n.model
+    link_p = m.variables["Link-p"].sel(snapshot="now")
+    links_df = n.links.static
+
+    for carrier in carriers:
+        if carrier == "animal_production":
+            attr = "bounded_subsidy_bnusd_per_mt"
+            baseline_col = "baseline_feed_use_mt_dm"
+        else:
+            attr = "bounded_subsidy_bnusd_per_mha"
+            baseline_col = "baseline_area_mha"
+
+        sub = links_df[links_df["carrier"] == carrier]
+        if attr not in sub.columns or baseline_col not in sub.columns:
+            continue
+        sub = sub[(sub[attr] < 0) & (sub[baseline_col] > 0)]
+        if sub.empty:
+            continue
+
+        link_names = sub.index
+        baselines = sub[baseline_col].astype(float).to_numpy()
+        rates = sub[attr].astype(float).to_numpy()
+
+        baselines_xr = xr.DataArray(baselines, coords={"name": link_names}, dims="name")
+        rates_xr = xr.DataArray(rates, coords={"name": link_names}, dims="name")
+
+        aux = m.add_variables(
+            lower=0,
+            upper=baselines_xr,
+            coords=[link_names],
+            dims=["name"],
+            name=f"{carrier}_bounded_subsidy_p",
+        )
+        m.add_constraints(
+            aux <= link_p.sel(name=link_names),
+            name=f"GlobalConstraint-{carrier}_bounded_subsidy_le_p",
+        )
+        m.objective += (rates_xr * aux).sum()
+
+        logger.info(
+            "Bounded subsidy active on %d %s links (rates min=%.4f, max=%.4f, "
+            "total subsidy budget at baseline = %.2f bnUSD)",
+            len(sub),
+            carrier,
+            rates.min(),
+            rates.max(),
+            float((rates * baselines).sum()),
+        )
+
+
+# ─── Crop growth caps ──────────────────────────────────────────────────────
+
+
+def add_crop_growth_cap_constraints(
+    n: pypsa.Network,
+    growth_cap_cfg: dict,
+) -> None:
+    """Add per-(crop, country) upper bounds on total harvested area.
+
+    Aggregates ``crop_production`` link dispatch across regions, resource
+    classes and water-supply types within each (crop, country), then bounds
+    the total at ``(1 + max_relative_increase) * sum_baseline``. This is a
+    structural backstop against pathological extrapolation of cost-
+    calibration corrections under L1 production stability — without it, a
+    moderate per-Mha negative correction calibrated at a tiny baseline can
+    drive large absolute expansion (the canonical olive-USA case turns
+    0.04 Mha into 0.72 Mha at the current calibration).
+
+    Country-level (rather than per-link) granularity is chosen so the
+    constraint preserves within-country reallocation freedom (yield-driven
+    shifts between regions / resource classes / water supply) while still
+    bounding total country-level expansion of any single crop. This is
+    structurally analogous to ``animal_growth_cap``, which is per-link =
+    per-(product, feed_category, country) since animals lack the regional
+    dimension.
+
+    Only (crop, country) groups whose summed baseline exceeds
+    ``min_baseline`` are constrained; groups with near-zero baselines
+    (introduction of a previously-unmodelled crop, or a crop just appearing
+    in a country) are left uncapped so the model retains the freedom to
+    bring them in if economics demand.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    growth_cap_cfg : dict
+        Configuration with ``enabled``, ``max_relative_increase``, and
+        ``min_baseline``.
+    """
+    if not growth_cap_cfg["enabled"]:
+        return
+
+    m = n.model
+    link_p = m.variables["Link-p"].sel(snapshot="now")
+    links_df = n.links.static
+    prod_links = links_df[links_df["carrier"] == "crop_production"]
+    if prod_links.empty or "baseline_area_mha" not in prod_links.columns:
+        logger.info("No crop_production links with baselines; skipping crop growth cap")
+        return
+
+    cap = growth_cap_cfg["max_relative_increase"]
+    min_baseline = growth_cap_cfg["min_baseline"]
+
+    # Aggregate baselines per (crop, country)
+    baseline_per_group = (
+        prod_links.groupby(["crop", "country"])["baseline_area_mha"]
+        .sum()
+        .rename("baseline")
+    )
+    eligible = baseline_per_group[baseline_per_group > min_baseline]
+    if eligible.empty:
+        logger.info(
+            "No (crop, country) groups exceed min_baseline=%.4g Mha; "
+            "skipping crop growth cap",
+            min_baseline,
+        )
+        return
+
+    # Build one constraint per (crop, country) group: sum of dispatch over
+    # links in the group <= (1 + cap) * baseline.
+    group_indices = prod_links.groupby(["crop", "country"]).indices
+    constraint_names: list[str] = []
+    upper_bounds_list: list[float] = []
+    for (crop, country), baseline in eligible.items():
+        link_names = prod_links.index[group_indices[(crop, country)]]
+        upper = (1.0 + cap) * float(baseline)
+        cname = f"crop_growth_cap_{crop}_{country}"
+        m.add_constraints(
+            link_p.sel(name=link_names).sum() <= upper,
+            name=f"GlobalConstraint-{cname}",
+        )
+        constraint_names.append(cname)
+        upper_bounds_list.append(upper)
+
+    n.global_constraints.add(
+        constraint_names,
+        sense="<=",
+        constant=upper_bounds_list,
+        type="crop_growth_cap",
+    )
+
+    logger.info(
+        "Added %d crop growth cap constraints at +%.0f%% (skipped %d (crop, country) groups below min_baseline)",
+        len(constraint_names),
+        100.0 * cap,
+        len(baseline_per_group) - len(eligible),
+    )
+
     logger.info(
         "Added %d per-link animal growth cap constraints (max +%.0f%%)",
         len(link_names),

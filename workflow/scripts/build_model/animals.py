@@ -457,21 +457,37 @@ def add_feed_to_animal_product_links(
     else:
         df["marginal_cost"] = 0.0
 
-    # Apply cost calibration corrections (additive, per (product, country), in bnUSD/Mt-feed)
+    # Apply cost calibration corrections, two-tier (see crops.py for the
+    # rationale): positive corrections are added additively to
+    # marginal_cost at all production levels; negative corrections are
+    # stored as a bounded subsidy and applied at solve time only up to
+    # ``baseline_feed_use_mt_dm`` per link.
+    df["bounded_subsidy_bnusd_per_mt"] = 0.0
     if cost_calibration is not None:
         cal_idx = pd.MultiIndex.from_arrays(
             [df["product"], df["country"]], names=["product", "country"]
         )
         cal_adj = cost_calibration.reindex(cal_idx, fill_value=0.0).to_numpy()
-        cost_before = df["marginal_cost"].to_numpy().copy()
-        df["marginal_cost"] = np.maximum(df["marginal_cost"] + cal_adj, 0.0)
-        n_clipped = int((cost_before + cal_adj < 0).sum())
-        n_adjusted = int((cal_adj != 0).sum())
+        positive_mask = cal_adj >= 0
+        negative_mask = ~positive_mask
+
+        marginal_cost = df["marginal_cost"].to_numpy().astype(float).copy()
+        # Positive corrections: additive with floor.
+        marginal_cost[positive_mask] = np.maximum(
+            marginal_cost[positive_mask] + cal_adj[positive_mask], 0.0
+        )
+        # Negative corrections: bound subsidy at base cost so floored cost stays >= 0.
+        bounded = np.zeros_like(cal_adj)
+        bounded[negative_mask] = np.maximum(
+            cal_adj[negative_mask], -marginal_cost[negative_mask]
+        )
+        df["marginal_cost"] = marginal_cost
+        df["bounded_subsidy_bnusd_per_mt"] = bounded
+
         logger.info(
-            "Applied animal cost calibration: %d/%d links adjusted, %d clipped to 0",
-            n_adjusted,
-            len(df),
-            n_clipped,
+            "Applied animal cost calibration: pos=%d additive, neg=%d bounded at baseline_feed_use_mt_dm",
+            int((cal_adj > 0).sum()),
+            int((cal_adj < 0).sum()),
         )
 
     # Calculate FLW-adjusted efficiency
@@ -516,6 +532,7 @@ def add_feed_to_animal_product_links(
         feed_category=link_df["feed_category"],
         manure_ch4_share=link_df["manure_ch4_share"],
         pasture_n2o_share=link_df["pasture_n2o_share"],
+        bounded_subsidy_bnusd_per_mt=link_df["bounded_subsidy_bnusd_per_mt"],
     )
 
     # Store GLEAM feed baseline on links (for production stability)

@@ -413,6 +413,89 @@ are measured in absolute units or relative to the baseline.
 * Products missing baseline data are skipped with a warning
 * Multi-cropping is automatically disabled when production stability is enabled
 
+.. _growth-caps:
+
+Growth Caps
+^^^^^^^^^^^
+
+Two **hard upper bounds** on production growth sit alongside the soft
+production-stability penalty above. They act as structural backstops
+against runaway expansion in either direction (animals or crops) under
+L1 stability, *without* depending on the L1 penalty being well-tuned.
+
+Both caps are independent of ``production_stability.enabled`` and are
+configured under ``validation.animal_growth_cap`` and
+``validation.crop_growth_cap`` respectively.
+
+**Animal growth cap** (``validation.animal_growth_cap``)
+
+Upper-bounds each ``animal_production`` link's feed input at
+:math:`(1 + \delta) \cdot \text{baseline}\_\text{feed}\_\text{use}\_\text{mt}\_\text{dm}`.
+The granularity is per-(product, feed-category, country), which directly
+constrains the feed mix as well as the production level.
+
+* ``animal_growth_cap.enabled``: master switch (default: ``true``)
+* ``animal_growth_cap.max_relative_increase``: cap (default ``0.1`` = +10%)
+* ``animal_growth_cap.min_baseline``: Mt-DM floor; near-zero baselines are
+  left uncapped so the model can still introduce previously-unmodelled
+  systems (default: ``0.00001``)
+
+**Crop growth cap** (``validation.crop_growth_cap``)
+
+Upper-bounds the **total country-level harvested area** of each
+modelled crop at :math:`(1 + \delta) \cdot \sum_{r,c,w} \text{baseline}\_\text{area}\_\text{mha}`,
+where the sum is over regions, resource classes, and water-supply
+types within a country. Country-level (rather than per-link)
+granularity preserves within-country reallocation freedom — the model
+can still shift crop production between regions and resource classes
+based on yield economics — while bounding total country-level
+expansion.
+
+* ``crop_growth_cap.enabled``: master switch (default: ``true``)
+* ``crop_growth_cap.max_relative_increase``: cap (default ``10.0`` = +1000%, i.e. 11× baseline)
+* ``crop_growth_cap.min_baseline``: Mha floor for the *summed* per-(crop,
+  country) baseline; groups below the floor are left uncapped (default:
+  ``0.0001``)
+
+The crop cap is intentionally **much** more generous than the animal
+cap's ``+10%`` because realistic dietary-shift scenarios already produce
+legitimate global crop expansions of 300–400% (e.g. legumes under
+plant-shift diets), and per-country shifts can be larger still. The
+crop cap is a *backstop* against ridiculous expansion (the canonical
+olive-USA case at 19× baseline) rather than a fine-tuned bound on
+realistic reallocation. The principled fix to the underlying cost
+calibration / L1 interaction lives elsewhere (in how negative
+corrections are applied — see :ref:`cost-calibration`).
+
+**Why both caps exist (interaction with cost calibration)**
+
+Cost calibration (see :ref:`cost-calibration`) extracts per-Mha (or
+per-Mt-DM) cost corrections from the duals of ±1% hard-bound stability
+constraints. Those duals are local marginal-cost gradients valid at
+baseline production; applied as a constant per-unit correction at any
+production level under L1 stability, the calibration interpretation
+breaks for crops or products with very small baselines. The canonical
+case is olive in the USA: a moderate ``-0.40 bnUSD/Mha`` cost correction
+calibrated at baseline ``0.04 Mha`` would otherwise drive the model to
+~0.7 Mha (19× baseline) and starve other US crops (notably maize) of
+land. The growth caps prevent this kind of pathological extrapolation
+without changing the calibration itself.
+
+**Limitations**
+
+Caps are applied **uniformly at the country level** — the model cannot
+exceed +X% in any individual country, but a sector-wide expansion (e.g.
+all major producers grow soybean by 50%) is still permitted. This is
+intentional: the caps target *spatial reallocation* artifacts, not
+sector-level demand growth.
+
+For animals, the per-(product, feed-category) granularity means the
+cap also constrains the **feed mix**: a country can't shift entirely
+from grain-fed to forage-fed cattle even if total cattle output stays
+within ±10%. This is mostly desirable but can be over-restrictive for
+counterfactual scenarios that probe alternative feed regimes; raise
+``max_relative_increase`` for such studies.
+
 Crop Selection
 ~~~~~~~~~~~~~~
 
@@ -577,6 +660,29 @@ byproducts that lack feed mappings. Crops listed in ``biomass.crops`` can be div
 directly as feedstocks. The ``marginal_values_usd_per_tonne`` parameter
 (USD\ :sub:`2024` per tonne dry matter) sets the price received when biomass leaves the
 food system; set to 0 for free disposal.
+
+.. _biomass-disposal-foods:
+
+Foods listed under ``biomass.disposal_foods`` get an additional link from their food
+bus to the country's biomass bus, but unlike ``byproducts`` they remain part of the
+diet and food-group tracking. This route is intended for foods where actual production
+exceeds what the modelled diet absorbs, leaving the optimizer no realistic outlet for
+the surplus other than food-balance slack. Two patterns are common:
+
+- **Forced co-products of non-food commodity demand**, e.g. cottonseed oil is a
+  fixed-coefficient byproduct of cotton ginning when cotton is grown for fiber.
+- **Crops where real-world production includes uses the model does not represent**:
+  birdseed and forage for foxtail-millet, post-harvest losses beyond the food-group
+  waste factors for sesame, coir/charcoal/husk uses for coconut, whole-peanut feed
+  use beyond what the oilseed-meal pool captures for groundnut.
+
+Without a disposal route the consumption equality on these foods would be satisfied
+by food slack at ``validation.slack_marginal_cost``, which inflates the objective and,
+more importantly, drives the dual variables of the consumption equality strongly
+negative — which biases consumer-value calibration (see :doc:`consumer_values`).
+The amount actually routed to biomass in a baseline solve is itself a useful diagnostic
+of the gap between baseline production and modelled outlets; it can be inspected via
+the ``biomass_disposal`` carrier on links in the solved network.
 
 When ``enforce_baseline_demand`` is true, biofuel and biogas crop demand is fixed at
 baseline levels. Each biofuel link is created with ``p_nom`` equal to baseline demand

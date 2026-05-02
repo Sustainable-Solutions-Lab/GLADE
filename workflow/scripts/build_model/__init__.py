@@ -101,6 +101,7 @@ specific items (crops, foods, products) are stored in metadata columns.
   - ``trade_feed``: Feed trade (use ``feed_category`` column)
   - ``biomass_crop``: Crop to biomass (use ``crop`` column)
   - ``biomass_byproduct``: Byproduct to biomass (use ``food`` column)
+  - ``biomass_disposal``: Food to biomass disposal (use ``food`` column)
   - ``fertilizer_distribution``: Fertilizer distribution
   - ``emission_aggregation``: GHG emission aggregation
   - ``land_use``, ``land_conversion``, ``existing_to_pasture``, ``new_to_pasture``, ``existing_grassland_to_pasture``, ``spare_land``, ``spare_existing_grassland``, ``residue_incorporation``

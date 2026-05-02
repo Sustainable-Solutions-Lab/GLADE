@@ -276,26 +276,57 @@ def add_regional_crop_production_links(
     # Convert USD/ha to bnUSD/Mha
     all_df["marginal_cost"] = per_link_cost * 1e6 * constants.USD_TO_BNUSD
 
-    # Apply additive calibration correction if available
+    # Apply additive calibration correction if available.
+    #
+    # Two-tier handling so corrections retain their calibration-time
+    # interpretation as *local* marginal-cost gradients at baseline:
+    #   - Positive corrections (cost increase) are applied additively at
+    #     all production levels, as before.
+    #   - Negative corrections (cost decrease, i.e. a subsidy bringing
+    #     model cost down to the calibration target) are *not* added to
+    #     marginal_cost; instead they are stored as a per-link
+    #     ``bounded_subsidy_bnusd_per_mha`` attribute and applied at
+    #     solve time only up to the link's ``baseline_area_mha``.
+    #
+    # Without this split, a small negative correction calibrated on a
+    # tiny baseline (the canonical olive-USA case at -0.40 bnUSD/Mha on
+    # 0.04 Mha) acts as a flat subsidy under L1 stability, leaking
+    # large absolute subsidies as the model expands the crop. Bounding
+    # the subsidy at baseline area preserves the calibration's
+    # local-gradient interpretation exactly.
+    all_df["bounded_subsidy_bnusd_per_mha"] = 0.0
     if cost_calibration is not None:
         cal_values = pd.Series(
             [cost_calibration.get(k, 0.0) for k in cost_keys],
             index=all_df.index,
             dtype=float,
         )
-        all_df["marginal_cost"] += cal_values
-        n_negative = int((all_df["marginal_cost"] < 0).sum())
-        if n_negative > 0:
-            all_df["marginal_cost"] = all_df["marginal_cost"].clip(lower=0.0)
-            logger.info(
-                "Clipped %d links with negative marginal_cost to zero",
-                n_negative,
-            )
+        base_cost = all_df["marginal_cost"].copy()
+
+        positive_mask = cal_values >= 0
+        negative_mask = ~positive_mask
+
+        # Positive corrections: apply additively as before, with floor.
+        all_df.loc[positive_mask, "marginal_cost"] = (
+            base_cost.loc[positive_mask] + cal_values.loc[positive_mask]
+        ).clip(lower=0.0)
+
+        # Negative corrections: bound the subsidy so the underlying base
+        # cost cannot go below zero, then store on the link.
+        all_df.loc[negative_mask, "bounded_subsidy_bnusd_per_mha"] = np.maximum(
+            cal_values.loc[negative_mask], -base_cost.loc[negative_mask]
+        )
+
         n_calibrated = int((cal_values != 0.0).sum())
+        n_pos = int((cal_values > 0).sum())
+        n_neg = int((cal_values < 0).sum())
         logger.info(
-            "Applied crop cost calibration: %d/%d links adjusted",
+            "Applied crop cost calibration: %d/%d links (pos=%d additive, neg=%d "
+            "bounded at baseline_area)",
             n_calibrated,
             len(all_df),
+            n_pos,
+            n_neg,
         )
 
     keys = list(
@@ -350,6 +381,7 @@ def add_regional_crop_production_links(
         "resource_class": all_df["resource_class"],
         "water_supply": all_df["water_supply"],
         "baseline_area_mha": all_df["baseline_area_mha"],
+        "bounded_subsidy_bnusd_per_mha": all_df["bounded_subsidy_bnusd_per_mha"],
     }
 
     if use_actual_production:

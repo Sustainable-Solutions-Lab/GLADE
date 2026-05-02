@@ -29,6 +29,8 @@ from workflow.scripts.solve_model.health import (
 )
 from workflow.scripts.solve_model.production_stability import (
     add_animal_growth_cap_constraints,
+    add_bounded_subsidy_constraints,
+    add_crop_growth_cap_constraints,
     add_production_stability_constraints,
     resolve_calibrated_l1_costs,
 )
@@ -1298,6 +1300,16 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     # Add animal growth cap constraints (independent of production stability)
     animal_growth_cap_cfg = smk.params.animal_growth_cap
     add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
+
+    # Add crop growth cap constraints (independent of production stability)
+    crop_growth_cap_cfg = smk.params.crop_growth_cap
+    add_crop_growth_cap_constraints(n, crop_growth_cap_cfg)
+
+    # Apply negative cost-calibration corrections only up to baseline (two-tier).
+    # Positive corrections are already applied additively at build time;
+    # negative corrections were stored on links as ``bounded_subsidy_*``
+    # attributes and are activated here.
+    add_bounded_subsidy_constraints(n)
 
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = smk.params.fix_within_group_ratios

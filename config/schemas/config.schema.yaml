@@ -155,6 +155,7 @@ properties:
       - feed_slack_cost_factor
       - production_stability
       - animal_growth_cap
+      - crop_growth_cap
     additionalProperties: false
     properties:
       use_actual_yields:
@@ -318,6 +319,23 @@ properties:
             type: number
             exclusiveMinimum: 0
             description: "Mt DM floor; ignore near-zero baselines below this threshold"
+      crop_growth_cap:
+        type: object
+        required: [enabled, max_relative_increase, min_baseline]
+        additionalProperties: false
+        description: "Cap per-(crop, country) total harvested area at (1 + max_relative_increase) × baseline. Aggregates across regions, resource classes and water-supply types within each country."
+        properties:
+          enabled:
+            type: boolean
+            description: "Whether to apply crop growth caps"
+          max_relative_increase:
+            type: number
+            minimum: 0
+            description: "Maximum relative increase from baseline area (e.g., 0.5 = +50%)"
+          min_baseline:
+            type: number
+            exclusiveMinimum: 0
+            description: "Mha floor; ignore near-zero baselines below this threshold"
 
   food_incentives:
     type: object
