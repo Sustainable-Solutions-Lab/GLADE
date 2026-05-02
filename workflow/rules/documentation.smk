@@ -643,6 +643,7 @@ rule doc_fig_consumer_values_distribution:
         style=DOC_FIG_STYLE,
     params:
         group_colors=food_group_colors,
+        slack_marginal_cost=config["validation"]["slack_marginal_cost"],
     output:
         svg="docs/_static/figures/consumer_values_distribution.svg",
         png="docs/_static/figures/consumer_values_distribution.png",

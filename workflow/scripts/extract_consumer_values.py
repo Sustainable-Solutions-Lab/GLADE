@@ -9,6 +9,14 @@ of each food, as revealed by the dual variables of p_set constraints on
 food_consumption links. These values can be used to construct an objective
 function that replicates consumer preferences.
 
+Negative duals (from the L1+caps interaction or supply-side artifacts where
+the model would prefer to dispose of more of a food) are floored at zero. A
+negative consumer value would mean "the consumer pays the model to take more
+of this food" — semantically backwards for a preference signal. Clipping at
+zero treats these foods as nominally free at the margin (no preference, no
+penalty), which is the closest sensible interpretation. The number of
+clipped values is logged so calibration regressions remain traceable.
+
 Expects a solved network with:
 - validation.enforce_baseline_diet=True (fixed per-food consumption via p_set)
 - mu_p_set duals extracted to n.links.dynamic
@@ -68,13 +76,17 @@ def extract_consumer_values(n: pypsa.Network) -> pd.DataFrame:
             "Ensure the model was solved with validation.enforce_baseline_diet=true"
         )
 
+    raw_values = duals.values
+    n_negative = int((raw_values < 0).sum())
+    clipped_values = raw_values.clip(min=0.0)
+
     df = pd.DataFrame(
         {
             "food": consume["food"].astype(str).values,
             "food_group": consume["food_group"].astype(str).values,
             "country": consume["country"].astype(str).str.upper().values,
-            "value_bnusd_per_mt": duals.values,
-            "adjustment_bnusd_per_mt": -duals.values,
+            "value_bnusd_per_mt": clipped_values,
+            "adjustment_bnusd_per_mt": -clipped_values,
         }
     )
 
@@ -83,6 +95,20 @@ def extract_consumer_values(n: pypsa.Network) -> pd.DataFrame:
         len(df),
         df["food"].nunique(),
     )
+    if n_negative:
+        most_negative_food = (
+            pd.DataFrame({"food": df["food"], "raw": raw_values})
+            .groupby("food")["raw"]
+            .min()
+            .sort_values()
+            .head(5)
+        )
+        logger.info(
+            "Floored %d/%d negative-dual entries to 0 (most-negative foods: %s)",
+            n_negative,
+            len(df),
+            ", ".join(f"{f}={v:+.3f}" for f, v in most_negative_food.items()),
+        )
     return df
 
 

@@ -40,6 +40,23 @@ def main() -> None:
 
     df = pd.read_csv(snakemake.input.values)  # type: ignore[name-defined]
     group_colors: dict[str, str] = dict(snakemake.params.group_colors)  # type: ignore[name-defined]
+    slack_marginal_cost = float(snakemake.params.slack_marginal_cost)  # type: ignore[name-defined]
+
+    # Drop rows whose dual is bounded by the food-slack price; these reflect
+    # baseline-supply gaps (foods the model cannot deliver at baseline-diet
+    # consumption) rather than consumer preference, and saturate at the slack
+    # cap regardless of the underlying economics.
+    threshold = 0.99 * slack_marginal_cost
+    n_total = len(df)
+    df = df[df["value_bnusd_per_mt"].abs() < threshold].copy()
+    n_dropped = n_total - len(df)
+    if n_dropped:
+        logger.info(
+            "Dropped %d/%d rows whose dual saturated at the slack price (|value| >= %.1f)",
+            n_dropped,
+            n_total,
+            threshold,
+        )
 
     df["value_usd_per_kg"] = df["value_bnusd_per_mt"] * BNUSD_PER_MT_TO_USD_PER_KG
 
