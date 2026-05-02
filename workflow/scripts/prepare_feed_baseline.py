@@ -434,8 +434,11 @@ def main() -> None:
     logger.info("Loading feed category mappings")
     rum_mapping = pd.read_csv(ruminant_mapping_path, comment="#")
     mono_mapping = pd.read_csv(monogastric_mapping_path, comment="#")
-    rum_item_to_cat = dict(zip(rum_mapping["feed_item"], rum_mapping["category"]))
-    mono_item_to_cat = dict(zip(mono_mapping["feed_item"], mono_mapping["category"]))
+    # Items can appear in multiple categories with shares (see
+    # workflow/scripts/categorize_feeds.py::apply_category_overrides);
+    # collect the unique category set per animal_type, not a 1:1 dict.
+    rum_categories = set(rum_mapping["category"].unique())
+    mono_categories = set(mono_mapping["category"].unique())
 
     # Load FAOSTAT for product shares and reference year scaling
     bulk, item_map = load_faostat_qcl(qcl_csv_path, m49_codes_path)
@@ -715,10 +718,8 @@ def main() -> None:
     )
     monogastric_products = [p for p in all_products if p not in ruminant_products]
 
-    ruminant_feed_cats = sorted({f"ruminant_{c}" for c in rum_item_to_cat.values()})
-    monogastric_feed_cats = sorted(
-        {f"monogastric_{c}" for c in mono_item_to_cat.values()}
-    )
+    ruminant_feed_cats = sorted({f"ruminant_{c}" for c in rum_categories})
+    monogastric_feed_cats = sorted({f"monogastric_{c}" for c in mono_categories})
 
     product_feed_cats = [
         (p, fc) for p in ruminant_products for fc in ruminant_feed_cats

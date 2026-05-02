@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Manual overrides for feed-category assignments produced by
+# ``categorize_feeds.py``.
+#
+# Each row replaces the auto-categorized assignment for the specified
+# (feed_item, source_type, animal_type) with one of multiple model
+# categories, weighted by ``share``. Shares for a given
+# (feed_item, source_type, animal_type) MUST sum to 1.0 (mass balance:
+# 1 Mt of feed input is split across categories such that the total
+# mass arriving at feed buses equals the input mass).
+#
+# Use cases for splits:
+#   - Feeds with substantial energy AND protein content that the
+#     model's single-category framework can't represent in one row
+#     (e.g. DDGS: ~70% energy from carbs+fat, ~30% from protein).
+#   - Feeds with mixed roles depending on inclusion rate or animal
+#     digestive system.
+#
+# Items not listed here keep their auto-categorized assignment with
+# share=1.0.
+#
+# Columns:
+#   - feed_item: model entity name
+#   - source_type: crop / food / residue
+#   - animal_type: ruminant / monogastric
+#   - category: one of the {animal_type}-specific model categories
+#               (forage/roughage/grain/protein/low_quality)
+#   - share: mass share assigned to this category (in [0, 1]; rows for
+#            a given (feed_item, source_type, animal_type) sum to 1.0)
+#
+feed_item,source_type,animal_type,category,share,notes
+# DDGS (corn distillers' grains with solubles): ethanol byproduct
+# containing ~28% crude protein, ~12% fat, ~50% carbohydrate/fiber, ~5%
+# ash. In monogastric (pig/poultry) diets it substitutes for both corn
+# (energy) and soybean meal (protein) in roughly a 70/30 mass split. The
+# default categorize_feeds output places it solely in the protein pool
+# (driven by N content) which under-represents its dominant energy role
+# and leaves DDGS surplus when protein is in oversupply globally — the
+# excess then dumps to biomass disposal instead of feeding pigs.
+ddgs,food,monogastric,grain,0.7,
+ddgs,food,monogastric,protein,0.3,

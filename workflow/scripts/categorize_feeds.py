@@ -7,10 +7,20 @@ Categorize feeds into quality classes and compute average nutritional values.
 
 Groups individual feeds into categories based on digestibility and energy content,
 then computes category-level average nutritional properties for use in the model.
+
+By default each (feed_item, source_type) is assigned to a single category with
+share = 1.0. A feed_category_overrides.csv may specify multi-category splits
+for individual items (e.g. DDGS = 70% grain + 30% protein in monogastric
+diets); see ``apply_category_overrides`` and the override file's header for
+details. Multi-row entries are propagated through to the feed_conversion link
+construction (where ``share`` becomes the link efficiency, conserving mass)
+and through to the GLEAM-derived feed baseline split.
 """
 
 import logging
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
@@ -217,6 +227,84 @@ def categorize_monogastric_feeds(
     return categories, feed_mapping
 
 
+def apply_category_overrides(
+    mapping: pd.DataFrame,
+    animal_type: str,
+    overrides_path: str | Path | None,
+) -> pd.DataFrame:
+    """Apply multi-category overrides to an auto-categorized feed mapping.
+
+    The default mapping has one row per (feed_item, source_type) with the
+    auto-determined category. Overrides allow a single item to be split
+    across multiple categories with explicit shares (e.g. DDGS as 70%
+    grain + 30% protein for monogastric pigs). Items not listed in the
+    overrides file keep their auto-categorized assignment with share=1.0.
+
+    Parameters
+    ----------
+    mapping : pd.DataFrame
+        Auto-categorized mapping with columns
+        ``[feed_item, source_type, category]``.
+    animal_type : str
+        ``ruminant`` or ``monogastric``; selects which override rows
+        apply.
+    overrides_path : str | Path | None
+        Path to the override CSV, or None to skip applying overrides.
+
+    Returns
+    -------
+    pd.DataFrame
+        Mapping with columns ``[feed_item, source_type, category, share]``.
+        Items not overridden have share=1.0; overridden items have one
+        row per (item, category) with the configured share.
+    """
+    mapping = mapping.copy()
+    mapping["share"] = 1.0
+
+    if overrides_path is None or not Path(overrides_path).exists():
+        return mapping
+
+    overrides = pd.read_csv(overrides_path, comment="#")
+    overrides = overrides[overrides["animal_type"] == animal_type]
+    if overrides.empty:
+        return mapping
+
+    required_cols = {"feed_item", "source_type", "animal_type", "category", "share"}
+    missing = required_cols - set(overrides.columns)
+    if missing:
+        raise ValueError(
+            f"feed_category_overrides.csv missing columns: {sorted(missing)}"
+        )
+
+    # Validate per-(item, source) shares sum to 1
+    sums = overrides.groupby(["feed_item", "source_type"])["share"].sum()
+    bad = sums[~np.isclose(sums.values, 1.0, atol=1e-6)]
+    if not bad.empty:
+        raise ValueError(
+            f"feed_category_overrides shares must sum to 1.0 per "
+            f"(feed_item, source_type) for {animal_type}; got:\n{bad}"
+        )
+
+    overridden = set(zip(overrides["feed_item"], overrides["source_type"]))
+    keep_mask = ~mapping[["feed_item", "source_type"]].apply(tuple, axis=1).isin(
+        overridden
+    )
+    base = mapping.loc[keep_mask, ["feed_item", "source_type", "category", "share"]]
+    extra = overrides[["feed_item", "source_type", "category", "share"]]
+
+    logger.info(
+        "%s: applied category overrides to %d items (%d total override rows)",
+        animal_type,
+        len(overridden),
+        len(extra),
+    )
+    return (
+        pd.concat([base, extra], ignore_index=True)
+        .sort_values(["feed_item", "source_type", "category"])
+        .reset_index(drop=True)
+    )
+
+
 def add_methane_yields(
     ruminant_categories: pd.DataFrame,
     methane_yields: pd.DataFrame,
@@ -288,6 +376,15 @@ if __name__ == "__main__":
 
     # Add CH4 yields to ruminant categories
     ruminant_categories = add_methane_yields(ruminant_categories, methane_yields)
+
+    # Apply optional multi-category overrides (adds ``share`` column).
+    overrides_path = getattr(snakemake.input, "category_overrides", None)
+    ruminant_mapping = apply_category_overrides(
+        ruminant_mapping, "ruminant", overrides_path
+    )
+    monogastric_mapping = apply_category_overrides(
+        monogastric_mapping, "monogastric", overrides_path
+    )
 
     # Write outputs
     ruminant_categories.to_csv(snakemake.output.ruminant_categories, index=False)

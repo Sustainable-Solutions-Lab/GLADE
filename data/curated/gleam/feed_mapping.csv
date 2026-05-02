@@ -43,6 +43,7 @@ MILLET,pearl-millet,crop,monogastric,Millet grain → pearl millet
 RICE,wetland-rice,crop,monogastric,Rice grain → wetland rice
 SORGHUM,sorghum,crop,monogastric,Sorghum grain
 SOY,soybean,crop,monogastric,Soybean grain
+SOY,groundnut,crop,monogastric,"Whole groundnuts (peanuts) as monogastric feed; SOY proxy is appropriate as groundnut and soybean both supply high-protein, high-fat oilseed feed material. Real-world flow: lower-grade or unshelled peanuts in West Africa/India go directly to pig and poultry feed without oil pressing."
 PULSES,dry-pea,crop,monogastric,Legume grains → dry pea as representative
 PULSES,cowpea,crop,monogastric,Legume grains → cowpea
 PULSES,pigeonpea,crop,monogastric,Legume grains → pigeonpea

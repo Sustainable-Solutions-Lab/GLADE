@@ -120,24 +120,48 @@ def _build_item_table(
     # Mark exogenous: no model_entity (NaN or empty)
     joined["exogenous"] = joined["model_entity"].isna() | (joined["model_entity"] == "")
 
-    # Map model_entity → model_feed_category via {rum,mono}_feed_mapping
-    rum_cat = dict(zip(rum_mapping["feed_item"], rum_mapping["category"]))
-    mono_cat = dict(zip(mono_mapping["feed_item"], mono_mapping["category"]))
+    # Map model_entity → list[(model_feed_category, share)] via {rum,mono}_feed_mapping.
+    # An item may appear in multiple categories with shares summing to 1.0
+    # (see workflow/scripts/categorize_feeds.py::apply_category_overrides).
+    def _entity_to_cats(mapping: pd.DataFrame) -> dict[str, list[tuple[str, float]]]:
+        out: dict[str, list[tuple[str, float]]] = {}
+        share_col = "share" if "share" in mapping.columns else None
+        for _, row in mapping.iterrows():
+            entity = row["feed_item"]
+            cat = row["category"]
+            share = float(row[share_col]) if share_col else 1.0
+            out.setdefault(entity, []).append((cat, share))
+        return out
 
-    def _get_category(row):
+    rum_cat = _entity_to_cats(rum_mapping)
+    mono_cat = _entity_to_cats(mono_mapping)
+
+    # Fan out joined rows: one row per (entity, model_feed_category, share).
+    fanned_rows = []
+    for _, row in joined.iterrows():
         if row["exogenous"]:
-            return None
+            fanned_rows.append(
+                {**row.to_dict(), "model_feed_category": None, "share": 1.0}
+            )
+            continue
         cat_map = rum_cat if row["animal_type"] == "ruminant" else mono_cat
-        cat = cat_map.get(row["model_entity"])
-        if cat is None:
-            return None
-        return f"{row['animal_type']}_{cat}"
+        cats = cat_map.get(row["model_entity"], [])
+        if not cats:
+            # Entity present in gleam mapping but absent from category mapping → exogenous
+            fanned_rows.append(
+                {**row.to_dict(), "model_feed_category": None, "share": 1.0}
+            )
+            continue
+        for cat, share in cats:
+            new_row = row.to_dict()
+            new_row["model_feed_category"] = f"{row['animal_type']}_{cat}"
+            new_row["share"] = share
+            fanned_rows.append(new_row)
 
-    joined["model_feed_category"] = joined.apply(_get_category, axis=1)
-    # Entity with model_entity but absent from feed mapping → exogenous
+    joined = pd.DataFrame(fanned_rows)
     joined.loc[joined["model_feed_category"].isna(), "exogenous"] = True
 
-    # Deduplicate expanded rows
+    # Deduplicate expanded rows on the fully-qualified key (preserves split rows)
     joined = joined.drop_duplicates(
         subset=["gleam3_category", "animal_type", "model_entity", "model_feed_category"]
     )
@@ -176,6 +200,7 @@ def _compute_volume_weighted_fractions(
         for _, row in entities.iterrows():
             cat = row["model_feed_category"]
             entity = row["model_entity"]
+            share = float(row["share"]) if "share" in row else 1.0
             if row["entity_type"] == "crop" and entity in crops_in_data:
                 vol = prod_lookup.get(entity, 0.0)
             else:
@@ -183,7 +208,9 @@ def _compute_volume_weighted_fractions(
                 # of tracked crops to keep scales comparable; falls back
                 # to 1.0 when no tracked crops exist in the group.
                 vol = mean_tracked
-            cat_volumes[cat] = cat_volumes.get(cat, 0.0) + vol
+            # Multi-category items contribute volume * share to each
+            # category (mass balance: shares sum to 1 per entity).
+            cat_volumes[cat] = cat_volumes.get(cat, 0.0) + vol * share
 
         for cat, vol in cat_volumes.items():
             records.append(

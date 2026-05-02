@@ -217,6 +217,13 @@ def add_feed_supply_links(
 
     Uses pre-computed feed categories and mappings to route items to appropriate
     feed pools (4 ruminant + 4 monogastric quality classes).
+
+    Each row of the feed mapping creates one feed_conversion link with
+    ``efficiency = share`` (default 1.0). Items with multi-category
+    splits (e.g. DDGS configured to act as 70% grain + 30% protein for
+    monogastric) appear as multiple rows whose shares sum to 1.0; the
+    resulting set of links carries the input mass through to the right
+    feed buses with mass conserved in aggregate.
     """
     # Process ruminant feeds
     ruminant_feeds = _filter_feed_mapping(
@@ -291,11 +298,18 @@ def add_feed_supply_links(
     if "feed_conversion" not in n.carriers.static.index:
         n.carriers.add("feed_conversion", unit="Mt")
 
+    # Link efficiency = mass share (default 1.0). Multi-category items have
+    # share < 1 on each row; mass balance holds because shares per
+    # (item, source_type, animal_type) sum to 1.0 (validated upstream in
+    # categorize_feeds.apply_category_overrides).
+    efficiency = expanded["share"].astype(float) if "share" in expanded.columns else 1.0
+
     n.links.add(
         expanded.index,
         bus0=expanded["bus0"],
         bus1=expanded["bus1"],
         carrier="feed_conversion",
+        efficiency=efficiency,
         marginal_cost=_LOW_PROCESSING_COST,
         p_nom_extendable=True,
         country=expanded["country"],

@@ -83,6 +83,7 @@ rule categorize_feeds:
         monogastric_feed_properties="<processing>/{name}/monogastric_feed_properties.csv",
         enteric_methane_yields="data/curated/ipcc_enteric_methane_yields.csv",
         ash_content="data/curated/feed_ash_content.csv",
+        category_overrides="data/curated/feed_category_overrides.csv",
     output:
         ruminant_categories="<processing>/{name}/ruminant_feed_categories.csv",
         monogastric_categories="<processing>/{name}/monogastric_feed_categories.csv",
