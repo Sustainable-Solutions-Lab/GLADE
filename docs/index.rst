@@ -67,29 +67,61 @@ Dietary constraints ensure that each country's population meets nutritional requ
 
 .. toctree::
    :hidden:
+   :caption: Getting started
    :maxdepth: 2
 
    introduction
    tutorial
+   about
+
+.. toctree::
+   :hidden:
+   :caption: Model framework
+   :maxdepth: 2
+
    model_framework
+   data_sources
+
+.. toctree::
+   :hidden:
+   :caption: Supply chain & impacts
+   :maxdepth: 2
+
    land_use
    crop_production
    livestock
    food_processing
    nutrition
    current_diets
+   consumer_values
    health
    environment
    costs
+
+.. toctree::
+   :hidden:
+   :caption: Running the model
+   :maxdepth: 2
+
    configuration
-   data_sources
    workflow
    cluster_execution
+
+.. toctree::
+   :hidden:
+   :caption: Outputs & evaluation
+   :maxdepth: 2
+
    results
    analysis
    validation
    calibration
    sensitivity_analysis
+
+.. toctree::
+   :hidden:
+   :caption: Reference & contributing
+   :maxdepth: 2
+
    api/index
    development
-   about
