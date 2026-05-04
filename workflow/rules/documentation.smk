@@ -953,5 +953,5 @@ rule build_docs:
         "<benchmarks>/shared/build_docs.tsv"
     shell:
         """
-        cd docs && make html > ../{log} 2>&1
+        cd docs && SPHINXOPTS="-W --keep-going" make html > ../{log} 2>&1
         """

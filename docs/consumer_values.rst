@@ -138,7 +138,7 @@ configuration looks the way it does (see ``docs/config/doc_figures.yaml`` and
    saturates at −50 USD/kg in every country.
 
    The mitigation is to give surplus a route to the energy sector via
-   ``biomass.disposal_foods`` (see :ref:`biomass-disposal-foods`). Foods
+   ``biomass.disposal_foods`` (see :ref:`disposal foods <biomass-disposal-foods>`). Foods
    currently on this list — cottonseed oil, the sesame and groundnut oils
    and seeds, coconut and coconut oil, foxtail millet — were each identified
    from a baseline solve where their dual sat at the slack price or had a
