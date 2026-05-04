@@ -10,15 +10,15 @@ SPDX-License-Identifier: CC-BY-4.0
 
 [![Docs](https://github.com/Sustainable-Solutions-Lab/food-opt/actions/workflows/docs.yml/badge.svg)](https://sustainable-solutions-lab.github.io/food-opt/)
 
-food-opt is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program build by reproducible workflow.
+food-opt is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program built around a reproducible workflow.
 
-🚧 This project is currently **under construction**! 🚧
+![Animated map showing how optimal crop production patterns shift as carbon prices rise from $0 to $500 per tonne CO2-equivalent.](https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/production_pattern.gif)
 
-Documentation is kept up to date at a best effort basis. Certain model elements are still missing. Validation of model results has not yet been conducted. Expect frequent breaking changes.
+*Dominant crop group, land-use intensity, and livestock protein output under increasing GHG pricing — one example of a scenario sweep made possible by the model.*
 
 ## Documentation
 
-Documentation (model design, configuration reference, data provenance, API) lives under `docs/`; the documentation is built automatically by a Github Action and, for now, can be accessed by clicking the documentation badge at the top of this page.
+Full documentation (model design, configuration reference, data provenance, API) is published at <https://sustainable-solutions-lab.github.io/food-opt/>. There, you can also find more information on installation as well as download tutorial Jupyter notebooks to learn more about how to run food-opt and analyze results.
 
 ## Quickstart
 
