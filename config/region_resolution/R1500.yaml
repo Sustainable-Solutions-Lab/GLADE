@@ -54,5 +54,5 @@ solving:
   solver: "gurobi"
   io_api: "direct"
   threads: 4
-  mem_mb: 10000
+  mem_mb: 16000
   runtime: 60

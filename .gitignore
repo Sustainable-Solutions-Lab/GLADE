@@ -29,4 +29,7 @@ docs/_static/figures/*
 
 # Secrets (never commit credentials)
 config/secrets.yaml
+
+# Local-only config overrides (e.g. cluster connection details)
+config/*.local.yaml
 /tools/snakemake-logger-plugin-compact/build/
