@@ -81,6 +81,3 @@ solving:
   threads: 2
   mem_mb: 9000
   runtime: 20
-
-remote_solve:
-  enabled: false
