@@ -12,9 +12,9 @@ SPDX-License-Identifier: CC-BY-4.0
 
 food-opt is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program built around a reproducible workflow.
 
-![Animated map showing how optimal crop production patterns shift as carbon prices rise from $0 to $500 per tonne CO2-equivalent.](https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/production_pattern.gif)
+![Map showing optimal crop production patterns at a $50/t CO2-equivalent carbon price.](https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/production_pattern_ghg_50.png)
 
-*Dominant crop group, land-use intensity, and livestock protein output under increasing GHG pricing — one example of a scenario sweep made possible by the model.*
+*Dominant crop group, land-use intensity, and livestock protein output at a $50/t CO₂-equivalent GHG price — one snapshot from a scenario sweep made possible by the model.*
 
 ## Documentation
 
