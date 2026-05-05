@@ -41,13 +41,6 @@ def main():
     stimulant_brewed_to_dry = {
         "v18": snakemake.params["stimulant_brewed_to_dry"]["tea"],
     }
-    ssb_sugar_g_per_100g = float(snakemake.params["ssb_sugar_g_per_100g"])
-    if ssb_sugar_g_per_100g <= 0:
-        logger.error(
-            "health.ssb_sugar_g_per_100g must be positive for sugar conversions"
-        )
-        sys.exit(1)
-    ssb_sugar_per_gram = ssb_sugar_g_per_100g / 100.0
 
     # Map GDD variable codes (vXX) to model food groups
     # Based on GDD codebook and canonical food_groups.csv
@@ -60,13 +53,24 @@ def main():
         "v06": "nuts_seeds",  # Nuts and seeds
         "v07": "grain",  # Refined grains (white flour, white rice)
         "v08": "whole_grains",  # Whole grains
-        "v09": "prc_meat",  # Total processed meats
+        # v09 (Total processed meats) is folded into red_meat. Rationale:
+        # the model has no separate processed-meat food group, but FAOSTAT
+        # animal production accounts for cattle/pig at slaughter (i.e.
+        # before the cured/processed split). Routing v09 into red_meat
+        # closes the consumption-vs-production leak that would otherwise
+        # show up in emissions and feed accounting. The health module's
+        # red_meat risk function (calibrated against unprocessed red meat
+        # per GBD) becomes a slight conservative approximation as a
+        # consequence; this is documented in docs/health.rst.
+        "v09": "red_meat",  # Total processed meats (folded into red_meat)
         "v10": "red_meat",  # Unprocessed red meats (cattle, pig)
         # v11 (Total seafoods) not mapped — fish/seafood not modelled
         "v12": "eggs",  # Eggs
         # "v57": "dairy",  # Total Milk - Excluded: Sourced from FAOSTAT
-        "v15": "sugar",  # Sugar-sweetened beverages → refined sugar equivalent
-        "v35": "sugar",  # Added sugars (g/day already reported)
+        # v15 (sugar-sweetened beverages, g/day) is excluded: GDD's v35 "Added
+        # sugars" already covers the sugar contribution from SSBs, so summing
+        # the two double-counts beverage-derived sugar.
+        "v35": "sugar",  # Added sugars (% of energy intake)
         "v16": None,  # Fruit juices (excluded - not part of GBD fruit risk factor)
         "v17": None,  # Coffee — excluded: GDD v17 is unreliable for many countries
         # (e.g. 42x overestimate for India vs FAOSTAT). coffee-green is sourced
@@ -87,13 +91,28 @@ def main():
     DIRECT_FOOD_ITEMS = {"tea-dried"}
     requested_food_groups = set(food_groups)
     food_group_vars = {}
+    silently_dropped: list[str] = []
     for varcode, item in gdd_to_model_items.items():
-        if item is not None and (
-            item in requested_food_groups or item in DIRECT_FOOD_ITEMS
-        ):
-            if item not in food_group_vars:
-                food_group_vars[item] = []
-            food_group_vars[item].append(varcode)
+        if item is None:
+            # Explicitly excluded via the mapping; the comment above the
+            # entry must justify why.
+            continue
+        if item in requested_food_groups or item in DIRECT_FOOD_ITEMS:
+            food_group_vars.setdefault(item, []).append(varcode)
+        else:
+            silently_dropped.append(f"{varcode} -> {item}")
+
+    if silently_dropped:
+        # We refuse to ingest the GDD CSV and silently skip variables whose
+        # target food group has not been added to `food_groups.included`.
+        # Either add the target group to the config, or set the entry to
+        # `None` in `gdd_to_model_items` with a comment explaining why.
+        raise ValueError(
+            "GDD variables map to food groups that are not in "
+            "`food_groups.included` and would be silently dropped: "
+            f"{silently_dropped}. Either add the target group to the config "
+            "or set the entry to None in gdd_to_model_items."
+        )
 
     logger.info("Processing GDD data for year %d", reference_year)
     logger.info("Food groups: %s", sorted(food_group_vars.keys()))
@@ -116,8 +135,11 @@ def main():
         for varcode in varcodes:
             csv_file = country_estimates_dir / f"{varcode}_cnty.csv"
             if not csv_file.exists():
-                logger.warning("File not found: %s", csv_file)
-                continue
+                raise FileNotFoundError(
+                    f"GDD variable {varcode} mapped to '{model_item}' is missing: "
+                    f"{csv_file} not found. Re-download the GDD country-level "
+                    f"estimates so all required variables are present."
+                )
 
             logger.info("Reading %s (%s)...", csv_file.name, model_item)
             df = pd.read_csv(csv_file)
@@ -142,24 +164,14 @@ def main():
                     logger.error("Still no data for %s", csv_file.name)
                     continue
 
-            if model_item == "sugar":
-                if varcode == "v15":
-                    beverage_grams = pd.to_numeric(
-                        df_year["median"], errors="coerce"
-                    ).fillna(0.0)
-                    df_year["median"] = beverage_grams * ssb_sugar_per_gram
-                elif varcode == "v35":
-                    # Added sugars in %kcal.
-                    # Assume 2000 kcal/day diet for conversion (v35 / 100 * 2000 / 4)
-                    # 1 g sugar = 4 kcal.
-                    median_val = pd.to_numeric(
-                        df_year["median"], errors="coerce"
-                    ).fillna(0.0)
-                    df_year["median"] = median_val * 2000.0 / 100.0 / 4.0
-                else:
-                    df_year["median"] = pd.to_numeric(
-                        df_year["median"], errors="coerce"
-                    ).fillna(0.0)
+            if model_item == "sugar" and varcode == "v35":
+                # Added sugars in %kcal.
+                # Assume 2000 kcal/day diet for conversion (v35 / 100 * 2000 / 4)
+                # 1 g sugar = 4 kcal.
+                median_val = pd.to_numeric(df_year["median"], errors="coerce").fillna(
+                    0.0
+                )
+                df_year["median"] = median_val * 2000.0 / 100.0 / 4.0
             elif varcode in stimulant_brewed_to_dry:
                 brewed_to_dry = stimulant_brewed_to_dry[varcode]
                 brewed_grams = pd.to_numeric(df_year["median"], errors="coerce").fillna(

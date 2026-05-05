@@ -357,6 +357,32 @@ rule extract_faostat_gt:
         "../scripts/convert_faostat_to_parquet.py"
 
 
+rule download_nhanes_fped:
+    """Download the FPED Mean Amounts of Food Patterns Equivalents
+    demographic table (Males/Females × age) for one NHANES cycle.
+
+    The PDF is small (~160 KB) and stable; we cache it under
+    `data/downloads/usda_fped/`. The `cycle` config value selects the
+    release (e.g. "1720" for 2017-March 2020 Prepandemic).
+    """
+    output:
+        "data/downloads/usda_fped/Table_1_FPED_MaleFemale_{cycle}.pdf",
+    params:
+        url=lambda wc: config["diet"]["nhanes"]["url"].format(cycle=wc.cycle),
+    resources:
+        runtime="5m",
+        mem_mb=200,
+    log:
+        "<logs>/shared/download_nhanes_fped_{cycle}.log",
+    benchmark:
+        "<benchmarks>/shared/download_nhanes_fped_{cycle}.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
 rule download_unsd_sdg:
     output:
         temp("data/downloads/unsd/SDG.zip"),

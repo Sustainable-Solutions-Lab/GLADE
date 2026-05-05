@@ -17,7 +17,6 @@ rule prepare_gdd_dietary_intake:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         reference_year=config["baseline_year"],
-        ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         stimulant_brewed_to_dry=config["diet"]["stimulant_brewed_to_dry"],
     output:
         diet="<processing>/{name}/gdd_dietary_intake.csv",
@@ -95,10 +94,51 @@ rule prepare_faostat_gdd_supplements:
         "../scripts/prepare_faostat_gdd_supplements.py"
 
 
+rule prepare_nhanes_dietary_intake:
+    """Parse the FPED demographic-table PDF and emit per-food-group intake
+    for the United States.
+
+    Output schema matches `gdd_dietary_intake.csv` and
+    `faostat_gdd_supplements.csv` so the merge step can treat NHANES as a
+    drop-in source. The single "Males and females / 2 and over"
+    population-mean is replicated across the model's age groups (matching
+    how FAOSTAT supply is propagated). The script also augments FPED's
+    skim-equivalent Total Dairy with butter (FAOSTAT FBS item 2740 in
+    milk-equivalent grams) so total dairy mass reflects all dairy products
+    consumed, not only the low-fat fraction. Only USA is produced; other
+    countries fall back to GDD/FAOSTAT.
+    """
+    input:
+        fped_pdf=lambda wc: f"data/downloads/usda_fped/Table_1_FPED_MaleFemale_{config['diet']['nhanes']['cycle']}.pdf",
+        mapping="data/curated/nhanes_fped_mapping.csv",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
+        m49="data/curated/M49-codes.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+    params:
+        reference_year=config["diet"]["nhanes"]["reference_year"],
+        food_groups_included=config["food_groups"]["included"],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
+        country="USA",
+    output:
+        diet="<processing>/{name}/nhanes_dietary_intake.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=300,
+    log:
+        "<logs>/{name}/prepare_nhanes_dietary_intake.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_nhanes_dietary_intake.tsv"
+    script:
+        "../scripts/prepare_nhanes_dietary_intake.py"
+
+
 rule merge_dietary_sources:
     input:
         gdd="<processing>/{name}/gdd_dietary_intake.csv",
         faostat="<processing>/{name}/faostat_gdd_supplements.csv",
+        nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     output:
         diet="<processing>/{name}/dietary_intake.csv",
@@ -123,6 +163,7 @@ rule prepare_food_loss_waste:
         population="<processing>/{name}/population.csv",
         fbs_csv="data/downloads/faostat/FBS.parquet",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
+        overrides="data/curated/food_loss_waste_overrides.csv",
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],

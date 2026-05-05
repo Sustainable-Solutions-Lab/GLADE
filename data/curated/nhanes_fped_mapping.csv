@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Mapping from NHANES / FPED demographic table columns to model food groups.
+#
+# `prepare_nhanes_dietary_intake.py` parses the FPED "Mean Amounts of Food
+# Patterns Equivalents Consumed per Individual, by Male/Female and Age" PDF
+# (Table_1_FPED_MaleFemale_<cycle>.pdf) and extracts the "Males and females /
+# 2 and over" population-mean row from each sub-table. Each row in this CSV
+# describes one signed contribution to a model food group from a column in
+# the FPED tables.
+#
+# Schema:
+#   food_group         Internal food group name (must match config.food_groups).
+#   table              FPED sub-table identifier. Multi-page tables are split:
+#                      "1e_1" (protein page 1), "1e_2" (protein page 2).
+#   column_index       0-based index of the column within the sub-table
+#                      (counting only data columns, not the row label or
+#                      sample-size prefix).
+#   column_label       Human-readable column name (documentation only; the
+#                      script extracts by index).
+#   fped_unit          One of: cup_eq, oz_eq, tsp_eq, g.
+#   grams_per_unit     Conversion factor from `fped_unit` to grams of the
+#                      modelled commodity (fresh weight for fresh foods,
+#                      milk-equivalent for dairy, flour-equivalent for grains,
+#                      whole egg for eggs, sugar mass for added sugars).
+#   sign               "+" to add, "-" to subtract (used to net e.g. starchy
+#                      out of total vegetables).
+#   note               Free-form rationale; included in the parser log.
+#
+# All conversion factors below are taken from the published FPED 2017-2018
+# Methodology and User Guide (Bowman et al., USDA ARS / FSRG, October 2020,
+# https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/FPED_1718.pdf;
+# referenced as "FPED MUG" in the per-row notes), supplemented for added
+# sugars by the USDA SR-Legacy density of granulated sugar.
+#
+# Where FPED gives different cup-equivalent weights for different foods
+# within a single column (e.g. raw berries 145 g, citrus 185 g, melons
+# 170 g for "All other fruits"), the value here is a US-population-weighted
+# rough average rather than a single FPED-published number; the per-row
+# note gives the FPED range and how the average was chosen.
+food_group,table,column_index,column_label,fped_unit,grams_per_unit,sign,note
+fruits,1a,1,Citrus/Melons/Berries,cup_eq,150,+,"Average of FPED MUG Table 8 cup-eq weights for raw berries (145 g), melons except watermelon (170 g), watermelon (150 g), and citrus oranges (185 g); single-figure approximation across the column's three sub-types"
+fruits,1a,2,Other Fruit,cup_eq,150,+,"FPED MUG Table 8 ""All other fruits, raw"" cup-eq weights are reported as varied (rounded to nearest 0 or 5 g); 150 g chosen as a typical mid-range value matching apple, banana, and grape cup-equivalents"
+fruits,1a,3,Fruit Juice,cup_eq,250,+,"FPED MUG Table 8: 1 cup-equivalent of 100% fruit juice = 250 g. USDA MyPlate counts 1 cup of 100% juice toward the Fruit Group. Projected onto the modelled ""fruits"" food group as fresh-fruit-equivalent grams."
+vegetables,1b,0,Total Vegetables,cup_eq,110,+,"FPED MUG Table 9 lists cup-eq weights ranging from 70 g (collards raw) to 180 g (eggplant cooked) depending on the vegetable and preparation. 110 g is a single-figure approximation across the typical US adult mixed-vegetable basket."
+vegetables,1b,1,Total Starchy,cup_eq,110,-,"Subtract starchy at the same factor used for Total Vegetables so the modelled non-starchy vegetables group is the residual. Starchy mass is added separately below at its FPED-documented density."
+starchy_vegetable,1b,1,Total Starchy,cup_eq,156,+,"FPED MUG p. 35: boiled/canned drained potatoes = 155 g, baked/roasted potatoes = 120 g; FPED MUG Table 9: corn cooked = 165 g. 156 g chosen as a single-figure approximation across the US starchy-vegetable basket."
+whole_grains,1c,1,Whole Grains,oz_eq,22,+,"ASSUMPTION (not a published FPED rule): midpoint of the two FPED MUG Table 10 conversion rules -- 16 g/oz-eq for grain products made of flour (breads, biscuits, pancakes) and 28.35 g/oz-eq for intact grains (rice, pasta, oats, RTE cereals) -- giving (16 + 28.35) / 2 ≈ 22 g/oz-eq. Used as a single factor because FPED's demographic table aggregates flour-based and intact products into one Whole Grains oz-eq column without an external mix breakdown. Picking either extreme materially mis-counts grain mass at the calorie level; 22 g/oz-eq treats the two rules with equal weight."
+grain,1c,2,Refined Grains,oz_eq,22,+,"ASSUMPTION (not a published FPED rule): same 50/50 midpoint of FPED MUG Table 10's 16 g (flour-based) and 28.35 g (intact) rules ≈ 22 g/oz-eq. Refined grain products in the US diet include both bread/baked-goods (16 g) and white rice/pasta (28.35 g); without a published mix split we apply the same midpoint as for whole grains."
+dairy,1d,0,Total Dairy,cup_eq,245,+,"FPED MUG Table 11: 1 cup-equivalent of fluid milk = 245 g; same value used for yogurt, buttermilk, dry milk reconstituted, and calcium-fortified soy milk. Cheese contributes via its own cup-eq weight but the column reports the milk-equivalent total. FPED Total Dairy is the low-fat / skim-equivalent fraction (butterfat is stripped into the Solid Fats axis); butter is added separately by the prepare script using FAOSTAT FBS."
+red_meat,1e_1,2,Meat,oz_eq,28.35,+,"FPED MUG Table 13: 1 ounce-equivalent of lean meat = 28.35 g cooked, lean (with up to 2.63 g of solid fat naturally present per oz-eq). Solid fat above this threshold is reported separately in FPED's Solid Fats column."
+red_meat,1e_1,4,Cured Meat,oz_eq,28.35,+,"FPED MUG Table 13 lean-meat definition (28.35 g per oz-eq). Folded into red_meat to match the GDD v09 fold and to keep consumption consistent with FAOSTAT slaughter-volume production accounting; see docs/current_diets.rst."
+poultry,1e_1,3,Poultry,oz_eq,28.35,+,FPED MUG Table 13: 1 ounce-equivalent of lean poultry = 28.35 g cooked.
+eggs,1e_2,0,Eggs,oz_eq,50,+,"FPED MUG Table 13: 1 ounce-equivalent of eggs = 50 g raw or cooked (one large egg)."
+nuts_seeds,1e_2,1,Nuts and Seeds,oz_eq,14.175,+,"FPED MUG Table 13: 1 ounce-equivalent of nuts and seeds = ½ oz = 28.35 / 2 = 14.175 g."
+nuts_seeds,1e_2,2,Soybean Products,oz_eq,14.175,+,"FPED MUG Table 13: 1 ounce-equivalent of soy flour, isolate, or concentrate = ½ oz = 14.175 g. Soybean products excluding calcium-fortified soy milk (which is counted under dairy)."
+legumes,1f,0,Legumes as Vegetable,cup_eq,175,+,"FPED MUG Table 13 / Appendix 10: 1 cup-equivalent of cooked legumes = 175 g."
+oil,1g,0,Oils,g,1.0,+,"FPED MUG reports the Oils component as gram-equivalents directly; no conversion needed."
+sugar,1g,2,Added Sugars,tsp_eq,4.2,+,"USDA SR-Legacy: 1 teaspoon of granulated sugar (sucrose) = 4.2 g. FPED MUG Table 1 uses ""tsp eq"" as the unit for the Added Sugars component; the 4.2 g/tsp figure is the standard US density for granulated sugar."

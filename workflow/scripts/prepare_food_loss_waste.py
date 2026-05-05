@@ -653,12 +653,125 @@ def process_food_waste_data(
     return waste_df.drop(columns=["subregion_code", "region_code"], errors="ignore")
 
 
+def apply_curated_overrides(
+    result: pd.DataFrame,
+    overrides_file: str,
+    food_groups: list[str],
+) -> pd.DataFrame:
+    """Apply curated loss/waste overrides on top of the SDG/FBS pipeline output.
+
+    Country-specific rows take precedence over rows with country == "*"
+    (global default). Empty cells in either fraction column are ignored, so
+    a row may override only loss, only waste, or both.
+
+    Every override that lands on a country-group pair is logged with the
+    citation from the ``source`` column.
+    """
+    overrides = pd.read_csv(overrides_file, comment="#")
+    if overrides.empty:
+        logger.info("No curated overrides defined in %s", overrides_file)
+        return result
+
+    required_cols = {
+        "country",
+        "food_group",
+        "loss_fraction",
+        "waste_fraction",
+        "source",
+    }
+    missing_cols = required_cols - set(overrides.columns)
+    if missing_cols:
+        raise ValueError(
+            f"Override file {overrides_file} is missing columns: {sorted(missing_cols)}"
+        )
+
+    overrides["country"] = overrides["country"].astype(str).str.strip()
+    overrides["food_group"] = overrides["food_group"].astype(str).str.strip()
+
+    unknown_groups = set(overrides["food_group"]) - set(food_groups)
+    if unknown_groups:
+        raise ValueError(
+            f"Override file references unknown food groups (not in config): "
+            f"{sorted(unknown_groups)}"
+        )
+
+    # A row that has neither fraction set is a no-op; flag it so it isn't a
+    # silent typo.
+    no_op = overrides["loss_fraction"].isna() & overrides["waste_fraction"].isna()
+    if no_op.any():
+        raise ValueError(
+            "Override rows with both loss_fraction and waste_fraction empty are "
+            "not allowed (they have no effect): "
+            f"{overrides.loc[no_op, ['country', 'food_group']].to_dict('records')}"
+        )
+
+    if (
+        overrides["source"].isna() | (overrides["source"].astype(str).str.strip() == "")
+    ).any():
+        raise ValueError("Every override row must include a non-empty source citation.")
+
+    # Sort so that country-specific rows come AFTER global rows. We then apply
+    # in order, letting country-specific rows overwrite global ones.
+    overrides = overrides.sort_values(
+        by="country",
+        key=lambda s: s.eq("*"),
+        ascending=False,
+    ).reset_index(drop=True)
+
+    for _, row in overrides.iterrows():
+        food_group = row["food_group"]
+        target_countries = (
+            list(result["country"].unique())
+            if row["country"] == "*"
+            else [row["country"]]
+        )
+        mask = result["food_group"].eq(food_group) & result["country"].isin(
+            target_countries
+        )
+        if not mask.any():
+            logger.warning(
+                "Override has no effect: country=%s, food_group=%s (no matching rows)",
+                row["country"],
+                food_group,
+            )
+            continue
+
+        scope_label = "globally" if row["country"] == "*" else f"for {row['country']}"
+        for col, label in (("loss_fraction", "loss"), ("waste_fraction", "waste")):
+            new_value = row[col]
+            if pd.isna(new_value):
+                continue
+            new_value = float(new_value)
+            if not 0.0 <= new_value <= 1.0:
+                raise ValueError(
+                    f"Override {col} for {row['country']}/{food_group} is "
+                    f"{new_value}; must be in [0, 1]."
+                )
+            old_mean = result.loc[mask, col].mean()
+            n_changed = int(mask.sum())
+            result.loc[mask, col] = new_value
+            logger.info(
+                "Override %s: %s %s -> %.1f%% (was %.1f%% on average across %d rows). "
+                "Source: %s",
+                food_group,
+                label,
+                scope_label,
+                new_value * 100,
+                old_mean * 100,
+                n_changed,
+                row["source"],
+            )
+
+    return result
+
+
 def main():
     m49_file = snakemake.input["m49"]
     animal_production_file = snakemake.input["animal_production"]
     faostat_gdd_supplements_file = snakemake.input["faostat_gdd_supplements"]
     population_file = snakemake.input["population"]
     fbs_csv = snakemake.input["fbs_csv"]
+    overrides_file = snakemake.input["overrides"]
     output_file = snakemake.output["food_loss_waste"]
     countries = snakemake.params["countries"]
     food_groups = snakemake.params["food_groups"]
@@ -795,6 +908,10 @@ def main():
             old_avg * 100,
             implicit_loss * 100,
         )
+
+    # Apply curated overrides last so they win over both SDG defaults and the
+    # FBS-implicit loss step above.
+    result = apply_curated_overrides(result, overrides_file, food_groups)
 
     # Sort for readability
     result = result.sort_values(["country", "food_group"]).reset_index(drop=True)

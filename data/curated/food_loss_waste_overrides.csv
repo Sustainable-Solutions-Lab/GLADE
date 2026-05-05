@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Curated overrides for food loss and waste fractions.
+#
+# These take precedence over the SDG-12.3.1- and FBS-derived defaults computed
+# by `prepare_food_loss_waste.py`. Use them when there is a better-sourced
+# country-specific or commodity-specific estimate available, or when the
+# default pipeline is known to under- or over-estimate the gap between FAO
+# food supply and actual ingestion.
+#
+# Schema:
+#   country         ISO3 code, or "*" to apply globally (to every country
+#                   that does not have its own override row for the same
+#                   food_group). Country-specific rows take precedence over
+#                   "*" rows.
+#   food_group      Internal food group name (must match config.food_groups).
+#   loss_fraction   Fraction (0-1) of supply lost between production and
+#                   retail. Empty cell = keep the default from the pipeline.
+#   waste_fraction  Fraction (0-1) of supply wasted at the consumer end
+#                   (and downstream, if no separate consumer-loss accounting
+#                   exists in the upstream supply figure). Empty cell = keep
+#                   the default.
+#   source          Free-form citation; required for every non-empty row.
+#
+# When both loss_fraction and waste_fraction are empty, the row is ignored.
+country,food_group,loss_fraction,waste_fraction,source
+*,dairy,,0.30,"USDA ERS Loss-Adjusted Food Availability (LAFA) reports combined retail- plus consumer-level loss for fluid milk and dairy products at ~32% in the United States; FAO Save Food (Gustavsson et al. 2011) reports comparable losses for industrialised regions and 14-19% post-harvest loss in low-income regions. Applied as a global default because the FAO FBS food supply already nets out pre-retail losses, but consistently over-estimates ingestion of dairy commodities by roughly a factor of two against intake surveys (e.g. NHANES What We Eat in America for the US). Replaces the country-level SDG-12.3.1(b) waste fraction, which is a single all-foods average that under-corrects dairy."

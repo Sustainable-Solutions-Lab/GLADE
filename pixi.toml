@@ -49,6 +49,7 @@ pycountry = ">=24.6.1,<25"           # ISO country codes and mappings
 # System tools
 curl = ">=8.17.0,<9"                 # HTTP downloads in workflow rules
 p7zip = ">=16.02,<17"                # 7z archive extraction for Huang water data
+poppler = ">=25,<26"                 # provides pdftotext for parsing FPED/NHANES tables
 xgboost = ">=3.2.0,<4"
 
 [pypi-dependencies]

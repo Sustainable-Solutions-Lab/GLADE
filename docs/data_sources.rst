@@ -197,6 +197,23 @@ UNSD SDG Indicator 12.3.1 (Food Loss & Waste)
 
 **Usage**: Supplies per-country loss and waste fractions for food groups, injected into the crop-to-food conversion efficiencies during ``build_model``.
 
+**Curated overrides**: Where the SDG/FBS-derived defaults are known to under-
+or over-correct against survey-based intake data, ``prepare_food_loss_waste.py``
+applies values from ``data/curated/food_loss_waste_overrides.csv``. Each
+override row carries a ``source`` field that must cite a published estimate.
+Country-specific rows take precedence over global rows
+(``country == "*"``). Currently in use:
+
+* **dairy** (global, ``waste_fraction = 0.30``): the SDG country-level waste
+  fraction is a single all-foods average that systematically under-corrects
+  dairy. USDA ERS Loss-Adjusted Food Availability puts combined retail and
+  consumer loss at ~32% for fluid milk and dairy products in the United
+  States, and FAO Save Food (Gustavsson et al. 2011) reports comparable
+  industrialised-region losses with 14–19% post-harvest loss in low-income
+  regions. The override brings modelled dairy intake into line with intake
+  surveys (e.g. NHANES What We Eat in America), where the unmodified
+  pipeline over-estimated US dairy by roughly a factor of two.
+
 IFA FUBC -- Global Fertilizer Use by Crop and Country
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -711,6 +728,63 @@ Global Dietary Database (GDD)
 2. When you are signed in, navigate back to the download page, accept the terms and proceed to download the GDD dataset, which will be ~1.6GB zip file.
 3. Extract the zip file; you will get a directory named ``GDD_FinalEstimates_01102022``
 4. Move this directory to ``data/manually_downloaded`` and rename the directory to ``GDD-dietary-intake``.
+
+NHANES / FPED -- What We Eat in America
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: USDA Agricultural Research Service, Food Surveys Research Group (in partnership with the U.S. Department of Health and Human Services / CDC NHANES)
+
+**Description**: "What We Eat in America" is the dietary intake interview component of the National Health and Nutrition Examination Survey (NHANES). The Food Patterns Equivalents Database (FPED) translates each reported food into USDA Food Pattern equivalents (cup-eq, ounce-eq, teaspoon-eq, or grams) for 37 food-pattern components. We consume the released demographic-table summary (mean amounts of equivalents consumed per individual, by male/female and age) for the most recent prepandemic NHANES cycle and use it as an intake-based override for the United States.
+
+**Version**: FPED 1720 -- "for use with WWEIA, NHANES 2017-March 2020 Prepandemic". Single-PDF demographic table (~160 KB), USDA ARS / FSRG, 2023 release.
+
+**Coverage**:
+  * Spatial: United States only.
+  * Content: Mean daily intake of fruit, vegetables, grains (whole and refined), dairy, meat / poultry / seafood / eggs / nuts and seeds, legumes, oils, solid fats, added sugars, and alcoholic drinks for the population aged 2+ (and finer male/female × age strata which we do not currently consume).
+
+**Access**: https://www.ars.usda.gov/northeast-area/beltsville-md-bhnrc/beltsville-human-nutrition-research-center/food-surveys-research-group/docs/fped-data-tables/
+
+**License**: U.S. Government Work / Creative Commons CC0 (public domain). No restrictions on use; attribution to USDA is requested but not required. (`USDA WWEIA license <https://agdatacommons.nal.usda.gov/articles/dataset/What_We_Eat_In_America_WWEIA_Database/24660126>`_)
+
+**Citation**: U.S. Department of Agriculture, Agricultural Research Service. 2023. *Food Patterns Equivalents Intakes from Foods: Mean Amounts Consumed per Individual, by Male/Female and Age, What We Eat in America, NHANES 2017-March 2020 Prepandemic*. www.ars.usda.gov/nea/bhnrc/fsrg
+
+**Retrieval**: Automatic via the ``download_nhanes_fped`` rule (URL templated by FPED cycle, default ``1720``). The PDF is parsed with ``pdftotext`` (poppler) by ``prepare_nhanes_dietary_intake.py``; the column-to-food-group mapping and unit conversions live in the curated CSV ``data/curated/nhanes_fped_mapping.csv``, with conversion factors sourced from USDA MyPlate cup/ounce-equivalent definitions and the FPED Methodology and User Guide.
+
+**Usage**: For the United States, NHANES values take precedence over both GDD intake estimates and FAOSTAT food-supply estimates in ``merge_dietary_sources.py`` for every food group it covers (fruits, vegetables, starchy vegetables, refined and whole grains, dairy, eggs, oils, red meat, poultry, nuts and seeds, legumes, sugar). Coverage of other intake-survey-based national datasets (e.g. CCHS for Canada, ENSANUT for Mexico) can be added in the same precedence layer.
+
+The FPED columns are *fat-stripped decompositions* rather than food masses:
+FPED Total Dairy is the low-fat / skim-equivalent fraction (butterfat is
+extracted into a separate Solid Fats axis), and Meat / Poultry are reported
+as lean fractions. Three projection adjustments are therefore applied to
+arrive at modelled-food masses:
+
+* **Butter top-up**: ``prepare_nhanes_dietary_intake.py`` reads FAOSTAT FBS
+  Butter and Ghee (item 2740) for the configured country, applies the FAO
+  dairy-commodity-tree milk-equivalent factor (21.3) and the country-level
+  dairy waste fraction, and adds the result to the FPED Total Dairy value.
+* **Cured meat fold**: FPED Cured Meat is added into ``red_meat`` to match
+  the GDD v09 fold and keep consumption consistent with FAOSTAT
+  slaughter-volume production accounting.
+* **Fruit juice projection**: FPED Fruit Juice cup-equivalents are
+  projected onto fresh-fruit-equivalent grams under ``fruits`` (USDA
+  MyPlate counts 1 cup juice as 1 cup fruit).
+
+All cup-, oz-, and tsp-equivalent conversion factors used in
+``data/curated/nhanes_fped_mapping.csv`` are sourced row-by-row from
+the FPED Methodology and User Guide
+(`Bowman et al. 2020 <https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/FPED_1718.pdf>`_)
+Tables 8, 9, 10, 11, and 13. One factor -- the grams-per-oz-equivalent
+for grains -- is an explicit modelling **assumption** rather than a
+published value. FPED MUG Table 10 gives two rules: 16 g flour per
+ounce-equivalent for flour-based products (bread, biscuits, pancakes,
+crackers, baked goods) and 28.35 g grain per ounce-equivalent for
+intact grains (rice, pasta, oats, RTE cereals). The FPED demographic
+table aggregates the two product types into a single oz-eq column per
+grain group without an external mix breakdown, so we apply the
+unweighted midpoint (~22 g/oz-eq) as a deliberate compromise. The
+trade-off is documented in the per-row note in the mapping CSV; if a
+better-sourced US-mix breakdown becomes available, the factor should
+be updated accordingly.
 
 Water Resources Data
 --------------------

@@ -276,7 +276,20 @@ Appendix 1, p. 171).
 - **Risk factors modelled by default**: fruits, vegetables, whole_grains,
   nuts_seeds, legumes, red_meat (configured in ``health.risk_factors``).
   GBD also provides seafood omega-3 and processed meat risk factors, but
-  fish/seafood and processed meat are not currently modelled as food groups.
+  fish/seafood and processed meat are not currently modelled as separate
+  food groups.
+- **Processed meat in red_meat**: GDD's processed-meat variable (v09) is
+  folded into the ``red_meat`` exposure used by the health module so that
+  consumption mass stays consistent with FAOSTAT slaughter-volume animal
+  production (see :doc:`current_diets`). Because GBD's red-meat
+  exposure-response curve was calibrated against unprocessed red meat
+  intake levels, the resulting risk attribution is a slight conservative
+  approximation: the higher per-gram carcinogenic risk that GBD assigns
+  specifically to processed meat is not reproduced. A future improvement
+  would be to add ``prc_meat`` as a real food group with its own RR; in
+  the current model this trade-off is preferred over silently dropping
+  v09 (which was the prior behaviour) since closing the
+  consumption-vs-production leak matters for emissions accounting.
 - **Disease causes modelled**: CHD (coronary heart disease), Stroke, T2DM (type
   2 diabetes), CRC (colorectal cancer)
 - **Sugar**: The GBD dataset includes relative risk factors for

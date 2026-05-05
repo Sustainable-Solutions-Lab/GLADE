@@ -95,17 +95,14 @@ The following food groups are populated from GDD variables:
      - v08
      - Whole grains
    * - ``red_meat``
-     - v10
-     - Unprocessed red meats (cattle, pig)
-   * - ``prc_meat``
-     - v09
-     - Total processed meats
+     - v09, v10
+     - Unprocessed red meats (cattle, pig) plus total processed meats. v09 (processed meats) is folded into ``red_meat`` because the model has no separate processed-meat food group, while FAOSTAT animal production accounts for cattle/pig at slaughter (i.e. before the cured/processed split). Routing v09 into ``red_meat`` closes the consumption-vs-production leak that otherwise shows up in emissions and feed accounting. The health module's ``red_meat`` risk function -- calibrated against unprocessed red meat per GBD -- becomes a slight conservative approximation as a consequence (see :doc:`health`).
    * - ``eggs``
      - v12
      - Eggs. Processed from GDD for reference, but the merged baseline diet currently overrides this group with FAOSTAT Food Balance Sheet supply for validation consistency.
    * - ``sugar``
-     - v15, v35
-     - Sugar-sweetened beverages and added sugars
+     - v35
+     - Added sugars (% of daily energy intake). v15 sugar-sweetened beverages is intentionally excluded; v35 already accounts for SSB-derived sugar, so summing the two would double-count beverage-derived sugar.
    * - ``coffee-green``
      - *(none)*
      - Not covered by GDD. GDD v17 data was found to be unreliable for many countries (e.g. India: 42× overestimate vs FAOSTAT). Sourced via FAOSTAT FBS override (``fbs_override_foods``).
@@ -296,8 +293,21 @@ This averaging applies to six food groups: ``fruits``, ``vegetables``,
 is missing for a particular country, the GDD value is used alone.
 
 For all other food groups (``dairy``, ``poultry``, ``oil``, ``grain``,
-``starchy_vegetable``, ``prc_meat``, ``eggs``, ``sugar``),
+``starchy_vegetable``, ``eggs``, ``sugar``),
 the GDD or FAOSTAT value from ``dietary_intake.csv`` is used as-is.
+
+For the United States specifically, NHANES "What We Eat in America" /
+FPED values (parsed from the USDA ARS demographic-table PDF) take
+precedence over both GDD and FAOSTAT for every food group they cover
+(fruits, vegetables, starchy vegetables, refined and whole grains,
+dairy, eggs, oils, red meat, poultry, nuts and seeds, legumes, sugar).
+NHANES Total Dairy is the low-fat / skim-equivalent fraction (FPED
+strips butterfat into a separate Solid Fats axis), so the script also
+adds country-specific FAOSTAT FBS butter (item 2740) as a milk-equivalent
+top-up to give a complete dairy mass. NHANES Cured Meat is folded into
+``red_meat`` (matching the GDD v09 fold) and FPED Fruit Juice is counted
+as fresh-fruit-equivalent under ``fruits``. See :doc:`data_sources` for
+the curated unit-conversion table.
 
 For stimulants, only ``tea-dried`` uses GDD data directly (v18, converted from
 cups/day to dry weight). ``coffee-green`` and ``cocoa-powder`` are both sourced

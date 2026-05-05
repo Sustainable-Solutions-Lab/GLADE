@@ -71,6 +71,16 @@ GBD_RISK_TO_FOOD_GROUP = {
     "LEGUMES": "legumes",
     "NUTS": "nuts_seeds",
     "REDMEAT": "red_meat",
+    # PROCMEAT is intentionally not folded into GBD's red_meat:
+    # validation against FAOSTAT slaughter-volume production showed that
+    # adding it pushes red_meat consumption ~30% above what slaughter can
+    # support globally (likely because GBD's Bayesian-smoothed exposures
+    # over-estimate processed-meat intake relative to FAOSTAT QCL volumes).
+    # GDD v09 still folds into red_meat upstream in
+    # prepare_gdd_dietary_intake.py; the GDD/GBD averaging in
+    # estimate_baseline_diet.py therefore partially dilutes the v09
+    # contribution but stays below the production envelope. See
+    # docs/health.rst and docs/data_sources.rst for the trade-off.
     "MILK": "milk",  # Cross-validation only; not used for dairy group total
 }
 
@@ -208,7 +218,21 @@ def main():
         raise ValueError("No GBD dietary risk exposure data extracted")
 
     combined = pd.concat(all_results, ignore_index=True)
-    combined = combined.sort_values(["food_group", "country"]).reset_index(drop=True)
+
+    # Multiple GBD risk factors may map to the same model food group
+    # (e.g. REDMEAT + PROCMEAT both -> red_meat). Sum exposures within a
+    # (country, food_group) so the file carries one row per combination
+    # and downstream averaging is apples-to-apples with GDD.
+    combined = (
+        combined.groupby(["food_group", "country"], as_index=False)
+        .agg(
+            consumption_g_per_day=("consumption_g_per_day", "sum"),
+            lower=("lower", "sum"),
+            upper=("upper", "sum"),
+        )
+        .sort_values(["food_group", "country"])
+        .reset_index(drop=True)
+    )
 
     # Ensure output directory exists
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)

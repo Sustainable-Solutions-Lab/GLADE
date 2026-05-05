@@ -556,6 +556,15 @@ diet:
   - yam
   - cocoa-powder
   - coffee-green
+  # NHANES "What We Eat in America" / FPED demographic table.
+  # Used as a region-specific intake override for the United States. The
+  # `cycle` corresponds to the FPED release cycle in the URL (e.g. 1720 for
+  # the 2017-March 2020 Prepandemic release). The `url` template embeds the
+  # cycle and is filled in by the retrieval rule.
+  nhanes:
+    cycle: "1720"
+    url: "https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf"
+    reference_year: 2018
 
 # --- section: biomass ---
 biomass:

@@ -979,6 +979,21 @@ properties:
           type: string
           pattern: "^[a-z0-9-]+$"
         description: "Foods whose consumption is overridden with waste-corrected FAOSTAT FBS supply data"
+      nhanes:
+        type: object
+        required: [cycle, url, reference_year]
+        additionalProperties: false
+        properties:
+          cycle:
+            type: string
+            description: "FPED release cycle identifier (e.g. '1720' for 2017-March 2020 Prepandemic)"
+          url:
+            type: string
+            description: "Download URL template for the FPED demographic-table PDF; '{cycle}' is substituted at retrieval time"
+          reference_year:
+            type: integer
+            description: "Approximate midpoint year of the NHANES survey cycle, used as the row 'year' in the dietary-intake CSV"
+        description: "NHANES / FPED override source for US food-group intake"
 
   biomass:
     type: object
