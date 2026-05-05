@@ -10,11 +10,11 @@
 # ``compute_prod_stability_calibration`` then writes the calibrated
 # values to ``data/curated/calibration/prod_stability_l1.yaml``.
 #
-# The grid is deliberately narrow: it brackets the known intersection
-# (roughly land=0.1, animal=0.033) with half a decade of cushion on each
-# side. If the true intersection drifts outside this window after an
-# upstream data update, the calibration script fails with a clear error
-# prompting you to widen the ``start``/``stop`` bounds below.
+# The grid is centered around the observed land contour and gives the
+# animal-feed contour enough headroom to bracket the target after hard
+# zero-baseline growth caps. If the true intersection drifts outside this
+# window after an upstream data update, the calibration script fails with a
+# clear error prompting you to widen the ``start``/``stop`` bounds below.
 #
 # Each grid point gets its own baseline scenario so that consumer values
 # (piecewise food utility blocks) are calibrated under the matching
@@ -69,14 +69,14 @@ scenarios:
       parameters: &grid_params
         crop_cost:
           space: log
-          start: 0.03
-          stop: 0.3
+          start: 0.08
+          stop: 0.1897
           num: 3
           name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
         animal_cost:
           space: log
-          start: 0.01
-          stop: 0.1
+          start: 0.1
+          stop: 0.6
           num: 3
           name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
       template:
