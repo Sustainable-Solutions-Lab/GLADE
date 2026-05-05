@@ -407,14 +407,20 @@ animal_products:
     k_m: 0.65  # Maintenance efficiency (NASEM 2016 / NRC 2000 Beef)
     k_g: 0.43  # Growth efficiency (NASEM 2016 / NRC 2000 Beef)
     k_l: 0.64  # Lactation efficiency, dairy (NRC 2001 Dairy)
-  # Carcass-to-retail meat conversion factors
+  # Carcass-to-retail meat conversion factors. Source: OECD-FAO
+  # Agricultural Outlook 2023-2032, Meat chapter, Box 6.1 ("Edible retail
+  # weight"), which gives carcass-to-boneless-retail-weight-equivalent
+  # percentages used by the OECD-FAO meat balance sheets. Cross-reference:
+  # USDA Agricultural Handbook 697 (1992) "Weights, Measures, and
+  # Conversion Factors for Agricultural Commodities and Their Products",
+  # Table 7.
   carcass_to_retail_meat:
-    meat-cattle: 0.67  # kg boneless retail beef per kg carcass (OECD-FAO 2023)
-    meat-pig: 0.73     # kg boneless retail pork per kg carcass (OECD-FAO 2023)
-    meat-chicken: 0.60 # kg boneless retail chicken per kg carcass (OECD-FAO 2023)
+    meat-cattle: 0.67  # OECD-FAO 2023 Box 6.1: Beef 67%
+    meat-pig: 0.73     # OECD-FAO 2023 Box 6.1: Pigmeat 73%
+    meat-chicken: 0.60 # OECD-FAO 2023 Box 6.1: Poultry 60%
+    meat-sheep: 0.66   # OECD-FAO 2023 Box 6.1: Sheep 66%
     eggs: 1.00         # No conversion needed (whole egg = retail product)
     dairy: 1.00        # No conversion needed (whole milk = retail product)
-    meat-sheep: 0.63   # kg boneless retail lamb per kg carcass (slightly lower than beef)
     dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
   # FAOSTAT QCL item names to aggregate for each model product.
   # First item is the primary product; additional items are proxied species
