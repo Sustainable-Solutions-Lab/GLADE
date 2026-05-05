@@ -398,15 +398,17 @@ animal_products:
   # differences. This factor clamps f to [median/k, median*k] where k
   # is the value below. Set to a large value (e.g. 100) to disable.
   me_scaling_clamp_factor: 2.0
-  # Ruminant net-to-metabolizable energy conversion efficiency factors
-  # Used to convert net energy (NE) requirements to metabolizable energy (ME) requirements
-  # Based on NRC (2000) typical values for mixed diets
-  # ME_required = NE_m/k_m + NE_g/k_g (+ NE_l/k_l for dairy)
-  # TODO: Should check the reference for this.
+  # Ruminant net-to-metabolizable energy conversion efficiency factors.
+  # Used to convert Wirsenius (2000) net-energy values to metabolizable
+  # energy: ME_required = NE_m/k_m + NE_g/k_g (+ NE_l/k_l for dairy).
+  # k_m and k_g follow the NASEM (2016) / NRC (2000) Beef Cattle California
+  # Net Energy System equations evaluated at a typical mixed-diet
+  # metabolizability q = ME/GE ≈ 0.60: k_m ≈ 0.65, k_g ≈ 0.43.
+  # k_l is the fixed efficiency from NRC (2001) Dairy Cattle, 7th rev. ed.
   net_to_metabolizable_energy_conversion:
-    k_m: 0.60  # Maintenance efficiency
-    k_g: 0.40  # Growth efficiency
-    k_l: 0.60  # Lactation efficiency (dairy)
+    k_m: 0.65  # Maintenance efficiency (NASEM 2016 / NRC 2000 Beef)
+    k_g: 0.43  # Growth efficiency (NASEM 2016 / NRC 2000 Beef)
+    k_l: 0.64  # Lactation efficiency, dairy (NRC 2001 Dairy)
   # Carcass-to-retail meat conversion factors
   carcass_to_retail_meat:
     meat-cattle: 0.67  # kg boneless retail beef per kg carcass (OECD-FAO 2023)

@@ -587,8 +587,8 @@ This factor scales feed conversion efficiencies (efficiency on
 ``animal_production`` links), representing uncertainty in how much feed is
 required per unit of animal product. Higher values mean better conversion (more
 product per unit feed). The model uses Wirsenius (2000) regional feed energy
-requirements [#wirsenius]_ converted via NRC net-energy-to-metabolisable-energy
-factors [#nrc]_.
+requirements [#wirsenius]_ converted via NRC/NASEM net-energy-to-metabolisable-energy
+factors [#nrc_beef]_ [#nasem_beef]_ [#nrc_dairy]_.
 
 The ±20% range is supported by:
 
@@ -596,9 +596,11 @@ The ±20% range is supported by:
   to 2.0×) to reconcile Wirsenius-based efficiencies with GLEAM feed baselines.
   After calibration, residual disagreement between Wirsenius and GLEAM / Herrero
   et al. [#herrero]_ is typically 10–30% for a given region–product pair.
-- **Energy conversion uncertainty**: The NE-to-ME conversion factors (k_m=0.60,
-  k_g=0.40, k_l=0.60) are NRC "typical" values. Published ranges span
-  k_m: 0.55–0.65 and k_g: 0.35–0.45, introducing ~10–15% uncertainty [#nrc]_.
+- **Energy conversion uncertainty**: The NE-to-ME conversion factors (k_m=0.65,
+  k_g=0.43, k_l=0.64) are central NRC/NASEM values for a typical mixed diet
+  [#nasem_beef]_ [#nrc_dairy]_. Published ranges span k_m: 0.55–0.70 and
+  k_g: 0.35–0.50 (depending on diet metabolizability q), introducing ~10–15%
+  uncertainty.
 - **Temporal lag**: The Wirsenius data reflects ~1994–1998 conditions.
   Monogastric FCRs have improved ~10–20% since then through genetic progress
   (~0.5–1%/year for poultry and pork); ruminant improvement is minimal.
@@ -804,10 +806,21 @@ probability distribution.
    Modeling the Turnover of Biomass in the Global Food System*. PhD thesis,
    Chalmers University of Technology.
 
-.. [#nrc] NRC, 2000: *Nutrient Requirements of Beef Cattle*, 7th revised ed.,
-   update 2000. National Academies Press. NE-to-ME conversion factors:
-   k_m = 0.60 (range 0.55–0.65), k_g = 0.40 (range 0.35–0.45).
-   https://doi.org/10.17226/9791
+.. [#nrc_beef] NRC, 2000: *Nutrient Requirements of Beef Cattle*, 7th
+   revised ed., update 2000. Washington, DC: The National Academies Press.
+   Source of the California Net Energy System used for ruminant ME→NE
+   conversion (k_m, k_g). https://doi.org/10.17226/9791
+
+.. [#nasem_beef] NASEM, 2016: *Nutrient Requirements of Beef Cattle*, 8th
+   revised ed. Washington, DC: The National Academies Press. Provides the
+   updated cubic-in-ME equations for k_m and k_g; evaluated at typical
+   mixed-diet metabolizability q ≈ 0.60 these give k_m ≈ 0.65 and
+   k_g ≈ 0.43. https://doi.org/10.17226/19014
+
+.. [#nrc_dairy] NRC, 2001: *Nutrient Requirements of Dairy Cattle*, 7th
+   revised ed. Washington, DC: The National Academies Press. Specifies
+   the fixed ME-to-NEL efficiency k_l = 0.64 used for dairy.
+   https://doi.org/10.17226/9825
 
 .. [#herrero] Herrero, M. et al., 2013: Biomass use, production, feed
    efficiencies, and greenhouse gas emissions from global livestock systems.

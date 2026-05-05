@@ -212,12 +212,16 @@ products.  This preserves the Wirsenius dairy:meat *ratio* while anchoring the
 absolute ME to observed GLEAM3 feed intake.
 
 For **ruminant products**, the Wirsenius net-energy values (NE) are first
-converted to metabolizable energy using NRC (2000) efficiency factors from
-config (``animal_products.net_to_metabolizable_energy_conversion``):
+converted to metabolizable energy using efficiency factors from config
+(``animal_products.net_to_metabolizable_energy_conversion``):
 
-* ``k_m`` = 0.60 — maintenance efficiency
-* ``k_g`` = 0.40 — growth efficiency
-* ``k_l`` = 0.60 — lactation efficiency (dairy only)
+* ``k_m`` = 0.65 — maintenance efficiency. From the California Net Energy
+  System (NRC 2000 Beef Cattle [6]_, with cubic-in-ME equations updated in
+  NASEM 2016 [7]_), evaluated at a typical mixed-diet metabolizability
+  :math:`q = \mathrm{ME}/\mathrm{GE} \approx 0.60`.
+* ``k_g`` = 0.43 — growth efficiency. Same source as ``k_m`` [6]_ [7]_.
+* ``k_l`` = 0.64 — lactation efficiency, dairy only. NRC 2001 Dairy
+  Cattle, 7th rev. ed. [8]_, where ME-to-NEL conversion is fixed at 0.64.
 
 For **monogastric products** (pigs, chicken), Wirsenius values are already in
 ME and the conversion step is skipped.  Single-product species (pigs) are
@@ -978,3 +982,9 @@ References
 .. [4] FAO (2022). Global Livestock Environmental Assessment Model (GLEAM) version 3.0. Rome. https://www.fao.org/gleam/. Country-level feed intake and production data (reference year 2015), obtained directly from FAO upon request under CC BY 4.0, used as the feed baseline in this model.
 
 .. [5] FAO (2023). *Pathways towards lower emissions – A global assessment of the greenhouse gas emissions and mitigation options from livestock agrifood systems*. Rome. https://doi.org/10.4060/cc9029en. This GLEAM 3.0-based assessment (2015 baseline) reports updated global feed totals reflecting improved efficiencies relative to the GLEAM 2.0 (2010) estimates.
+
+.. [6] National Research Council (2000). *Nutrient Requirements of Beef Cattle: Seventh Revised Edition: Update 2000*. Washington, DC: The National Academies Press. https://doi.org/10.17226/9791. Source of the California Net Energy System used for ruminant ME→NE conversion (k_m, k_g).
+
+.. [7] National Academies of Sciences, Engineering, and Medicine (2016). *Nutrient Requirements of Beef Cattle: Eighth Revised Edition*. Washington, DC: The National Academies Press. https://doi.org/10.17226/19014. Provides the updated cubic-in-ME equations for k_m and k_g; evaluated at q ≈ 0.60 these give k_m ≈ 0.65 and k_g ≈ 0.43.
+
+.. [8] National Research Council (2001). *Nutrient Requirements of Dairy Cattle: Seventh Revised Edition, 2001*. Washington, DC: The National Academies Press. https://doi.org/10.17226/9825. Specifies the fixed ME-to-NEL efficiency k_l = 0.64 used for dairy.
