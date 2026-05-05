@@ -9,8 +9,11 @@ import pandas as pd
 import xarray as xr
 
 from workflow.scripts.solve_model.production_stability import (
+    _animal_feed_and_baselines,
     _compute_stability_deviation,
     _production_and_baselines,
+    add_animal_growth_cap_constraints,
+    add_crop_growth_cap_constraints,
 )
 
 
@@ -29,6 +32,43 @@ def _make_links(baselines, carrier="crop_production", index=None, efficiency=Non
         },
         index=index,
     )
+
+
+class _DummyModel:
+    def __init__(self, link_names):
+        self.variables = {
+            "Link-p": xr.DataArray(
+                np.zeros((1, len(link_names))),
+                coords={"snapshot": ["now"], "name": link_names},
+                dims=("snapshot", "name"),
+            )
+        }
+
+    def add_constraints(self, *args, **kwargs):
+        return None
+
+
+class _DummyGlobalConstraints:
+    def __init__(self):
+        self.rows = []
+
+    def add(self, names, sense, constant, type):
+        for name, value in zip(names, np.asarray(constant, dtype=float)):
+            self.rows.append(
+                {
+                    "name": name,
+                    "sense": sense,
+                    "constant": value,
+                    "type": type,
+                }
+            )
+
+
+class _DummyNetwork:
+    def __init__(self, links_df):
+        self.links = type("Links", (), {"static": links_df})()
+        self.model = _DummyModel(links_df.index)
+        self.global_constraints = _DummyGlobalConstraints()
 
 
 def test_crop_baseline_filter_excludes_zero_in_hard_mode():
@@ -50,6 +90,26 @@ def test_crop_baseline_filter_excludes_zero_in_hard_mode():
     link_names, _, baselines = result
     assert list(link_names) == ["c"]
     np.testing.assert_allclose(baselines.values, [1.5])
+
+
+def test_crop_helper_includes_zero_baselines_by_default():
+    """Default helper behavior should include zero baselines for hard caps."""
+    links_df = _make_links([0.0, 0.02, 1.5])
+    link_p = xr.DataArray(
+        [0.0, 0.0, 0.0], coords={"name": ["a", "b", "c"]}, dims="name"
+    )
+
+    result = _production_and_baselines(
+        link_p,
+        links_df,
+        "crop_production",
+        min_baseline=0.1,
+    )
+
+    assert result is not None
+    link_names, _, baselines = result
+    assert list(link_names) == ["a", "b", "c"]
+    np.testing.assert_allclose(baselines.values, [0.0, 0.02, 1.5])
 
 
 def test_crop_penalty_mode_includes_zero_baselines():
@@ -113,6 +173,33 @@ def test_grassland_baseline_filter_excludes_zero_in_hard_mode():
     np.testing.assert_allclose(baselines.values, [3.0])
 
 
+def test_animal_helper_includes_zero_baselines_by_default():
+    """Default animal helper behavior should include zero-baseline links."""
+    links_df = pd.DataFrame(
+        {
+            "carrier": ["animal_production"] * 3,
+            "baseline_feed_use_mt_dm": [0.0, 0.000001, 2.0],
+        },
+        index=["zero", "tiny", "positive"],
+    )
+    link_p = xr.DataArray(
+        [0.0, 0.0, 0.0],
+        coords={"name": ["zero", "tiny", "positive"]},
+        dims="name",
+    )
+
+    result = _animal_feed_and_baselines(
+        link_p,
+        links_df,
+        min_baseline=0.1,
+    )
+
+    assert result is not None
+    link_names, _, baselines = result
+    assert list(link_names) == ["zero", "tiny", "positive"]
+    np.testing.assert_allclose(baselines.values, [0.0, 0.000001, 2.0])
+
+
 def test_grassland_penalty_mode_includes_zero_baselines():
     """Penalty-mode helper should include all grassland links, including baseline=0."""
     links_df = _make_links(
@@ -157,3 +244,57 @@ def test_production_and_baselines_returns_area_not_production():
     np.testing.assert_allclose(area.values, [0.5, 0.8])
     # baselines should be baseline_area_mha, not baseline * efficiency
     np.testing.assert_allclose(baselines.values, [1.0, 2.0])
+
+
+def test_animal_growth_cap_constrains_zero_and_tiny_baselines():
+    """Animal growth cap should add hard caps for every animal link."""
+    links_df = pd.DataFrame(
+        {
+            "carrier": ["animal_production"] * 3,
+            "baseline_feed_use_mt_dm": [0.0, 0.000001, 2.0],
+        },
+        index=["zero", "tiny", "positive"],
+    )
+    n = _DummyNetwork(links_df)
+
+    add_animal_growth_cap_constraints(
+        n,
+        {"enabled": True, "max_relative_increase": 0.1},
+    )
+
+    rows = pd.DataFrame(n.global_constraints.rows).set_index("name")
+    assert list(rows.index) == [
+        "animal_growth_cap_zero",
+        "animal_growth_cap_tiny",
+        "animal_growth_cap_positive",
+    ]
+    np.testing.assert_allclose(rows["constant"].values, [0.0, 0.0000011, 2.2])
+
+
+def test_crop_growth_cap_constrains_zero_baseline_groups():
+    """Crop growth cap should add hard caps for every crop-country group."""
+    links_df = pd.DataFrame(
+        {
+            "carrier": ["crop_production"] * 4,
+            "crop": ["wheat", "wheat", "rice", "wheat"],
+            "country": ["USA", "USA", "USA", "CAN"],
+            "baseline_area_mha": [0.0, 0.0, 0.5, 0.000001],
+        },
+        index=["wheat_usa_1", "wheat_usa_2", "rice_usa", "wheat_can"],
+    )
+    n = _DummyNetwork(links_df)
+
+    add_crop_growth_cap_constraints(
+        n,
+        {"enabled": True, "max_relative_increase": 10.0},
+    )
+
+    rows = pd.DataFrame(n.global_constraints.rows).set_index("name")
+    assert set(rows.index) == {
+        "crop_growth_cap_wheat_USA",
+        "crop_growth_cap_rice_USA",
+        "crop_growth_cap_wheat_CAN",
+    }
+    assert rows.loc["crop_growth_cap_wheat_USA", "constant"] == 0.0
+    assert rows.loc["crop_growth_cap_rice_USA", "constant"] == 5.5
+    assert rows.loc["crop_growth_cap_wheat_CAN", "constant"] == 0.000011

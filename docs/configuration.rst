@@ -436,9 +436,9 @@ constrains the feed mix as well as the production level.
 
 * ``animal_growth_cap.enabled``: master switch (default: ``true``)
 * ``animal_growth_cap.max_relative_increase``: cap (default ``0.1`` = +10%)
-* ``animal_growth_cap.min_baseline``: Mt-DM floor; near-zero baselines are
-  left uncapped so the model can still introduce previously-unmodelled
-  systems (default: ``0.00001``)
+
+Zero-baseline links get an upper bound of zero, so animal systems cannot
+be introduced in countries where they were not present in the baseline.
 
 **Crop growth cap** (``validation.crop_growth_cap``)
 
@@ -453,9 +453,10 @@ expansion.
 
 * ``crop_growth_cap.enabled``: master switch (default: ``true``)
 * ``crop_growth_cap.max_relative_increase``: cap (default ``10.0`` = +1000%, i.e. 11× baseline)
-* ``crop_growth_cap.min_baseline``: Mha floor for the *summed* per-(crop,
-  country) baseline; groups below the floor are left uncapped (default:
-  ``0.0001``)
+
+Zero-baseline crop-country groups get an upper bound of zero, so crops
+cannot be introduced in countries where they were not present in the
+baseline.
 
 The crop cap is intentionally **much** more generous than the animal
 cap's ``+10%`` because realistic dietary-shift scenarios already produce

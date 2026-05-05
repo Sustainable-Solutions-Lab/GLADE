@@ -253,7 +253,7 @@ properties:
               min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Mha floor. Hard mode: minimum crop baseline to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mha denominator floor for relative penalty modes."
           grassland:
             type: object
             required: [enabled, max_relative_deviation, enable_slack, min_baseline]
@@ -273,7 +273,7 @@ properties:
               min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Mha floor. Hard mode: minimum grassland baseline to include a link in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mha denominator floor for relative penalty modes."
           animals:
             type: object
             required: [enabled, max_relative_deviation, enable_slack, min_baseline]
@@ -293,7 +293,7 @@ properties:
               min_baseline:
                 type: number
                 exclusiveMinimum: 0
-                description: "Mt DM floor (scaled to Mha-eq internally). Hard mode: minimum animal baseline to include a target in stability constraints. Relative penalty modes: denominator floor for near-zero/zero baselines."
+                description: "Mt DM denominator floor for relative penalty modes."
           land_conversion:
             type: object
             required: [enabled]
@@ -304,7 +304,7 @@ properties:
                 description: "Whether to penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline. Uses parent penalty_mode and land_l1_cost/quadratic_cost. Hard mode is skipped (zero baselines would forbid all conversion)."
       animal_growth_cap:
         type: object
-        required: [enabled, max_relative_increase, min_baseline]
+        required: [enabled, max_relative_increase]
         additionalProperties: false
         description: "Cap animal production growth to prevent unrealistic spatial reallocation. Applies a hard upper bound per animal production link."
         properties:
@@ -315,13 +315,9 @@ properties:
             type: number
             minimum: 0
             description: "Maximum relative increase from baseline (e.g., 0.1 = +10%)"
-          min_baseline:
-            type: number
-            exclusiveMinimum: 0
-            description: "Mt DM floor; ignore near-zero baselines below this threshold"
       crop_growth_cap:
         type: object
-        required: [enabled, max_relative_increase, min_baseline]
+        required: [enabled, max_relative_increase]
         additionalProperties: false
         description: "Cap per-(crop, country) total harvested area at (1 + max_relative_increase) × baseline. Aggregates across regions, resource classes and water-supply types within each country."
         properties:
@@ -332,10 +328,6 @@ properties:
             type: number
             minimum: 0
             description: "Maximum relative increase from baseline area (e.g., 0.5 = +50%)"
-          min_baseline:
-            type: number
-            exclusiveMinimum: 0
-            description: "Mha floor; ignore near-zero baselines below this threshold"
 
   food_incentives:
     type: object

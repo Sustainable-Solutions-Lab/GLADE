@@ -27,10 +27,10 @@ land between uses: cropland-to-pasture, new land conversion, and spare land.
 These links have zero baseline (no conversion in the reference year), so any
 flow incurs a stability cost.
 
-Hard constraints only apply to links with sufficiently positive baselines to
-avoid forcing zero-baseline links to stay exactly at zero production/feed use.
-Penalty modes (L1/quadratic) apply to all links so zero-baseline links also
-incur a stability cost when activated.
+Hard constraints apply to all links, so zero-baseline links are constrained to
+stay exactly at zero production/feed use. Penalty modes (L1/quadratic) also
+apply to all links, so zero-baseline links incur a stability cost when
+activated.
 """
 
 import copy
@@ -129,8 +129,8 @@ def add_production_stability_constraints(
     - l1: linear penalty via linopy abs-deviation variables
     - quadratic: quadratic penalty via linopy deviation variables
 
-    Hard mode constrains only links with positive baselines. Penalty modes apply
-    to all links and use a denominator floor for relative deviations.
+    Hard mode and penalty modes apply to all links. Penalty modes use a
+    denominator floor for relative deviations.
 
     Parameters
     ----------
@@ -322,7 +322,7 @@ def _production_and_baselines(
     carrier: str,
     min_baseline: float,
     *,
-    include_all_links: bool = False,
+    include_all_links: bool = True,
 ) -> tuple | None:
     """Extract area expressions and baselines for production links.
 
@@ -362,13 +362,13 @@ def _animal_feed_and_baselines(
     links_df,
     min_baseline: float,
     *,
-    include_all_links: bool = False,
+    include_all_links: bool = True,
 ) -> tuple | None:
     """Extract feed use expressions and baselines for animal links.
 
     Returns ``(link_names, feed_use, baselines)`` for animal production links,
-    or ``None`` if there are no eligible links. In hard mode, only links above
-    ``min_baseline`` are included; in penalty modes all links are included.
+    or ``None`` if there are no eligible links. When ``include_all_links`` is
+    false, links at or below ``min_baseline`` are excluded.
 
     Feed use is ``link_p`` directly (p0 = feed input in Mt DM), so no
     efficiency multiplication is needed.
@@ -431,7 +431,7 @@ def _add_production_hard_constraints(
     cfg: dict,
     slack_marginal_cost: float,
     *,
-    include_all_links: bool = False,
+    include_all_links: bool = True,
 ) -> None:
     """Add per-link production stability bounds (hard mode).
 
@@ -635,7 +635,12 @@ def _add_animal_hard_constraints(
 
     ``(1 - delta) * baseline <= feed_use <= (1 + delta) * baseline``
     """
-    result = _animal_feed_and_baselines(link_p, links_df, animals_cfg["min_baseline"])
+    result = _animal_feed_and_baselines(
+        link_p,
+        links_df,
+        animals_cfg["min_baseline"],
+        include_all_links=True,
+    )
     if result is None:
         return
 
@@ -898,16 +903,12 @@ def add_animal_growth_cap_constraints(
     ``(1 + max_relative_increase) * baseline_feed_use_mt_dm``, preventing
     unrealistic spatial reallocation of livestock production.
 
-    Only links with baselines above ``min_baseline`` are constrained; links
-    with near-zero baselines are left uncapped.
-
     Parameters
     ----------
     n : pypsa.Network
         The network containing the model.
     growth_cap_cfg : dict
-        Configuration with ``enabled``, ``max_relative_increase``, and
-        ``min_baseline``.
+        Configuration with ``enabled`` and ``max_relative_increase``.
     """
     if not growth_cap_cfg["enabled"]:
         return
@@ -916,9 +917,7 @@ def add_animal_growth_cap_constraints(
     link_p = m.variables["Link-p"].sel(snapshot="now")
     links_df = n.links.static
 
-    result = _animal_feed_and_baselines(
-        link_p, links_df, growth_cap_cfg["min_baseline"]
-    )
+    result = _animal_feed_and_baselines(link_p, links_df, 0.0, include_all_links=True)
     if result is None:
         return
 
@@ -936,6 +935,12 @@ def add_animal_growth_cap_constraints(
         sense="<=",
         constant=upper_bounds.values,
         type="animal_growth_cap",
+    )
+
+    logger.info(
+        "Added %d per-link animal growth cap constraints (max +%.0f%%)",
+        len(link_names),
+        cap * 100,
     )
 
 
@@ -1063,19 +1068,16 @@ def add_crop_growth_cap_constraints(
     per-(product, feed_category, country) since animals lack the regional
     dimension.
 
-    Only (crop, country) groups whose summed baseline exceeds
-    ``min_baseline`` are constrained; groups with near-zero baselines
-    (introduction of a previously-unmodelled crop, or a crop just appearing
-    in a country) are left uncapped so the model retains the freedom to
-    bring them in if economics demand.
+    All (crop, country) groups are constrained. Groups with zero baseline get
+    an upper bound of zero, so crops cannot be introduced into countries where
+    they were not present in the baseline.
 
     Parameters
     ----------
     n : pypsa.Network
         The network containing the model.
     growth_cap_cfg : dict
-        Configuration with ``enabled``, ``max_relative_increase``, and
-        ``min_baseline``.
+        Configuration with ``enabled`` and ``max_relative_increase``.
     """
     if not growth_cap_cfg["enabled"]:
         return
@@ -1089,29 +1091,19 @@ def add_crop_growth_cap_constraints(
         return
 
     cap = growth_cap_cfg["max_relative_increase"]
-    min_baseline = growth_cap_cfg["min_baseline"]
-
     # Aggregate baselines per (crop, country)
     baseline_per_group = (
         prod_links.groupby(["crop", "country"])["baseline_area_mha"]
         .sum()
         .rename("baseline")
     )
-    eligible = baseline_per_group[baseline_per_group > min_baseline]
-    if eligible.empty:
-        logger.info(
-            "No (crop, country) groups exceed min_baseline=%.4g Mha; "
-            "skipping crop growth cap",
-            min_baseline,
-        )
-        return
 
     # Build one constraint per (crop, country) group: sum of dispatch over
     # links in the group <= (1 + cap) * baseline.
     group_indices = prod_links.groupby(["crop", "country"]).indices
     constraint_names: list[str] = []
     upper_bounds_list: list[float] = []
-    for (crop, country), baseline in eligible.items():
+    for (crop, country), baseline in baseline_per_group.items():
         link_names = prod_links.index[group_indices[(crop, country)]]
         upper = (1.0 + cap) * float(baseline)
         cname = f"crop_growth_cap_{crop}_{country}"
@@ -1130,14 +1122,7 @@ def add_crop_growth_cap_constraints(
     )
 
     logger.info(
-        "Added %d crop growth cap constraints at +%.0f%% (skipped %d (crop, country) groups below min_baseline)",
+        "Added %d crop growth cap constraints at +%.0f%%",
         len(constraint_names),
         100.0 * cap,
-        len(baseline_per_group) - len(eligible),
-    )
-
-    logger.info(
-        "Added %d per-link animal growth cap constraints (max +%.0f%%)",
-        len(link_names),
-        cap * 100,
     )
