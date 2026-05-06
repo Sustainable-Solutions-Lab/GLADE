@@ -7,5 +7,5 @@
 # or .animal_feed_l1_cost is set to the sentinel string "calibrated".
 # Do not edit by hand -- run ``tools/calibrate stability`` to regenerate.
 target_deviation_pct: 5.0
-land_l1_cost: 0.10883519211685842
-animal_feed_l1_cost: 0.025629086598293202
+land_l1_cost: 0.10824787925240327
+animal_feed_l1_cost: 0.026683062022633812
