@@ -357,6 +357,41 @@ rule extract_faostat_gt:
         "../scripts/convert_faostat_to_parquet.py"
 
 
+rule download_faostat_fs:
+    output:
+        temp("data/downloads/faostat/FS.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/Food_Security_Data_E_All_Data_(Normalized).zip",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_faostat_fs.log",
+    benchmark:
+        "<benchmarks>/shared/download_faostat_fs.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_fs:
+    input:
+        "data/downloads/faostat/FS.zip",
+    output:
+        "data/downloads/faostat/FS.parquet",
+    resources:
+        runtime="2m",
+        mem_mb=1500,
+    log:
+        "<logs>/shared/extract_faostat_fs.log",
+    benchmark:
+        "<benchmarks>/shared/extract_faostat_fs.tsv"
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
+
+
 rule download_nhanes_fped:
     """Download the FPED Mean Amounts of Food Patterns Equivalents
     demographic table (Males/Females × age) for one NHANES cycle.

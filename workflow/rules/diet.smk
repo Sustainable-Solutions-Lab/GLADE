@@ -245,3 +245,67 @@ rule estimate_baseline_diet:
         "<benchmarks>/{name}/estimate_baseline_diet.tsv"
     script:
         "../scripts/estimate_baseline_diet.py"
+
+
+rule prepare_food_security_anchors:
+    """Per-country dietary energy anchors (ADER/MDER/DES) from FAOSTAT FS.
+
+    Used by validate_baseline_diet to flag countries whose GDD-derived
+    baseline-diet kcal totals are implausible relative to physiological
+    requirements (MDER) or food-system supply (DES).
+    """
+    input:
+        fs="data/downloads/faostat/FS.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["baseline_year"],
+    output:
+        anchors="<processing>/{name}/food_security_anchors.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=500,
+    log:
+        "<logs>/{name}/prepare_food_security_anchors.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_food_security_anchors.tsv"
+    script:
+        "../scripts/prepare_food_security_anchors.py"
+
+
+rule validate_baseline_diet:
+    """Compare GDD-derived baseline-diet kcal totals against FAOSTAT
+    dietary-energy anchors and emit a per-country status report.
+
+    Status categories:
+    - ok: GDD total within [0.7, 1.4] x ADER and consistent with MDER/DES.
+    - low: 0.7 x ADER >= GDD > 0.85 x MDER (consistent with severe survey
+           under-reporting but not physically impossible).
+    - below-MDER: GDD < 0.85 x MDER (physically implausible at population
+                  scale; investigate the GDD pipeline for that country).
+    - high: GDD > 1.4 x ADER but <= 1.05 x DES (high but supportable).
+    - above-DES: GDD > 1.05 x DES (exceeds food-system availability,
+                 implies upstream over-projection).
+    - no-anchor: country missing from FAOSTAT FS (small territories).
+    """
+    input:
+        baseline_diet="<processing>/{name}/baseline_diet.csv",
+        anchors="<processing>/{name}/food_security_anchors.csv",
+        nutrition="data/curated/nutrition.csv",
+    params:
+        countries=config["countries"],
+    output:
+        report="<processing>/{name}/baseline_diet_validation.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=200,
+    log:
+        "<logs>/{name}/validate_baseline_diet.log",
+    benchmark:
+        "<benchmarks>/{name}/validate_baseline_diet.tsv"
+    script:
+        "../scripts/validate_baseline_diet.py"
