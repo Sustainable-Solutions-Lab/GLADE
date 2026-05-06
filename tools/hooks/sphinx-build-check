@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Pre-push hook: run sphinx-build with warnings-as-errors so we catch
+# broken cross references, bad RST, and similar issues before they hit
+# the docs CI build. Uses the `dummy` builder (no HTML output) for speed
+# and re-uses the cached environment under docs/_build/.
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Pixi env with Sphinx installed.
+PIXI_ENV="${SPHINX_CHECK_PIXI_ENV:-dev}"
+
+exec pixi run -e "${PIXI_ENV}" sphinx-build \
+    -W --keep-going -q \
+    -b dummy \
+    docs docs/_build/dummy

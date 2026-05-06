@@ -33,3 +33,10 @@ repos:
         entry: tools/hooks/check-furo-rst
         language: script
         files: \.rst$
+      - id: sphinx-build-check
+        name: sphinx build (warnings as errors)
+        entry: tools/hooks/sphinx-build-check
+        language: script
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(docs/.*\.(rst|md|py|ipynb)|docs/conf\.py|docs/_static/.*)$
