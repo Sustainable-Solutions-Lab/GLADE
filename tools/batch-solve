@@ -100,6 +100,14 @@ def main():
         help="SLURM time limit (HH:MM:SS), overrides computed default",
     )
     parser.add_argument(
+        "--max-time",
+        default="4:00:00",
+        help="Cap on the auto-computed time limit (HH:MM:SS); ignored when "
+        "--time is given. The formula in compute_resources() assumes every "
+        "scenario hits the per-solve hard time_limit, which over-asks badly "
+        "for typical sweeps and hurts SLURM backfill. Default 4:00:00.",
+    )
+    parser.add_argument(
         "--mem",
         help="SLURM memory (e.g., 40G), overrides computed default",
     )
@@ -143,7 +151,10 @@ def main():
     # Compute resources
     resources = compute_resources(solving, args.parallel, args.batch_size)
     mem_mb = parse_mem(args.mem) if args.mem else resources["mem_mb"]
-    time_minutes = parse_time(args.time) if args.time else resources["time_minutes"]
+    if args.time:
+        time_minutes = parse_time(args.time)
+    else:
+        time_minutes = min(resources["time_minutes"], parse_time(args.max_time))
     cpus = resources["cpus"]
 
     n_batches = math.ceil(n_scenarios / args.batch_size)
