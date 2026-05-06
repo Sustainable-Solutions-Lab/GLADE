@@ -40,6 +40,15 @@ Installation
 4. Set up prek hooks::
 
        pixi run --environment dev prek install
+       pixi run --environment dev prek install --hook-type pre-push
+
+   The first command installs the regular ``pre-commit`` hooks (linting,
+   formatting, REUSE, Furo-incompatible RST guard). The second wires up
+   a ``pre-push`` hook that runs ``sphinx-build -W`` against ``docs/`` so
+   broken cross references and other RST issues are caught locally
+   instead of failing the docs CI build. The pre-push hook only fires
+   when files under ``docs/`` are part of the push, so unrelated pushes
+   are unaffected.
 
    Prek is a lightweight hook runner similar to `pre-commit <https://pre-commit.com/>`_.
    See `prek <https://github.com/j178/prek>`_ for details. You can also use pre-commit.
