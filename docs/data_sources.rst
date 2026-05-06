@@ -124,7 +124,8 @@ single 30 % factor, because the model has no separate non-food milk
 outlet. Under that convention the GDD-based dairy total happens to
 mass-balance against the production-side ``QCL × 0.7`` delivered to the
 food bus; switching to FBS would break that balance. See
-:ref:`animal-source-selection` for the full rationale.
+:ref:`Why animal products use FBS, not GDD <animal-source-selection>`
+for the full rationale.
 
 
 Agricultural Production Data

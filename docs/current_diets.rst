@@ -660,8 +660,9 @@ Workflow Integration
   * ``config.diet.fbs_override_foods``: Foods whose consumption is anchored
     to FBS supply (default: ``yam``, ``cocoa-powder``, ``coffee-green``,
     ``meat-cattle``, ``meat-pig``, ``meat-sheep``, ``meat-chicken``,
-    ``eggs``). See :ref:`animal-source-selection` for the rationale on
-    animal products and the deliberate exclusion of dairy.
+    ``eggs``). See :ref:`Why animal products use FBS, not GDD
+    <animal-source-selection>` for the rationale on animal products and
+    the deliberate exclusion of dairy.
   * ``config.byproducts``: Foods to exclude from share calculation (e.g., wheat-bran)
 
 **Output**:
