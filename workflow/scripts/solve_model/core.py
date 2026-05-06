@@ -18,6 +18,10 @@ import xarray as xr
 from workflow.scripts import constants
 from workflow.scripts.build_model.utils import _per_capita_mass_to_mt_per_year
 from workflow.scripts.population import get_country_population
+from workflow.scripts.solve_model.diet_stability import (
+    add_diet_stability_constraints,
+    evaluate_diet_stability_cost,
+)
 from workflow.scripts.solve_model.food_utility import (
     add_piecewise_food_utility,
     pop_piecewise_food_utility_value,
@@ -1173,14 +1177,17 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         raise ValueError(
             "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
         )
-    if enforce_baseline:
-        slack_cost = float(smk.params.slack_marginal_cost)
+    matched_baseline: pd.DataFrame | None = None
+    diet_stability_cfg = smk.params.diet_stability
+    needs_baseline_match = enforce_baseline or diet_stability_cfg["enabled"]
+    if needs_baseline_match:
         matched_baseline = _match_baseline_to_consume_links(
             prepared_baseline_df, consume_links, population_map
         )
-        if matched_baseline is not None:
-            add_food_slack_generators(n, matched_baseline, slack_cost)
-            fix_food_consumption_to_baseline(n, matched_baseline)
+    if enforce_baseline and matched_baseline is not None:
+        slack_cost = float(smk.params.slack_marginal_cost)
+        add_food_slack_generators(n, matched_baseline, slack_cost)
+        fix_food_consumption_to_baseline(n, matched_baseline)
 
     # Create the linopy model
     logger.info("Creating linopy model...")
@@ -1305,6 +1312,13 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     if stability_cfg["enabled"]:
         slack_marginal_cost = float(smk.params.slack_marginal_cost)
         add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
+
+    # Diet stability: per-(food, country) L1 (or quadratic) penalty anchoring
+    # consumption to the baseline diet. Independent of production_stability;
+    # only applies when validation.diet_stability.enabled is true and the
+    # diet is not already pinned via enforce_baseline_diet.
+    if diet_stability_cfg["enabled"] and not enforce_baseline:
+        add_diet_stability_constraints(n, matched_baseline, diet_stability_cfg)
 
     # Add animal growth cap constraints (independent of production stability)
     animal_growth_cap_cfg = smk.params.animal_growth_cap
@@ -1478,6 +1492,14 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
                 stability_cost += 0.5 * cost * float((sol * sol).sum())
         if abs(stability_cost) > 1e-12:
             n.meta["production_stability_cost"] = stability_cost
+
+        # Diet-stability post-hoc cost (separate from production stability so
+        # the objective breakdown can show them as distinct terms).
+        diet_cost = evaluate_diet_stability_cost(
+            n, matched_baseline, diet_stability_cfg
+        )
+        if abs(diet_cost) > 1e-12:
+            n.meta["diet_stability_cost"] = diet_cost
 
         # Post-hoc health evaluation when value_per_yll == 0
         if health_enabled and value_per_yll == 0:

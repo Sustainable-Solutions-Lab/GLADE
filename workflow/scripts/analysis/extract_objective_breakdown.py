@@ -235,6 +235,11 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
             total.get("Production stability", 0.0) + stability_cost
         )
 
+    # Diet stability penalty (per-(food, country) anchor toward observed diet).
+    diet_stability_cost = n.meta.get("diet_stability_cost", 0.0)
+    if diet_stability_cost:
+        total["Diet stability"] = total.get("Diet stability", 0.0) + diet_stability_cost
+
     # Piecewise food utility is also a linopy-level objective term.
     food_utility_cost = n.meta.get("food_utility_cost", 0.0)
     if food_utility_cost:
@@ -328,6 +333,7 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
         "Land use": "land_use",
         "Water": "water",
         "Production stability": "production_stability",
+        "Diet stability": "diet_stability",
     }
     result = result.rename(columns=column_map)
 

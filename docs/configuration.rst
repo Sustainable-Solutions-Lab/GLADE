@@ -413,6 +413,55 @@ are measured in absolute units or relative to the baseline.
 * Products missing baseline data are skipped with a warning
 * Multi-cropping is automatically disabled when production stability is enabled
 
+.. _diet-stability:
+
+Diet Stability
+^^^^^^^^^^^^^^
+
+The ``validation.diet_stability`` section adds a per-(food, country) soft anchor on
+**food consumption** toward the observed baseline diet (the same per-(food, country)
+``target_mt`` derived from ``baseline_year``-resolved data that
+``enforce_baseline_diet`` consumes). It is independent of ``production_stability``
+and **off by default**.
+
+Production stability constrains *what is produced* (and how much land/feed it uses)
+but leaves the model free to reroute the same hectares into a very different *diet*
+(e.g. converting feed-grain area to direct-food legumes/whole-grains). Under priced
+regimes (positive ``ghg_price`` / ``value_per_yll``) this rerouting can be substantial
+even when total cropland and pasture deviate by only a few percent. Diet stability
+attaches an explicit currency cost to every Mt that consumption of a food deviates
+from baseline, restoring a knob to anchor *consumption* close to current levels.
+
+Two penalty modes are available, selected via ``penalty_mode``:
+
+* **``l1``** (default): linear absolute-value penalty on consumption deviation.
+  Each Mt of absolute deviation costs ``food_l1_cost`` bn USD.
+* **``quadratic``**: soft quadratic penalty on consumption deviation,
+  ``0.5 * quadratic_cost * sum((p - baseline)^2)``.
+
+**Configuration options**:
+
+* ``diet_stability.enabled``: Master switch (default: ``false``).
+* ``diet_stability.penalty_mode``: ``l1`` (default) or ``quadratic``.
+* ``diet_stability.deviation_type``: ``absolute`` or ``relative`` (default: ``absolute``).
+* ``diet_stability.food_l1_cost``: Linear penalty (bn USD per Mt deviation), used when ``penalty_mode`` is ``l1``.
+* ``diet_stability.quadratic_cost``: Quadratic penalty (bn USD per Mt²), used when ``penalty_mode`` is ``quadratic``.
+* ``diet_stability.min_baseline``: Mt floor for relative-mode denominators.
+
+**Interaction with other features**:
+
+* The penalty is added on top of any piecewise consumer-values utility
+  (``food_utility_piecewise``); the two compose linearly.
+* Diet stability has no effect when ``enforce_baseline_diet`` is true
+  (the diet is already pinned via ``p_set``).
+* The cost shows up as a separate ``diet_stability`` column in the
+  per-scenario ``analysis/.../objective_breakdown.parquet``.
+
+A typical use is reproducing the current observed diet (per ``baseline_year``)
+under a priced GHG/YLL regime as the high-stability anchor of a transition study;
+the appropriate ``food_l1_cost`` is calibration-specific (analogous to
+``land_l1_cost`` for production_stability).
+
 .. _growth-caps:
 
 Growth Caps

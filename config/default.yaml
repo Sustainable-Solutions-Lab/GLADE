@@ -101,6 +101,21 @@ validation:
       min_baseline: 0.00001  # Mt DM denominator floor for relative penalty modes.
     land_conversion:
       enabled: true  # Penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline
+  diet_stability:
+    # Per-(food, country) deviation penalty on food_consumption links, anchored
+    # to the observed baseline-year diet (the same matched_baseline used by
+    # enforce_baseline_diet). Land/animal-feed production_stability does NOT
+    # constrain how the same hectares are routed into different foods, so a
+    # priced regime (GHG/YLL > 0) can leave land use ~unchanged while shifting
+    # the diet substantially. This block adds an explicit currency cost on diet
+    # deviation; off by default so it does not affect the calibration runs or
+    # any existing scenario.
+    enabled: false
+    penalty_mode: "l1"  # "l1" = linear |dev|, "quadratic" = 0.5 * c * dev^2
+    deviation_type: "absolute"  # "absolute" = Mt, "relative" = (Mt-baseline)/baseline
+    food_l1_cost: 0.0  # bn USD per Mt deviation (used when penalty_mode == "l1")
+    quadratic_cost: 0.0  # bn USD per Mt^2 (used when penalty_mode == "quadratic")
+    min_baseline: 0.000001  # Mt floor for relative-mode denominator
   animal_growth_cap:
     enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
     max_relative_increase: 0.1  # Maximum relative increase from baseline (0.1 = +10%)

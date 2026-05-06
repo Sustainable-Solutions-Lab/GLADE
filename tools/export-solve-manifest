@@ -222,6 +222,7 @@ def build_scenario_entry(
         "food_group_constraints": eff["food_groups"]["constraints"],
         "enforce_baseline": eff["validation"]["enforce_baseline_diet"],
         "production_stability": eff["validation"]["production_stability"],
+        "diet_stability": eff["validation"]["diet_stability"],
         "animal_growth_cap": eff["validation"]["animal_growth_cap"],
         "crop_growth_cap": eff["validation"]["crop_growth_cap"],
         "food_utility_piecewise": utility_cfg,

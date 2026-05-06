@@ -72,6 +72,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "health.value_per_yll",
     "validation.enforce_baseline_diet",
     "validation.production_stability",
+    "validation.diet_stability",
     "validation.animal_growth_cap",
     "macronutrients",
     "food_utility_piecewise",

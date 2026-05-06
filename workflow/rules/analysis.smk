@@ -108,6 +108,9 @@ if config["solving"]["inline_analysis"]:
             production_stability=lambda w: get_effective_config(w.scenario)[
                 "validation"
             ]["production_stability"],
+            diet_stability=lambda w: get_effective_config(w.scenario)["validation"][
+                "diet_stability"
+            ],
             animal_growth_cap=lambda w: get_effective_config(w.scenario)["validation"][
                 "animal_growth_cap"
             ],
