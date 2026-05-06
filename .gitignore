@@ -33,3 +33,7 @@ config/secrets.yaml
 # Local-only config overrides (e.g. cluster connection details)
 config/*.local.yaml
 /tools/snakemake-logger-plugin-compact/build/
+
+# Project-private workspace (per-investigation configs, scripts, scratch data
+# and notebooks that should not pollute the main repo). Not version-controlled.
+/tools/private/
