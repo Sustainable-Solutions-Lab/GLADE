@@ -632,26 +632,29 @@ def main() -> None:
     )
 
     implied = implied.merge(
-        faostat_prod[["country", "product", "production_mt"]],
+        faostat_prod[["country", "product", "production_mt_fresh_retail"]],
         on=["country", "product"],
         how="left",
     )
-    implied["production_mt"] = implied["production_mt"].fillna(0)
+    implied["production_mt_fresh_retail"] = implied[
+        "production_mt_fresh_retail"
+    ].fillna(0)
 
     implied["scale_factor"] = 1.0
-    zero_prod = implied["production_mt"] == 0
+    zero_prod = implied["production_mt_fresh_retail"] == 0
     implied.loc[zero_prod, "scale_factor"] = 0.0
     has_implied = implied["implied_prod"] > 0
     scalable = has_implied & ~zero_prod
     implied.loc[scalable, "scale_factor"] = (
-        implied.loc[scalable, "production_mt"] / implied.loc[scalable, "implied_prod"]
+        implied.loc[scalable, "production_mt_fresh_retail"]
+        / implied.loc[scalable, "implied_prod"]
     )
     no_feed = ~has_implied & ~zero_prod
     if no_feed.any():
         for c, p, pm in zip(
             implied.loc[no_feed, "country"],
             implied.loc[no_feed, "product"],
-            implied.loc[no_feed, "production_mt"],
+            implied.loc[no_feed, "production_mt_fresh_retail"],
         ):
             logger.warning(
                 "  %s/%s: FAOSTAT production %.3f Mt but no GLEAM feed; skipping",
@@ -670,7 +673,7 @@ def main() -> None:
         notable["product"],
         notable["scale_factor"],
         notable["implied_prod"],
-        notable["production_mt"],
+        notable["production_mt_fresh_retail"],
     ):
         flag = ""
         if sf > 3.0:

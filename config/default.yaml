@@ -546,10 +546,6 @@ food_groups:
 # --- section: diet ---
 diet:
   baseline_age: "All ages"
-  # Foods whose group-level consumption is overridden with waste-corrected
-  # FAOSTAT Food Balance Sheet supply data. This addresses cases where GDD
-  # survey intake substantially underestimates actual consumption (e.g. yam
-  # in West Africa).
   # Conversion factor from GDD beverage intake (cups/day) to dry commodity
   # weight (g/day). Only tea (v18) is actively used; coffee-green is sourced
   # from FAOSTAT FBS (fbs_override_foods) because GDD v17 data is unreliable
@@ -558,10 +554,32 @@ diet:
   # Tea: 240 g/cup × 0.01 g-dry/g-brewed = 2.4 g-dry/cup
   stimulant_brewed_to_dry:
     tea: 2.4
+  # Foods whose per-country intake is computed directly from FAOSTAT Food
+  # Balance Sheet supply rather than disaggregated from GDD/GBD group
+  # totals. For each listed food the override sets
+  #   intake_g_day = FBS_supply × within_FBS_share × carcass_to_retail
+  #                  × (1 − loss_fraction) × (1 − waste_fraction)
+  #                  × 1000 / 365
+  # which mirrors the FLW correction the build_model animal_production and
+  # food_processing links apply on the production side. This anchors the
+  # diet to the same FAOSTAT backbone as baseline production.
+  #
+  # Meats, poultry, and eggs are anchored to FBS because slaughter-volume
+  # supply is more reliable than self-reported intake (which is known to
+  # over-report red meat in particular). Dairy is intentionally NOT in the
+  # list: its food_loss_waste convention is non-standard (waste=0.30
+  # already lumps in the non-food fraction of raw milk), so the GDD-based
+  # disaggregation happens to mass-balance against the production-side
+  # FLW; switching it to an FBS override would break that balance.
   fbs_override_foods:
   - yam
   - cocoa-powder
   - coffee-green
+  - meat-cattle
+  - meat-pig
+  - meat-sheep
+  - meat-chicken
+  - eggs
   # NHANES "What We Eat in America" / FPED demographic table.
   # Used as a region-specific intake override for the United States. The
   # `cycle` corresponds to the FPED release cycle in the URL (e.g. 1720 for

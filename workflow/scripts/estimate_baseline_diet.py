@@ -265,7 +265,7 @@ def build_within_group_shares(
     # Build QCL production lookups
     # Crop production: (country, qcl_item_code) → production_tonnes
     crop_prod_lookup = _build_crop_production_lookup(crop_production_df, qcl_lookup)
-    # Animal production: (country, qcl_item_code) → production_mt
+    # Animal production: (country, qcl_item_code) → production_mt_fresh_retail
     animal_prod_lookup = _build_animal_production_lookup(
         animal_production_df, qcl_lookup
     )
@@ -655,18 +655,22 @@ def _build_animal_production_lookup(
     animal_production_df: pd.DataFrame,
     qcl_lookup: dict[str, int],
 ) -> dict[tuple[str, int], float]:
-    """Build (country, qcl_item_code) → production_mt lookup from animal production data."""
+    """Build (country, qcl_item_code) → production_mt_fresh_retail lookup.
+
+    Animal production CSV columns: country, product, year,
+    production_mt_fresh_retail. The mass basis is fresh retail weight for
+    meats (post-c2r) and raw fresh weight for milk/eggs.
+    """
     result: dict[tuple[str, int], float] = {}
 
     if animal_production_df.empty:
         return result
 
-    # Animal production has columns: country, product, year, production_mt
     # Map product names to QCL codes via qcl_lookup
     for _, row in animal_production_df.iterrows():
         product_name = row["product"]
         country = row["country"]
-        production = row["production_mt"]
+        production = row["production_mt_fresh_retail"]
 
         if product_name in qcl_lookup:
             qcl_code = qcl_lookup[product_name]
@@ -743,25 +747,35 @@ def _apply_fbs_overrides(
     fbs_items_df: pd.DataFrame,
     food_item_map_df: pd.DataFrame,
     flw_df: pd.DataFrame,
+    qcl_resolution_df: pd.DataFrame,
+    crop_production_df: pd.DataFrame,
+    animal_production_df: pd.DataFrame,
     override_foods: list[str],
+    carcass_to_retail: dict[str, float],
 ) -> pd.DataFrame:
-    """Override per-food consumption with waste-corrected FAOSTAT FBS supply.
+    """Override per-food consumption with FBS-supply-anchored intake.
 
-    For foods where GDD group totals substantially underestimate actual intake
-    (e.g. yam in West Africa), replace the disaggregated consumption with
-    FAOSTAT food supply x (1 - waste_fraction).
+    For each override food, computes per-country intake mass as:
 
-    Parameters
-    ----------
-    result : DataFrame with columns country, food, food_group, consumption_g_per_day
-    fbs_items_df : FAOSTAT FBS item-level supply (country, item_code, supply_kg_per_capita_year)
-    food_item_map_df : Mapping from food → item_code(s)
-    flw_df : Food loss and waste fractions (country, food_group, waste_fraction)
-    override_foods : List of food names to override
+        intake_g_day = FBS_supply_kg_per_capita_year
+                       * within_FBS_item_share
+                       * carcass_to_retail
+                       * (1 - loss_fraction)
+                       * (1 - waste_fraction)
+                       * 1000 / 365
 
-    Returns
-    -------
-    DataFrame with overridden consumption values.
+    Carcass_to_retail converts FAOSTAT FBS supply (carcass weight equivalent
+    for meat) to retail mass; non-meat foods use 1.0. The (1-loss)(1-waste)
+    multiplier mirrors the FLW correction that the build_model
+    animal_production and food_processing links apply on the production
+    side, so consumer-side intake is on the same post-FLW basis as what the
+    food bus actually delivers.
+
+    When several override foods share a single FBS item code (e.g.
+    dairy/dairy-buffalo both map to 2848 "Milk - Excluding Butter"), the
+    FBS supply is split between them by country-level QCL production
+    weights (matching the within-FBS-item resolution used for non-override
+    foods).
     """
     if not override_foods:
         return result
@@ -775,15 +789,31 @@ def _apply_fbs_overrides(
     map_df["item_code"] = map_df["item_code"].astype(int)
     fbs_codes_by_food = map_df.groupby("food")["item_code"].apply(list).to_dict()
 
-    # Build FBS supply lookup: (country, item_code) → kg/capita/year
+    # Reverse lookup: FBS item code → [override foods sharing it]
+    code_to_override_foods: dict[int, list[str]] = {}
+    for food in override_foods:
+        for code in fbs_codes_by_food.get(food, []):
+            code_to_override_foods.setdefault(int(code), []).append(food)
+
+    # FBS supply lookup: (country, item_code) → kg/capita/year (carcass weight for meat)
     fbs_supply = fbs_items_df.set_index(["country", "item_code"])[
         "supply_kg_per_capita_year"
     ].to_dict()
 
-    # Build waste fraction lookup: (country, food_group) → waste_fraction
-    waste_lookup = flw_df.set_index(["country", "food_group"])[
-        "waste_fraction"
-    ].to_dict()
+    # FLW lookup: (country, food_group) → (loss_fraction, waste_fraction)
+    flw_lookup = flw_df.set_index(["country", "food_group"])[
+        ["loss_fraction", "waste_fraction"]
+    ]
+
+    # QCL production lookups for splitting shared FBS items
+    qcl_lookup: dict[str, int] = {}
+    if not qcl_resolution_df.empty:
+        for _, row in qcl_resolution_df.iterrows():
+            qcl_lookup[row["food"]] = int(row["qcl_item_code"])
+    crop_prod_lookup = _build_crop_production_lookup(crop_production_df, qcl_lookup)
+    animal_prod_lookup = _build_animal_production_lookup(
+        animal_production_df, qcl_lookup
+    )
 
     for food in override_foods:
         codes = fbs_codes_by_food.get(food)
@@ -801,27 +831,48 @@ def _apply_fbs_overrides(
             continue
 
         food_group = result.loc[food_mask, "food_group"].iloc[0]
+        c2r = float(carcass_to_retail.get(food, 1.0))
         before_total = result.loc[food_mask, "consumption_g_per_day"].sum()
 
-        for idx in result.index[food_mask]:
-            country = result.loc[idx, "country"]
-            # Sum supply across all FBS item codes for this food
-            supply_kg = sum(fbs_supply.get((country, int(code)), 0.0) for code in codes)
-            # Convert kg/capita/year → g/day
-            supply_g_day = supply_kg * 1000.0 / 365.0
-            # Apply waste correction
-            waste_frac = waste_lookup.get((country, food_group), 0.0)
-            intake_g_day = supply_g_day * (1.0 - waste_frac)
-            result.loc[idx, "consumption_g_per_day"] = intake_g_day
+        countries = result.loc[food_mask, "country"].tolist()
+        new_intake = []
+        for country in countries:
+            supply_kg = 0.0
+            for code in codes:
+                shared = code_to_override_foods.get(int(code), [food])
+                if len(shared) > 1:
+                    shares = _resolve_shared_fbs_item(
+                        country,
+                        shared,
+                        qcl_lookup,
+                        crop_prod_lookup,
+                        animal_prod_lookup,
+                    )
+                    fbs_share = shares.get(food, 1.0 / len(shared))
+                else:
+                    fbs_share = 1.0
+                supply_kg += fbs_share * fbs_supply.get((country, int(code)), 0.0)
+
+            try:
+                loss_frac, waste_frac = flw_lookup.loc[(country, food_group)]
+            except KeyError:
+                loss_frac, waste_frac = 0.0, 0.0
+            flw_mult = (1.0 - float(loss_frac)) * (1.0 - float(waste_frac))
+
+            intake_g_day = supply_kg * c2r * flw_mult * 1000.0 / 365.0
+            new_intake.append(intake_g_day)
+
+        result.loc[food_mask, "consumption_g_per_day"] = new_intake
 
         after_total = result.loc[food_mask, "consumption_g_per_day"].sum()
         logger.info(
             "FBS override: %s — before=%.0f g/day total, after=%.0f g/day total "
-            "(across %d countries)",
+            "(c2r=%.2f, %d countries)",
             food,
             before_total,
             after_total,
-            food_mask.sum(),
+            c2r,
+            int(food_mask.sum()),
         )
 
     return result
@@ -1033,11 +1084,19 @@ def main():
         drop=True
     )
 
-    # Step 4: Override specific foods with waste-corrected FBS supply
+    # Step 4: Override specific foods with FBS-supply-anchored intake
     if fbs_override_foods:
         logger.info("Step 4: Applying FBS overrides for %s...", fbs_override_foods)
         result = _apply_fbs_overrides(
-            result, fbs_items_df, food_item_map_df, flw_df, fbs_override_foods
+            result,
+            fbs_items_df,
+            food_item_map_df,
+            flw_df,
+            qcl_resolution_df,
+            crop_production_df,
+            animal_production_df,
+            fbs_override_foods,
+            carcass_to_retail_meat,
         )
 
     # Validation: group sums should match group totals
@@ -1046,7 +1105,16 @@ def main():
     # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-    result.to_csv(output_path, index=False)
+    # Summary statistics (uses internal column name)
+    _log_summary_stats(result)
+
+    # Rename to make the weight basis explicit on disk: the value is
+    # consumer-eaten intake mass (g/day), already net of supply-chain loss
+    # and consumer waste — i.e. on the same basis as the food bus delivers
+    # mass after the animal_production / food_processing FLW multiplier.
+    result.rename(
+        columns={"consumption_g_per_day": "consumption_g_per_day_intake"}
+    ).to_csv(output_path, index=False)
     logger.info(
         "Wrote %d rows (%d countries, %d foods) to %s",
         len(result),
@@ -1054,9 +1122,6 @@ def main():
         result["food"].nunique(),
         output_path,
     )
-
-    # Summary statistics
-    _log_summary_stats(result)
 
 
 def _log_qcl_fallback_stats(

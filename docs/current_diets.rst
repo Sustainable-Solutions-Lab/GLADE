@@ -468,21 +468,36 @@ within a tolerance of 0.1 g/day. Any discrepancies are logged as warnings.
 Step 4: FBS Supply Overrides
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For specific foods where GDD survey-based group totals substantially
-underestimate actual consumption, the per-food estimate from Step 3 is replaced
-with **waste-corrected FAOSTAT Food Balance Sheet supply** data. The list of
-overridden foods is configured via ``config.diet.fbs_override_foods`` (default:
-``["yam"]``).
-
-For each overridden food and country, the replacement consumption is:
+For specific foods, the per-food estimate from Step 3 is replaced with
+**FAOSTAT Food Balance Sheet supply** data converted to consumer-eaten
+intake mass. The list of overridden foods is configured via
+``config.diet.fbs_override_foods``. The replacement formula is
 
 .. math::
 
-   c_{i,f} = \frac{S_{i,f} \times 1000}{365} \times (1 - w_{i,g(f)})
+   c_{i,f} = \frac{S_{i,f} \times \sigma_{i,f} \times r_f \times 1000}
+                  {365}
+            \times (1 - \ell_{i,g(f)}) \times (1 - w_{i,g(f)})
 
-where :math:`S_{i,f}` is the FAOSTAT food supply (kg/capita/year) summed
-across the food's FBS item codes, and :math:`w_{i,g(f)}` is the country- and
-group-level consumer waste fraction from the food loss and waste dataset.
+where
+
+* :math:`S_{i,f}` is the FAOSTAT FBS supply (kg/capita/year) summed
+  across the food's FBS item codes (carcass weight equivalent for meat),
+* :math:`\sigma_{i,f}` is the within-FBS-item share (1.0 unless several
+  override foods share an FBS code, in which case the supply is split by
+  country-level QCL production weights — e.g. dairy/dairy-buffalo both
+  map to FBS 2848 "Milk - Excluding Butter"),
+* :math:`r_f` is the carcass-to-retail factor (0.67 cattle, 0.73 pig,
+  0.66 sheep, 0.60 chicken; 1.0 for non-meat foods),
+* :math:`\ell_{i,g(f)}` and :math:`w_{i,g(f)}` are the country- and
+  group-level supply-chain loss and consumer waste fractions from
+  ``processing/{name}/food_loss_waste.csv``.
+
+The :math:`(1-\ell)(1-w)` multiplier mirrors exactly the FLW correction
+that the build_model ``animal_production`` and ``food_processing`` links
+apply on the production side, so the resulting baseline diet is on the
+**post-FLW intake basis** that the food bus delivers — the two sides
+mass-balance at baseline.
 
 .. admonition:: Why yam needs an override
 
@@ -494,6 +509,63 @@ group-level consumer waste fraction from the food loss and waste dataset.
    problem is entirely in the GDD group total for starchy vegetables in these
    countries. Overriding yam consumption with FBS supply ensures that the
    model's demand matches observed food availability.
+
+.. _animal-source-selection:
+
+.. admonition:: Why animal products use FBS, not GDD
+
+   For meats, poultry, and eggs the per-food intake is anchored to
+   FAOSTAT FBS supply rather than the GDD-disaggregated group total.
+   Three reasons:
+
+   1. **Survey bias on socially significant foods.** Self-reported food
+      intake systematically over-reports red meat (cattle, pig, sheep)
+      against slaughter-volume supply in many populations. GDD harmonises
+      survey data across studies but does not reconcile against
+      production. With processed-meat (GDD v09) folded into ``red_meat``
+      to match FAOSTAT cattle/pig slaughter mass, the GDD-based total
+      for red meat sat ~24 Mt/yr above what total world supply
+      (production net of feed/non-food/exports, after post-loss and
+      consumer waste) can deliver — physically impossible. Validation
+      slacks under ``enforce_baseline_diet=true`` exposed this as a
+      +17.8% positive food slack on red_meat, which inflated the
+      calibrated ``animal_feed_l1_cost`` ninefold (0.034 → 0.299 bn USD
+      per Mt DM) because the production-stability calibration had to
+      fight intake-derived consumer values that were structurally above
+      supply.
+
+   2. **Trade is handled implicitly.** FBS supply per country already
+      encodes
+      ``production + imports − exports − feed − seed − non-food
+      − stock_changes``,
+      so country-level diet automatically reflects the importer/exporter
+      pattern (Japan, China, Korea import; USA, Brazil, Australia
+      export). The model's trade hubs then have to reproduce only the
+      observed FAOSTAT trade flows at solve time, instead of resolving a
+      mismatch between intake-based diet and slaughter-based production
+      via expensive feed-deviation L1 penalties.
+
+   3. **Same FAOSTAT backbone as production.** Baseline animal
+      production (``processing/{name}/faostat_animal_production.csv``)
+      is built from QCL element 5510 with ``carcass_to_retail_meat``
+      applied. FBS items aggregate the same QCL primary commodities at
+      the carcass-weight balance level. Anchoring both sides to FAOSTAT
+      removes a class of unit/source mismatches that previously surfaced
+      only as residual slack after solve.
+
+   **Dairy is intentionally excluded** from the override list. Its
+   ``food_loss_waste`` convention is non-standard — the curated dairy
+   override sets ``loss_fraction=0`` and ``waste_fraction=0.30``, where
+   the 30% lumps in *non-food uses of raw milk* (calf feed, processing,
+   industrial) plus retail and consumer waste, because the model does
+   not have an explicit non-food milk outlet. Under that convention the
+   GDD-based dairy total of ~645 Mt/yr happens to mass-balance against
+   the production-side ``QCL × 0.7 ≈ 643 Mt/yr`` delivered to the food
+   bus. Switching dairy to an FBS override would break that balance
+   (FBS supply is post-non-food-use and would imply a 30% surplus on
+   the food bus). If the dairy chain ever gets an explicit non-food
+   outlet, both ``food_loss_waste_overrides.csv`` and
+   ``fbs_override_foods`` should be revisited together.
 
 Baseline Diet Output
 ---------------------
@@ -513,8 +585,13 @@ The output file ``processing/{name}/baseline_diet.csv`` contains one row per
      - Model food name (e.g., ``banana``, ``rice-white``, ``cowpea``)
    * - ``food_group``
      - Food group to which the food belongs
-   * - ``consumption_g_per_day``
-     - Estimated daily consumption in grams per person
+   * - ``consumption_g_per_day_intake``
+     - Estimated daily consumption in grams per person, on
+       **post-loss, post-waste consumer-eaten intake basis**. The
+       ``_intake`` suffix flags the weight basis explicitly (see
+       :ref:`weight-bases`); the value is on the same basis as what the
+       food bus delivers after the build_model FLW multiplier, so
+       diet and supply mass-balance at baseline.
 
 Rows are sorted by (country, food_group, food).
 
@@ -580,7 +657,11 @@ Workflow Integration
   * ``config.food_groups.included``: Food groups to filter and aggregate
   * ``config.baseline_year``: Reference year for GDD dietary intake and GBD exposure data
   * ``config.diet.baseline_age``: Age group for baseline totals (default: ``"11-74 years"``)
-  * ``config.diet.fbs_override_foods``: Foods whose consumption is overridden with waste-corrected FBS supply (default: ``["yam"]``)
+  * ``config.diet.fbs_override_foods``: Foods whose consumption is anchored
+    to FBS supply (default: ``yam``, ``cocoa-powder``, ``coffee-green``,
+    ``meat-cattle``, ``meat-pig``, ``meat-sheep``, ``meat-chicken``,
+    ``eggs``). See :ref:`animal-source-selection` for the rationale on
+    animal products and the deliberate exclusion of dairy.
   * ``config.byproducts``: Foods to exclude from share calculation (e.g., wheat-bran)
 
 **Output**:

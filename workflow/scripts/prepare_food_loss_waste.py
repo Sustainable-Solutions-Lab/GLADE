@@ -865,7 +865,7 @@ def main():
 
         production_total = animal_production[
             animal_production["product"].isin(products)
-        ]["production_mt"].sum()
+        ]["production_mt_fresh_retail"].sum()
 
         supply_rows = faostat_supply[faostat_supply["item"] == fbs_item]
         supply_per_country = supply_rows.drop_duplicates(subset=["country"]).set_index(

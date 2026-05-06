@@ -441,8 +441,17 @@ def _prepare_baseline_diet_for_food_constraints(
 
     Uses the same filtering and clipping logic as per-food equality constraints
     so ratio-based runs are consistent with baseline-equality runs.
+
+    On-disk column ``consumption_g_per_day_intake`` is renamed to
+    ``consumption_g_per_day`` for internal use; the on-disk suffix
+    documents that the value is post-loss, post-waste consumer-eaten mass
+    (the same basis the food bus delivers after the FLW multiplier).
     """
     df = baseline_df.copy()
+    if "consumption_g_per_day_intake" in df.columns:
+        df = df.rename(
+            columns={"consumption_g_per_day_intake": "consumption_g_per_day"}
+        )
     df["country"] = df["country"].astype(str).str.upper()
     df["food"] = df["food"].astype(str)
     df["consumption_g_per_day"] = pd.to_numeric(

@@ -12,6 +12,21 @@ for validation mode.
 For poultry, multiple FAOSTAT species are aggregated into the model's
 ``meat-chicken`` product so demand for "other poultry" can be projected onto
 the modeled poultry commodity.
+
+Output weight basis
+-------------------
+- Meats (``meat-cattle``, ``meat-pig``, ``meat-chicken``, ``meat-sheep``):
+  fresh retail weight (boneless, trimmed). FAOSTAT QCL reports primary
+  meat in carcass weight equivalent ("with the bone, fresh or chilled");
+  this script multiplies by ``carcass_to_retail_meat`` from config to
+  convert to retail mass.
+- Dairy (``dairy``, ``dairy-buffalo``): raw whole milk mass (fresh).
+- Eggs: whole eggs in shell (fresh).
+
+The output column is named ``production_mt_fresh_retail`` to make this
+basis explicit. It is the same basis the ``animal_production`` link
+expects on its bus1 output before the link applies the
+``(1-loss_fraction) * (1-waste_fraction)`` FLW multiplier.
 """
 
 import logging
@@ -167,7 +182,7 @@ def main() -> None:
     )
 
     # Convert tonnes to Mt for consistency with model units
-    result["production_mt"] = result["production_tonnes"] * 1e-6
+    result["production_mt_fresh_retail"] = result["production_tonnes"] * 1e-6
     result = result.drop(columns=["production_tonnes"])
 
     # Convert carcass-weight meat production to retail-weight using config factors
@@ -184,8 +199,8 @@ def main() -> None:
                 ", ".join(missing_products),
             )
             result.loc[missing, "carcass_to_retail"] = 1.0
-        result.loc[meat_mask, "production_mt"] = (
-            result.loc[meat_mask, "production_mt"]
+        result.loc[meat_mask, "production_mt_fresh_retail"] = (
+            result.loc[meat_mask, "production_mt_fresh_retail"]
             * result.loc[meat_mask, "carcass_to_retail"]
         )
         logger.info(
@@ -198,7 +213,7 @@ def main() -> None:
     logger.info("Retrieved country-level production data:")
     for product in result["product"].unique():
         prod_data = result[result["product"] == product]
-        total_mt = prod_data["production_mt"].sum()
+        total_mt = prod_data["production_mt_fresh_retail"].sum()
         n_countries = len(prod_data)
         logger.info(
             "  %s: %.2f Mt across %d countries",
@@ -219,7 +234,7 @@ def main() -> None:
                         "country": country,
                         "product": product,
                         "year": production_year,
-                        "production_mt": 0.0,
+                        "production_mt_fresh_retail": 0.0,
                     }
                 )
 

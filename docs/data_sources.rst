@@ -29,6 +29,104 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 5. Register for a Copernicus Climate Data Store account and configure your API key to enable automatic retrieval of land cover data (:ref:`copernicus-land-cover`).
 
 
+.. _weight-bases:
+
+Weight bases for animal products
+--------------------------------
+
+Animal-product mass appears in several different "weight bases" along
+the supply chain. Mixing these silently is a common source of bugs, so
+the project tracks them explicitly in column names and in loader/writer
+docstrings. For animal foods specifically:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 18 60
+
+   * - Basis
+     - Notation
+     - Definition
+   * - Live weight
+     - LW
+     - The animal alive on the farm. Not used directly in the model.
+   * - Carcass weight equivalent
+     - CWE
+     - The slaughtered carcass with bones, blood drained. FAOSTAT FBS
+       reports meat in CWE; FAOSTAT QCL "Meat of … with the bone, fresh
+       or chilled" is also CWE.
+   * - Fresh retail
+     - retail
+     - Boneless, trimmed cuts as sold to the consumer; equals
+       ``CWE × carcass_to_retail`` (OECD-FAO 2023 Box 6.1: 67 % cattle,
+       73 % pig, 60 % chicken, 66 % sheep). Dairy and eggs use
+       ``carcass_to_retail = 1`` (no conversion).
+   * - Intake
+     - intake
+     - What people actually consume; equals
+       ``retail × (1 − loss_fraction) × (1 − waste_fraction)``. This is
+       what dietary intake surveys measure (GDD, GBD, NHANES) and the
+       basis the model's food bus delivers after the ``animal_production``
+       link applies its FLW multiplier.
+
+CSV columns and config keys carry an explicit suffix where the basis
+matters:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 25 30
+
+   * - Column / file
+     - Basis
+     - Source
+   * - ``faostat_animal_production.csv:production_mt_fresh_retail``
+     - retail
+     - QCL element 5510 × ``carcass_to_retail_meat`` (raw fresh weight
+       for milk and eggs).
+   * - ``baseline_diet.csv:consumption_g_per_day_intake``
+     - intake
+     - GDD/GBD/FAOSTAT/NHANES intake surveys, or for FBS-overridden
+       foods, ``FBS_supply × within_FBS_share × carcass_to_retail
+       × (1 − loss) × (1 − waste)``.
+   * - ``faostat_fbs_items.csv:supply_kg_per_capita_year``
+     - CWE for meat;
+       fresh for milk/eggs/crops
+     - FAOSTAT FBS element 645 (`Food supply quantity, kg/capita/yr`).
+       Mixed-unit file: meat items are CWE per FAOSTAT convention;
+       crops are fresh weight. Convert to retail by multiplying with
+       ``carcass_to_retail_meat`` for meat items.
+   * - ``feed_baseline.csv:feed_use_mt_dm``
+     - dry matter
+     - GLEAM 3.0 (already explicit).
+
+Source selection for animal products
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For animal products the project uses **FAOSTAT throughout** — both
+production (QCL) and per-country food supply (FBS) — because:
+
+* QCL slaughter-volume data is more reliable than self-reported intake
+  for socially significant foods like red meat, and FBS aggregates the
+  same QCL primary commodities into a closed
+  ``production + trade − non-food − loss`` balance per country.
+* Anchoring the consumption side to FBS supply with the same FLW
+  factors used on the production side keeps diet and supply on the same
+  intake basis at baseline, so the food-balance constraint closes
+  without artificial slack.
+* Trade falls out for free: FBS supply per country already nets in
+  imports and exports, so per-country diet matches what FAOSTAT reports
+  each country actually consumed. The model's trade hubs reproduce the
+  observed flows at solve time.
+
+The exception is **dairy**, which uses GDD-disaggregated values rather
+than an FBS override. Dairy's ``food_loss_waste`` convention lumps
+non-food uses of raw milk (calf feed, processing, industrial) into a
+single 30 % factor, because the model has no separate non-food milk
+outlet. Under that convention the GDD-based dairy total happens to
+mass-balance against the production-side ``QCL × 0.7`` delivered to the
+food bus; switching to FBS would break that balance. See
+:ref:`animal-source-selection` for the full rationale.
+
+
 Agricultural Production Data
 -----------------------------
 

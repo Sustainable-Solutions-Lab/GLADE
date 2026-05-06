@@ -103,8 +103,11 @@ def main(
     """Generate the by-food baseline diet figure."""
     apply_doc_style()
 
-    # Load data
-    diet = pd.read_csv(baseline_diet_path)
+    # Load data; on-disk column has explicit "_intake" suffix to flag the
+    # mass basis (post-loss, post-waste consumer intake).
+    diet = pd.read_csv(baseline_diet_path).rename(
+        columns={"consumption_g_per_day_intake": "consumption_g_per_day"}
+    )
     population = pd.read_csv(population_path)
 
     # Compute global population-weighted mean consumption per food
