@@ -19,7 +19,7 @@ Algorithm:
 
 Input:
     - dietary_intake.csv: Food group totals (GDD + FAOSTAT, waste-corrected)
-    - gbd_dietary_risk_exposure.csv: GBD estimates for averaging/cross-validation
+    - gbd_food_group_intake.csv: GBD estimates for averaging/cross-validation
     - faostat_fbs_items.csv: Item-level food supply for within-group shares
     - faostat_crop_production.csv: Crop production for QCL-based resolution
     - faostat_animal_production.csv: Animal production (dairy vs buffalo)

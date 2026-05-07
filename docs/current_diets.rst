@@ -149,7 +149,7 @@ Data Processing
 The dietary data processing pipeline involves three stages:
 
 1. **Prepare GDD Data** (``workflow/scripts/prepare_gdd_dietary_intake.py``): Processes GDD survey data for most food groups.
-2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_gdd_supplements.py``): Fetches FAOSTAT supply data for dairy, eggs, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
+2. **Prepare FAOSTAT Data** (``workflow/scripts/prepare_faostat_food_group_supply.py``): Fetches FAOSTAT supply data for dairy, eggs, poultry, and oil; converts supply to intake by subtracting waste; fills missing countries using proxies.
 3. **Merge Sources** (``workflow/scripts/merge_dietary_sources.py``): Combines the datasets into a unified ``dietary_intake.csv``.
 
 The GDD processing step (Step 1) performs the following:
@@ -258,10 +258,10 @@ food groups:
 
 These six food groups (excluding milk) overlap with GDD estimates, enabling
 both cross-validation and averaging to produce more robust group totals. The
-GBD data is processed by ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py``,
+GBD data is processed by ``workflow/scripts/prepare_gbd_food_group_intake.py``,
 which filters the raw IHME CSV files for the configured reference year, maps
 GBD location names to ISO3 country codes, and outputs
-``processing/{name}/gbd_dietary_risk_exposure.csv``.
+``processing/{name}/gbd_food_group_intake.csv``.
 
 .. _baseline-diet-estimation:
 
@@ -627,9 +627,9 @@ Workflow Integration
 
 **Snakemake rules**:
   * ``prepare_gdd_dietary_intake``
-  * ``prepare_faostat_gdd_supplements``
+  * ``prepare_faostat_food_group_supply``
   * ``merge_dietary_sources``
-  * ``prepare_gbd_dietary_risk_exposure``
+  * ``prepare_gbd_food_group_intake``
   * ``estimate_baseline_diet``
 
 **Input data**:
@@ -667,14 +667,14 @@ Workflow Integration
 
 **Output**:
   * ``processing/{name}/dietary_intake.csv`` — Merged food-group-level intake
-  * ``processing/{name}/gbd_dietary_risk_exposure.csv`` — GBD risk exposure estimates
+  * ``processing/{name}/gbd_food_group_intake.csv`` — GBD risk exposure estimates
   * ``processing/{name}/baseline_diet.csv`` — Per-food, per-country consumption
 
 **Scripts**:
   * ``workflow/scripts/prepare_gdd_dietary_intake.py``
-  * ``workflow/scripts/prepare_faostat_gdd_supplements.py``
+  * ``workflow/scripts/prepare_faostat_food_group_supply.py``
   * ``workflow/scripts/merge_dietary_sources.py``
-  * ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py``
+  * ``workflow/scripts/prepare_gbd_food_group_intake.py``
   * ``workflow/scripts/estimate_baseline_diet.py``
 
 References

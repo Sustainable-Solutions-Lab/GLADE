@@ -768,7 +768,7 @@ def apply_curated_overrides(
 def main():
     m49_file = snakemake.input["m49"]
     animal_production_file = snakemake.input["animal_production"]
-    faostat_gdd_supplements_file = snakemake.input["faostat_gdd_supplements"]
+    faostat_food_group_supply_file = snakemake.input["faostat_food_group_supply"]
     population_file = snakemake.input["population"]
     fbs_csv = snakemake.input["fbs_csv"]
     overrides_file = snakemake.input["overrides"]
@@ -788,7 +788,7 @@ def main():
 
     # Load FAOSTAT data for dairy loss calculation
     animal_production = pd.read_csv(animal_production_file)
-    faostat_supply = pd.read_csv(faostat_gdd_supplements_file)
+    faostat_supply = pd.read_csv(faostat_food_group_supply_file)
     population = pd.read_csv(population_file)
 
     # Read FAOSTAT food supply data from bulk CSV

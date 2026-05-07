@@ -18,7 +18,7 @@ This script:
 1. Aggregates ``baseline_diet.csv`` per (country, food_group), summing
    each food's ``consumption_g_per_day_intake`` into the food-group it
    belongs to (only the GBD-covered risk groups).
-2. Loads ``gbd_dietary_risk_exposure.csv`` (the GBD intake source) and
+2. Loads ``gbd_food_group_intake.csv`` (the GBD intake source) and
    applies the same cooked-to-dry conversion the diet pipeline applies
    to it (gated by ``health.gbd_intake_needs_conversion`` in config).
 3. Computes the per-country ratio model_intake / gbd_intake for each

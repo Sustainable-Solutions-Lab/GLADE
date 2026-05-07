@@ -267,7 +267,7 @@ FAOSTAT Food Balance Sheets (FBS)
 
 **Citation**: FAO. FAOSTAT Food Balance Sheets. https://www.fao.org/faostat/en/
 
-**Retrieval**: Downloaded as bulk CSVs from FAOSTAT and processed by scripts in ``workflow/scripts/`` (e.g., ``prepare_faostat_gdd_supplements.py``, ``prepare_food_loss_waste.py``).
+**Retrieval**: Downloaded as bulk CSVs from FAOSTAT and processed by scripts in ``workflow/scripts/`` (e.g., ``prepare_faostat_food_group_supply.py``, ``prepare_food_loss_waste.py``).
 
 **Usage**:
   * **Food Waste**: Converts per-capita waste (kg) to fractions relative to available food supply.
@@ -789,7 +789,7 @@ IHME GBD 2019 -- Dietary Risk Exposure Estimates
 
 **Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
 
-**Retrieval**: Processed via ``workflow/scripts/prepare_gbd_dietary_risk_exposure.py`` from ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
+**Retrieval**: Processed via ``workflow/scripts/prepare_gbd_food_group_intake.py`` from ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
 
 **Manual download steps**:
 

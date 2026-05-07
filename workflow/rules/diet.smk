@@ -61,7 +61,7 @@ rule prepare_faostat_fbs_items:
         "../scripts/prepare_faostat_fbs_items.py"
 
 
-rule prepare_faostat_gdd_supplements:
+rule prepare_faostat_food_group_supply:
     """Prepare FAOSTAT supply data to supplement GDD dietary intake.
 
     Reads dairy, oil, and sugar supply data from FAOSTAT FBS bulk CSV
@@ -78,18 +78,18 @@ rule prepare_faostat_gdd_supplements:
         baseline_age=config["diet"]["baseline_age"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
-        supply="<processing>/{name}/faostat_gdd_supplements.csv",
+        supply="<processing>/{name}/faostat_food_group_supply.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=3300,
     log:
-        "<logs>/{name}/prepare_faostat_gdd_supplements.log",
+        "<logs>/{name}/prepare_faostat_food_group_supply.log",
     benchmark:
-        "<benchmarks>/{name}/prepare_faostat_gdd_supplements.tsv"
+        "<benchmarks>/{name}/prepare_faostat_food_group_supply.tsv"
     script:
-        "../scripts/prepare_faostat_gdd_supplements.py"
+        "../scripts/prepare_faostat_food_group_supply.py"
 
 
 rule prepare_fbs_cereal_intake:
@@ -131,7 +131,7 @@ rule prepare_nhanes_dietary_intake:
     for the United States.
 
     Output schema matches `gdd_dietary_intake.csv` and
-    `faostat_gdd_supplements.csv` so the merge step can treat NHANES as a
+    `faostat_food_group_supply.csv` so the merge step can treat NHANES as a
     drop-in source. The single "Males and females / 2 and over"
     population-mean is emitted at the configured baseline_age. The script
     also augments FPED's skim-equivalent Total Dairy with butter (FAOSTAT
@@ -169,7 +169,7 @@ rule prepare_nhanes_dietary_intake:
 rule merge_dietary_sources:
     input:
         gdd="<processing>/{name}/gdd_dietary_intake.csv",
-        faostat="<processing>/{name}/faostat_gdd_supplements.csv",
+        faostat="<processing>/{name}/faostat_food_group_supply.csv",
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         food_groups="data/curated/food_groups.csv",
@@ -197,7 +197,7 @@ rule prepare_food_loss_waste:
     input:
         m49="data/curated/M49-codes.csv",
         animal_production="<processing>/{name}/faostat_animal_production.csv",
-        faostat_gdd_supplements="<processing>/{name}/faostat_gdd_supplements.csv",
+        faostat_food_group_supply="<processing>/{name}/faostat_food_group_supply.csv",
         population="<processing>/{name}/population.csv",
         fbs_csv="data/downloads/faostat/FBS.parquet",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
@@ -222,7 +222,7 @@ rule prepare_food_loss_waste:
         "../scripts/prepare_food_loss_waste.py"
 
 
-rule prepare_gbd_dietary_risk_exposure:
+rule prepare_gbd_food_group_intake:
     """Process GBD 2019 dietary risk exposure data for food group intake estimates.
 
     Extracts country-level dietary intake (g/day) for adults 25+ from GBD risk
@@ -233,18 +233,18 @@ rule prepare_gbd_dietary_risk_exposure:
     params:
         reference_year=config["baseline_year"],
     output:
-        exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        exposure="<processing>/{name}/gbd_food_group_intake.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=500,
     log:
-        "<logs>/{name}/prepare_gbd_dietary_risk_exposure.log",
+        "<logs>/{name}/prepare_gbd_food_group_intake.log",
     benchmark:
-        "<benchmarks>/{name}/prepare_gbd_dietary_risk_exposure.tsv"
+        "<benchmarks>/{name}/prepare_gbd_food_group_intake.tsv"
     script:
-        "../scripts/prepare_gbd_dietary_risk_exposure.py"
+        "../scripts/prepare_gbd_food_group_intake.py"
 
 
 rule estimate_baseline_diet:
@@ -255,7 +255,7 @@ rule estimate_baseline_diet:
     """
     input:
         dietary_intake="<processing>/{name}/dietary_intake.csv",
-        gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        gbd_exposure="<processing>/{name}/gbd_food_group_intake.csv",
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
         fbs_cereal_intake="<processing>/{name}/fbs_cereal_intake.csv",
         crop_production="<processing>/{name}/faostat_crop_production.csv",
@@ -335,7 +335,7 @@ rule compare_baseline_diet_to_gbd:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
         food_groups="data/curated/food_groups.csv",
         food_basis="data/curated/food_basis.csv",
-        gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        gbd_exposure="<processing>/{name}/gbd_food_group_intake.csv",
         source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
     params:
         countries=config["countries"],

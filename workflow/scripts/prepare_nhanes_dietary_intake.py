@@ -17,7 +17,7 @@ unit conversions from a curated mapping CSV, and write the result as
 g/day for each modelled food group.
 
 The single "All ages" value is replicated across the model's age groups
-(matching how `prepare_faostat_gdd_supplements.py` propagates a single
+(matching how `prepare_faostat_food_group_supply.py` propagates a single
 country aggregate); finer age stratification can be added later by parsing
 additional rows.
 
@@ -246,7 +246,7 @@ def get_unit(food_group: str) -> str:
 
 
 # FAOSTAT FBS item code for Butter and Ghee, with the milk-equivalent
-# extraction factor used in `prepare_faostat_gdd_supplements.py`. We pull
+# extraction factor used in `prepare_faostat_food_group_supply.py`. We pull
 # butter separately because FPED's "Total Dairy" is the low-fat fraction
 # (butterfat is stripped into FPED's Solid Fats accounting axis), so taking
 # the FPED value alone would systematically under-count modelled dairy
