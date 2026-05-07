@@ -246,9 +246,24 @@ def _sensitivity_generator(wildcards):
     )
 
 
+_ANALYSIS_FILES = (
+    "objective_breakdown.parquet",
+    "net_emissions.parquet",
+    "land_use.parquet",
+    "health_totals.parquet",
+)
+
+
 def _sensitivity_scenario_names(wildcards):
-    """Return all sensitivity scenario names matching the group in expansion order."""
+    """Return sensitivity scenarios for the group whose analysis outputs are on disk.
+
+    Cluster sweeps occasionally leave a small fraction of Sobol scenarios
+    unsolved (per-solve TimeLimit hits, etc.).  The surrogate fit operates on
+    whatever subset is available, so drop scenarios whose ``_ANALYSIS_FILES``
+    are not all present rather than failing the whole rule.
+    """
     import re
+    from pathlib import Path
 
     generator = _sensitivity_generator(wildcards)
     pattern = re.escape(generator["name"]).replace(r"\{sample_id\}", r"\d+") + "$"
@@ -260,23 +275,33 @@ def _sensitivity_scenario_names(wildcards):
             f"No scenarios found matching pattern '{pattern}'. "
             f"Available scenarios: {all_scenarios}"
         )
-    return matching
 
-
-_ANALYSIS_FILES = (
-    "objective_breakdown.parquet",
-    "net_emissions.parquet",
-    "land_use.parquet",
-    "health_totals.parquet",
-)
+    analysis_root = Path(PATH_ROOTS["results"]) / wildcards.name / "analysis"
+    available = [
+        s
+        for s in matching
+        if all((analysis_root / f"scen-{s}" / f).is_file() for f in _ANALYSIS_FILES)
+    ]
+    n_missing = len(matching) - len(available)
+    if n_missing:
+        print(
+            f"[sensitivity] group={generator['name']}: dropping {n_missing} of "
+            f"{len(matching)} scenarios with incomplete analysis outputs."
+        )
+    if not available:
+        raise ValueError(
+            f"No scenarios with complete analysis outputs for group "
+            f"'{generator['name']}'. Run the GSA solves first."
+        )
+    return available
 
 
 def _sensitivity_scenario_inputs(wildcards):
-    """Generate input files for all sensitivity scenarios.
+    """Generate input files for the sensitivity scenarios available on disk.
 
-    Lists all expected scenarios so Snakemake can build the full dependency
-    chain (solve → analyze → compute_sobol).  The compute script receives
-    only the available subset via params.scenario_names.
+    Mirrors :func:`_sensitivity_scenario_names`: scenarios whose analysis
+    outputs are not all present are dropped, so a partial sweep can still
+    fit a surrogate over the available subset.
     """
     all_scenarios = _sensitivity_scenario_names(wildcards)
     return [
