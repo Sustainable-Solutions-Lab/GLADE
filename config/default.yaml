@@ -596,14 +596,11 @@ diet:
     cycle: "1720"
     url: "https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf"
     reference_year: 2018
-  # Reconciliation policy for GDD and GBD intake estimates on the
   # GBD-covered risk groups (fruits, vegetables, whole_grains, legumes,
-  # nuts_seeds, red_meat). "gbd" anchors the baseline-diet intake of
-  # these groups to GBD's own reported intake, so the model's
-  # attributable disease burden is consistent with what GBD itself
-  # estimates from its dietary risk exposure data. "average" mixes
-  # GDD with GBD.
-  risk_group_anchor: "gbd"
+  # nuts_seeds, red_meat) are anchored to GBD's reported intake when
+  # available, so the model's attributable disease burden is consistent
+  # with what GBD itself estimates from its dietary risk exposure data.
+  # GDD/FAOSTAT serves as the fallback when GBD is missing for a country.
   # Per-food-group native mass basis declared by each external dietary
   # data source. The diet pipeline compares the source's basis to the
   # food's basis (data/curated/food_basis.csv) and applies the matching
@@ -700,9 +697,8 @@ diet:
   # intake). When enabled, refined grain is lifted to
   # ``threshold * max(0, fbs_cereal_intake - whole_grains_total)``
   # whenever the existing total is below that floor; otherwise the
-  # current value is preserved. Whole grains stay anchored to GBD/GDD
-  # via ``risk_group_anchor`` above so this does not perturb the
-  # health-risk calibration.
+  # current value is preserved. Whole grains stay anchored to GBD so
+  # this does not perturb the health-risk calibration.
   fbs_grain_supplement:
     enabled: true
     threshold: 0.5

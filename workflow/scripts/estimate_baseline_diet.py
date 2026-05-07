@@ -66,57 +66,24 @@ logger = logging.getLogger(__name__)
 DEFAULT_PEARL_MILLET_SHARE = 0.8
 
 
-def _combine_gdd_gbd(
-    gdd_val: float | None,
-    gbd_val: float | None,
-    risk_group_anchor: str,
-) -> float | None:
-    """Combine GDD and GBD intake estimates per the configured policy.
-
-    ``risk_group_anchor`` controls how the two are reconciled for
-    GBD-covered (risk-relevant) food groups:
-
-    - ``"average"``: arithmetic mean of GDD and GBD when both present;
-      fall back to whichever is available. Historical default.
-    - ``"gbd"``: GBD value when present (so the baseline aligns with
-      the same intake basis the GBD relative-risk functions are
-      calibrated against); fall back to GDD if GBD is missing.
-    """
-    have_gdd = gdd_val is not None and pd.notna(gdd_val)
-    have_gbd = gbd_val is not None and pd.notna(gbd_val)
-    if risk_group_anchor == "gbd":
-        if have_gbd:
-            return float(gbd_val)
-        if have_gdd:
-            return float(gdd_val)
-        return None
-    if risk_group_anchor == "average":
-        if have_gdd and have_gbd:
-            return (float(gdd_val) + float(gbd_val)) / 2.0
-        if have_gdd:
-            return float(gdd_val)
-        if have_gbd:
-            return float(gbd_val)
-        return None
-    raise ValueError(
-        f"Unknown risk_group_anchor={risk_group_anchor!r}; expected 'average' or 'gbd'."
-    )
-
-
 def load_group_totals(
     dietary_intake_path: str,
     gbd_exposure_path: str,
     baseline_age: str,
-    reference_year: int,
     food_groups_included: list[str],
     gbd_anchored_groups: set[str],
-    risk_group_anchor: str = "average",
-    source_basis: dict[str, dict[str, str]] | None = None,
-    source_basis_country_overrides: dict[str, dict[str, dict[str, str]]] | None = None,
-    group_basis: dict[str, str] | None = None,
-    weight_conversion: dict[str, dict[str, float]] | None = None,
+    source_basis: dict[str, dict[str, str]],
+    source_basis_country_overrides: dict[str, dict[str, dict[str, str]]],
+    group_basis: dict[str, str],
+    weight_conversion: dict[str, dict[str, float]],
 ) -> pd.DataFrame:
-    """Load food group totals, reconciling GDD and GBD per *risk_group_anchor*.
+    """Load food group totals, anchoring risk groups to GBD when available.
+
+    For groups in *gbd_anchored_groups*, the per-country total comes from
+    GBD when GBD reports a value (so the baseline aligns with the same
+    intake basis the GBD relative-risk functions are calibrated against);
+    otherwise the GDD/FAOSTAT value from *dietary_intake_path* is used.
+    For all other groups the GDD/FAOSTAT value is used directly.
 
     GBD's intake exposure values share the basis of the GBD/IHME RR
     dose-response curves. Per-(source, country, group) basis lookup
@@ -126,15 +93,6 @@ def load_group_totals(
 
     Returns DataFrame with columns: country, food_group, group_total_g_per_day
     """
-    if source_basis is None:
-        source_basis = {}
-    if source_basis_country_overrides is None:
-        source_basis_country_overrides = {}
-    if group_basis is None:
-        group_basis = {}
-    if weight_conversion is None:
-        weight_conversion = {}
-
     # Load GDD + FAOSTAT dietary intake (already in model basis after
     # merge_dietary_sources applied source_basis conversion).
     intake = pd.read_csv(dietary_intake_path)
@@ -156,48 +114,37 @@ def load_group_totals(
         country_column="country",
         source_basis=source_basis,
         source_basis_country_overrides=source_basis_country_overrides,
-        group_basis=group_basis,
+        target_basis_by_key=group_basis,
         factors=weight_conversion,
     )
     gbd_totals = gbd.groupby(["country", "food_group"])["consumption_g_per_day"].mean()
 
-    # Build combined group totals
+    # Build combined group totals: GBD-anchored groups prefer GBD when
+    # available, else fall back to GDD/FAOSTAT; non-anchored groups
+    # use GDD/FAOSTAT directly.
     results = []
     for country in sorted(gdd_totals.index.get_level_values("country").unique()):
         for fg in food_groups_included:
             gdd_val = gdd_totals.get((country, fg))
-
-            if fg in gbd_anchored_groups:
-                gbd_val = gbd_totals.get((country, fg))
-                combined = _combine_gdd_gbd(gdd_val, gbd_val, risk_group_anchor)
-                if combined is None:
-                    continue
-                results.append(
-                    {
-                        "country": country,
-                        "food_group": fg,
-                        "group_total_g_per_day": combined,
-                    }
-                )
+            gbd_val = (
+                gbd_totals.get((country, fg)) if fg in gbd_anchored_groups else None
+            )
+            if pd.notna(gbd_val):
+                value = float(gbd_val)
+            elif pd.notna(gdd_val):
+                value = float(gdd_val)
             else:
-                # GDD-only or FAOSTAT-only groups
-                if gdd_val is None or pd.isna(gdd_val):
-                    continue
-                results.append(
-                    {
-                        "country": country,
-                        "food_group": fg,
-                        "group_total_g_per_day": float(gdd_val),
-                    }
-                )
+                continue
+            results.append(
+                {
+                    "country": country,
+                    "food_group": fg,
+                    "group_total_g_per_day": value,
+                }
+            )
 
-    result_df = pd.DataFrame(results)
-
-    # Log cross-validation: GDD vs GBD agreement
     log_gdd_gbd_agreement(gdd_totals, gbd_totals, gbd_anchored_groups)
-    logger.info("Risk-relevant food group anchor policy: %s", risk_group_anchor)
-
-    return result_df
+    return pd.DataFrame(results)
 
 
 GRAIN_GROUP = "grain"
@@ -1123,11 +1070,11 @@ def main():
         str(food): float(factor)
         for food, factor in snakemake.params.carcass_to_retail_meat.items()
     }
-    risk_group_anchor = str(snakemake.params.risk_group_anchor)
-    # Food groups for which GBD provides intake exposure data and the
-    # baseline-diet should reconcile against it (per risk_group_anchor).
-    # Sourced from health.risk_factors so the diet anchor and the
-    # health-impact RR machinery never drift on which groups they cover.
+    # Food groups for which GBD provides intake exposure data; the
+    # baseline-diet anchors to GBD for these (with GDD/FAOSTAT as
+    # fallback). Sourced from health.risk_factors so the diet anchor
+    # and the health-impact RR machinery never drift on which groups
+    # they cover.
     gbd_anchored_groups = {str(g) for g in snakemake.params.gbd_anchored_groups}
     fbs_grain_cfg = dict(snakemake.params.fbs_grain_supplement)
     source_basis = {
@@ -1161,16 +1108,15 @@ def main():
     food_to_group = food_groups_df.set_index("food")["group"].to_dict()
     group_basis_map = build_group_basis(food_basis, food_to_group)
 
-    # Step 1: Food group totals (GDD+GBD reconciled per risk_group_anchor)
+    # Step 1: Food group totals (GBD-anchored for risk groups, GDD/FAOSTAT
+    # for everything else).
     logger.info("Step 1: Computing food group totals...")
     group_totals = load_group_totals(
         dietary_intake_path,
         gbd_exposure_path,
         baseline_age,
-        reference_year,
         food_groups_included,
         gbd_anchored_groups=gbd_anchored_groups,
-        risk_group_anchor=risk_group_anchor,
         source_basis=source_basis,
         source_basis_country_overrides=source_basis_country_overrides,
         group_basis=group_basis_map,

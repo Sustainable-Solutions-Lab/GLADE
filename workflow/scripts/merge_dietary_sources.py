@@ -125,7 +125,7 @@ def main():
         "country_column": "country",
         "source_basis": source_basis,
         "source_basis_country_overrides": source_basis_country_overrides,
-        "group_basis": item_basis,
+        "target_basis_by_key": item_basis,
         "factors": weight_conversion,
     }
 

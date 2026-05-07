@@ -274,7 +274,6 @@ rule estimate_baseline_diet:
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
-        risk_group_anchor=config["diet"]["risk_group_anchor"],
         gbd_anchored_groups=config["health"]["risk_factors"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
         source_basis=config["diet"]["source_basis"],
@@ -363,16 +362,15 @@ rule validate_baseline_diet:
     """Compare baseline-diet kcal totals against FAOSTAT
     dietary-energy anchors and emit a per-country status report.
 
-    Status categories:
-    - ok: baseline within [0.7, 1.4] x ADER and consistent with MDER/DES.
-    - low: 0.7 x ADER >= baseline > 0.85 x MDER (consistent with severe survey
-           under-reporting but not physically impossible).
-    - below-MDER: baseline < 0.85 x MDER (physically implausible at population
-                  scale; investigate the diet pipeline for that country).
-    - high: baseline > 1.4 x ADER but <= 1.05 x DES (high but supportable).
-    - above-DES: baseline > 1.05 x DES (exceeds food-system availability,
-                 implies upstream over-projection).
-    - no-anchor: country missing from FAOSTAT FS (small territories).
+    Status categories (evaluated in order — first match wins):
+    - no-anchor: ADER missing from FAOSTAT FS (small territories).
+    - below-MDER: baseline < 0.85 x MDER (physically implausible at
+                  population scale; investigate the diet pipeline).
+    - above-DES:  baseline > 1.05 x DES (exceeds food-system supply).
+    - low:  baseline < 0.70 x ADER (severe survey under-reporting but
+            not physically impossible — already cleared the MDER floor).
+    - high: baseline > 1.40 x ADER (already cleared the DES ceiling).
+    - ok:   baseline within [0.70, 1.40] x ADER.
     """
     input:
         baseline_diet="<processing>/{name}/baseline_diet.csv",

@@ -25,8 +25,6 @@ vegetables / fruits cooked vs. fresh: density barely changes), the table
 entry can be omitted; the helper falls back to 1.0.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 import logging
 
@@ -155,17 +153,23 @@ def convert_intake(
     country_column: str | None,
     source_basis: Mapping[str, Mapping[str, str]],
     source_basis_country_overrides: Mapping[str, Mapping[str, Mapping[str, str]]],
-    group_basis: Mapping[str, str],
+    target_basis_by_key: Mapping[str, str],
     factors: Mapping[str, Mapping[str, float]],
 ) -> pd.DataFrame:
-    """Apply per-(country, group) basis conversion to *df[value_column]*.
+    """Apply per-(country, key) basis conversion to *df[value_column]*.
+
+    The *group_column* values are looked up in *target_basis_by_key*;
+    keys may be food groups, individual foods, or a mix of both
+    (callers like ``merge_dietary_sources`` supply a merged
+    food→basis merged with group→basis dict so the same row format can carry
+    direct food rows alongside group totals).
 
     Returns a copy of *df* with *value_column* multiplied by the
     appropriate factor on each row. Rows whose source basis is not
     declared, whose target basis is unknown, or whose source and
     target match are passed through unchanged.
 
-    Logs a per-(group, src→tgt) summary count and (when overrides are
+    Logs a per-(key, src→tgt) summary count and (when overrides are
     in play) the set of countries hit by an override.
     """
     df = df.copy()
@@ -183,7 +187,7 @@ def convert_intake(
         src = resolve_source_basis(
             source, country, grp, source_basis, source_basis_country_overrides
         )
-        tgt = group_basis.get(grp)
+        tgt = target_basis_by_key.get(grp)
         # Track override usage even when the override matches the global
         # default (so logs reflect declared intent, not just deltas).
         if country is not None:

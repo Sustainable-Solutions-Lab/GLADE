@@ -45,7 +45,8 @@ GDD_BEVERAGE_GRAMS_PER_CUP = {
 def main():
     gdd_dir = Path(snakemake.input["gdd_dir"])
     reference_year = snakemake.params["reference_year"]
-    food_groups = snakemake.params["food_groups"]
+    requested_food_groups = set(snakemake.params["food_groups"])
+    required_countries = set(snakemake.params["countries"])
     output_file = snakemake.output["diet"]
 
     # Map GDD variable codes (vXX) to model food groups
@@ -95,9 +96,8 @@ def main():
     # Per-food items (e.g. coffee-green, tea-dried) bypass the food group filter
     # since they represent direct food-level values, not group aggregates.
     DIRECT_FOOD_ITEMS = {"tea-dried"}
-    requested_food_groups = set(food_groups)
     food_group_vars = {}
-    silently_dropped: list[str] = []
+    disallowed_mappings: list[str] = []
     for varcode, item in gdd_to_model_items.items():
         if item is None:
             # Explicitly excluded via the mapping; the comment above the
@@ -106,17 +106,17 @@ def main():
         if item in requested_food_groups or item in DIRECT_FOOD_ITEMS:
             food_group_vars.setdefault(item, []).append(varcode)
         else:
-            silently_dropped.append(f"{varcode} -> {item}")
+            disallowed_mappings.append(f"{varcode} -> {item}")
 
-    if silently_dropped:
-        # We refuse to ingest the GDD CSV and silently skip variables whose
-        # target food group has not been added to `food_groups.included`.
-        # Either add the target group to the config, or set the entry to
-        # `None` in `gdd_to_model_items` with a comment explaining why.
+    if disallowed_mappings:
+        # A GDD variable maps to a food group that is not in
+        # `food_groups.included`. Either add the target group to the config,
+        # or set the entry to `None` in `gdd_to_model_items` with a comment
+        # explaining why.
         raise ValueError(
             "GDD variables map to food groups that are not in "
-            "`food_groups.included` and would be silently dropped: "
-            f"{silently_dropped}. Either add the target group to the config "
+            "`food_groups.included`: "
+            f"{disallowed_mappings}. Either add the target group to the config "
             "or set the entry to None in gdd_to_model_items."
         )
 
@@ -315,8 +315,6 @@ def main():
         "SOM": "ETH",  # Somalia -> Ethiopia (similar region, data available)
     }
 
-    required_countries = set(snakemake.params["countries"])
-    requested_food_groups = set(snakemake.params["food_groups"])
     output_countries = set(result["country"].unique())
     output_food_groups = set(result["item"].unique())
 

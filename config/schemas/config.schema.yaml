@@ -979,7 +979,6 @@ properties:
     type: object
     required:
       - baseline_age
-      - risk_group_anchor
       - source_basis
       - weight_conversion
       - fbs_grain_supplement
@@ -1011,10 +1010,6 @@ properties:
             type: integer
             description: "Approximate midpoint year of the NHANES survey cycle, used as the row 'year' in the dietary-intake CSV"
         description: "NHANES / FPED override source for US food-group intake"
-      risk_group_anchor:
-        type: string
-        enum: ["average", "gbd"]
-        description: "Reconciliation policy for GDD vs GBD intake estimates on GBD-covered risk groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat)."
       source_basis:
         type: object
         description: "Per-source declaration of the native mass basis ('dry', 'fresh', or 'cooked') in which each food-group's intake values are reported. Compared at conversion time to each food's basis (data/curated/food_basis.csv) to decide whether to scale by a weight_conversion factor."

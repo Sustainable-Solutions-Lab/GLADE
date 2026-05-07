@@ -73,8 +73,6 @@ def main():
     group_basis = build_group_basis(food_basis, fg_map)
 
     bd = pd.read_csv(baseline_diet_path)
-    if "food_group" not in bd.columns or bd["food_group"].isna().any():
-        bd["food_group"] = bd["food"].map(fg_map)
     bd = bd[bd["food_group"].isin(risk_factors)]
     model_per_group = (
         bd.groupby(["country", "food_group"], as_index=False)[
@@ -98,7 +96,7 @@ def main():
         country_column="country",
         source_basis=source_basis,
         source_basis_country_overrides=source_basis_country_overrides,
-        group_basis=group_basis,
+        target_basis_by_key=group_basis,
         factors=weight_conversion,
     )
     gbd_per_group = (
