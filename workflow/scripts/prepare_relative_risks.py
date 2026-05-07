@@ -543,21 +543,39 @@ def main() -> None:
         raise ValueError("ssb_sugar_g_per_100g must be positive")
     ssb_sugar_per_gram = ssb_sugar_g_per_100g / 100.0
 
-    # Build the per-risk-factor cooked-to-dry conversion applied to the
-    # RR exposure x-axis. Groups whose GBD basis matches the model's
-    # consumption basis stay at 1.0 (no transformation). Groups listed in
-    # gbd_intake_needs_conversion get the matching diet-side factor so the
-    # RR curve and the model's consumption end up on the same basis.
-    needs_conversion = {
-        str(g) for g in list(snakemake.params.gbd_intake_needs_conversion)
+    # Build per-risk-factor RR-curve x-axis conversion: each risk
+    # factor's GBD basis (declared in diet.source_basis.gbd) is compared
+    # to the matching food's basis (food_basis.csv via food_groups.csv);
+    # when they differ, the matching factor in diet.weight_conversion
+    # is applied so the curve x-axis lands in the model's consumption basis.
+    from workflow.scripts.diet.basis import conversion_factor, load_food_basis
+
+    source_basis = {
+        src: {str(g): str(b) for g, b in groups.items()}
+        for src, groups in dict(snakemake.params.source_basis).items()
     }
-    factor_table = {
-        str(k): float(v)
-        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+    weight_conversion = {
+        str(table): {str(k): float(v) for k, v in entries.items()}
+        for table, entries in dict(snakemake.params.weight_conversion).items()
     }
-    basis_factor_by_risk = {
-        risk_id: factor_table.get(risk_id, 1.0) for risk_id in needs_conversion
-    }
+    food_basis = load_food_basis(snakemake.input["food_basis"])
+    food_to_group = (
+        pd.read_csv(snakemake.input["food_groups"]).set_index("food")["group"].to_dict()
+    )
+    group_basis: dict[str, str] = {}
+    for food, basis in food_basis.items():
+        grp = food_to_group.get(food)
+        if grp is not None:
+            group_basis.setdefault(grp, basis)
+    gbd_basis = source_basis.get("gbd", {})
+    basis_factor_by_risk: dict[str, float] = {}
+    for risk_id, src in gbd_basis.items():
+        tgt = group_basis.get(risk_id)
+        if tgt is None or src == tgt:
+            continue
+        basis_factor_by_risk[risk_id] = conversion_factor(
+            src, tgt, risk_id, weight_conversion
+        )
 
     logger.info(f"Reading {input_path}")
     df = pd.read_excel(input_path, header=None)

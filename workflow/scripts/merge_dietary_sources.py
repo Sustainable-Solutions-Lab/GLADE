@@ -8,33 +8,32 @@ Merge dietary intake data from multiple sources.
 
 Three sources contribute, in increasing order of precedence:
 1. GDD (Global Dietary Database, individual-level surveys, intake-based) --
-   default for most food groups in most countries. GDD reports food intake
-   in g/day of food *as consumed* (e.g. 100g of cooked rice, 100g of bread)
-   for cereals/legumes/meats. Because the model's nutrition.csv uses dry-
-   weight kcal densities (e.g. flour-white at 364 kcal/100g, which is dry
-   flour, not bread), the GDD values are pre-multiplied by the configured
-   per-food-group ``food_group_dry_equiv_factor`` factor before merging.
-   Missing groups default to 1.0 (no conversion).
+   default for most food groups in most countries.
 2. FAOSTAT FBS food supply (per-country, year-specific, supply-based) --
    waste-corrected via `food_loss_waste.csv`. Used for groups GDD does not
-   cover well (dairy, eggs, poultry, vegetable oils). FAOSTAT overrides
-   GDD on overlap. Already in raw/dry mass basis from the supply side, so
-   no cooked-to-dry conversion is applied to it.
+   cover well (dairy, eggs, poultry, vegetable oils, sugar). FAOSTAT
+   overrides GDD on overlap.
 3. NHANES / FPED (USA only, intake-based, 24-hour recall summaries).
    Overrides both GDD and FAOSTAT for the US for every (country, food
-   group) it carries. NHANES values come from FPED ounce-equivalents, a
-   hybrid basis (flour-content for breads, cooked weight for rice), so we
-   leave them untouched rather than apply a single conversion factor.
+   group) it carries.
+
+Each source's intake values are converted into the model's per-food
+mass basis (declared in data/curated/food_basis.csv) before merging.
+The basis-conversion is driven by the per-source per-group basis
+declarations in config["diet"]["source_basis"] and the factor tables
+in config["diet"]["weight_conversion"]; see workflow/scripts/diet/basis.py.
+
+In particular GDD reports cooked / as-consumed weight for cereals,
+legumes, and meats; the helper multiplies those values by the
+matching cooked-to-dry (cereals/legumes) or cooked-to-fresh (meat)
+factor so the merged dietary_intake.csv is consistently in model basis.
 
 Input:
     - GDD dietary intake CSV
     - FAOSTAT food supply CSV (raw, not waste-adjusted)
     - NHANES dietary intake CSV (already in intake terms; no waste correction)
     - Food loss & waste fractions CSV
-
-Params:
-    - food_group_dry_equiv_factor: dict mapping food_group -> conversion
-      factor. Used at this stage only on the GDD source.
+    - data/curated/food_basis.csv
 
 Output:
     - Combined dietary intake CSV
@@ -44,6 +43,10 @@ import logging
 
 import pandas as pd
 
+from workflow.scripts.diet.basis import (
+    conversion_factor,
+    load_food_basis,
+)
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -83,37 +86,74 @@ def _drop_overlap(
     return target.loc[~mask].copy()
 
 
-def _apply_dry_equiv_conversion(
-    gdd_df: pd.DataFrame,
-    factors: dict[str, float],
-    apply_to: set[str],
+def _apply_basis_conversion(
+    df: pd.DataFrame,
+    *,
+    source: str,
+    source_basis_by_group: dict[str, str],
+    group_basis: dict[str, str],
+    factors: dict[str, dict[str, float]],
 ) -> pd.DataFrame:
-    """Multiply GDD values by per-food-group cooked-to-dry conversion factors.
+    """Convert intake values from each source's basis into the model's basis.
 
-    GDD reports food intake in cooked / as-consumed weight for cereals,
-    legumes, and meats; the model's nutrition.csv uses dry/raw kcal
-    densities. Without conversion, the per-food calorie computation
-    inflates by ~2-3x for high-cereal-intake countries. Factors default
-    to 1.0 (no change) for any food_group not in *apply_to*.
+    Each row's ``item`` is a food group; we look up the source's basis
+    declaration for that group, compare to the group's target basis
+    (derived from data/curated/food_basis.csv via food_groups.csv), and
+    apply the matching factor table when they differ. Groups with no
+    declared source basis pass through unchanged.
     """
-    if not apply_to:
-        logger.info("gdd_intake_needs_conversion: empty list, GDD passes through")
-        return gdd_df
+    df = df.copy()
+    multipliers = []
+    summary_counts: dict[tuple[str, str, str], int] = {}
+    for grp in df["item"]:
+        src = source_basis_by_group.get(grp)
+        tgt = group_basis.get(grp)
+        if src is None or tgt is None or src == tgt:
+            multipliers.append(1.0)
+            continue
+        f = conversion_factor(src, tgt, grp, factors)
+        multipliers.append(f)
+        summary_counts[(grp, src, tgt)] = summary_counts.get((grp, src, tgt), 0) + 1
+    df["value"] = df["value"] * pd.Series(multipliers, index=df.index)
+    if summary_counts:
+        for (grp, src, tgt), n in sorted(summary_counts.items()):
+            f = conversion_factor(src, tgt, grp, factors)
+            logger.info(
+                "%s: converted %d %r rows %s -> %s (factor %.3f)",
+                source,
+                n,
+                grp,
+                src,
+                tgt,
+                f,
+            )
+    else:
+        logger.info("%s: no basis conversions applied", source)
+    return df
 
-    effective = {g: factors.get(g, 1.0) for g in apply_to}
-    gdd_df = gdd_df.copy()
-    multiplier = gdd_df["item"].map(effective).fillna(1.0).astype(float)
-    n_converted = int((multiplier != 1.0).sum())
-    if n_converted == 0:
-        return gdd_df
-    gdd_df["value"] = gdd_df["value"] * multiplier
-    factor_summary = ", ".join(f"{k}={v}" for k, v in sorted(effective.items()))
-    logger.info(
-        "Applied food_group_dry_equiv_factor to %d GDD rows (factors: %s)",
-        n_converted,
-        factor_summary,
-    )
-    return gdd_df
+
+def _build_group_basis(
+    food_basis: dict[str, str], food_to_group: dict[str, str]
+) -> dict[str, str]:
+    """Derive each food group's basis from its constituent foods.
+
+    All foods within a group are expected to share a basis (cereals
+    dry, fresh produce fresh, etc.). Raises if a group has mixed
+    bases, since that would make group-level conversion ambiguous.
+    """
+    by_group: dict[str, set[str]] = {}
+    for food, basis in food_basis.items():
+        group = food_to_group.get(food)
+        if group is None:
+            continue
+        by_group.setdefault(group, set()).add(basis)
+    inconsistent = {g: bs for g, bs in by_group.items() if len(bs) > 1}
+    if inconsistent:
+        raise ValueError(
+            f"Foods within these groups disagree on basis: {inconsistent}. "
+            "Either align food_basis.csv or split the group."
+        )
+    return {g: next(iter(bs)) for g, bs in by_group.items()}
 
 
 def main():
@@ -121,26 +161,49 @@ def main():
     fao_file = snakemake.input.faostat
     nhanes_file = snakemake.input.nhanes
     flw_file = snakemake.input.food_loss_waste
+    food_groups_file = snakemake.input.food_groups
+    food_basis_file = snakemake.input.food_basis
     output_file = snakemake.output.diet
-    food_group_dry_equiv_factor = {
-        str(k): float(v)
-        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+
+    source_basis = {
+        src: {str(g): str(b) for g, b in groups.items()}
+        for src, groups in dict(snakemake.params.source_basis).items()
     }
-    gdd_intake_needs_conversion = {
-        str(g) for g in list(snakemake.params.gdd_intake_needs_conversion)
+    weight_conversion = {
+        str(table): {str(k): float(v) for k, v in entries.items()}
+        for table, entries in dict(snakemake.params.weight_conversion).items()
     }
+
+    food_basis = load_food_basis(food_basis_file)
+    food_to_group = pd.read_csv(food_groups_file).set_index("food")["group"].to_dict()
+    group_basis = _build_group_basis(food_basis, food_to_group)
 
     logger.info(f"Reading GDD data from {gdd_file}")
     gdd_df = pd.read_csv(gdd_file)
-    gdd_df = _apply_dry_equiv_conversion(
-        gdd_df, food_group_dry_equiv_factor, gdd_intake_needs_conversion
+    gdd_df = _apply_basis_conversion(
+        gdd_df,
+        source="gdd",
+        source_basis_by_group=source_basis.get("gdd", {}),
+        group_basis=group_basis,
+        factors=weight_conversion,
     )
 
     logger.info(f"Reading FAOSTAT food supply data from {fao_file}")
     fao_df = pd.read_csv(fao_file)
+    # FAOSTAT supplements arrive in "raw supply" basis; declared per group
+    # in source_basis.faostat_fbs_supplement. Apply the same basis
+    # conversion before the waste-correction step below.
+    fao_df = _apply_basis_conversion(
+        fao_df,
+        source="faostat_fbs_supplement",
+        source_basis_by_group=source_basis.get("faostat_fbs_supplement", {}),
+        group_basis=group_basis,
+        factors=weight_conversion,
+    )
 
     logger.info(f"Reading NHANES dietary intake from {nhanes_file}")
     nhanes_df = pd.read_csv(nhanes_file)
+    # NHANES (FPED) is in a hybrid basis we leave untouched.
 
     logger.info(f"Reading food loss/waste data from {flw_file}")
     flw_df = pd.read_csv(flw_file)

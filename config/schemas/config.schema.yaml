@@ -980,8 +980,8 @@ properties:
     required:
       - baseline_age
       - risk_group_anchor
-      - food_group_dry_equiv_factor
-      - gdd_intake_needs_conversion
+      - source_basis
+      - weight_conversion
       - fbs_grain_supplement
     additionalProperties: false
     properties:
@@ -1025,19 +1025,22 @@ properties:
         type: string
         enum: ["average", "gbd"]
         description: "Reconciliation policy for GDD vs GBD intake estimates on GBD-covered risk groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat)."
-      food_group_dry_equiv_factor:
+      source_basis:
         type: object
+        description: "Per-source declaration of the native mass basis ('dry', 'fresh', or 'cooked') in which each food-group's intake values are reported. Compared at conversion time to each food's basis (data/curated/food_basis.csv) to decide whether to scale by a weight_conversion factor."
         additionalProperties:
-          type: number
-          exclusiveMinimum: 0.0
-        description: "Per-food-group 'cooked / as-consumed' -> 'dry / raw' conversion factors. Used in merge_dietary_sources (gated by gdd_intake_needs_conversion) and in the health module's risk-curve construction & GBD intake averaging (gated by health.gbd_intake_needs_conversion). Missing keys default to 1.0."
-      gdd_intake_needs_conversion:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: "^[a-z0-9_]+$"
-        description: "Food groups whose GDD intake values should be converted by food_group_dry_equiv_factor in merge_dietary_sources. GDD's basis varies by country, so this is opt-in (default empty)."
+          type: object
+          additionalProperties:
+            type: string
+            enum: ["dry", "fresh", "cooked"]
+      weight_conversion:
+        type: object
+        description: "Mass-conversion factor tables keyed '<from>_to_<to>'. Each table maps food-group (or food) name to a multiplicative factor. Foods/groups not listed default to 1.0."
+        additionalProperties:
+          type: object
+          additionalProperties:
+            type: number
+            exclusiveMinimum: 0.0
       fbs_grain_supplement:
         type: object
         required: [enabled, threshold]
@@ -1207,7 +1210,6 @@ properties:
       - risk_factors
       - causes
       - risk_cause_map
-      - gbd_intake_needs_conversion
       - clustering
     additionalProperties: false
     properties:
@@ -1273,13 +1275,6 @@ properties:
         description: "Per risk-factor overrides using log-linear RR from literature CSV files"
         additionalProperties:
           type: ["string", "null"]
-      gbd_intake_needs_conversion:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: "^[a-z0-9_]+$"
-        description: "Risk factors whose GBD intake/RR-curve basis differs from the model's consumption basis. Listed groups have their GBD intake values and RR exposure x-axis multiplied by diet.food_group_dry_equiv_factor[group] before use."
       clustering:
         type: object
         required:

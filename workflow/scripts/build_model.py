@@ -91,6 +91,11 @@ if __name__ == "__main__":
     # Read food groups data
     food_groups = read_csv(snakemake.input.food_groups)
 
+    # Read per-food native mass basis (used to annotate food buses)
+    food_basis = (
+        read_csv(snakemake.input.food_basis).set_index("food")["basis"].to_dict()
+    )
+
     # Read nutrition data
     nutrition_data = read_csv(snakemake.input.nutrition)
     nutrition_data["nutrient"] = nutrition_data["nutrient"].replace("kcal", "cal")
@@ -614,6 +619,7 @@ if __name__ == "__main__":
         cfg_countries,
         regions,
         water_bus_regions,
+        food_basis=food_basis,
     )
 
     # Biomass infrastructure and routing.

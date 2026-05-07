@@ -174,9 +174,11 @@ rule merge_dietary_sources:
         faostat="<processing>/{name}/faostat_gdd_supplements.csv",
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+        food_groups="data/curated/food_groups.csv",
+        food_basis="data/curated/food_basis.csv",
     params:
-        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
-        gdd_intake_needs_conversion=config["diet"]["gdd_intake_needs_conversion"],
+        source_basis=config["diet"]["source_basis"],
+        weight_conversion=config["diet"]["weight_conversion"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
@@ -262,6 +264,7 @@ rule estimate_baseline_diet:
         food_item_map="data/curated/faostat_food_item_map.csv",
         qcl_resolution="data/curated/faostat_food_qcl_resolution.csv",
         food_groups="data/curated/food_groups.csv",
+        food_basis="data/curated/food_basis.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     params:
         reference_year=config["baseline_year"],
@@ -272,8 +275,8 @@ rule estimate_baseline_diet:
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         risk_group_anchor=config["diet"]["risk_group_anchor"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
-        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
-        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
+        source_basis=config["diet"]["source_basis"],
+        weight_conversion=config["diet"]["weight_conversion"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
@@ -331,12 +334,13 @@ rule compare_baseline_diet_to_gbd:
     input:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
         food_groups="data/curated/food_groups.csv",
+        food_basis="data/curated/food_basis.csv",
         gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
     params:
         countries=config["countries"],
         risk_factors=config["health"]["risk_factors"],
-        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
-        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
+        source_basis=config["diet"]["source_basis"],
+        weight_conversion=config["diet"]["weight_conversion"],
     output:
         report="<processing>/{name}/baseline_diet_risk_comparison.csv",
     group:

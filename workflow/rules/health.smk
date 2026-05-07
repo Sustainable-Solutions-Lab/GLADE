@@ -36,13 +36,15 @@ rule prepare_relative_risks:
     input:
         **{f"alt_rr_{k}": v for k, v in config["health"]["alternative_rr"].items() if v},
         gbd_rr="data/manually_downloaded/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX",
+        food_basis="data/curated/food_basis.csv",
+        food_groups="data/curated/food_groups.csv",
     params:
         risk_factors=config["health"]["risk_factors"],
         causes=config["health"]["causes"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         alternative_rr=config["health"]["alternative_rr"],
-        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
-        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
+        source_basis=config["diet"]["source_basis"],
+        weight_conversion=config["diet"]["weight_conversion"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",
     group:

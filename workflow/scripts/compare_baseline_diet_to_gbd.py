@@ -35,6 +35,7 @@ import logging
 
 import pandas as pd
 
+from workflow.scripts.diet.basis import conversion_factor, load_food_basis
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
@@ -51,16 +52,23 @@ def main():
 
     countries = [str(c).upper() for c in snakemake.params.countries]
     risk_factors = list(snakemake.params.risk_factors)
-    food_group_dry_equiv_factor = {
-        str(k): float(v)
-        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+    source_basis = {
+        src: {str(g): str(b) for g, b in groups.items()}
+        for src, groups in dict(snakemake.params.source_basis).items()
     }
-    gbd_intake_needs_conversion = {
-        str(g) for g in list(snakemake.params.gbd_intake_needs_conversion)
+    weight_conversion = {
+        str(table): {str(k): float(v) for k, v in entries.items()}
+        for table, entries in dict(snakemake.params.weight_conversion).items()
     }
 
     food_groups = pd.read_csv(food_groups_path)
     fg_map = food_groups.set_index("food")["group"].to_dict()
+    food_basis = load_food_basis(snakemake.input.food_basis)
+    group_basis: dict[str, str] = {}
+    for food, basis in food_basis.items():
+        grp = fg_map.get(food)
+        if grp is not None:
+            group_basis.setdefault(grp, basis)
 
     bd = pd.read_csv(baseline_diet_path)
     if "food_group" not in bd.columns or bd["food_group"].isna().any():
@@ -78,16 +86,20 @@ def main():
     # Map GBD's "milk" -> model "dairy" if the model uses dairy as a risk factor
     gbd["food_group"] = gbd["food_group"].replace(GBD_TO_MODEL_GROUP)
     gbd = gbd[gbd["food_group"].isin(risk_factors)]
-    # Apply same cooked-to-dry conversion the pipeline applies to GBD intake
+    # Apply the same basis conversion the pipeline applies to GBD intake
     # so the comparison happens in a consistent basis.
-    gbd_factor = (
-        gbd["food_group"]
-        .where(gbd["food_group"].isin(gbd_intake_needs_conversion), other=None)
-        .map(food_group_dry_equiv_factor)
-        .fillna(1.0)
-        .astype(float)
+    gbd_basis = source_basis.get("gbd", {})
+    multipliers = []
+    for grp in gbd["food_group"]:
+        src = gbd_basis.get(grp)
+        tgt = group_basis.get(grp)
+        if src is None or tgt is None or src == tgt:
+            multipliers.append(1.0)
+        else:
+            multipliers.append(conversion_factor(src, tgt, grp, weight_conversion))
+    gbd["consumption_g_per_day"] = gbd["consumption_g_per_day"] * pd.Series(
+        multipliers, index=gbd.index
     )
-    gbd["consumption_g_per_day"] = gbd["consumption_g_per_day"] * gbd_factor
     gbd_per_group = (
         gbd.groupby(["country", "food_group"], as_index=False)["consumption_g_per_day"]
         .mean()

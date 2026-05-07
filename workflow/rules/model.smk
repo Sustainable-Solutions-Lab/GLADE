@@ -129,6 +129,7 @@ rule build_model:
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
         manure_emissions="<processing>/{name}/manure_emission_factors.csv",
         food_groups="data/curated/food_groups.csv",
+        food_basis="data/curated/food_basis.csv",
         nutrition="data/curated/nutrition.csv",
         regions="<processing>/{name}/regions.geojson",
         land_area_by_class="<processing>/{name}/land_area_by_class.csv",

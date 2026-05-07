@@ -604,68 +604,90 @@ diet:
     cycle: "1720"
     url: "https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf"
     reference_year: 2018
-  # How to reconcile GDD vs GBD intake estimates for the GBD-covered risk
-  # groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat).
-  #   "average" — GDD/GBD arithmetic mean (historical default).
-  #   "gbd"     — GBD value when present, fall back to GDD if missing.
-  #               Use this to align the baseline with the same intake
-  #               basis the GBD relative-risk functions are calibrated
-  #               against.
   # Reconciliation policy for GDD and GBD intake estimates on the
   # GBD-covered risk groups (fruits, vegetables, whole_grains, legumes,
   # nuts_seeds, red_meat). "gbd" anchors the baseline-diet intake of
   # these groups to GBD's own reported intake, so the model's
   # attributable disease burden is consistent with what GBD itself
   # estimates from its dietary risk exposure data. "average" mixes
-  # GDD with GBD; useful in LICs where GBD's country-level imputations
-  # are noisy, but trades off health-impact consistency.
+  # GDD with GBD.
   risk_group_anchor: "gbd"
-  # Per-food-group "cooked / as-consumed" -> "dry / raw" conversion
-  # factors, declared once and consumed in two places:
+  # Per-food-group native mass basis declared by each external dietary
+  # data source. The diet pipeline compares the source's basis to the
+  # food's basis (data/curated/food_basis.csv) and applies the matching
+  # factor in weight_conversion below when they differ. This replaces
+  # the older scattered conversion flags.
   #
-  # 1. merge_dietary_sources: GDD reports food intake in g/day of food
-  #    *as consumed* (cooked rice, bread, cooked legumes, cooked meat)
-  #    for cereals, legumes, and meats. The model's nutrition.csv uses
-  #    dry/raw kcal densities (e.g. flour-white 364 kcal/100g of dry
-  #    flour, not bread). Multiplying GDD's value by the factor here
-  #    converts the intake into the model's dry/raw mass basis so
-  #    consumption x kcal-density gives correct calories. Applied only
-  #    to the food groups listed in gdd_intake_needs_conversion below.
-  #
-  # 2. health risk-curve construction & GBD intake averaging: GBD's
-  #    relative-risk functions are calibrated against survey-style
-  #    intake. For groups where the GBD basis differs from the model's
-  #    (see health.gbd_intake_needs_conversion), the IHME RR-curve
-  #    exposure axis and GBD's exposure values are scaled by this
-  #    factor so the dose-response x-axis aligns with the model's
-  #    consumption.
-  #
-  # Empirical anchor: factor 0.45 applied to Norway's GDD whole_grains
-  # (31 g/day cooked) gives 14 g/day, matching GBD's reported value of
-  # 14.07 g/day on a dry whole-grain basis.
-  food_group_dry_equiv_factor:
-    grain: 0.45
-    whole_grains: 0.45
-    legumes: 0.40
-  # Risk-relevant food groups whose GDD intake values are in cooked /
-  # as-consumed weight, so the food_group_dry_equiv_factor above should
-  # be applied during merge_dietary_sources.
-  #
-  # Empirically the GDD basis varies by country: HICs whose surveys
-  # are FFQ-style typically record cooked weight; LICs whose surveys
-  # are household-acquisition style (NSS in India, household-budget
-  # surveys in much of sub-Saharan Africa) often record raw cereal
-  # mass already. Applying a uniform conversion to all GDD values
-  # over-corrects LICs (Ethiopia surveyed cereal kcal ~1500 falls to
-  # ~700 if the factor is applied). The default-empty list disables
-  # GDD-side conversion for now, accepting the small calorie inflation
-  # of HIC cereal kcal that the FBS grain supplement otherwise pulls
-  # back in via the floor mechanism.
-  #
-  # The GBD-side conversion (which is uniform globally per food group
-  # and well-anchored per the IHME methodology) stays on by default
-  # via health.gbd_intake_needs_conversion.
-  gdd_intake_needs_conversion: []
+  # Notes:
+  # - GDD reports food intake "as consumed" (cooked weight for cereals/
+  #   legumes/meats; fresh weight for fruits/vegetables/dairy).
+  # - GBD shares basis with its IHME RR dose-response curves. Most
+  #   groups follow GDD; whole_grains is the documented exception
+  #   (calibrated on dry whole-grain content; the GBD TMREL of 100-150
+  #   g/day is on a dry basis -- at cooked weight it would be trivially
+  #   met, contradicting GBD's own findings).
+  # - FAOSTAT FBS supply is in raw agricultural commodity terms;
+  #   sugar (item 2542) is "Sugar Raw Equivalent" (dry); dairy is
+  #   in milk-equivalent fresh weight; meat is carcass weight which
+  #   we convert to retail (raw fresh) before declaring basis.
+  # - NHANES values pass through FPED ounce-equivalents: a hybrid
+  #   basis we leave untouched.
+  source_basis:
+    gdd:
+      grain: cooked
+      whole_grains: cooked
+      legumes: cooked
+      red_meat: cooked
+      poultry: cooked
+      starchy_vegetable: cooked
+      fruits: fresh
+      vegetables: fresh
+      nuts_seeds: dry
+      eggs: fresh
+      oil: dry
+      sugar: dry
+      dairy: fresh
+      tea-dried: dry
+    gbd:
+      whole_grains: dry
+      legumes: cooked
+      red_meat: cooked
+      fruits: fresh
+      vegetables: fresh
+      nuts_seeds: dry
+      milk: fresh
+    faostat_fbs_supplement:
+      dairy: fresh
+      eggs: fresh
+      poultry: fresh
+      oil: dry
+      sugar: dry
+    # NHANES is intentionally absent: FPED ounce-equivalents are a
+    # hybrid basis (flour-content for breads, cooked weight for rice)
+    # that doesn't admit a single conversion factor, so the helper
+    # returns 1.0 (no conversion) when a source isn't declared.
+  # Mass-conversion factor tables, keyed "<from>_to_<to>".
+  # Foods/groups not listed default to factor 1.0.
+  weight_conversion:
+    # Cereals/legumes lose ~55-60% mass when uncooked (cooked rice 100g
+    # ≈ 33g raw; cooked pasta 100g ≈ 40g dry; cooked beans 100g ≈ 40g
+    # dry). Empirical anchor: 0.45 applied to Norway's GDD whole_grains
+    # (31 g/day cooked) gives 14 g/day, matching GBD's reported 14.07
+    # g/day on a dry whole-grain basis.
+    cooked_to_dry:
+      grain: 0.45
+      whole_grains: 0.45
+      legumes: 0.40
+    # Meat gains mass-density when cooked (raw 100g → ~70g cooked,
+    # so cooked-to-fresh-equivalent ≈ 1.43 in principle). However, the
+    # existing pipeline (fbs_override_foods + production-side FLW)
+    # already mass-balances red meat to within ~1% per validation.yaml,
+    # so applying a 1.43 inflation here would distort that balance more
+    # than it corrects the basis. Left at 1.0 (no-op) until a future
+    # iteration audits the meat-side basis end-to-end.
+    cooked_to_fresh:
+      red_meat: 1.0
+      poultry: 1.0
   # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
   # GDD systematically under-reports refined grain in some HICs (Norway:
   # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain
@@ -841,29 +863,10 @@ health:
   # attenuation factors from the GBD data.
   alternative_rr:
     red_meat: "data/curated/red_meat_rr_log_linear.csv"
-  # Risk factors whose GBD intake / RR-curve exposure data is in a
-  # basis that does NOT match the model's consumption basis (model is
-  # dry/raw mass for cereals and legumes, raw-retail for meats, fresh
-  # weight for fruits/vegetables/nuts). For each listed risk factor:
-  #
-  # 1. estimate_baseline_diet multiplies GBD intake values by
-  #    diet.food_group_dry_equiv_factor[group] before averaging with
-  #    the (already-converted) GDD intake.
-  # 2. prepare_relative_risks multiplies the IHME RR-curve exposure
-  #    values by the same factor, so the curve x-axis aligns with the
-  #    model's consumption basis when the risk integral is evaluated.
-  #
-  # Risk factors NOT listed are assumed to share the model's basis
-  # (whole_grains: GBD calibrated on dry whole-grain content; fruits/
-  # vegetables/nuts_seeds: fresh weight in both GBD and the model).
-  # red_meat is in cooked weight in GBD but its baseline-diet value is
-  # already overridden from FBS raw-retail supply (see fbs_override_foods),
-  # so the basis-conversion would only matter for the RR curve. We omit
-  # it for now, accepting a small inaccuracy in the apparent dose-response
-  # for the meat foods (these have a relatively flat RR curve in the
-  # model's relevant intake range anyway).
-  gbd_intake_needs_conversion:
-    - legumes
+  # (Per-risk-factor basis is now declared centrally in
+  # diet.source_basis and applied automatically via the basis helper
+  # whenever the source basis differs from the food's basis declared
+  # in data/curated/food_basis.csv.)
   # Multi-objective clustering settings for grouping countries into health clusters
   clustering:
     weights:

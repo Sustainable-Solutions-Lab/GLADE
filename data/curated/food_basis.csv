@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Per-food native mass basis used by the diet/health pipeline.
+#
+# The model's nutrition.csv kcal/100g densities are calibrated against
+# specific mass forms of each food: dry uncooked grain (flour-white at
+# 364 kcal/100g is dry flour, not bread), raw retail meat (meat-cattle
+# at 215 kcal/100g is raw beef, not cooked), fresh-weight fruit/veg.
+# When intake data from external sources arrives in a different basis,
+# it must be converted before applying these densities or the resulting
+# kcal totals are off by ~2-3x for cereals/legumes.
+#
+# Categories:
+# - "dry":   negligible water content (cereals, legumes, oils, sugar,
+#            nuts/seeds, dried stimulants).
+# - "fresh": ambient water content as eaten (fruits, vegetables, raw
+#            retail meat, eggs, dairy in milk-equivalent).
+#
+# This is a property of how the food appears on its food bus in the
+# PyPSA model. The same food may have been processed from a crop input
+# at a different moisture content; that conversion lives in foods.csv.
+
+food,basis
+flour-white,dry
+flour-wholemeal,dry
+rice-white,dry
+rice-brown,dry
+maize,dry
+sorghum,dry
+buckwheat,dry
+foxtail-millet,dry
+pearl-millet,dry
+barley-hulled,dry
+oat,dry
+rye,dry
+soy,dry
+cowpea,dry
+gram,dry
+phaseolus-bean,dry
+pigeon-pea,dry
+dry-pea,dry
+chickpea,dry
+sesame-seed,dry
+groundnut,dry
+sunflower-seed,dry
+coconut,dry
+palm-oil,dry
+olive-oil,dry
+soybean-oil,dry
+sunflower-oil,dry
+groundnut-oil,dry
+sesame-oil,dry
+coconut-oil,dry
+rapeseed-oil,dry
+cottonseed-oil,dry
+sugar,dry
+cocoa-powder,dry
+coffee-green,dry
+tea-dried,dry
+potato,fresh
+sweet-potato,fresh
+cassava,fresh
+yam,fresh
+citrus,fresh
+banana,fresh
+tomato,fresh
+carrot,fresh
+onion,fresh
+cabbage,fresh
+meat-cattle,fresh
+meat-pig,fresh
+meat-sheep,fresh
+meat-chicken,fresh
+eggs,fresh
+dairy,fresh
+dairy-buffalo,fresh
