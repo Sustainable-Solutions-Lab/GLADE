@@ -254,7 +254,9 @@ def add_grassland_feed_links(
 
     # Compute baseline production from observed grazing area * yield.
     # This is used by production stability constraints regardless of
-    # whether use_actual_production caps dispatch.
+    # whether use_actual_production caps dispatch. Cap at available_area
+    # so stability bounds remain feasible when observed grazing exceeds
+    # the model's land potential.
     if current_grassland_area is not None:
         observed_area = current_grassland_area.set_index(["region", "resource_class"])[
             "area_ha"
@@ -272,7 +274,7 @@ def add_grassland_feed_links(
         )
     else:
         observed_area_mha = np.zeros(len(work))
-    baseline_area_mha = observed_area_mha
+    baseline_area_mha = np.minimum(observed_area_mha, available_mha)
 
     # Index by name for proper alignment with PyPSA component names
     work_indexed = work.set_index("name")
