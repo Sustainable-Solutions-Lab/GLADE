@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.estimate_baseline_diet import (
-    GDD_GBD_AVERAGED_GROUPS,
     _apply_millet_split,
     _resolve_shared_fbs_item,
     build_within_group_shares,
@@ -672,36 +671,3 @@ class TestBuildWithinGroupShares:
         # IND has 80 cattle + 70 buffalo = 150 total
         assert ind_dairy == pytest.approx(80.0 / 150.0, abs=0.01)
         assert ind_buffalo == pytest.approx(70.0 / 150.0, abs=0.01)
-
-
-# ---------------------------------------------------------------------------
-# Tests: GDD/GBD averaging constants
-# ---------------------------------------------------------------------------
-
-
-class TestGroupAveragingConfig:
-    """Tests for the GDD/GBD averaging group configuration."""
-
-    def test_averaged_groups_are_valid(self):
-        """All averaged groups are standard food group names."""
-        valid_groups = {
-            "fruits",
-            "vegetables",
-            "whole_grains",
-            "legumes",
-            "nuts_seeds",
-            "red_meat",
-            "grain",
-            "starchy_vegetable",
-            "eggs",
-            "sugar",
-            "dairy",
-            "poultry",
-            "oil",
-        }
-        assert GDD_GBD_AVERAGED_GROUPS.issubset(valid_groups)
-
-    def test_faostat_only_groups_not_averaged(self):
-        """Groups supplied only by FAOSTAT should not be in the averaged set."""
-        faostat_only = {"dairy", "poultry", "oil"}
-        assert GDD_GBD_AVERAGED_GROUPS.isdisjoint(faostat_only)

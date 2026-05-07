@@ -3,14 +3,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Compare GDD-derived baseline-diet kcal totals against FAOSTAT anchors.
+"""Compare baseline-diet kcal totals against FAOSTAT energy anchors.
 
-The baseline-diet pipeline anchors per-food consumption to GDD survey
-intake (with FAOSTAT supplements). GDD is the right calibration source
-for the GBD relative-risk machinery, but its country totals can be
-implausible — surveys systematically under-report energy in HICs, and
-the GDD-FAOSTAT merge produces a long tail of outliers driven by sparse
-underlying data (small island states, conflict zones).
+The baseline-diet pipeline derives per-food consumption from a mix of
+GDD survey intake, FAOSTAT FBS supplements, NHANES (USA), GBD anchoring,
+and FBS overrides. Country totals can still be implausible — surveys
+systematically under-report energy in HICs, and the merge produces a
+long tail of outliers driven by sparse underlying data (small island
+states, conflict zones).
 
 This script joins the per-food baseline diet with FAOSTAT FS anchors
 (ADER, MDER, DES) and emits a per-country status report. It is a
@@ -19,8 +19,8 @@ analyses (or a future corrective rescaling step) can read the report to
 filter outlier countries.
 
 Output columns:
-    country, gdd_kcal, ader_kcal, mder_kcal, des_kcal,
-    gdd_over_ader, gdd_over_mder, gdd_over_des, status
+    country, baseline_kcal, ader_kcal, mder_kcal, des_kcal,
+    baseline_over_ader, baseline_over_mder, baseline_over_des, status
 
 Status categories: ok | low | below-MDER | high | above-DES | no-anchor.
 """
@@ -34,24 +34,30 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger(__name__)
 
 # Thresholds expressed relative to FAOSTAT anchors. Tuned against the
-# observed baseline_diet distribution (median GDD/ADER ~= 0.88, with a
-# long lower tail at ~0.5). MDER is a hard physiological floor; we allow
-# a 15% margin to absorb survey/anchor measurement noise.
-LOW_RATIO = 0.70  # gdd/ader below this is "low"
-HIGH_RATIO = 1.40  # gdd/ader above this is "high"
-MDER_MARGIN = 0.85  # gdd below MDER * this is "below-MDER"
-DES_MARGIN = 1.05  # gdd above DES * this is "above-DES"
+# observed baseline_diet distribution (median baseline/ADER ~= 0.88,
+# with a long lower tail at ~0.5). MDER is a hard physiological floor;
+# we allow a 15% margin to absorb survey/anchor measurement noise.
+LOW_RATIO = 0.70  # baseline/ader below this is "low"
+HIGH_RATIO = 1.40  # baseline/ader above this is "high"
+MDER_MARGIN = 0.85  # baseline below MDER * this is "below-MDER"
+DES_MARGIN = 1.05  # baseline above DES * this is "above-DES"
 
 
 def classify(row: pd.Series) -> str:
-    """Assign a status label based on GDD vs FAOSTAT anchors."""
-    if pd.isna(row["ader_kcal"]) or pd.isna(row["gdd_kcal"]):
+    """Assign a status label based on baseline-diet kcal vs FAOSTAT anchors."""
+    if pd.isna(row["ader_kcal"]) or pd.isna(row["baseline_kcal"]):
         return "no-anchor"
-    if pd.notna(row["mder_kcal"]) and row["gdd_kcal"] < MDER_MARGIN * row["mder_kcal"]:
+    if (
+        pd.notna(row["mder_kcal"])
+        and row["baseline_kcal"] < MDER_MARGIN * row["mder_kcal"]
+    ):
         return "below-MDER"
-    if pd.notna(row["des_kcal"]) and row["gdd_kcal"] > DES_MARGIN * row["des_kcal"]:
+    if (
+        pd.notna(row["des_kcal"])
+        and row["baseline_kcal"] > DES_MARGIN * row["des_kcal"]
+    ):
         return "above-DES"
-    ratio = row["gdd_kcal"] / row["ader_kcal"]
+    ratio = row["baseline_kcal"] / row["ader_kcal"]
     if ratio < LOW_RATIO:
         return "low"
     if ratio > HIGH_RATIO:
@@ -79,33 +85,33 @@ def main():
             ", ".join(missing_cal),
         )
     bd["kcal"] = bd["consumption_g_per_day_intake"] * bd["food"].map(cal) / 100
-    gdd = bd.groupby("country", as_index=False)["kcal"].sum()
-    gdd = gdd.rename(columns={"kcal": "gdd_kcal"})
+    baseline = bd.groupby("country", as_index=False)["kcal"].sum()
+    baseline = baseline.rename(columns={"kcal": "baseline_kcal"})
 
     # Restrict the report to the configured country universe. baseline_diet
     # may carry extra countries left over from upstream FAOSTAT/GDD data
     # that aren't in the model; anchors may miss small territories absent
     # from FAOSTAT (e.g. ASM, GUF). Build the report from the config list
-    # so missing-anchor and missing-GDD countries both surface.
+    # so missing-anchor and missing-baseline countries both surface.
     universe = pd.DataFrame({"country": countries})
     report = universe.merge(anchors, on="country", how="left").merge(
-        gdd, on="country", how="left"
+        baseline, on="country", how="left"
     )
-    report["gdd_over_ader"] = report["gdd_kcal"] / report["ader_kcal"]
-    report["gdd_over_mder"] = report["gdd_kcal"] / report["mder_kcal"]
-    report["gdd_over_des"] = report["gdd_kcal"] / report["des_kcal"]
+    report["baseline_over_ader"] = report["baseline_kcal"] / report["ader_kcal"]
+    report["baseline_over_mder"] = report["baseline_kcal"] / report["mder_kcal"]
+    report["baseline_over_des"] = report["baseline_kcal"] / report["des_kcal"]
     report["status"] = report.apply(classify, axis=1)
 
     report = report[
         [
             "country",
-            "gdd_kcal",
+            "baseline_kcal",
             "ader_kcal",
             "mder_kcal",
             "des_kcal",
-            "gdd_over_ader",
-            "gdd_over_mder",
-            "gdd_over_des",
+            "baseline_over_ader",
+            "baseline_over_mder",
+            "baseline_over_des",
             "status",
         ]
     ].sort_values("country")

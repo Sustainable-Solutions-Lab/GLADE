@@ -275,6 +275,7 @@ rule estimate_baseline_diet:
         fbs_override_foods=config["diet"]["fbs_override_foods"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         risk_group_anchor=config["diet"]["risk_group_anchor"],
+        gbd_anchored_groups=config["health"]["risk_factors"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
         source_basis=config["diet"]["source_basis"],
         source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
@@ -360,17 +361,17 @@ rule compare_baseline_diet_to_gbd:
 
 
 rule validate_baseline_diet:
-    """Compare GDD-derived baseline-diet kcal totals against FAOSTAT
+    """Compare baseline-diet kcal totals against FAOSTAT
     dietary-energy anchors and emit a per-country status report.
 
     Status categories:
-    - ok: GDD total within [0.7, 1.4] x ADER and consistent with MDER/DES.
-    - low: 0.7 x ADER >= GDD > 0.85 x MDER (consistent with severe survey
+    - ok: baseline within [0.7, 1.4] x ADER and consistent with MDER/DES.
+    - low: 0.7 x ADER >= baseline > 0.85 x MDER (consistent with severe survey
            under-reporting but not physically impossible).
-    - below-MDER: GDD < 0.85 x MDER (physically implausible at population
-                  scale; investigate the GDD pipeline for that country).
-    - high: GDD > 1.4 x ADER but <= 1.05 x DES (high but supportable).
-    - above-DES: GDD > 1.05 x DES (exceeds food-system availability,
+    - below-MDER: baseline < 0.85 x MDER (physically implausible at population
+                  scale; investigate the diet pipeline for that country).
+    - high: baseline > 1.4 x ADER but <= 1.05 x DES (high but supportable).
+    - above-DES: baseline > 1.05 x DES (exceeds food-system availability,
                  implies upstream over-projection).
     - no-anchor: country missing from FAOSTAT FS (small territories).
     """

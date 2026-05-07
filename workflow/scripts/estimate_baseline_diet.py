@@ -57,16 +57,6 @@ from workflow.scripts.vegetable_projection import (
 
 logger = logging.getLogger(__name__)
 
-# Food groups where GDD and GBD are averaged
-GDD_GBD_AVERAGED_GROUPS = {
-    "fruits",
-    "vegetables",
-    "whole_grains",
-    "legumes",
-    "nuts_seeds",
-    "red_meat",
-}
-
 # Default pearl millet share of total millet production.
 # Pearl millet (Pennisetum glaucum) dominates global millet output;
 # foxtail millet (Setaria italica) accounts for the remainder.
@@ -118,6 +108,7 @@ def load_group_totals(
     baseline_age: str,
     reference_year: int,
     food_groups_included: list[str],
+    gbd_anchored_groups: set[str],
     risk_group_anchor: str = "average",
     source_basis: dict[str, dict[str, str]] | None = None,
     source_basis_country_overrides: dict[str, dict[str, dict[str, str]]] | None = None,
@@ -190,7 +181,7 @@ def load_group_totals(
         for fg in food_groups_included:
             gdd_val = gdd_totals.get((country, fg))
 
-            if fg in GDD_GBD_AVERAGED_GROUPS:
+            if fg in gbd_anchored_groups:
                 gbd_val = gbd_totals.get((country, fg))
                 combined = _combine_gdd_gbd(gdd_val, gbd_val, risk_group_anchor)
                 if combined is None:
@@ -217,7 +208,7 @@ def load_group_totals(
     result_df = pd.DataFrame(results)
 
     # Log cross-validation: GDD vs GBD agreement
-    log_gdd_gbd_agreement(gdd_totals, gbd_totals)
+    log_gdd_gbd_agreement(gdd_totals, gbd_totals, gbd_anchored_groups)
     logger.info("Risk-relevant food group anchor policy: %s", risk_group_anchor)
 
     return result_df
@@ -316,9 +307,13 @@ def apply_fbs_grain_supplement(
     return long.sort_values(["country", "food_group"]).reset_index(drop=True)
 
 
-def log_gdd_gbd_agreement(gdd_totals: pd.Series, gbd_totals: pd.Series) -> None:
+def log_gdd_gbd_agreement(
+    gdd_totals: pd.Series,
+    gbd_totals: pd.Series,
+    gbd_anchored_groups: set[str],
+) -> None:
     """Log cross-validation metrics between GDD and GBD estimates."""
-    for fg in GDD_GBD_AVERAGED_GROUPS:
+    for fg in gbd_anchored_groups:
         gdd_fg = gdd_totals.xs(fg, level="food_group", drop_level=False)
         gbd_fg = (
             gbd_totals.xs(fg, level="food_group", drop_level=False)
@@ -1143,6 +1138,11 @@ def main():
         for food, factor in snakemake.params.carcass_to_retail_meat.items()
     }
     risk_group_anchor = str(snakemake.params.risk_group_anchor)
+    # Food groups for which GBD provides intake exposure data and the
+    # baseline-diet should reconcile against it (per risk_group_anchor).
+    # Sourced from health.risk_factors so the diet anchor and the
+    # health-impact RR machinery never drift on which groups they cover.
+    gbd_anchored_groups = {str(g) for g in snakemake.params.gbd_anchored_groups}
     fbs_grain_cfg = dict(snakemake.params.fbs_grain_supplement)
     source_basis = {
         src: {str(g): str(b) for g, b in groups.items()}
@@ -1201,6 +1201,7 @@ def main():
         baseline_age,
         reference_year,
         food_groups_included,
+        gbd_anchored_groups=gbd_anchored_groups,
         risk_group_anchor=risk_group_anchor,
         source_basis=source_basis,
         source_basis_country_overrides=source_basis_country_overrides,
