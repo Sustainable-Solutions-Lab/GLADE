@@ -611,15 +611,15 @@ diet:
   #               Use this to align the baseline with the same intake
   #               basis the GBD relative-risk functions are calibrated
   #               against.
-  # Reconciliation policy for GDD (post-cooked-to-dry conversion) and GBD
-  # intake estimates on the GBD-covered risk groups (fruits, vegetables,
-  # whole_grains, legumes, nuts_seeds, red_meat). Empirically, GBD's
-  # country-level imputations are unreliable in many LICs (Mexico,
-  # Ethiopia, Brazil) where it differs from GDD by 5-20x in implausible
-  # ways, while GDD has its own under-coverage in HICs (Norway). The
-  # arithmetic mean smooths over both biases. "gbd" is available for
-  # users who want strict GBD-anchoring at the cost of LIC accuracy.
-  risk_group_anchor: "average"
+  # Reconciliation policy for GDD and GBD intake estimates on the
+  # GBD-covered risk groups (fruits, vegetables, whole_grains, legumes,
+  # nuts_seeds, red_meat). "gbd" anchors the baseline-diet intake of
+  # these groups to GBD's own reported intake, so the model's
+  # attributable disease burden is consistent with what GBD itself
+  # estimates from its dietary risk exposure data. "average" mixes
+  # GDD with GBD; useful in LICs where GBD's country-level imputations
+  # are noisy, but trades off health-impact consistency.
+  risk_group_anchor: "gbd"
   # Per-food-group "cooked / as-consumed" -> "dry / raw" conversion
   # factors, declared once and consumed in two places:
   #

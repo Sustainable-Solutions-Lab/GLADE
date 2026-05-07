@@ -317,6 +317,41 @@ rule prepare_food_security_anchors:
         "../scripts/prepare_food_security_anchors.py"
 
 
+rule compare_baseline_diet_to_gbd:
+    """Compare per-country GBD-risk-factor consumption in the baseline
+    diet against GBD's own intake estimates, after applying the same
+    cooked-to-dry conversion the pipeline uses.
+
+    This is a consistency check for the health module: if the model's
+    baseline-diet intake of a risk factor differs dramatically from
+    GBD's intake estimate for the same country, the attributable
+    disease burden the model computes will diverge from what GBD
+    itself estimates for that country.
+    """
+    input:
+        baseline_diet="<processing>/{name}/baseline_diet.csv",
+        food_groups="data/curated/food_groups.csv",
+        gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+    params:
+        countries=config["countries"],
+        risk_factors=config["health"]["risk_factors"],
+        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
+        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
+    output:
+        report="<processing>/{name}/baseline_diet_risk_comparison.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=200,
+    log:
+        "<logs>/{name}/compare_baseline_diet_to_gbd.log",
+    benchmark:
+        "<benchmarks>/{name}/compare_baseline_diet_to_gbd.tsv"
+    script:
+        "../scripts/compare_baseline_diet_to_gbd.py"
+
+
 rule validate_baseline_diet:
     """Compare GDD-derived baseline-diet kcal totals against FAOSTAT
     dietary-energy anchors and emit a per-country status report.

@@ -139,6 +139,7 @@ rule build_model:
         population="<processing>/{name}/population.csv",
         baseline_diet="<processing>/{name}/dietary_intake.csv",
         baseline_diet_validation="<processing>/{name}/baseline_diet_validation.csv",
+        baseline_diet_risk_comparison="<processing>/{name}/baseline_diet_risk_comparison.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         costs="<processing>/{name}/faostat_crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
