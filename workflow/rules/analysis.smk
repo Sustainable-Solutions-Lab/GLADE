@@ -255,15 +255,17 @@ _ANALYSIS_FILES = (
 
 
 def _sensitivity_scenario_names(wildcards):
-    """Return sensitivity scenarios for the group whose analysis outputs are on disk.
+    """Return all sensitivity scenario names matching the group in expansion order.
 
-    Cluster sweeps occasionally leave a small fraction of Sobol scenarios
-    unsolved (per-solve TimeLimit hits, etc.).  The surrogate fit operates on
-    whatever subset is available, so drop scenarios whose ``_ANALYSIS_FILES``
-    are not all present rather than failing the whole rule.
+    Default behaviour declares every scenario the generator would produce so
+    Snakemake can drive the full solve→analyse→surrogate chain in a single
+    invocation.  Set ``sensitivity_analysis.discover_scenarios_on_disk: true``
+    when the solve+analyse phase runs *outside* Snakemake (e.g. cluster
+    sweeps via ``tools/batch-solve``) and the surrogate should be fit over
+    whatever scenarios happen to have complete analysis outputs on disk.
+    See :func:`_filter_existing_scenarios` for the guardrails.
     """
     import re
-    from pathlib import Path
 
     generator = _sensitivity_generator(wildcards)
     pattern = re.escape(generator["name"]).replace(r"\{sample_id\}", r"\d+") + "$"
@@ -276,32 +278,53 @@ def _sensitivity_scenario_names(wildcards):
             f"Available scenarios: {all_scenarios}"
         )
 
+    if config["sensitivity_analysis"]["discover_scenarios_on_disk"]:
+        return _filter_existing_scenarios(wildcards, matching, generator["name"])
+    return matching
+
+
+def _filter_existing_scenarios(wildcards, scenarios, group_label):
+    """Drop scenarios whose analysis outputs are not all present on disk.
+
+    Used only when ``sensitivity_analysis.discover_scenarios_on_disk`` is true.
+    Errors out if more than half the scenarios are missing — that almost
+    always means the solve+analyse phase has not been run yet, and silently
+    fitting a surrogate on the remainder would produce a misleading model.
+    """
+    from pathlib import Path
+
     analysis_root = Path(PATH_ROOTS["results"]) / wildcards.name / "analysis"
     available = [
         s
-        for s in matching
+        for s in scenarios
         if all((analysis_root / f"scen-{s}" / f).is_file() for f in _ANALYSIS_FILES)
     ]
-    n_missing = len(matching) - len(available)
-    if n_missing:
-        print(
-            f"[sensitivity] group={generator['name']}: dropping {n_missing} of "
-            f"{len(matching)} scenarios with incomplete analysis outputs."
-        )
-    if not available:
+    n_total = len(scenarios)
+    n_missing = n_total - len(available)
+    if n_missing == 0:
+        return available
+    if n_missing > n_total // 2:
         raise ValueError(
-            f"No scenarios with complete analysis outputs for group "
-            f"'{generator['name']}'. Run the GSA solves first."
+            f"sensitivity_analysis.discover_scenarios_on_disk is true but "
+            f"{n_missing} of {n_total} scenarios for group '{group_label}' "
+            f"have incomplete analysis outputs (>50% missing). Run the "
+            f"solve+analyse phase before fitting the surrogate."
         )
+    print(
+        f"[sensitivity] group={group_label}: dropping {n_missing} of {n_total} "
+        f"scenarios with incomplete analysis outputs (discover_scenarios_on_disk=true)."
+    )
     return available
 
 
 def _sensitivity_scenario_inputs(wildcards):
-    """Generate input files for the sensitivity scenarios available on disk.
+    """Generate input files for all sensitivity scenarios.
 
-    Mirrors :func:`_sensitivity_scenario_names`: scenarios whose analysis
-    outputs are not all present are dropped, so a partial sweep can still
-    fit a surrogate over the available subset.
+    Mirrors :func:`_sensitivity_scenario_names`: when
+    ``sensitivity_analysis.discover_scenarios_on_disk`` is false (default),
+    every expected scenario is declared so Snakemake drives the upstream
+    solves; when true, only scenarios with complete outputs on disk are
+    declared.
     """
     all_scenarios = _sensitivity_scenario_names(wildcards)
     return [

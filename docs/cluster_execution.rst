@@ -165,7 +165,21 @@ full GSA sweep, but the fitted surrogate itself is ~20 MB.  Fitting in
 place on the cluster and only transferring the bundle (plus the Sobol
 parquets) avoids moving the per-scenario analysis back and forth.  A
 single ``srun`` on the ``dev`` partition suffices — the fit is a few
-minutes of CPU on 8k samples::
+minutes of CPU on 8k samples.
+
+The ``gsa.yaml`` and ``gsa_fixed_diet.yaml`` configs set
+``sensitivity_analysis.discover_scenarios_on_disk: true``, so the
+``build_surrogate`` rule reads the analysis directory and fits the
+surrogate on whatever scenarios have complete outputs on disk
+(occasional per-solve TimeLimit hits in a 24k-scenario sweep are
+expected; the rule errors out if more than 50 % are missing).  With this
+flag set, the upstream solves are *not* implicit DAG dependencies of the
+surrogate target — that's why the manifest-based ``tools/batch-solve``
+loop above must finish before this step.  See
+:doc:`sensitivity_analysis` for the rationale and behaviour with the
+flag at its default ``false``.
+
+::
 
     # On the cluster
     cd <path/to/remote/food-opt>

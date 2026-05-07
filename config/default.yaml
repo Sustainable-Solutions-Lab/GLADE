@@ -1238,6 +1238,18 @@ sensitivity_analysis:
   # Method downstream consumers (uncertainty-band plots, notebooks) use when
   # no explicit choice is given. Must match a key under ``methods``.
   default_surrogate: xgb
+  # When false (default), the surrogate-fit rule declares every Sobol scenario
+  # the generator promises so Snakemake drives the full solve→analyse→
+  # surrogate chain in a single invocation (the canonical Snakemake idiom).
+  # When true, the rule instead scans the analysis directory and fits the
+  # surrogate only on scenarios with complete outputs on disk; intended for
+  # cluster sweeps where solves run *outside* Snakemake (via
+  # ``tools/batch-solve``) and a small fraction may legitimately be missing
+  # because per-solve TimeLimit hit. Setting this to true changes the
+  # workflow contract: the user must run the solve+analyse phase
+  # before targeting the surrogate. As a guardrail, the rule errors out if
+  # more than 50% of scenarios are missing.
+  discover_scenarios_on_disk: false
   # Sobol-index settings, shared across surrogate methods.  ``outputs``
   # is the allowlist of OutputSpec names whose Sobol indices we
   # compute, plot, and persist; vector specs are excluded by default

@@ -865,6 +865,23 @@ trained model, generator spec, and parameter metadata) plus a flat
 validation parquet.  The bundle is consumed by downstream rules and
 notebooks (policy sweeps, uncertainty-band plots).
 
+.. note::
+
+   When a sweep solves outside Snakemake (typically the cluster path
+   driven by ``tools/batch-solve``; see :doc:`cluster_execution`), set
+   ``sensitivity_analysis.discover_scenarios_on_disk: true`` in the
+   config (already set in ``config/gsa.yaml`` and
+   ``config/gsa_fixed_diet.yaml``).  With the flag on, the surrogate-fit
+   rule scans the analysis directory and fits over scenarios with
+   complete outputs on disk, dropping the small fraction that may have
+   hit per-solve TimeLimit.  The rule errors out if more than 50 % of
+   scenarios are missing, as a guardrail against running it before the
+   solve+analyse phase has finished.  When the flag is left at its
+   default ``false``, ``build_surrogate`` declares every Sobol scenario
+   as an input so a single ``tools/smk`` call drives the whole
+   solve→analyse→surrogate chain — the canonical Snakemake idiom and
+   the right choice for small / test runs.
+
 **Compute Sobol indices from a surrogate**:
 
 .. code-block:: bash

@@ -102,6 +102,10 @@ scenarios:
 # (foods, feed_categories) carry near-zero variance with
 # enforce_baseline_diet but cost almost nothing to fit, so we leave
 # them in place rather than overriding.
+sensitivity_analysis:
+  # GSA solves run outside Snakemake on the cluster (tools/batch-solve);
+  # see config/default.yaml for the full rationale.
+  discover_scenarios_on_disk: true
 
 # Match GDD baseline data (2018) via planning horizon / baseline year.
 planning_horizon: 2020

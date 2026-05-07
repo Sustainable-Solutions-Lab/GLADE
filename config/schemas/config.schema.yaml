@@ -1745,7 +1745,7 @@ properties:
   sensitivity_analysis:
     type: object
     description: "Configuration for surrogate-based sensitivity analysis methods"
-    required: [outputs, holdout_fraction, threads, default_surrogate, methods, sobol]
+    required: [outputs, holdout_fraction, threads, default_surrogate, methods, sobol, discover_scenarios_on_disk]
     additionalProperties: false
     properties:
       outputs:
@@ -1785,6 +1785,9 @@ properties:
       default_surrogate:
         type: string
         description: "Surrogate method downstream consumers (e.g. uncertainty-band plots, notebooks) pick when no method is specified explicitly.  Must match a key under ``methods``."
+      discover_scenarios_on_disk:
+        type: boolean
+        description: "If false (default), the surrogate-fit rule declares every scenario the generator promises so Snakemake drives the full solve→analyse→surrogate chain.  If true, the rule scans the analysis directory and fits the surrogate on whatever scenarios have complete outputs on disk; intended for cluster sweeps where solves run outside Snakemake.  Errors out if more than 50% of scenarios are missing."
       sobol:
         type: object
         required: [outputs, grid_resolution, n_mc_global, n_mc_conditional]

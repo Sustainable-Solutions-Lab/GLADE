@@ -193,6 +193,13 @@ sensitivity_analysis:
   # this method when no explicit choice is provided.  Must match a key under
   # ``methods``.
   default_surrogate: xgb
+  # GSA solves run outside Snakemake on the cluster (tools/batch-solve), so
+  # the surrogate fit reads scenarios from disk rather than declaring every
+  # expected output.  A small fraction of Sobol scenarios may be missing
+  # (per-solve TimeLimit hits); the rule errors out if more than 50% are
+  # missing as a guardrail.  See sensitivity_analysis.discover_scenarios_on_disk
+  # in config/default.yaml for the full rationale.
+  discover_scenarios_on_disk: true
   methods:
     xgb:
       method_options:
