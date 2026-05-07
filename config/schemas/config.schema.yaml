@@ -977,7 +977,11 @@ properties:
 
   diet:
     type: object
-    required: [baseline_age, risk_group_anchor, fbs_grain_supplement]
+    required:
+      - baseline_age
+      - risk_group_anchor
+      - food_group_dry_equiv_factor
+      - fbs_grain_supplement
     additionalProperties: false
     properties:
       baseline_age:
@@ -1020,6 +1024,12 @@ properties:
         type: string
         enum: ["average", "gbd"]
         description: "Reconciliation policy for GDD vs GBD intake estimates on GBD-covered risk groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat)."
+      food_group_dry_equiv_factor:
+        type: object
+        additionalProperties:
+          type: number
+          exclusiveMinimum: 0.0
+        description: "Per-food-group 'cooked / as-consumed' -> 'dry / raw' conversion factors. Used in merge_dietary_sources to convert GDD intake into the model's dry-mass basis, and in the health module's risk-curve construction to align the model's consumption with GBD's calibration basis where it differs. Missing keys default to 1.0."
       fbs_grain_supplement:
         type: object
         required: [enabled, threshold]

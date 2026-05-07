@@ -8,20 +8,33 @@ Merge dietary intake data from multiple sources.
 
 Three sources contribute, in increasing order of precedence:
 1. GDD (Global Dietary Database, individual-level surveys, intake-based) --
-   default for most food groups in most countries.
+   default for most food groups in most countries. GDD reports food intake
+   in g/day of food *as consumed* (e.g. 100g of cooked rice, 100g of bread)
+   for cereals/legumes/meats. Because the model's nutrition.csv uses dry-
+   weight kcal densities (e.g. flour-white at 364 kcal/100g, which is dry
+   flour, not bread), the GDD values are pre-multiplied by the configured
+   per-food-group ``food_group_dry_equiv_factor`` factor before merging.
+   Missing groups default to 1.0 (no conversion).
 2. FAOSTAT FBS food supply (per-country, year-specific, supply-based) --
    waste-corrected via `food_loss_waste.csv`. Used for groups GDD does not
    cover well (dairy, eggs, poultry, vegetable oils). FAOSTAT overrides
-   GDD on overlap.
+   GDD on overlap. Already in raw/dry mass basis from the supply side, so
+   no cooked-to-dry conversion is applied to it.
 3. NHANES / FPED (USA only, intake-based, 24-hour recall summaries).
    Overrides both GDD and FAOSTAT for the US for every (country, food
-   group) it carries.
+   group) it carries. NHANES values come from FPED ounce-equivalents, a
+   hybrid basis (flour-content for breads, cooked weight for rice), so we
+   leave them untouched rather than apply a single conversion factor.
 
 Input:
     - GDD dietary intake CSV
     - FAOSTAT food supply CSV (raw, not waste-adjusted)
     - NHANES dietary intake CSV (already in intake terms; no waste correction)
     - Food loss & waste fractions CSV
+
+Params:
+    - food_group_dry_equiv_factor: dict mapping food_group -> conversion
+      factor. Used at this stage only on the GDD source.
 
 Output:
     - Combined dietary intake CSV
@@ -70,15 +83,50 @@ def _drop_overlap(
     return target.loc[~mask].copy()
 
 
+def _apply_dry_equiv_conversion(
+    gdd_df: pd.DataFrame, factors: dict[str, float]
+) -> pd.DataFrame:
+    """Multiply GDD values by per-food-group cooked-to-dry conversion factors.
+
+    GDD reports food intake in cooked / as-consumed weight for cereals,
+    legumes, and meats; the model's nutrition.csv uses dry/raw kcal
+    densities. Without conversion, the per-food calorie computation
+    inflates by ~2-3x for high-cereal-intake countries. Factors default
+    to 1.0 (no change) for any food_group not in the dict.
+    """
+    if not factors:
+        logger.info("food_group_dry_equiv_factor: no factors configured")
+        return gdd_df
+
+    gdd_df = gdd_df.copy()
+    multiplier = gdd_df["item"].map(factors).fillna(1.0).astype(float)
+    n_converted = int((multiplier != 1.0).sum())
+    if n_converted == 0:
+        return gdd_df
+    gdd_df["value"] = gdd_df["value"] * multiplier
+    factor_summary = ", ".join(f"{k}={v}" for k, v in sorted(factors.items()))
+    logger.info(
+        "Applied food_group_dry_equiv_factor to %d GDD rows (factors: %s)",
+        n_converted,
+        factor_summary,
+    )
+    return gdd_df
+
+
 def main():
     gdd_file = snakemake.input.gdd
     fao_file = snakemake.input.faostat
     nhanes_file = snakemake.input.nhanes
     flw_file = snakemake.input.food_loss_waste
     output_file = snakemake.output.diet
+    food_group_dry_equiv_factor = {
+        str(k): float(v)
+        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+    }
 
     logger.info(f"Reading GDD data from {gdd_file}")
     gdd_df = pd.read_csv(gdd_file)
+    gdd_df = _apply_dry_equiv_conversion(gdd_df, food_group_dry_equiv_factor)
 
     logger.info(f"Reading FAOSTAT food supply data from {fao_file}")
     fao_df = pd.read_csv(fao_file)

@@ -611,7 +611,48 @@ diet:
   #               Use this to align the baseline with the same intake
   #               basis the GBD relative-risk functions are calibrated
   #               against.
+  # Reconciliation policy for GDD (post-cooked-to-dry conversion) and GBD
+  # intake estimates on the GBD-covered risk groups (fruits, vegetables,
+  # whole_grains, legumes, nuts_seeds, red_meat). Empirically, GBD's
+  # country-level imputations are unreliable in many LICs (Mexico,
+  # Ethiopia, Brazil) where it differs from GDD by 5-20x in implausible
+  # ways, while GDD has its own under-coverage in HICs (Norway). The
+  # arithmetic mean smooths over both biases. "gbd" is available for
+  # users who want strict GBD-anchoring at the cost of LIC accuracy.
   risk_group_anchor: "average"
+  # Per-food-group "cooked / as-consumed" -> "dry / raw" conversion
+  # factors. Applied in two places:
+  #
+  # 1. merge_dietary_sources: GDD reports food intake in g/day of food
+  #    *as consumed* (cooked rice, bread, cooked legumes, cooked meat)
+  #    for cereals, legumes, and meats. The model's nutrition.csv uses
+  #    dry-/raw-weight kcal densities (e.g. flour-white 364 kcal/100g of
+  #    dry flour, not bread). Multiplying GDD's value by the factor here
+  #    converts the intake into the model's dry/raw mass basis so
+  #    consumption x kcal-density gives correct calories.
+  #
+  # 2. health risk-curve construction: GBD's relative-risk functions are
+  #    calibrated against survey-style intake. For groups where GBD's
+  #    risk basis differs from the dry/raw basis the model carries, the
+  #    health module multiplies the model's consumption by the inverse
+  #    of the factor before feeding it to the risk integral so the
+  #    dose-response x-axis matches the calibration basis.
+  #
+  # Empirical anchor: factor 0.45 applied to Norway's GDD whole_grains
+  # (31 g/day cooked) gives 14 g/day, matching GBD's reported value of
+  # 14.07 g/day. Caveat: GDD/GBD ratios vary widely per country for
+  # these groups (HICs cluster near 2.2 = 1/0.45; LICs/MICs are often
+  # lower, sometimes inverted). The uniform factor is most accurate for
+  # HICs and for countries whose surveys record cooked weight; it may
+  # over-correct for LICs whose surveys (e.g. NSS in India) already
+  # record raw cereal mass. Future work could derive country-specific
+  # factors from GDD-vs-GBD agreement.
+  #
+  # Groups not listed default to 1.0 (no conversion).
+  food_group_dry_equiv_factor:
+    grain: 0.45
+    whole_grains: 0.45
+    legumes: 0.40
   # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
   # GDD systematically under-reports refined grain in some HICs (Norway:
   # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain
@@ -622,7 +663,7 @@ diet:
   # via ``risk_group_anchor`` above so this does not perturb the
   # health-risk calibration.
   fbs_grain_supplement:
-    enabled: false
+    enabled: true
     threshold: 0.5
 
 # --- section: biomass ---

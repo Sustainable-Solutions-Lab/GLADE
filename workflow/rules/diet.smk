@@ -174,6 +174,8 @@ rule merge_dietary_sources:
         faostat="<processing>/{name}/faostat_gdd_supplements.csv",
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+    params:
+        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
