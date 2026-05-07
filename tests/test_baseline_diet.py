@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.estimate_baseline_diet import (
-    _apply_millet_split,
+    WITHIN_QCL_FOOD_SPLITS,
     _resolve_shared_fbs_item,
     build_within_group_shares,
 )
@@ -257,63 +257,54 @@ class TestResolveSharedFbsItem:
 
 
 # ---------------------------------------------------------------------------
-# Tests: _apply_millet_split
+# Tests: _resolve_shared_fbs_item with WITHIN_QCL_FOOD_SPLITS
 # ---------------------------------------------------------------------------
 
 
-class TestApplyMilletSplit:
-    """Tests for the fixed millet production split."""
+class TestSameQclBucketSplit:
+    """Tests for absolute within-bucket splits via food_split_overrides."""
 
-    def test_millet_split_applied(self):
-        """Pearl and foxtail millet shares are adjusted from equal split."""
-        df = pd.DataFrame(
-            {
-                "country": ["USA", "USA"],
-                "food": ["pearl-millet", "foxtail-millet"],
-                "food_group": ["whole_grains", "whole_grains"],
-                "share": [0.5, 0.5],
-            }
+    def test_pearl_foxtail_millet_split(self):
+        """When both millets share the QCL "Millet" bucket and there is no
+        production data, the override pins them to 0.8 / 0.2."""
+        # Both millets have the same QCL code; no per-species production.
+        qcl_lookup = {"pearl-millet": 88, "foxtail-millet": 88}
+        shares = _resolve_shared_fbs_item(
+            "USA",
+            ["pearl-millet", "foxtail-millet"],
+            qcl_lookup,
+            crop_prod_lookup={},  # no production -> falls into equal-bucket path
+            animal_prod_lookup={},
+            food_split_overrides=WITHIN_QCL_FOOD_SPLITS,
         )
-        _apply_millet_split(df)
-        assert df.loc[df["food"] == "pearl-millet", "share"].iloc[0] == pytest.approx(
-            0.8
-        )
-        assert df.loc[df["food"] == "foxtail-millet", "share"].iloc[0] == pytest.approx(
-            0.2
-        )
+        assert shares["pearl-millet"] == pytest.approx(0.8)
+        assert shares["foxtail-millet"] == pytest.approx(0.2)
+        assert sum(shares.values()) == pytest.approx(1.0)
 
-    def test_millet_split_sums_to_one(self):
-        """After split, shares still sum to 1.0 per country."""
-        df = pd.DataFrame(
-            {
-                "country": ["USA", "USA", "IND", "IND"],
-                "food": [
-                    "pearl-millet",
-                    "foxtail-millet",
-                    "pearl-millet",
-                    "foxtail-millet",
-                ],
-                "food_group": ["whole_grains"] * 4,
-                "share": [0.5, 0.5, 0.5, 0.5],
-            }
+    def test_split_with_production_scales_bucket_share(self):
+        """Override applies to the within-bucket weights, not the bucket
+        share (the bucket share still comes from production)."""
+        # Two QCL buckets: millet (88) shared by pearl+foxtail, and another
+        # crop (99) for cowpea. Production splits the buckets 30/70.
+        qcl_lookup = {
+            "pearl-millet": 88,
+            "foxtail-millet": 88,
+            "cowpea": 99,
+        }
+        crop_prod = {("USA", 88): 30.0, ("USA", 99): 70.0}
+        shares = _resolve_shared_fbs_item(
+            "USA",
+            ["pearl-millet", "foxtail-millet", "cowpea"],
+            qcl_lookup,
+            crop_prod,
+            animal_prod_lookup={},
+            food_split_overrides=WITHIN_QCL_FOOD_SPLITS,
         )
-        _apply_millet_split(df)
-        for country in ["USA", "IND"]:
-            country_total = df[df["country"] == country]["share"].sum()
-            assert country_total == pytest.approx(1.0)
-
-    def test_no_millet_is_noop(self):
-        """If no millet foods present, nothing changes."""
-        df = pd.DataFrame(
-            {
-                "country": ["USA"],
-                "food": ["wheat"],
-                "food_group": ["grain"],
-                "share": [1.0],
-            }
-        )
-        _apply_millet_split(df)
-        assert df["share"].iloc[0] == 1.0
+        # Millet bucket has 30% of supply; pearl gets 0.8 of that, foxtail 0.2.
+        assert shares["pearl-millet"] == pytest.approx(0.30 * 0.8)
+        assert shares["foxtail-millet"] == pytest.approx(0.30 * 0.2)
+        assert shares["cowpea"] == pytest.approx(0.70)
+        assert sum(shares.values()) == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
