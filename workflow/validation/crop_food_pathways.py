@@ -76,3 +76,29 @@ def validate_crop_food_pathways(config: dict, project_root: Path) -> None:
     if missing_byproducts:
         missing_text = ", ".join(missing_byproducts)
         raise ValueError(f"Byproducts in config not found in foods.csv: {missing_text}")
+
+    # Biofuel and fiber demand maps must reference real crops + foods.
+    # Both files have (crop, source_item) where source_item is the food
+    # bus the demand is routed through.
+    for csv_name in ("faostat_biofuel_crop_map.csv", "faostat_fiber_demand_map.csv"):
+        path = project_root / "data" / "curated" / csv_name
+        if not path.exists():
+            raise FileNotFoundError(f"Expected data file at {path}")
+        map_df = pd.read_csv(path, comment="#")
+        required = {"crop", "source_item"}
+        missing_cols = required - set(map_df.columns)
+        if missing_cols:
+            raise ValueError(
+                f"{csv_name}: missing required columns {sorted(missing_cols)}"
+            )
+        bad_crops = sorted(set(map_df["crop"]) - config_crops)
+        if bad_crops:
+            raise ValueError(
+                f"{csv_name}: crop values not in config.crops: {bad_crops}"
+            )
+        bad_foods = sorted(set(map_df["source_item"]) - foods_in_csv)
+        if bad_foods:
+            raise ValueError(
+                f"{csv_name}: source_item values not produced by any "
+                f"foods.csv pathway: {bad_foods}"
+            )

@@ -76,3 +76,19 @@ meat-chicken,fresh
 eggs,fresh
 dairy,fresh
 dairy-buffalo,fresh
+# Processing byproducts routed to feed, fiber, or biofuel rather than
+# human consumption. These never enter the diet/health pipeline, but
+# every food bus must carry a basis annotation. All are dry materials.
+wheat-bran,dry
+wheat-germ,dry
+rice-bran,dry
+barley-bran,dry
+oat-bran,dry
+buckwheat-hulls,dry
+oilseed-meal,dry
+rapeseed-meal,dry
+ddgs,dry
+maize-ethanol,dry
+sugarcane-ethanol,dry
+molasses,dry
+cotton-lint,dry
