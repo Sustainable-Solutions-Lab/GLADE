@@ -9,6 +9,7 @@ from .basis import (
     conversion_factor,
     convert_intake,
     load_food_basis,
+    load_source_basis_country_overrides,
     resolve_source_basis,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "conversion_factor",
     "convert_intake",
     "load_food_basis",
+    "load_source_basis_country_overrides",
     "resolve_source_basis",
 ]

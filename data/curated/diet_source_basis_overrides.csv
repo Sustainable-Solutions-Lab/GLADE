@@ -1,0 +1,223 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Per-(source, country, food_group) basis overrides for the diet
+# pipeline. Resolved by diet.basis.resolve_source_basis BEFORE the
+# per-source global declaration in config.diet.source_basis.
+#
+# Use cases: when a country's underlying survey methodology records a
+# food group in a basis different from the source's global default. The
+# bulk of entries below correct GDD's "grain/whole_grains/legumes ==
+# cooked" global declaration for ~65 countries whose dietary surveys
+# are household-acquisition-based (NSS in India, HIES in
+# Bangladesh/Pakistan, LSMS in much of sub-Saharan Africa, ENSANUT in
+# Mexico, SUSENAS in Indonesia, HCES in Ethiopia) and therefore
+# already record raw cereal mass. The "region" and "note" columns are
+# documentation only — the lookup uses (source, country, food_group).
+
+source,country,food_group,basis,region,note
+# South Asia (NSS / HIES record raw cereal weight)
+gdd,IND,grain,dry,South Asia,NSS
+gdd,IND,whole_grains,dry,South Asia,NSS
+gdd,IND,legumes,dry,South Asia,NSS
+gdd,BGD,grain,dry,South Asia,HIES
+gdd,BGD,whole_grains,dry,South Asia,HIES
+gdd,BGD,legumes,dry,South Asia,HIES
+gdd,PAK,grain,dry,South Asia,HIES
+gdd,PAK,whole_grains,dry,South Asia,HIES
+gdd,PAK,legumes,dry,South Asia,HIES
+gdd,NPL,grain,dry,South Asia,
+gdd,NPL,whole_grains,dry,South Asia,
+gdd,NPL,legumes,dry,South Asia,
+gdd,LKA,grain,dry,South Asia,
+gdd,LKA,whole_grains,dry,South Asia,
+gdd,LKA,legumes,dry,South Asia,
+gdd,AFG,grain,dry,South Asia,
+gdd,AFG,whole_grains,dry,South Asia,
+gdd,AFG,legumes,dry,South Asia,
+# Sub-Saharan Africa (LSMS / national HCES record raw weight)
+gdd,ETH,grain,dry,Sub-Saharan Africa,HCES
+gdd,ETH,whole_grains,dry,Sub-Saharan Africa,HCES
+gdd,ETH,legumes,dry,Sub-Saharan Africa,HCES
+gdd,NGA,grain,dry,Sub-Saharan Africa,LSMS
+gdd,NGA,whole_grains,dry,Sub-Saharan Africa,LSMS
+gdd,NGA,legumes,dry,Sub-Saharan Africa,LSMS
+gdd,KEN,grain,dry,Sub-Saharan Africa,
+gdd,KEN,whole_grains,dry,Sub-Saharan Africa,
+gdd,KEN,legumes,dry,Sub-Saharan Africa,
+gdd,UGA,grain,dry,Sub-Saharan Africa,
+gdd,UGA,whole_grains,dry,Sub-Saharan Africa,
+gdd,UGA,legumes,dry,Sub-Saharan Africa,
+gdd,TZA,grain,dry,Sub-Saharan Africa,
+gdd,TZA,whole_grains,dry,Sub-Saharan Africa,
+gdd,TZA,legumes,dry,Sub-Saharan Africa,
+gdd,COD,grain,dry,Sub-Saharan Africa,
+gdd,COD,whole_grains,dry,Sub-Saharan Africa,
+gdd,COD,legumes,dry,Sub-Saharan Africa,
+gdd,GHA,grain,dry,Sub-Saharan Africa,
+gdd,GHA,whole_grains,dry,Sub-Saharan Africa,
+gdd,GHA,legumes,dry,Sub-Saharan Africa,
+gdd,MWI,grain,dry,Sub-Saharan Africa,
+gdd,MWI,whole_grains,dry,Sub-Saharan Africa,
+gdd,MWI,legumes,dry,Sub-Saharan Africa,
+gdd,ZMB,grain,dry,Sub-Saharan Africa,
+gdd,ZMB,whole_grains,dry,Sub-Saharan Africa,
+gdd,ZMB,legumes,dry,Sub-Saharan Africa,
+gdd,ZWE,grain,dry,Sub-Saharan Africa,
+gdd,ZWE,whole_grains,dry,Sub-Saharan Africa,
+gdd,ZWE,legumes,dry,Sub-Saharan Africa,
+gdd,MOZ,grain,dry,Sub-Saharan Africa,
+gdd,MOZ,whole_grains,dry,Sub-Saharan Africa,
+gdd,MOZ,legumes,dry,Sub-Saharan Africa,
+gdd,RWA,grain,dry,Sub-Saharan Africa,
+gdd,RWA,whole_grains,dry,Sub-Saharan Africa,
+gdd,RWA,legumes,dry,Sub-Saharan Africa,
+gdd,BDI,grain,dry,Sub-Saharan Africa,
+gdd,BDI,whole_grains,dry,Sub-Saharan Africa,
+gdd,BDI,legumes,dry,Sub-Saharan Africa,
+gdd,MDG,grain,dry,Sub-Saharan Africa,
+gdd,MDG,whole_grains,dry,Sub-Saharan Africa,
+gdd,MDG,legumes,dry,Sub-Saharan Africa,
+gdd,CMR,grain,dry,Sub-Saharan Africa,
+gdd,CMR,whole_grains,dry,Sub-Saharan Africa,
+gdd,CMR,legumes,dry,Sub-Saharan Africa,
+gdd,BFA,grain,dry,Sub-Saharan Africa,
+gdd,BFA,whole_grains,dry,Sub-Saharan Africa,
+gdd,BFA,legumes,dry,Sub-Saharan Africa,
+gdd,MLI,grain,dry,Sub-Saharan Africa,
+gdd,MLI,whole_grains,dry,Sub-Saharan Africa,
+gdd,MLI,legumes,dry,Sub-Saharan Africa,
+gdd,NER,grain,dry,Sub-Saharan Africa,
+gdd,NER,whole_grains,dry,Sub-Saharan Africa,
+gdd,NER,legumes,dry,Sub-Saharan Africa,
+gdd,TCD,grain,dry,Sub-Saharan Africa,
+gdd,TCD,whole_grains,dry,Sub-Saharan Africa,
+gdd,TCD,legumes,dry,Sub-Saharan Africa,
+gdd,SEN,grain,dry,Sub-Saharan Africa,
+gdd,SEN,whole_grains,dry,Sub-Saharan Africa,
+gdd,SEN,legumes,dry,Sub-Saharan Africa,
+gdd,BEN,grain,dry,Sub-Saharan Africa,
+gdd,BEN,whole_grains,dry,Sub-Saharan Africa,
+gdd,BEN,legumes,dry,Sub-Saharan Africa,
+gdd,TGO,grain,dry,Sub-Saharan Africa,
+gdd,TGO,whole_grains,dry,Sub-Saharan Africa,
+gdd,TGO,legumes,dry,Sub-Saharan Africa,
+gdd,CIV,grain,dry,Sub-Saharan Africa,
+gdd,CIV,whole_grains,dry,Sub-Saharan Africa,
+gdd,CIV,legumes,dry,Sub-Saharan Africa,
+gdd,LBR,grain,dry,Sub-Saharan Africa,
+gdd,LBR,whole_grains,dry,Sub-Saharan Africa,
+gdd,LBR,legumes,dry,Sub-Saharan Africa,
+gdd,SLE,grain,dry,Sub-Saharan Africa,
+gdd,SLE,whole_grains,dry,Sub-Saharan Africa,
+gdd,SLE,legumes,dry,Sub-Saharan Africa,
+gdd,LSO,grain,dry,Sub-Saharan Africa,
+gdd,LSO,whole_grains,dry,Sub-Saharan Africa,
+gdd,LSO,legumes,dry,Sub-Saharan Africa,
+gdd,SOM,grain,dry,Sub-Saharan Africa,
+gdd,SOM,whole_grains,dry,Sub-Saharan Africa,
+gdd,SOM,legumes,dry,Sub-Saharan Africa,
+gdd,SSD,grain,dry,Sub-Saharan Africa,
+gdd,SSD,whole_grains,dry,Sub-Saharan Africa,
+gdd,SSD,legumes,dry,Sub-Saharan Africa,
+gdd,ERI,grain,dry,Sub-Saharan Africa,
+gdd,ERI,whole_grains,dry,Sub-Saharan Africa,
+gdd,ERI,legumes,dry,Sub-Saharan Africa,
+gdd,GMB,grain,dry,Sub-Saharan Africa,
+gdd,GMB,whole_grains,dry,Sub-Saharan Africa,
+gdd,GMB,legumes,dry,Sub-Saharan Africa,
+gdd,CAF,grain,dry,Sub-Saharan Africa,
+gdd,CAF,whole_grains,dry,Sub-Saharan Africa,
+gdd,CAF,legumes,dry,Sub-Saharan Africa,
+gdd,COG,grain,dry,Sub-Saharan Africa,
+gdd,COG,whole_grains,dry,Sub-Saharan Africa,
+gdd,COG,legumes,dry,Sub-Saharan Africa,
+gdd,GAB,grain,dry,Sub-Saharan Africa,
+gdd,GAB,whole_grains,dry,Sub-Saharan Africa,
+gdd,GAB,legumes,dry,Sub-Saharan Africa,
+gdd,GNB,grain,dry,Sub-Saharan Africa,
+gdd,GNB,whole_grains,dry,Sub-Saharan Africa,
+gdd,GNB,legumes,dry,Sub-Saharan Africa,
+gdd,STP,grain,dry,Sub-Saharan Africa,
+gdd,STP,whole_grains,dry,Sub-Saharan Africa,
+gdd,STP,legumes,dry,Sub-Saharan Africa,
+gdd,SWZ,grain,dry,Sub-Saharan Africa,
+gdd,SWZ,whole_grains,dry,Sub-Saharan Africa,
+gdd,SWZ,legumes,dry,Sub-Saharan Africa,
+gdd,NAM,grain,dry,Sub-Saharan Africa,
+gdd,NAM,whole_grains,dry,Sub-Saharan Africa,
+gdd,NAM,legumes,dry,Sub-Saharan Africa,
+# South-eastern Asia (SUSENAS / NSO surveys record raw)
+gdd,IDN,grain,dry,South-eastern Asia,SUSENAS
+gdd,IDN,whole_grains,dry,South-eastern Asia,SUSENAS
+gdd,IDN,legumes,dry,South-eastern Asia,SUSENAS
+gdd,THA,grain,dry,South-eastern Asia,
+gdd,THA,whole_grains,dry,South-eastern Asia,
+gdd,THA,legumes,dry,South-eastern Asia,
+gdd,VNM,grain,dry,South-eastern Asia,
+gdd,VNM,whole_grains,dry,South-eastern Asia,
+gdd,VNM,legumes,dry,South-eastern Asia,
+gdd,KHM,grain,dry,South-eastern Asia,
+gdd,KHM,whole_grains,dry,South-eastern Asia,
+gdd,KHM,legumes,dry,South-eastern Asia,
+gdd,LAO,grain,dry,South-eastern Asia,
+gdd,LAO,whole_grains,dry,South-eastern Asia,
+gdd,LAO,legumes,dry,South-eastern Asia,
+gdd,MMR,grain,dry,South-eastern Asia,
+gdd,MMR,whole_grains,dry,South-eastern Asia,
+gdd,MMR,legumes,dry,South-eastern Asia,
+gdd,PHL,grain,dry,South-eastern Asia,
+gdd,PHL,whole_grains,dry,South-eastern Asia,
+gdd,PHL,legumes,dry,South-eastern Asia,
+gdd,TLS,grain,dry,South-eastern Asia,
+gdd,TLS,whole_grains,dry,South-eastern Asia,
+gdd,TLS,legumes,dry,South-eastern Asia,
+# Western Asia / North Africa (HIES, household budget surveys)
+gdd,EGY,grain,dry,Western Asia / North Africa,HIES
+gdd,EGY,whole_grains,dry,Western Asia / North Africa,HIES
+gdd,EGY,legumes,dry,Western Asia / North Africa,HIES
+gdd,IRN,grain,dry,Western Asia / North Africa,
+gdd,IRN,whole_grains,dry,Western Asia / North Africa,
+gdd,IRN,legumes,dry,Western Asia / North Africa,
+gdd,IRQ,grain,dry,Western Asia / North Africa,
+gdd,IRQ,whole_grains,dry,Western Asia / North Africa,
+gdd,IRQ,legumes,dry,Western Asia / North Africa,
+gdd,JOR,grain,dry,Western Asia / North Africa,
+gdd,JOR,whole_grains,dry,Western Asia / North Africa,
+gdd,JOR,legumes,dry,Western Asia / North Africa,
+gdd,YEM,grain,dry,Western Asia / North Africa,
+gdd,YEM,whole_grains,dry,Western Asia / North Africa,
+gdd,YEM,legumes,dry,Western Asia / North Africa,
+gdd,SDN,grain,dry,Western Asia / North Africa,
+gdd,SDN,whole_grains,dry,Western Asia / North Africa,
+gdd,SDN,legumes,dry,Western Asia / North Africa,
+gdd,TUN,grain,dry,Western Asia / North Africa,
+gdd,TUN,whole_grains,dry,Western Asia / North Africa,
+gdd,TUN,legumes,dry,Western Asia / North Africa,
+gdd,MAR,grain,dry,Western Asia / North Africa,
+gdd,MAR,whole_grains,dry,Western Asia / North Africa,
+gdd,MAR,legumes,dry,Western Asia / North Africa,
+gdd,DZA,grain,dry,Western Asia / North Africa,
+gdd,DZA,whole_grains,dry,Western Asia / North Africa,
+gdd,DZA,legumes,dry,Western Asia / North Africa,
+# Latin America (ENSANUT-style surveys record raw cereal mass)
+gdd,MEX,grain,dry,Latin America,ENSANUT
+gdd,MEX,whole_grains,dry,Latin America,ENSANUT
+gdd,MEX,legumes,dry,Latin America,ENSANUT
+gdd,BOL,grain,dry,Latin America,
+gdd,BOL,whole_grains,dry,Latin America,
+gdd,BOL,legumes,dry,Latin America,
+gdd,HTI,grain,dry,Latin America,
+gdd,HTI,whole_grains,dry,Latin America,
+gdd,HTI,legumes,dry,Latin America,
+# Other large/significant cases
+gdd,CHN,grain,dry,East Asia,CHNS / CFNS
+gdd,CHN,whole_grains,dry,East Asia,CHNS / CFNS
+gdd,CHN,legumes,dry,East Asia,CHNS / CFNS
+gdd,PRK,grain,dry,East Asia,
+gdd,PRK,whole_grains,dry,East Asia,
+gdd,PRK,legumes,dry,East Asia,
+gdd,MNG,grain,dry,East Asia,
+gdd,MNG,whole_grains,dry,East Asia,
+gdd,MNG,legumes,dry,East Asia,

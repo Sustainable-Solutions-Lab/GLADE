@@ -175,9 +175,9 @@ rule merge_dietary_sources:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         food_groups="data/curated/food_groups.csv",
         food_basis="data/curated/food_basis.csv",
+        source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
     params:
         source_basis=config["diet"]["source_basis"],
-        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
@@ -266,6 +266,7 @@ rule estimate_baseline_diet:
         food_groups="data/curated/food_groups.csv",
         food_basis="data/curated/food_basis.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+        source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
     params:
         reference_year=config["baseline_year"],
         baseline_age=config["diet"]["baseline_age"],
@@ -277,7 +278,6 @@ rule estimate_baseline_diet:
         gbd_anchored_groups=config["health"]["risk_factors"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
         source_basis=config["diet"]["source_basis"],
-        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
@@ -338,11 +338,11 @@ rule compare_baseline_diet_to_gbd:
         food_groups="data/curated/food_groups.csv",
         food_basis="data/curated/food_basis.csv",
         gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
+        source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
     params:
         countries=config["countries"],
         risk_factors=config["health"]["risk_factors"],
         source_basis=config["diet"]["source_basis"],
-        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         report="<processing>/{name}/baseline_diet_risk_comparison.csv",

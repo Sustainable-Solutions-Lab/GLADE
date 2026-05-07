@@ -47,6 +47,33 @@ def load_food_basis(path: str | object) -> dict[str, str]:
     return df.set_index("food")["basis"].to_dict()
 
 
+def load_source_basis_country_overrides(
+    path: str | object,
+) -> dict[str, dict[str, dict[str, str]]]:
+    """Load (source, country, food_group) -> basis from a curated CSV.
+
+    Expected columns: source, country, food_group, basis. Additional
+    columns (region, note, etc.) are ignored — they exist for human
+    documentation only.
+    """
+    df = pd.read_csv(str(path), comment="#")
+    required = {"source", "country", "food_group", "basis"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"{path}: missing required columns {sorted(missing)}; "
+            f"have {sorted(df.columns)}"
+        )
+    overrides: dict[str, dict[str, dict[str, str]]] = {}
+    for _, row in df.iterrows():
+        src = str(row["source"]).strip()
+        country = str(row["country"]).strip().upper()
+        group = str(row["food_group"]).strip()
+        basis = str(row["basis"]).strip()
+        overrides.setdefault(src, {}).setdefault(country, {})[group] = basis
+    return overrides
+
+
 def build_group_basis(
     food_basis: Mapping[str, str], food_to_group: Mapping[str, str]
 ) -> dict[str, str]:

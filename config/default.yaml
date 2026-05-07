@@ -658,95 +658,13 @@ diet:
     # hybrid basis (flour-content for breads, cooked weight for rice)
     # that doesn't admit a single conversion factor, so the helper
     # returns 1.0 (no conversion) when a source isn't declared.
-  # Per-(source, country, food_group) basis overrides. Resolved before
-  # the global declaration in source_basis: when a country's underlying
-  # survey methodology records a food group in a different basis than
-  # GDD's global default, declare the override here.
-  #
-  # Most high-leverage overrides are for GDD: countries whose dietary
-  # surveys are household-acquisition-based (NSS in India, HIES in
-  # Bangladesh / Pakistan, LSMS in much of sub-Saharan Africa, ENSANUT
-  # in Mexico, SUSENAS in Indonesia, HCES in Ethiopia) record raw
-  # cereal mass at the household-purchase level, so GDD's "grain ==
-  # cooked" global declaration is wrong for them and applying the
-  # 0.45 factor systematically under-counts cereal calories. The
-  # countries below come from the high-leverage analysis: each is in
-  # the top deficit (population x kcal-vs-ADER) and has a documented
-  # raw-weight-recording survey behind its GDD entry.
-  source_basis_country_overrides:
-    gdd:
-      # South Asia (NSS / HIES record raw cereal weight)
-      IND: { grain: dry, whole_grains: dry, legumes: dry }
-      BGD: { grain: dry, whole_grains: dry, legumes: dry }
-      PAK: { grain: dry, whole_grains: dry, legumes: dry }
-      NPL: { grain: dry, whole_grains: dry, legumes: dry }
-      LKA: { grain: dry, whole_grains: dry, legumes: dry }
-      AFG: { grain: dry, whole_grains: dry, legumes: dry }
-      # Sub-Saharan Africa (LSMS / national HCES record raw weight)
-      ETH: { grain: dry, whole_grains: dry, legumes: dry }
-      NGA: { grain: dry, whole_grains: dry, legumes: dry }
-      KEN: { grain: dry, whole_grains: dry, legumes: dry }
-      UGA: { grain: dry, whole_grains: dry, legumes: dry }
-      TZA: { grain: dry, whole_grains: dry, legumes: dry }
-      COD: { grain: dry, whole_grains: dry, legumes: dry }
-      GHA: { grain: dry, whole_grains: dry, legumes: dry }
-      MWI: { grain: dry, whole_grains: dry, legumes: dry }
-      ZMB: { grain: dry, whole_grains: dry, legumes: dry }
-      ZWE: { grain: dry, whole_grains: dry, legumes: dry }
-      MOZ: { grain: dry, whole_grains: dry, legumes: dry }
-      RWA: { grain: dry, whole_grains: dry, legumes: dry }
-      BDI: { grain: dry, whole_grains: dry, legumes: dry }
-      MDG: { grain: dry, whole_grains: dry, legumes: dry }
-      CMR: { grain: dry, whole_grains: dry, legumes: dry }
-      BFA: { grain: dry, whole_grains: dry, legumes: dry }
-      MLI: { grain: dry, whole_grains: dry, legumes: dry }
-      NER: { grain: dry, whole_grains: dry, legumes: dry }
-      TCD: { grain: dry, whole_grains: dry, legumes: dry }
-      SEN: { grain: dry, whole_grains: dry, legumes: dry }
-      BEN: { grain: dry, whole_grains: dry, legumes: dry }
-      TGO: { grain: dry, whole_grains: dry, legumes: dry }
-      CIV: { grain: dry, whole_grains: dry, legumes: dry }
-      LBR: { grain: dry, whole_grains: dry, legumes: dry }
-      SLE: { grain: dry, whole_grains: dry, legumes: dry }
-      LSO: { grain: dry, whole_grains: dry, legumes: dry }
-      SOM: { grain: dry, whole_grains: dry, legumes: dry }
-      SSD: { grain: dry, whole_grains: dry, legumes: dry }
-      ERI: { grain: dry, whole_grains: dry, legumes: dry }
-      GMB: { grain: dry, whole_grains: dry, legumes: dry }
-      CAF: { grain: dry, whole_grains: dry, legumes: dry }
-      COG: { grain: dry, whole_grains: dry, legumes: dry }
-      GAB: { grain: dry, whole_grains: dry, legumes: dry }
-      GNB: { grain: dry, whole_grains: dry, legumes: dry }
-      STP: { grain: dry, whole_grains: dry, legumes: dry }
-      SWZ: { grain: dry, whole_grains: dry, legumes: dry }
-      NAM: { grain: dry, whole_grains: dry, legumes: dry }
-      # South-eastern Asia (SUSENAS / NSO surveys record raw)
-      IDN: { grain: dry, whole_grains: dry, legumes: dry }
-      THA: { grain: dry, whole_grains: dry, legumes: dry }
-      VNM: { grain: dry, whole_grains: dry, legumes: dry }
-      KHM: { grain: dry, whole_grains: dry, legumes: dry }
-      LAO: { grain: dry, whole_grains: dry, legumes: dry }
-      MMR: { grain: dry, whole_grains: dry, legumes: dry }
-      PHL: { grain: dry, whole_grains: dry, legumes: dry }
-      TLS: { grain: dry, whole_grains: dry, legumes: dry }
-      # Western Asia / North Africa (HIES, household budget surveys)
-      EGY: { grain: dry, whole_grains: dry, legumes: dry }
-      IRN: { grain: dry, whole_grains: dry, legumes: dry }
-      IRQ: { grain: dry, whole_grains: dry, legumes: dry }
-      JOR: { grain: dry, whole_grains: dry, legumes: dry }
-      YEM: { grain: dry, whole_grains: dry, legumes: dry }
-      SDN: { grain: dry, whole_grains: dry, legumes: dry }
-      TUN: { grain: dry, whole_grains: dry, legumes: dry }
-      MAR: { grain: dry, whole_grains: dry, legumes: dry }
-      DZA: { grain: dry, whole_grains: dry, legumes: dry }
-      # Latin America (ENSANUT-style surveys record raw cereal mass)
-      MEX: { grain: dry, whole_grains: dry, legumes: dry }
-      BOL: { grain: dry, whole_grains: dry, legumes: dry }
-      HTI: { grain: dry, whole_grains: dry, legumes: dry }
-      # Other large/significant cases
-      CHN: { grain: dry, whole_grains: dry, legumes: dry }  # CHNS / CFNS record raw cereal
-      PRK: { grain: dry, whole_grains: dry, legumes: dry }
-      MNG: { grain: dry, whole_grains: dry, legumes: dry }
+  # Per-(source, country, food_group) basis overrides live in
+  # data/curated/diet_source_basis_overrides.csv. The CSV is read
+  # alongside the global source_basis declaration above; rows in the
+  # CSV take precedence per (source, country, food_group). Keep
+  # high-volume per-country exceptions in the CSV (it scales better
+  # than a YAML block) and reserve this YAML for the cross-cutting
+  # global defaults.
   # Mass-conversion factor tables, keyed "<from>_to_<to>".
   # Foods/groups not listed default to factor 1.0.
   weight_conversion:

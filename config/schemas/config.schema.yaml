@@ -981,7 +981,6 @@ properties:
       - baseline_age
       - risk_group_anchor
       - source_basis
-      - source_basis_country_overrides
       - weight_conversion
       - fbs_grain_supplement
     additionalProperties: false
@@ -1024,16 +1023,6 @@ properties:
           additionalProperties:
             type: string
             enum: ["dry", "fresh", "cooked", "brewed"]
-      source_basis_country_overrides:
-        type: object
-        description: "Per-(source, country, food_group) basis overrides. Resolved before the global declaration in source_basis. Used when a country's underlying survey methodology records food in a basis different from the source's global default."
-        additionalProperties:
-          type: object
-          additionalProperties:
-            type: object
-            additionalProperties:
-              type: string
-              enum: ["dry", "fresh", "cooked", "brewed"]
       weight_conversion:
         type: object
         description: "Mass-conversion factor tables keyed '<from>_to_<to>'. Each table maps food-group (or food) name to a multiplicative factor. Foods/groups not listed default to 1.0."

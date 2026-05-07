@@ -47,6 +47,7 @@ from workflow.scripts.diet.basis import (
     build_group_basis,
     convert_intake,
     load_food_basis,
+    load_source_basis_country_overrides,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -100,15 +101,9 @@ def main():
         src: {str(g): str(b) for g, b in groups.items()}
         for src, groups in dict(snakemake.params.source_basis).items()
     }
-    source_basis_country_overrides = {
-        src: {
-            str(country): {str(g): str(b) for g, b in groups.items()}
-            for country, groups in countries.items()
-        }
-        for src, countries in dict(
-            snakemake.params.source_basis_country_overrides
-        ).items()
-    }
+    source_basis_country_overrides = load_source_basis_country_overrides(
+        snakemake.input.source_basis_country_overrides
+    )
     weight_conversion = {
         str(table): {str(k): float(v) for k, v in entries.items()}
         for table, entries in dict(snakemake.params.weight_conversion).items()
