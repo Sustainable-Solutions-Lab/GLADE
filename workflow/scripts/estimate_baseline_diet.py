@@ -36,7 +36,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from workflow.scripts.diet.basis import conversion_factor, load_food_basis
+from workflow.scripts.diet.basis import (
+    conversion_factor,
+    load_food_basis,
+    resolve_source_basis,
+)
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.vegetable_projection import (
     NUTS_COUNTRY_SHARE_BLEND,
@@ -115,21 +119,25 @@ def load_group_totals(
     reference_year: int,
     food_groups_included: list[str],
     risk_group_anchor: str = "average",
-    gbd_source_basis: dict[str, str] | None = None,
+    source_basis: dict[str, dict[str, str]] | None = None,
+    source_basis_country_overrides: dict[str, dict[str, dict[str, str]]] | None = None,
     group_basis: dict[str, str] | None = None,
     weight_conversion: dict[str, dict[str, float]] | None = None,
 ) -> pd.DataFrame:
     """Load food group totals, reconciling GDD and GBD per *risk_group_anchor*.
 
     GBD's intake exposure values share the basis of the GBD/IHME RR
-    dose-response curves. The basis-aware conversion (declared in
-    *gbd_source_basis* and applied via *weight_conversion*) brings GBD
-    onto the model's dry/fresh basis before averaging or selection.
+    dose-response curves. Per-(source, country, group) basis lookup
+    via *source_basis* and *source_basis_country_overrides* drives
+    cooked->dry / cooked->fresh conversions where the source basis
+    differs from the model's.
 
     Returns DataFrame with columns: country, food_group, group_total_g_per_day
     """
-    if gbd_source_basis is None:
-        gbd_source_basis = {}
+    if source_basis is None:
+        source_basis = {}
+    if source_basis_country_overrides is None:
+        source_basis_country_overrides = {}
     if group_basis is None:
         group_basis = {}
     if weight_conversion is None:
@@ -150,8 +158,10 @@ def load_group_totals(
     gbd = pd.read_csv(gbd_exposure_path).copy()
     multipliers = []
     summary: dict[tuple[str, str, str], int] = {}
-    for grp in gbd["food_group"]:
-        src = gbd_source_basis.get(grp)
+    for country, grp in zip(gbd["country"], gbd["food_group"]):
+        src = resolve_source_basis(
+            "gbd", country, grp, source_basis, source_basis_country_overrides
+        )
         tgt = group_basis.get(grp)
         if src is None or tgt is None or src == tgt:
             multipliers.append(1.0)
@@ -1136,6 +1146,15 @@ def main():
         src: {str(g): str(b) for g, b in groups.items()}
         for src, groups in dict(snakemake.params.source_basis).items()
     }
+    source_basis_country_overrides = {
+        src: {
+            str(country): {str(g): str(b) for g, b in groups.items()}
+            for country, groups in countries.items()
+        }
+        for src, countries in dict(
+            snakemake.params.source_basis_country_overrides
+        ).items()
+    }
     weight_conversion = {
         str(table): {str(k): float(v) for k, v in entries.items()}
         for table, entries in dict(snakemake.params.weight_conversion).items()
@@ -1181,7 +1200,8 @@ def main():
         reference_year,
         food_groups_included,
         risk_group_anchor=risk_group_anchor,
-        gbd_source_basis=source_basis.get("gbd", {}),
+        source_basis=source_basis,
+        source_basis_country_overrides=source_basis_country_overrides,
         group_basis=group_basis_map,
         weight_conversion=weight_conversion,
     )

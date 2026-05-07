@@ -47,6 +47,26 @@ def load_food_basis(path: str | object) -> dict[str, str]:
     return df.set_index("food")["basis"].to_dict()
 
 
+def resolve_source_basis(
+    source: str,
+    country: str | None,
+    food_group: str,
+    defaults: Mapping[str, Mapping[str, str]],
+    country_overrides: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
+) -> str | None:
+    """Return the basis ('dry'/'fresh'/'cooked') for a (source, country, group).
+
+    Lookup order: (source, country, group) override, then (source, group)
+    default. Returns None when nothing is declared, in which case callers
+    should treat the value as already-in-target-basis (no conversion).
+    """
+    if country_overrides is not None and country is not None:
+        per_country = country_overrides.get(source, {}).get(country, {})
+        if food_group in per_country:
+            return per_country[food_group]
+    return defaults.get(source, {}).get(food_group)
+
+
 def conversion_factor(
     from_basis: str,
     to_basis: str,

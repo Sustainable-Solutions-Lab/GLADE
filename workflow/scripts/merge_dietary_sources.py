@@ -46,6 +46,7 @@ import pandas as pd
 from workflow.scripts.diet.basis import (
     conversion_factor,
     load_food_basis,
+    resolve_source_basis,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -90,24 +91,39 @@ def _apply_basis_conversion(
     df: pd.DataFrame,
     *,
     source: str,
-    source_basis_by_group: dict[str, str],
+    source_basis: dict[str, dict[str, str]],
+    source_basis_country_overrides: dict[str, dict[str, dict[str, str]]],
     group_basis: dict[str, str],
     factors: dict[str, dict[str, float]],
 ) -> pd.DataFrame:
     """Convert intake values from each source's basis into the model's basis.
 
-    Each row's ``item`` is a food group; we look up the source's basis
-    declaration for that group, compare to the group's target basis
-    (derived from data/curated/food_basis.csv via food_groups.csv), and
-    apply the matching factor table when they differ. Groups with no
-    declared source basis pass through unchanged.
+    For each row, look up the source's basis declaration for (country,
+    food_group) -- consulting source_basis_country_overrides first and
+    falling back to the global source_basis -- then compare to the
+    group's target basis (derived from data/curated/food_basis.csv via
+    food_groups.csv). When they differ, apply the matching factor table.
+    Groups with no declared source basis pass through unchanged.
     """
     df = df.copy()
     multipliers = []
+    # Aggregate counts at (group, country, src->tgt) granularity but log
+    # at (group, src->tgt) granularity to keep the log readable.
     summary_counts: dict[tuple[str, str, str], int] = {}
-    for grp in df["item"]:
-        src = source_basis_by_group.get(grp)
+    overridden_counts: dict[tuple[str, str], int] = {}
+    for country, grp in zip(df["country"], df["item"]):
+        src = resolve_source_basis(
+            source, country, grp, source_basis, source_basis_country_overrides
+        )
         tgt = group_basis.get(grp)
+        # Track override usage regardless of whether it leads to a conversion:
+        # an override that matches the target (so no conversion happens) is
+        # still meaningful information when reasoning about the baseline.
+        global_src = source_basis.get(source, {}).get(grp)
+        if global_src is not None and src is not None and src != global_src:
+            overridden_counts[(country, grp)] = (
+                overridden_counts.get((country, grp), 0) + 1
+            )
         if src is None or tgt is None or src == tgt:
             multipliers.append(1.0)
             continue
@@ -129,6 +145,18 @@ def _apply_basis_conversion(
             )
     else:
         logger.info("%s: no basis conversions applied", source)
+    if overridden_counts:
+        n_pairs = len(overridden_counts)
+        countries = sorted({c for (c, _) in overridden_counts})
+        logger.info(
+            "%s: country overrides active for %d (country, group) pairs "
+            "covering %d countries (%s%s)",
+            source,
+            n_pairs,
+            len(countries),
+            ", ".join(countries[:8]),
+            "..." if len(countries) > 8 else "",
+        )
     return df
 
 
@@ -169,6 +197,15 @@ def main():
         src: {str(g): str(b) for g, b in groups.items()}
         for src, groups in dict(snakemake.params.source_basis).items()
     }
+    source_basis_country_overrides = {
+        src: {
+            str(country): {str(g): str(b) for g, b in groups.items()}
+            for country, groups in countries.items()
+        }
+        for src, countries in dict(
+            snakemake.params.source_basis_country_overrides
+        ).items()
+    }
     weight_conversion = {
         str(table): {str(k): float(v) for k, v in entries.items()}
         for table, entries in dict(snakemake.params.weight_conversion).items()
@@ -183,7 +220,8 @@ def main():
     gdd_df = _apply_basis_conversion(
         gdd_df,
         source="gdd",
-        source_basis_by_group=source_basis.get("gdd", {}),
+        source_basis=source_basis,
+        source_basis_country_overrides=source_basis_country_overrides,
         group_basis=group_basis,
         factors=weight_conversion,
     )
@@ -196,7 +234,8 @@ def main():
     fao_df = _apply_basis_conversion(
         fao_df,
         source="faostat_fbs_supplement",
-        source_basis_by_group=source_basis.get("faostat_fbs_supplement", {}),
+        source_basis=source_basis,
+        source_basis_country_overrides=source_basis_country_overrides,
         group_basis=group_basis,
         factors=weight_conversion,
     )

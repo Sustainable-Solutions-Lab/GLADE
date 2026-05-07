@@ -35,7 +35,11 @@ import logging
 
 import pandas as pd
 
-from workflow.scripts.diet.basis import conversion_factor, load_food_basis
+from workflow.scripts.diet.basis import (
+    conversion_factor,
+    load_food_basis,
+    resolve_source_basis,
+)
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +59,15 @@ def main():
     source_basis = {
         src: {str(g): str(b) for g, b in groups.items()}
         for src, groups in dict(snakemake.params.source_basis).items()
+    }
+    source_basis_country_overrides = {
+        src: {
+            str(country): {str(g): str(b) for g, b in groups.items()}
+            for country, groups in countries_overrides.items()
+        }
+        for src, countries_overrides in dict(
+            snakemake.params.source_basis_country_overrides
+        ).items()
     }
     weight_conversion = {
         str(table): {str(k): float(v) for k, v in entries.items()}
@@ -87,11 +100,14 @@ def main():
     gbd["food_group"] = gbd["food_group"].replace(GBD_TO_MODEL_GROUP)
     gbd = gbd[gbd["food_group"].isin(risk_factors)]
     # Apply the same basis conversion the pipeline applies to GBD intake
-    # so the comparison happens in a consistent basis.
-    gbd_basis = source_basis.get("gbd", {})
+    # so the comparison happens in a consistent basis. Per-country
+    # overrides are honoured so the comparison reflects the same
+    # conversions used by estimate_baseline_diet.
     multipliers = []
-    for grp in gbd["food_group"]:
-        src = gbd_basis.get(grp)
+    for country, grp in zip(gbd["country"], gbd["food_group"]):
+        src = resolve_source_basis(
+            "gbd", country, grp, source_basis, source_basis_country_overrides
+        )
         tgt = group_basis.get(grp)
         if src is None or tgt is None or src == tgt:
             multipliers.append(1.0)

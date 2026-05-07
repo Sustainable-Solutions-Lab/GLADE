@@ -178,6 +178,7 @@ rule merge_dietary_sources:
         food_basis="data/curated/food_basis.csv",
     params:
         source_basis=config["diet"]["source_basis"],
+        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
@@ -276,6 +277,7 @@ rule estimate_baseline_diet:
         risk_group_anchor=config["diet"]["risk_group_anchor"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
         source_basis=config["diet"]["source_basis"],
+        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
@@ -340,6 +342,7 @@ rule compare_baseline_diet_to_gbd:
         countries=config["countries"],
         risk_factors=config["health"]["risk_factors"],
         source_basis=config["diet"]["source_basis"],
+        source_basis_country_overrides=config["diet"]["source_basis_country_overrides"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:
         report="<processing>/{name}/baseline_diet_risk_comparison.csv",

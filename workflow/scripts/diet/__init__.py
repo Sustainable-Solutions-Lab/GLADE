@@ -9,6 +9,7 @@ from .basis import (
     convert_series,
     convert_to_food_basis,
     load_food_basis,
+    resolve_source_basis,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "convert_series",
     "convert_to_food_basis",
     "load_food_basis",
+    "resolve_source_basis",
 ]
