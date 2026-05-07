@@ -37,9 +37,9 @@ import numpy as np
 import pandas as pd
 
 from workflow.scripts.diet.basis import (
-    conversion_factor,
+    build_group_basis,
+    convert_intake,
     load_food_basis,
-    resolve_source_basis,
 )
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -75,11 +75,7 @@ def main():
     food_groups = pd.read_csv(food_groups_path)
     fg_map = food_groups.set_index("food")["group"].to_dict()
     food_basis = load_food_basis(snakemake.input.food_basis)
-    group_basis: dict[str, str] = {}
-    for food, basis in food_basis.items():
-        grp = fg_map.get(food)
-        if grp is not None:
-            group_basis.setdefault(grp, basis)
+    group_basis = build_group_basis(food_basis, fg_map)
 
     bd = pd.read_csv(baseline_diet_path)
     if "food_group" not in bd.columns or bd["food_group"].isna().any():
@@ -99,18 +95,16 @@ def main():
     # so the comparison happens in a consistent basis. Per-country
     # overrides are honoured so the comparison reflects the same
     # conversions used by estimate_baseline_diet.
-    multipliers = []
-    for country, grp in zip(gbd["country"], gbd["food_group"]):
-        src = resolve_source_basis(
-            "gbd", country, grp, source_basis, source_basis_country_overrides
-        )
-        tgt = group_basis.get(grp)
-        if src is None or tgt is None or src == tgt:
-            multipliers.append(1.0)
-        else:
-            multipliers.append(conversion_factor(src, tgt, grp, weight_conversion))
-    gbd["consumption_g_per_day"] = gbd["consumption_g_per_day"] * pd.Series(
-        multipliers, index=gbd.index
+    gbd = convert_intake(
+        gbd,
+        source="gbd",
+        value_column="consumption_g_per_day",
+        group_column="food_group",
+        country_column="country",
+        source_basis=source_basis,
+        source_basis_country_overrides=source_basis_country_overrides,
+        group_basis=group_basis,
+        factors=weight_conversion,
     )
     gbd_per_group = (
         gbd.groupby(["country", "food_group"], as_index=False)["consumption_g_per_day"]

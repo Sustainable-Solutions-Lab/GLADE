@@ -5,17 +5,17 @@
 """Diet-pipeline helpers used across baseline-diet construction and validation."""
 
 from .basis import (
+    build_group_basis,
     conversion_factor,
-    convert_series,
-    convert_to_food_basis,
+    convert_intake,
     load_food_basis,
     resolve_source_basis,
 )
 
 __all__ = [
+    "build_group_basis",
     "conversion_factor",
-    "convert_series",
-    "convert_to_food_basis",
+    "convert_intake",
     "load_food_basis",
     "resolve_source_basis",
 ]

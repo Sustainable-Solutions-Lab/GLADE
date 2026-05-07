@@ -37,9 +37,9 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scripts.diet.basis import (
-    conversion_factor,
+    build_group_basis,
+    convert_intake,
     load_food_basis,
-    resolve_source_basis,
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.vegetable_projection import (
@@ -146,33 +146,18 @@ def load_group_totals(
 
     # Load GBD dietary risk exposure (aggregate duplicates if any) and
     # convert to the model's basis where it differs.
-    gbd = pd.read_csv(gbd_exposure_path).copy()
-    multipliers = []
-    summary: dict[tuple[str, str, str], int] = {}
-    for country, grp in zip(gbd["country"], gbd["food_group"]):
-        src = resolve_source_basis(
-            "gbd", country, grp, source_basis, source_basis_country_overrides
-        )
-        tgt = group_basis.get(grp)
-        if src is None or tgt is None or src == tgt:
-            multipliers.append(1.0)
-            continue
-        f = conversion_factor(src, tgt, grp, weight_conversion)
-        multipliers.append(f)
-        summary[(grp, src, tgt)] = summary.get((grp, src, tgt), 0) + 1
-    gbd["consumption_g_per_day"] = gbd["consumption_g_per_day"] * pd.Series(
-        multipliers, index=gbd.index
+    gbd = pd.read_csv(gbd_exposure_path)
+    gbd = convert_intake(
+        gbd,
+        source="gbd",
+        value_column="consumption_g_per_day",
+        group_column="food_group",
+        country_column="country",
+        source_basis=source_basis,
+        source_basis_country_overrides=source_basis_country_overrides,
+        group_basis=group_basis,
+        factors=weight_conversion,
     )
-    for (grp, src, tgt), n in sorted(summary.items()):
-        f = conversion_factor(src, tgt, grp, weight_conversion)
-        logger.info(
-            "gbd: converted %d %r rows %s -> %s (factor %.3f)",
-            n,
-            grp,
-            src,
-            tgt,
-            f,
-        )
     gbd_totals = gbd.groupby(["country", "food_group"])["consumption_g_per_day"].mean()
 
     # Build combined group totals
@@ -1179,19 +1164,7 @@ def main():
 
     # Build group-basis mapping from food_basis + food_groups
     food_to_group = food_groups_df.set_index("food")["group"].to_dict()
-    group_basis: dict[str, set[str]] = {}
-    for food, basis in food_basis.items():
-        grp = food_to_group.get(food)
-        if grp is not None:
-            group_basis.setdefault(grp, set()).add(basis)
-    inconsistent = {g: bs for g, bs in group_basis.items() if len(bs) > 1}
-    if inconsistent:
-        raise ValueError(
-            f"Foods within these groups disagree on basis: {inconsistent}."
-        )
-    group_basis_map: dict[str, str] = {
-        g: next(iter(bs)) for g, bs in group_basis.items()
-    }
+    group_basis_map = build_group_basis(food_basis, food_to_group)
 
     # Step 1: Food group totals (GDD+GBD reconciled per risk_group_anchor)
     logger.info("Step 1: Computing food group totals...")

@@ -548,7 +548,11 @@ def main() -> None:
     # to the matching food's basis (food_basis.csv via food_groups.csv);
     # when they differ, the matching factor in diet.weight_conversion
     # is applied so the curve x-axis lands in the model's consumption basis.
-    from workflow.scripts.diet.basis import conversion_factor, load_food_basis
+    from workflow.scripts.diet.basis import (
+        build_group_basis,
+        conversion_factor,
+        load_food_basis,
+    )
 
     source_basis = {
         src: {str(g): str(b) for g, b in groups.items()}
@@ -562,11 +566,7 @@ def main() -> None:
     food_to_group = (
         pd.read_csv(snakemake.input["food_groups"]).set_index("food")["group"].to_dict()
     )
-    group_basis: dict[str, str] = {}
-    for food, basis in food_basis.items():
-        grp = food_to_group.get(food)
-        if grp is not None:
-            group_basis.setdefault(grp, basis)
+    group_basis = build_group_basis(food_basis, food_to_group)
     gbd_basis = source_basis.get("gbd", {})
     basis_factor_by_risk: dict[str, float] = {}
     for risk_id, src in gbd_basis.items():
