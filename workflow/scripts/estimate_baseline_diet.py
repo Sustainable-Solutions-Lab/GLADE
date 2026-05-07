@@ -70,14 +70,53 @@ GDD_GBD_AVERAGED_GROUPS = {
 DEFAULT_PEARL_MILLET_SHARE = 0.8
 
 
+def _combine_gdd_gbd(
+    gdd_val: float | None,
+    gbd_val: float | None,
+    risk_group_anchor: str,
+) -> float | None:
+    """Combine GDD and GBD intake estimates per the configured policy.
+
+    ``risk_group_anchor`` controls how the two are reconciled for
+    GBD-covered (risk-relevant) food groups:
+
+    - ``"average"``: arithmetic mean of GDD and GBD when both present;
+      fall back to whichever is available. Historical default.
+    - ``"gbd"``: GBD value when present (so the baseline aligns with
+      the same intake basis the GBD relative-risk functions are
+      calibrated against); fall back to GDD if GBD is missing.
+    """
+    have_gdd = gdd_val is not None and pd.notna(gdd_val)
+    have_gbd = gbd_val is not None and pd.notna(gbd_val)
+    if risk_group_anchor == "gbd":
+        if have_gbd:
+            return float(gbd_val)
+        if have_gdd:
+            return float(gdd_val)
+        return None
+    if risk_group_anchor == "average":
+        if have_gdd and have_gbd:
+            return (float(gdd_val) + float(gbd_val)) / 2.0
+        if have_gdd:
+            return float(gdd_val)
+        if have_gbd:
+            return float(gbd_val)
+        return None
+    raise ValueError(
+        f"Unknown risk_group_anchor={risk_group_anchor!r}; "
+        "expected 'average' or 'gbd'."
+    )
+
+
 def load_group_totals(
     dietary_intake_path: str,
     gbd_exposure_path: str,
     baseline_age: str,
     reference_year: int,
     food_groups_included: list[str],
+    risk_group_anchor: str = "average",
 ) -> pd.DataFrame:
-    """Load food group totals, averaging GDD and GBD where applicable.
+    """Load food group totals, reconciling GDD and GBD per *risk_group_anchor*.
 
     Returns DataFrame with columns: country, food_group, group_total_g_per_day
     """
@@ -101,51 +140,28 @@ def load_group_totals(
     for country in sorted(gdd_totals.index.get_level_values("country").unique()):
         for fg in food_groups_included:
             gdd_val = gdd_totals.get((country, fg))
-            if gdd_val is None:
-                continue
 
             if fg in GDD_GBD_AVERAGED_GROUPS:
                 gbd_val = gbd_totals.get((country, fg))
-                if gbd_val is not None and pd.notna(gbd_val):
-                    # Average of GDD and GBD
-                    combined = (gdd_val + gbd_val) / 2.0
-                    logger.debug(
-                        "%s/%s: GDD=%.1f, GBD=%.1f, avg=%.1f",
-                        country,
-                        fg,
-                        gdd_val,
-                        gbd_val,
-                        combined,
-                    )
-                    results.append(
-                        {
-                            "country": country,
-                            "food_group": fg,
-                            "group_total_g_per_day": combined,
-                        }
-                    )
-                else:
-                    # GBD missing for this country; use GDD only
-                    logger.debug(
-                        "%s/%s: GBD missing, using GDD=%.1f",
-                        country,
-                        fg,
-                        gdd_val,
-                    )
-                    results.append(
-                        {
-                            "country": country,
-                            "food_group": fg,
-                            "group_total_g_per_day": gdd_val,
-                        }
-                    )
-            else:
-                # GDD-only or FAOSTAT-only groups
+                combined = _combine_gdd_gbd(gdd_val, gbd_val, risk_group_anchor)
+                if combined is None:
+                    continue
                 results.append(
                     {
                         "country": country,
                         "food_group": fg,
-                        "group_total_g_per_day": gdd_val,
+                        "group_total_g_per_day": combined,
+                    }
+                )
+            else:
+                # GDD-only or FAOSTAT-only groups
+                if gdd_val is None or pd.isna(gdd_val):
+                    continue
+                results.append(
+                    {
+                        "country": country,
+                        "food_group": fg,
+                        "group_total_g_per_day": float(gdd_val),
                     }
                 )
 
@@ -153,8 +169,100 @@ def load_group_totals(
 
     # Log cross-validation: GDD vs GBD agreement
     log_gdd_gbd_agreement(gdd_totals, gbd_totals)
+    logger.info("Risk-relevant food group anchor policy: %s", risk_group_anchor)
 
     return result_df
+
+
+def apply_fbs_grain_supplement(
+    group_totals: pd.DataFrame,
+    fbs_cereal_intake_path: str,
+    enabled: bool,
+    threshold: float,
+    food_group: str = "grain",
+    whole_grains_group: str = "whole_grains",
+) -> pd.DataFrame:
+    """Backfill the refined-``grain`` total from FBS-derived cereal intake.
+
+    GDD systematically under-reports refined grain in some HICs
+    (Norway: 13.5 g/day GDD vs ~185 g/day inferred from FBS supply
+    minus whole-grain consumption). The pipeline has no FAOSTAT
+    supplement for cereals because GBD covers ``whole_grains`` as a
+    risk factor and we don't want to disturb that anchor.
+
+    For every country, define the FBS-implied refined-grain
+    residual as
+
+        residual = max(0, fbs_cereal_intake - whole_grains_total)
+
+    Then apply
+
+        new_grain = max(current_grain, threshold * residual)
+
+    so that countries with plausible GDD coverage are left untouched
+    while obvious holes are lifted to a defensible floor. *threshold*
+    is the minimum fraction of the FBS residual we are willing to
+    accept as refined-grain intake; with the historical FLW
+    under-correction for HIC consumer waste, ``threshold = 0.5``
+    matches the ~50% of FBS-supply level that household-survey
+    studies typically hit in HICs. The current value is preserved
+    when it is already at or above this floor.
+
+    If ``residual <= 0`` (FBS thinks cereals are essentially entirely
+    whole grain, common for some LICs where FBS coverage is sparse),
+    we skip the supplement to avoid pushing grain to zero.
+    """
+    if not enabled:
+        return group_totals
+
+    fbs_cereal = pd.read_csv(fbs_cereal_intake_path).set_index("country")[
+        "fbs_cereal_intake_g_per_day"
+    ]
+
+    df = group_totals.copy()
+    wide = df.pivot(
+        index="country", columns="food_group", values="group_total_g_per_day"
+    )
+    if food_group not in wide.columns:
+        wide[food_group] = float("nan")
+    n_supplemented = 0
+    skipped_negative_residual = 0
+    skipped_already_above_floor = 0
+    skipped_no_fbs = 0
+    for country in wide.index:
+        if country not in fbs_cereal.index:
+            skipped_no_fbs += 1
+            continue
+        wg = wide.loc[country].get(whole_grains_group, float("nan"))
+        wg = 0.0 if pd.isna(wg) else float(wg)
+        residual = float(fbs_cereal.loc[country]) - wg
+        if residual <= 0:
+            skipped_negative_residual += 1
+            continue
+        floor = threshold * residual
+        current = wide.loc[country].get(food_group, float("nan"))
+        current_val = 0.0 if pd.isna(current) else float(current)
+        if current_val >= floor:
+            skipped_already_above_floor += 1
+            continue
+        wide.loc[country, food_group] = floor
+        n_supplemented += 1
+
+    long = wide.reset_index().melt(
+        id_vars="country", var_name="food_group", value_name="group_total_g_per_day"
+    )
+    long = long.dropna(subset=["group_total_g_per_day"])
+    logger.info(
+        "FBS grain supplement: lifted refined-grain in %d countries to "
+        "%.0f%% of (FBS cereal - whole_grains); skipped %d already at/above "
+        "floor, %d with non-positive residual, %d with no FBS data",
+        n_supplemented,
+        threshold * 100,
+        skipped_already_above_floor,
+        skipped_negative_residual,
+        skipped_no_fbs,
+    )
+    return long.sort_values(["country", "food_group"]).reset_index(drop=True)
 
 
 def log_gdd_gbd_agreement(gdd_totals: pd.Series, gbd_totals: pd.Series) -> None:
@@ -965,6 +1073,7 @@ def main():
     dietary_intake_path = snakemake.input.dietary_intake
     gbd_exposure_path = snakemake.input.gbd_exposure
     fbs_items_path = snakemake.input.fbs_items
+    fbs_cereal_intake_path = snakemake.input.fbs_cereal_intake
     crop_production_path = snakemake.input.crop_production
     animal_production_path = snakemake.input.animal_production
     food_item_map_path = snakemake.input.food_item_map
@@ -982,6 +1091,8 @@ def main():
         str(food): float(factor)
         for food, factor in snakemake.params.carcass_to_retail_meat.items()
     }
+    risk_group_anchor = str(snakemake.params.risk_group_anchor)
+    fbs_grain_cfg = dict(snakemake.params.fbs_grain_supplement)
 
     logger.info("Estimating baseline diet for reference year %d", reference_year)
     logger.info("Baseline age group: %s", baseline_age)
@@ -996,7 +1107,7 @@ def main():
     animal_production_df = pd.read_csv(animal_production_path)
     flw_df = pd.read_csv(food_loss_waste_path)
 
-    # Step 1: Food group totals (GDD+GBD averaged where applicable)
+    # Step 1: Food group totals (GDD+GBD reconciled per risk_group_anchor)
     logger.info("Step 1: Computing food group totals...")
     group_totals = load_group_totals(
         dietary_intake_path,
@@ -1004,11 +1115,20 @@ def main():
         baseline_age,
         reference_year,
         food_groups_included,
+        risk_group_anchor=risk_group_anchor,
     )
     logger.info(
         "Group totals: %d countries, %d food groups",
         group_totals["country"].nunique(),
         group_totals["food_group"].nunique(),
+    )
+
+    # Step 1b: Optionally backfill refined-grain hole from FBS cereal supply.
+    group_totals = apply_fbs_grain_supplement(
+        group_totals,
+        fbs_cereal_intake_path,
+        enabled=bool(fbs_grain_cfg["enabled"]),
+        threshold=float(fbs_grain_cfg["threshold"]),
     )
 
     # Step 1a: Extract direct per-food items (e.g. coffee-green, tea-dried)

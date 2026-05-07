@@ -977,7 +977,7 @@ properties:
 
   diet:
     type: object
-    required: [baseline_age]
+    required: [baseline_age, risk_group_anchor, fbs_grain_supplement]
     additionalProperties: false
     properties:
       baseline_age:
@@ -1016,6 +1016,24 @@ properties:
             type: integer
             description: "Approximate midpoint year of the NHANES survey cycle, used as the row 'year' in the dietary-intake CSV"
         description: "NHANES / FPED override source for US food-group intake"
+      risk_group_anchor:
+        type: string
+        enum: ["average", "gbd"]
+        description: "Reconciliation policy for GDD vs GBD intake estimates on GBD-covered risk groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat)."
+      fbs_grain_supplement:
+        type: object
+        required: [enabled, threshold]
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Backfill refined-grain total from FAOSTAT cereal supply when GDD coverage is poor"
+          threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: "Apply supplement when current refined-grain < threshold * (fbs_cereal_intake - whole_grains)"
+        description: "Conditional FBS-derived backfill for refined-grain intake. Anchors total cereal mass to FAOSTAT supply (waste-corrected) without disturbing the GBD-anchored whole_grains total."
 
   biomass:
     type: object

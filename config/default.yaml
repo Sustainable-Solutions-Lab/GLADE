@@ -74,7 +74,7 @@ validation:
   feed_slack_cost_factor: 0.1 # Feed slack cost as fraction of slack_marginal_cost (lower separates feed from food slack)
   grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
   production_stability:
-    enabled: false
+    enabled: true
     penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
     # L1 penalty costs live directly under production_stability with scope-
@@ -85,7 +85,7 @@ validation:
     animal_feed_l1_cost: "calibrated"  # bn USD per Mt DM deviation (animal feed use). Set to null to fall back to automatic Mha-equivalent scaling from land_l1_cost.
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
-      enabled: true
+      enabled: false
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline: 0.000001  # Mha denominator floor for relative penalty modes.
@@ -604,6 +604,26 @@ diet:
     cycle: "1720"
     url: "https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf"
     reference_year: 2018
+  # How to reconcile GDD vs GBD intake estimates for the GBD-covered risk
+  # groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat).
+  #   "average" — GDD/GBD arithmetic mean (historical default).
+  #   "gbd"     — GBD value when present, fall back to GDD if missing.
+  #               Use this to align the baseline with the same intake
+  #               basis the GBD relative-risk functions are calibrated
+  #               against.
+  risk_group_anchor: "average"
+  # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
+  # GDD systematically under-reports refined grain in some HICs (Norway:
+  # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain
+  # intake). When enabled, refined grain is lifted to
+  # ``threshold * max(0, fbs_cereal_intake - whole_grains_total)``
+  # whenever the existing total is below that floor; otherwise the
+  # current value is preserved. Whole grains stay anchored to GBD/GDD
+  # via ``risk_group_anchor`` above so this does not perturb the
+  # health-risk calibration.
+  fbs_grain_supplement:
+    enabled: false
+    threshold: 0.5
 
 # --- section: biomass ---
 biomass:

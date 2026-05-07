@@ -94,6 +94,40 @@ rule prepare_faostat_gdd_supplements:
         "../scripts/prepare_faostat_gdd_supplements.py"
 
 
+rule prepare_fbs_cereal_intake:
+    """Aggregate FAOSTAT FBS cereal supply to per-country intake (g/day).
+
+    Used by ``estimate_baseline_diet`` when
+    ``diet.fbs_grain_supplement.enabled`` is true: refined ``grain``
+    intake is anchored as ``max(0, fbs_cereal_intake - whole_grains)``,
+    closing the GDD data hole on refined grain in HICs without
+    disturbing the GBD-anchored ``whole_grains`` total.
+    """
+    input:
+        fbs_csv="data/downloads/faostat/FBS.parquet",
+        food_item_map="data/curated/faostat_food_item_map.csv",
+        food_groups="data/curated/food_groups.csv",
+        m49_codes="data/curated/M49-codes.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["baseline_year"],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
+    output:
+        cereal_intake="<processing>/{name}/fbs_cereal_intake.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=3300,
+    log:
+        "<logs>/{name}/prepare_fbs_cereal_intake.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_fbs_cereal_intake.tsv"
+    script:
+        "../scripts/prepare_fbs_cereal_intake.py"
+
+
 rule prepare_nhanes_dietary_intake:
     """Parse the FPED demographic-table PDF and emit per-food-group intake
     for the United States.
@@ -219,6 +253,7 @@ rule estimate_baseline_diet:
         dietary_intake="<processing>/{name}/dietary_intake.csv",
         gbd_exposure="<processing>/{name}/gbd_dietary_risk_exposure.csv",
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
+        fbs_cereal_intake="<processing>/{name}/fbs_cereal_intake.csv",
         crop_production="<processing>/{name}/faostat_crop_production.csv",
         animal_production="<processing>/{name}/faostat_animal_production.csv",
         food_item_map="data/curated/faostat_food_item_map.csv",
@@ -232,6 +267,8 @@ rule estimate_baseline_diet:
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+        risk_group_anchor=config["diet"]["risk_group_anchor"],
+        fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
