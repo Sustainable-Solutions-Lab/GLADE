@@ -10,10 +10,15 @@ The Global Dietary Database (GDD) is structurally missing or can be
 substantially biased for some commodity groups in validation settings.
 This script reads supply data from a FAOSTAT FBS bulk CSV for:
 - Dairy (milk, butter, cream - converted to milk equivalents)
-- Eggs
-- Poultry meat (converted to model retail-meat basis)
 - Vegetable oils
 - Refined sugar (FBS item 2542 "Sugar Raw Equivalent")
+
+Eggs and poultry meat are intentionally NOT supplemented here: both are
+in ``diet.fbs_override_foods`` and get a fully FBS-anchored value in
+``estimate_baseline_diet`` from the raw ``faostat_fbs_items.csv``, with
+a single carcass-to-retail conversion applied at that point. Emitting
+group totals for them here would be dead on arrival (the override
+overwrites them) and the c2r dance would have to live in two places.
 
 Sugar is sourced from FAOSTAT here because GDD's v35 ("Added sugars")
 variable is reported as %-of-total-energy and converted to g/day using
@@ -30,7 +35,9 @@ Input:
 
 Output:
     - CSV with columns: unit, item, country, age, year, value
-      Values are raw food supply in g/day (not adjusted for waste)
+      Values are raw food supply in g/day (not adjusted for waste).
+      Only the configured baseline_age row is emitted (consumers filter
+      by age and the FAOSTAT supply has no age stratification anyway).
 """
 
 import logging
@@ -51,8 +58,6 @@ logger = logging.getLogger(__name__)
 
 # FAOSTAT Item Codes (FBS)
 FAO_ITEMS = {
-    "poultry": [2734],  # Poultry Meat
-    "eggs": [2744],  # Eggs
     # Aggregate vegetable oils intake; used as group total that is later
     # distributed across modeled oil foods.
     "oil": [2914],  # Vegetable Oils
@@ -67,35 +72,14 @@ DAIRY_MILK_EQUIV_FACTORS = {
     2743: 6.7,  # Cream (fresh) milk-equivalent
 }
 
-# Standard Age Groups
-AGE_GROUPS = [
-    "0-1 years",
-    "1-2 years",
-    "2-5 years",
-    "6-10 years",
-    "11-74 years",
-    "75+ years",
-    "All ages",
-]
-
 
 def main():
     countries = snakemake.params.countries
     reference_year = snakemake.params.reference_year
-    poultry_carcass_to_retail = float(snakemake.params.poultry_carcass_to_retail)
+    baseline_age = str(snakemake.params.baseline_age)
     fbs_csv = snakemake.input.fbs_csv
     m49_codes = snakemake.input.m49_codes
     output_file = snakemake.output.supply
-
-    if not 0 < poultry_carcass_to_retail <= 1:
-        raise ValueError(
-            "poultry_carcass_to_retail must be in (0, 1], "
-            f"got {poultry_carcass_to_retail}"
-        )
-    logger.info(
-        "Using poultry carcass-to-retail factor: %.3f",
-        poultry_carcass_to_retail,
-    )
 
     # Load bulk data
     logger.info("Loading FAOSTAT FBS bulk data")
@@ -148,15 +132,6 @@ def main():
     for country, group_df in df.groupby("iso3"):
         supplies = {}
 
-        # Poultry
-        poultry_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["poultry"])]
-        # Convert FBS carcass-equivalent poultry mass to model retail-meat basis.
-        supplies["poultry"] = poultry_rows["Value"].sum() * poultry_carcass_to_retail
-
-        # Eggs
-        egg_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["eggs"])]
-        supplies["eggs"] = egg_rows["Value"].sum()
-
         # Oil
         oil_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["oil"])]
         supplies["oil"] = oil_rows["Value"].sum()
@@ -181,18 +156,16 @@ def main():
                 unit = "g/day (refined sugar eq)"
             else:
                 unit = "g/day (fresh wt)"
-
-            for age in AGE_GROUPS:
-                results.append(
-                    {
-                        "unit": unit,
-                        "item": item,
-                        "country": country,
-                        "age": age,
-                        "year": reference_year,
-                        "value": supply_g,
-                    }
-                )
+            results.append(
+                {
+                    "unit": unit,
+                    "item": item,
+                    "country": country,
+                    "age": baseline_age,
+                    "year": reference_year,
+                    "value": supply_g,
+                }
+            )
 
     # Handle missing countries
     missing = set(countries) - set(present_countries)

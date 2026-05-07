@@ -47,17 +47,6 @@ from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
-# Standard age bins used elsewhere in the diet pipeline.
-AGE_GROUPS = [
-    "0-1 years",
-    "1-2 years",
-    "2-5 years",
-    "6-10 years",
-    "11-74 years",
-    "75+ years",
-    "All ages",
-]
-
 # A "cell" in the FPED tables is a "value (SE)" pair, optionally with a
 # trailing asterisk on the value (relative SE > 30%). "#" indicates
 # non-zero but too-small-to-report; we treat it as 0 with a debug log.
@@ -357,6 +346,7 @@ def main():
     fbs_element_code = int(snakemake.params.fbs_element_code)
     food_groups_included = list(snakemake.params.food_groups_included)
     country = str(snakemake.params.country)
+    baseline_age = str(snakemake.params.baseline_age)
 
     logger.info("Parsing FPED table %s", pdf_file)
     text = run_pdftotext(pdf_file)
@@ -397,18 +387,16 @@ def main():
 
     rows = []
     for food_group, value in sorted(intake.items()):
-        unit = get_unit(food_group)
-        for age in AGE_GROUPS:
-            rows.append(
-                {
-                    "unit": unit,
-                    "item": food_group,
-                    "country": country,
-                    "age": age,
-                    "year": reference_year,
-                    "value": value,
-                }
-            )
+        rows.append(
+            {
+                "unit": get_unit(food_group),
+                "item": food_group,
+                "country": country,
+                "age": baseline_age,
+                "year": reference_year,
+                "value": value,
+            }
+        )
 
     df = pd.DataFrame(rows)
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)

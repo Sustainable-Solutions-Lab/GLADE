@@ -62,11 +62,12 @@ rule prepare_faostat_fbs_items:
 
 
 rule prepare_faostat_gdd_supplements:
-    """Prepare FAOSTAT supply data to supplement or override GDD dietary intake.
+    """Prepare FAOSTAT supply data to supplement GDD dietary intake.
 
-    Reads dairy, eggs, poultry, and oil supply data from FAOSTAT FBS bulk CSV
-    to fill gaps in the Global Dietary Database (GDD) or replace survey-based
-    values where FAOSTAT provides a more suitable validation anchor.
+    Reads dairy, oil, and sugar supply data from FAOSTAT FBS bulk CSV
+    to fill gaps in the Global Dietary Database (GDD). Eggs and poultry
+    are not supplemented here; they are anchored end-to-end through
+    diet.fbs_override_foods in estimate_baseline_diet.
     """
     input:
         fbs_csv="data/downloads/faostat/FBS.parquet",
@@ -74,10 +75,8 @@ rule prepare_faostat_gdd_supplements:
     params:
         countries=config["countries"],
         reference_year=config["baseline_year"],
+        baseline_age=config["diet"]["baseline_age"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
-        poultry_carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"][
-            "meat-chicken"
-        ],
     output:
         supply="<processing>/{name}/faostat_gdd_supplements.csv",
     group:
@@ -134,12 +133,11 @@ rule prepare_nhanes_dietary_intake:
     Output schema matches `gdd_dietary_intake.csv` and
     `faostat_gdd_supplements.csv` so the merge step can treat NHANES as a
     drop-in source. The single "Males and females / 2 and over"
-    population-mean is replicated across the model's age groups (matching
-    how FAOSTAT supply is propagated). The script also augments FPED's
-    skim-equivalent Total Dairy with butter (FAOSTAT FBS item 2740 in
-    milk-equivalent grams) so total dairy mass reflects all dairy products
-    consumed, not only the low-fat fraction. Only USA is produced; other
-    countries fall back to GDD/FAOSTAT.
+    population-mean is emitted at the configured baseline_age. The script
+    also augments FPED's skim-equivalent Total Dairy with butter (FAOSTAT
+    FBS item 2740 in milk-equivalent grams) so total dairy mass reflects
+    all dairy products consumed, not only the low-fat fraction. Only USA
+    is produced; other countries fall back to GDD/FAOSTAT.
     """
     input:
         fped_pdf=lambda wc: f"data/downloads/usda_fped/Table_1_FPED_MaleFemale_{config['diet']['nhanes']['cycle']}.pdf",
@@ -149,6 +147,7 @@ rule prepare_nhanes_dietary_intake:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     params:
         reference_year=config["diet"]["nhanes"]["reference_year"],
+        baseline_age=config["diet"]["baseline_age"],
         food_groups_included=config["food_groups"]["included"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
         country="USA",

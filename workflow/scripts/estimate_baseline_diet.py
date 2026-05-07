@@ -784,16 +784,14 @@ def _apply_fbs_overrides(
         intake_g_day = FBS_supply_kg_per_capita_year
                        * within_FBS_item_share
                        * carcass_to_retail
-                       * (1 - loss_fraction)
                        * (1 - waste_fraction)
                        * 1000 / 365
 
-    Carcass_to_retail converts FAOSTAT FBS supply (carcass weight equivalent
-    for meat) to retail mass; non-meat foods use 1.0. The (1-loss)(1-waste)
-    multiplier mirrors the FLW correction that the build_model
-    animal_production and food_processing links apply on the production
-    side, so consumer-side intake is on the same post-FLW basis as what the
-    food bus actually delivers.
+    The FAOSTAT FBS "Food supply" element is already net of supply-chain
+    and post-harvest losses (production - feed - seed - processing - other
+    - losses = food); only consumer-level waste needs to be deducted to
+    land at consumer-eaten intake. Carcass_to_retail converts FBS meat
+    supply (carcass weight) to retail mass; non-meat foods use 1.0.
 
     When several override foods share a single FBS item code (e.g.
     dairy/dairy-buffalo both map to 2848 "Milk - Excluding Butter"), the
@@ -819,10 +817,10 @@ def _apply_fbs_overrides(
         "supply_kg_per_capita_year"
     ].to_dict()
 
-    # FLW lookup: (country, food_group) → (loss_fraction, waste_fraction)
-    flw_lookup = flw_df.set_index(["country", "food_group"])[
-        ["loss_fraction", "waste_fraction"]
-    ]
+    # FLW lookup: (country, food_group) → waste_fraction.
+    # FBS-supply-anchored intake only needs the consumer-waste deduction;
+    # loss is already absorbed in the FBS "Food supply" element.
+    flw_lookup = flw_df.set_index(["country", "food_group"])["waste_fraction"]
 
     # QCL production lookups for splitting shared FBS items
     qcl_lookup = _build_qcl_lookup(qcl_resolution_df)
@@ -870,13 +868,9 @@ def _apply_fbs_overrides(
                     fbs_share = 1.0
                 supply_kg += fbs_share * fbs_supply.get((country, int(code)), 0.0)
 
-            try:
-                loss_frac, waste_frac = flw_lookup.loc[(country, food_group)]
-            except KeyError:
-                loss_frac, waste_frac = 0.0, 0.0
-            flw_mult = (1.0 - float(loss_frac)) * (1.0 - float(waste_frac))
-
-            intake_g_day = supply_kg * c2r * flw_mult * 1000.0 / 365.0
+            # FBS supply is already post-loss; only deduct consumer waste.
+            waste_frac = float(flw_lookup.get((country, food_group), 0.0))
+            intake_g_day = supply_kg * c2r * (1.0 - waste_frac) * 1000.0 / 365.0
             new_intake.append(intake_g_day)
 
         result.loc[food_mask, "consumption_g_per_day"] = new_intake

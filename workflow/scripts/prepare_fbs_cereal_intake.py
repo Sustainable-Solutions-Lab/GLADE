@@ -17,11 +17,11 @@ Method:
        ``faostat_food_item_map.csv`` whose mapped foods belong to the
        configured cereal food groups.
     2. Convert to g/day fresh weight.
-    3. Apply (1 - loss)(1 - waste) using the food_loss_waste table.
-       The cereal supply is attributed to the union of the relevant
-       food groups; we apply the FLW for the ``grain`` group as a
-       conservative estimate (refined and whole grains share most
-       loss/waste pathways: storage, milling, retail).
+    3. Apply (1 - waste) using the food_loss_waste table's ``grain``
+       row. FBS "Food supply" is already net of supply-chain losses, so
+       only consumer waste needs to come off to land at intake. Refined
+       and whole grains share nearly identical waste pathways (retail
+       and household), so the grain-group factor stands in for both.
 
 Input:
     - FAOSTAT FBS bulk Parquet
@@ -123,14 +123,9 @@ def main():
         supply["supply_kg_per_capita_year"] * 1000.0 / 365.25
     )
 
-    # Apply waste/loss correction. Cereal-group FLW factors live under
-    # food_group="grain"; we apply the same factor to the aggregate
-    # since whole and refined cereals share nearly identical
-    # loss/waste pathways (storage, milling, retail, household).
+    # Deduct consumer waste only (FBS supply is already post-loss).
     flw = pd.read_csv(flw_path)
-    flw_grain = flw[flw["food_group"] == "grain"][
-        ["country", "loss_fraction", "waste_fraction"]
-    ].copy()
+    flw_grain = flw[flw["food_group"] == "grain"][["country", "waste_fraction"]].copy()
     if flw_grain.empty:
         raise ValueError(
             "food_loss_waste table has no rows for food_group='grain'; "
@@ -138,14 +133,11 @@ def main():
         )
     supply = supply.merge(flw_grain, on="country", how="left")
     # Fall back to global mean for any country missing FLW (rare edge case)
-    global_loss = flw_grain["loss_fraction"].mean()
-    global_waste = flw_grain["waste_fraction"].mean()
-    supply["loss_fraction"] = supply["loss_fraction"].fillna(global_loss)
-    supply["waste_fraction"] = supply["waste_fraction"].fillna(global_waste)
-    supply["fbs_cereal_intake_g_per_day"] = (
-        supply["fbs_cereal_supply_g_per_day"]
-        * (1.0 - supply["loss_fraction"])
-        * (1.0 - supply["waste_fraction"])
+    supply["waste_fraction"] = supply["waste_fraction"].fillna(
+        flw_grain["waste_fraction"].mean()
+    )
+    supply["fbs_cereal_intake_g_per_day"] = supply["fbs_cereal_supply_g_per_day"] * (
+        1.0 - supply["waste_fraction"]
     )
 
     # Restrict to configured countries and fill missing via proxies
