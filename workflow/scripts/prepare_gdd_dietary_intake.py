@@ -33,14 +33,20 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger("prepare_gdd_dietary_intake")
 
 
+# Cup-to-grams unit conversion for GDD beverage variables. GDD reports
+# tea (v18) intake in cups/day; multiplying by the serving size yields
+# brewed grams/day, which then participates in the standard basis
+# conversion machinery (brewed -> dry via diet.weight_conversion).
+GDD_BEVERAGE_GRAMS_PER_CUP = {
+    "v18": 240.0,  # tea
+}
+
+
 def main():
     gdd_dir = Path(snakemake.input["gdd_dir"])
     reference_year = snakemake.params["reference_year"]
     food_groups = snakemake.params["food_groups"]
     output_file = snakemake.output["diet"]
-    stimulant_brewed_to_dry = {
-        "v18": snakemake.params["stimulant_brewed_to_dry"]["tea"],
-    }
 
     # Map GDD variable codes (vXX) to model food groups
     # Based on GDD codebook and canonical food_groups.csv
@@ -172,12 +178,11 @@ def main():
                     0.0
                 )
                 df_year["median"] = median_val * 2000.0 / 100.0 / 4.0
-            elif varcode in stimulant_brewed_to_dry:
-                brewed_to_dry = stimulant_brewed_to_dry[varcode]
-                brewed_grams = pd.to_numeric(df_year["median"], errors="coerce").fillna(
-                    0.0
-                )
-                df_year["median"] = brewed_grams * brewed_to_dry
+            elif varcode in GDD_BEVERAGE_GRAMS_PER_CUP:
+                # Cups/day -> brewed grams/day. The brewed -> dry
+                # basis conversion happens later via diet.weight_conversion.
+                cups = pd.to_numeric(df_year["median"], errors="coerce").fillna(0.0)
+                df_year["median"] = cups * GDD_BEVERAGE_GRAMS_PER_CUP[varcode]
 
             # Aggregate to country-age level (weighted mean across sex/urban/education strata)
             # GDD stratifies by age, sex, urban, education
@@ -278,7 +283,9 @@ def main():
         if item == "sugar":
             return "g/day (refined sugar eq)"
         if item in DIRECT_FOOD_ITEMS:
-            return "g/day (dry wt)"  # Dry commodity weight (converted from brewed)
+            return (
+                "g/day (brewed wt)"  # Brewed beverage mass; basis converted downstream
+            )
         return "g/day (fresh wt)"  # Fresh/cooked "as consumed" weight
 
     result["unit"] = result["item"].apply(get_unit)

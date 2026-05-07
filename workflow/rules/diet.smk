@@ -17,7 +17,6 @@ rule prepare_gdd_dietary_intake:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         reference_year=config["baseline_year"],
-        stimulant_brewed_to_dry=config["diet"]["stimulant_brewed_to_dry"],
     output:
         diet="<processing>/{name}/gdd_dietary_intake.csv",
     group:

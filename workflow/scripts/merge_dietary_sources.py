@@ -118,13 +118,19 @@ def main():
     food_to_group = pd.read_csv(food_groups_file).set_index("food")["group"].to_dict()
     group_basis = build_group_basis(food_basis, food_to_group)
 
+    # The "item" column in GDD/FAOSTAT/NHANES outputs holds either a
+    # food-group name (most rows) or a direct food name (e.g.
+    # tea-dried). Fold both into one lookup so convert_intake can resolve
+    # either style without special cases.
+    item_basis = {**food_basis, **group_basis}
+
     convert_kwargs = {
         "value_column": "value",
         "group_column": "item",
         "country_column": "country",
         "source_basis": source_basis,
         "source_basis_country_overrides": source_basis_country_overrides,
-        "group_basis": group_basis,
+        "group_basis": item_basis,
         "factors": weight_conversion,
     }
 

@@ -561,14 +561,6 @@ food_groups:
 # --- section: diet ---
 diet:
   baseline_age: "All ages"
-  # Conversion factor from GDD beverage intake (cups/day) to dry commodity
-  # weight (g/day). Only tea (v18) is actively used; coffee-green is sourced
-  # from FAOSTAT FBS (fbs_override_foods) because GDD v17 data is unreliable
-  # for many countries (e.g. 42× overestimate for India vs FAOSTAT supply).
-  # Factor = serving_size_g × dry_fraction_per_g_brewed
-  # Tea: 240 g/cup × 0.01 g-dry/g-brewed = 2.4 g-dry/cup
-  stimulant_brewed_to_dry:
-    tea: 2.4
   # Foods whose per-country intake is computed directly from FAOSTAT Food
   # Balance Sheet supply rather than disaggregated from GDD/GBD group
   # totals. For each listed food the override sets
@@ -647,7 +639,7 @@ diet:
       oil: dry
       sugar: dry
       dairy: fresh
-      tea-dried: dry
+      tea-dried: brewed
     gbd:
       whole_grains: dry
       legumes: cooked
@@ -777,6 +769,13 @@ diet:
     cooked_to_fresh:
       red_meat: 1.0
       poultry: 1.0
+    # Brewed beverage mass to dry commodity weight. GDD reports tea (v18)
+    # as cups/day; the cup→gram unit conversion happens in
+    # prepare_gdd_dietary_intake; this factor (≈ 1g of dry tea leaves
+    # per 100g of brewed beverage) lands the value on the model's dry
+    # commodity basis declared for tea-dried in food_basis.csv.
+    brewed_to_dry:
+      tea-dried: 0.01
   # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
   # GDD systematically under-reports refined grain in some HICs (Norway:
   # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain

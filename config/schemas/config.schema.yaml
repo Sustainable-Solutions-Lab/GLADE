@@ -989,16 +989,6 @@ properties:
       baseline_age:
         type: string
         description: "Age group for baseline diet (e.g., 'All ages')"
-      stimulant_brewed_to_dry:
-        type: object
-        required: [tea]
-        additionalProperties: false
-        properties:
-          tea:
-            type: number
-            minimum: 0
-            description: "GDD cups-to-dry-grams conversion factor for tea (v18)"
-        description: "Conversion factor from GDD beverage intake (cups/day) to dry commodity weight (g/day). Only tea is used; coffee is sourced from FAOSTAT FBS."
       fbs_override_foods:
         type: array
         uniqueItems: true
@@ -1033,7 +1023,7 @@ properties:
           type: object
           additionalProperties:
             type: string
-            enum: ["dry", "fresh", "cooked"]
+            enum: ["dry", "fresh", "cooked", "brewed"]
       source_basis_country_overrides:
         type: object
         description: "Per-(source, country, food_group) basis overrides. Resolved before the global declaration in source_basis. Used when a country's underlying survey methodology records food in a basis different from the source's global default."
@@ -1043,7 +1033,7 @@ properties:
             type: object
             additionalProperties:
               type: string
-              enum: ["dry", "fresh", "cooked"]
+              enum: ["dry", "fresh", "cooked", "brewed"]
       weight_conversion:
         type: object
         description: "Mass-conversion factor tables keyed '<from>_to_<to>'. Each table maps food-group (or food) name to a multiplicative factor. Foods/groups not listed default to 1.0."
