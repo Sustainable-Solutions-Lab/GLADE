@@ -115,11 +115,24 @@ def load_group_totals(
     reference_year: int,
     food_groups_included: list[str],
     risk_group_anchor: str = "average",
+    gbd_dry_equiv_factor: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """Load food group totals, reconciling GDD and GBD per *risk_group_anchor*.
 
+    GBD dietary risk exposure values share the basis of the GBD/IHME
+    relative-risk dose-response curves. For groups where the GBD basis
+    is cooked / as-consumed (legumes, red_meat), the values are
+    multiplied by *gbd_dry_equiv_factor* before they enter the
+    averaging so they share a basis with the GDD-converted intake (the
+    GDD source has already been pre-converted in merge_dietary_sources).
+    For groups where the GBD basis is dry (whole_grains), the factor
+    should be 1.0.
+
     Returns DataFrame with columns: country, food_group, group_total_g_per_day
     """
+    if gbd_dry_equiv_factor is None:
+        gbd_dry_equiv_factor = {}
+
     # Load GDD + FAOSTAT dietary intake (waste-corrected)
     intake = pd.read_csv(dietary_intake_path)
     # Filter to baseline age group
@@ -133,6 +146,19 @@ def load_group_totals(
 
     # Load GBD dietary risk exposure (aggregate duplicates if any)
     gbd = pd.read_csv(gbd_exposure_path)
+    # Apply per-group cooked-to-dry conversion to GBD values whose basis
+    # differs from the model's dry-mass basis.
+    gbd = gbd.copy()
+    gbd_factor = gbd["food_group"].map(gbd_dry_equiv_factor).fillna(1.0).astype(float)
+    gbd["consumption_g_per_day"] = gbd["consumption_g_per_day"] * gbd_factor
+    n_converted = int((gbd_factor != 1.0).sum())
+    if n_converted > 0:
+        nonneutral = {k: v for k, v in gbd_dry_equiv_factor.items() if v != 1.0}
+        logger.info(
+            "Applied cooked-to-dry conversion to %d GBD exposure rows (factors: %s)",
+            n_converted,
+            ", ".join(f"{k}={v}" for k, v in sorted(nonneutral.items())),
+        )
     gbd_totals = gbd.groupby(["country", "food_group"])["consumption_g_per_day"].mean()
 
     # Build combined group totals
@@ -1093,6 +1119,20 @@ def main():
     }
     risk_group_anchor = str(snakemake.params.risk_group_anchor)
     fbs_grain_cfg = dict(snakemake.params.fbs_grain_supplement)
+    food_group_dry_equiv_factor = {
+        str(k): float(v)
+        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+    }
+    gbd_intake_needs_conversion = {
+        str(g) for g in list(snakemake.params.gbd_intake_needs_conversion)
+    }
+    # GBD-side conversion: groups whose GBD basis differs from the model's
+    # get the configured cooked-to-dry factor; groups not listed share the
+    # model's basis and stay at 1.0.
+    gbd_dry_equiv_factor: dict[str, float] = {
+        group: food_group_dry_equiv_factor.get(group, 1.0)
+        for group in gbd_intake_needs_conversion
+    }
 
     logger.info("Estimating baseline diet for reference year %d", reference_year)
     logger.info("Baseline age group: %s", baseline_age)
@@ -1116,6 +1156,7 @@ def main():
         reference_year,
         food_groups_included,
         risk_group_anchor=risk_group_anchor,
+        gbd_dry_equiv_factor=gbd_dry_equiv_factor,
     )
     logger.info(
         "Group totals: %d countries, %d food groups",

@@ -163,8 +163,20 @@ def _extract_risk_blocks(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
 def _parse_relative_risks(
     df: pd.DataFrame,
     ssb_sugar_per_gram: float,
+    basis_factor_by_risk: dict[str, float] | None = None,
 ) -> pd.DataFrame:
-    """Parse the Excel sheet into tidy RR records."""
+    """Parse the Excel sheet into tidy RR records.
+
+    If *basis_factor_by_risk* is provided, multiply the parsed exposure
+    values for each risk factor by the corresponding factor before
+    emitting them. This is how the GBD/IHME RR curve x-axis is
+    converted from its native cooked-weight basis (for legumes, etc.)
+    onto the model's dry/raw basis, so consumption can be looked up
+    directly.
+    """
+
+    if basis_factor_by_risk is None:
+        basis_factor_by_risk = {}
 
     records: list[dict[str, float | str]] = []
     skipped_causes: dict[str, set[str]] = {}
@@ -180,6 +192,18 @@ def _parse_relative_risks(
             if ssb_sugar_per_gram <= 0:
                 raise ValueError("ssb_sugar_per_gram must be positive")
             conversion = ssb_sugar_per_gram
+
+        # Compose the parsed-exposure conversion (units) with the
+        # cooked-to-model-basis factor (no-op for groups whose GBD basis
+        # already matches the model).
+        basis_factor = float(basis_factor_by_risk.get(risk_id, 1.0))
+        effective_conversion = None if conversion is None else conversion * basis_factor
+        if basis_factor != 1.0:
+            logger.info(
+                "Applying GBD->model basis factor %.3f to %s RR exposure axis",
+                basis_factor,
+                risk_id,
+            )
 
         block = df.iloc[start:end]
         block = block[block[0].notna()]
@@ -199,7 +223,7 @@ def _parse_relative_risks(
             cause = CAUSE_MAP[outcome]
 
             try:
-                exposure = _normalize_exposure(exposure_raw, conversion)
+                exposure = _normalize_exposure(exposure_raw, effective_conversion)
             except ValueError:
                 skipped_units.add(exposure_raw)
                 continue
@@ -519,10 +543,28 @@ def main() -> None:
         raise ValueError("ssb_sugar_g_per_100g must be positive")
     ssb_sugar_per_gram = ssb_sugar_g_per_100g / 100.0
 
+    # Build the per-risk-factor cooked-to-dry conversion applied to the
+    # RR exposure x-axis. Groups whose GBD basis matches the model's
+    # consumption basis stay at 1.0 (no transformation). Groups listed in
+    # gbd_intake_needs_conversion get the matching diet-side factor so the
+    # RR curve and the model's consumption end up on the same basis.
+    needs_conversion = {
+        str(g) for g in list(snakemake.params.gbd_intake_needs_conversion)
+    }
+    factor_table = {
+        str(k): float(v)
+        for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
+    }
+    basis_factor_by_risk = {
+        risk_id: factor_table.get(risk_id, 1.0) for risk_id in needs_conversion
+    }
+
     logger.info(f"Reading {input_path}")
     df = pd.read_excel(input_path, header=None)
 
-    relative_risks = _parse_relative_risks(df, ssb_sugar_per_gram)
+    relative_risks = _parse_relative_risks(
+        df, ssb_sugar_per_gram, basis_factor_by_risk=basis_factor_by_risk
+    )
 
     # Apply alternative log-linear RR overrides if configured
     alternative_rr = getattr(snakemake.params, "alternative_rr", {})

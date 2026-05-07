@@ -828,6 +828,29 @@ health:
   # attenuation factors from the GBD data.
   alternative_rr:
     red_meat: "data/curated/red_meat_rr_log_linear.csv"
+  # Risk factors whose GBD intake / RR-curve exposure data is in a
+  # basis that does NOT match the model's consumption basis (model is
+  # dry/raw mass for cereals and legumes, raw-retail for meats, fresh
+  # weight for fruits/vegetables/nuts). For each listed risk factor:
+  #
+  # 1. estimate_baseline_diet multiplies GBD intake values by
+  #    diet.food_group_dry_equiv_factor[group] before averaging with
+  #    the (already-converted) GDD intake.
+  # 2. prepare_relative_risks multiplies the IHME RR-curve exposure
+  #    values by the same factor, so the curve x-axis aligns with the
+  #    model's consumption basis when the risk integral is evaluated.
+  #
+  # Risk factors NOT listed are assumed to share the model's basis
+  # (whole_grains: GBD calibrated on dry whole-grain content; fruits/
+  # vegetables/nuts_seeds: fresh weight in both GBD and the model).
+  # red_meat is in cooked weight in GBD but its baseline-diet value is
+  # already overridden from FBS raw-retail supply (see fbs_override_foods),
+  # so the basis-conversion would only matter for the RR curve. We omit
+  # it for now, accepting a small inaccuracy in the apparent dose-response
+  # for the meat foods (these have a relatively flat RR curve in the
+  # model's relevant intake range anyway).
+  gbd_intake_needs_conversion:
+    - legumes
   # Multi-objective clustering settings for grouping countries into health clusters
   clustering:
     weights:

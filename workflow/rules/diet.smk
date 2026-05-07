@@ -271,6 +271,8 @@ rule estimate_baseline_diet:
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         risk_group_anchor=config["diet"]["risk_group_anchor"],
         fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
+        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
+        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:

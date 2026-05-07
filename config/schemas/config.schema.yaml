@@ -1199,6 +1199,7 @@ properties:
       - risk_factors
       - causes
       - risk_cause_map
+      - gbd_intake_needs_conversion
       - clustering
     additionalProperties: false
     properties:
@@ -1264,6 +1265,13 @@ properties:
         description: "Per risk-factor overrides using log-linear RR from literature CSV files"
         additionalProperties:
           type: ["string", "null"]
+      gbd_intake_needs_conversion:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9_]+$"
+        description: "Risk factors whose GBD intake/RR-curve basis differs from the model's consumption basis. Listed groups have their GBD intake values and RR exposure x-axis multiplied by diet.food_group_dry_equiv_factor[group] before use."
       clustering:
         type: object
         required:

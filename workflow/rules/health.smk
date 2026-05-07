@@ -41,6 +41,8 @@ rule prepare_relative_risks:
         causes=config["health"]["causes"],
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         alternative_rr=config["health"]["alternative_rr"],
+        gbd_intake_needs_conversion=config["health"]["gbd_intake_needs_conversion"],
+        food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",
     group:
