@@ -79,8 +79,9 @@ def _fetch_eurostat_apro_cpsh1(
     Parameters
     ----------
     year_range : [start, end]
-    strucpro : Eurostat structural production code, e.g. ``"PR_HU_EU"``
-        (production in 1000 t) or ``"AR"`` (harvested area in 1000 ha).
+    strucpro : Eurostat structural production code, e.g.
+        ``"HPRD_HUMD_EU_THS_T"`` (production in EU standard humidity,
+        1000 t) or ``"AR_THS_HA"`` (area, 1000 ha).
     value_column : Name for the value column in the returned DataFrame.
 
     Returns
@@ -167,8 +168,10 @@ def fetch_eurostat_fodder(year_range: list[int]) -> pd.DataFrame:
 
     Returns DataFrame with columns: geo, crop_code, year, production_1000t, area_1000ha
     """
-    prod = _fetch_eurostat_apro_cpsh1(year_range, "PR_HU_EU", "production_1000t")
-    area = _fetch_eurostat_apro_cpsh1(year_range, "AR", "area_1000ha")
+    prod = _fetch_eurostat_apro_cpsh1(
+        year_range, "HPRD_HUMD_EU_THS_T", "production_1000t"
+    )
+    area = _fetch_eurostat_apro_cpsh1(year_range, "AR_THS_HA", "area_1000ha")
     merged = prod.merge(area, on=["geo", "crop_code", "year"], how="outer")
     return merged
 
