@@ -84,7 +84,9 @@ def _drop_overlap(
 
 
 def _apply_dry_equiv_conversion(
-    gdd_df: pd.DataFrame, factors: dict[str, float]
+    gdd_df: pd.DataFrame,
+    factors: dict[str, float],
+    apply_to: set[str],
 ) -> pd.DataFrame:
     """Multiply GDD values by per-food-group cooked-to-dry conversion factors.
 
@@ -92,19 +94,20 @@ def _apply_dry_equiv_conversion(
     legumes, and meats; the model's nutrition.csv uses dry/raw kcal
     densities. Without conversion, the per-food calorie computation
     inflates by ~2-3x for high-cereal-intake countries. Factors default
-    to 1.0 (no change) for any food_group not in the dict.
+    to 1.0 (no change) for any food_group not in *apply_to*.
     """
-    if not factors:
-        logger.info("food_group_dry_equiv_factor: no factors configured")
+    if not apply_to:
+        logger.info("gdd_intake_needs_conversion: empty list, GDD passes through")
         return gdd_df
 
+    effective = {g: factors.get(g, 1.0) for g in apply_to}
     gdd_df = gdd_df.copy()
-    multiplier = gdd_df["item"].map(factors).fillna(1.0).astype(float)
+    multiplier = gdd_df["item"].map(effective).fillna(1.0).astype(float)
     n_converted = int((multiplier != 1.0).sum())
     if n_converted == 0:
         return gdd_df
     gdd_df["value"] = gdd_df["value"] * multiplier
-    factor_summary = ", ".join(f"{k}={v}" for k, v in sorted(factors.items()))
+    factor_summary = ", ".join(f"{k}={v}" for k, v in sorted(effective.items()))
     logger.info(
         "Applied food_group_dry_equiv_factor to %d GDD rows (factors: %s)",
         n_converted,
@@ -123,10 +126,15 @@ def main():
         str(k): float(v)
         for k, v in dict(snakemake.params.food_group_dry_equiv_factor).items()
     }
+    gdd_intake_needs_conversion = {
+        str(g) for g in list(snakemake.params.gdd_intake_needs_conversion)
+    }
 
     logger.info(f"Reading GDD data from {gdd_file}")
     gdd_df = pd.read_csv(gdd_file)
-    gdd_df = _apply_dry_equiv_conversion(gdd_df, food_group_dry_equiv_factor)
+    gdd_df = _apply_dry_equiv_conversion(
+        gdd_df, food_group_dry_equiv_factor, gdd_intake_needs_conversion
+    )
 
     logger.info(f"Reading FAOSTAT food supply data from {fao_file}")
     fao_df = pd.read_csv(fao_file)

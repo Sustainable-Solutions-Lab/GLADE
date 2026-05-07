@@ -981,6 +981,7 @@ properties:
       - baseline_age
       - risk_group_anchor
       - food_group_dry_equiv_factor
+      - gdd_intake_needs_conversion
       - fbs_grain_supplement
     additionalProperties: false
     properties:
@@ -1029,7 +1030,14 @@ properties:
         additionalProperties:
           type: number
           exclusiveMinimum: 0.0
-        description: "Per-food-group 'cooked / as-consumed' -> 'dry / raw' conversion factors. Used in merge_dietary_sources to convert GDD intake into the model's dry-mass basis, and in the health module's risk-curve construction to align the model's consumption with GBD's calibration basis where it differs. Missing keys default to 1.0."
+        description: "Per-food-group 'cooked / as-consumed' -> 'dry / raw' conversion factors. Used in merge_dietary_sources (gated by gdd_intake_needs_conversion) and in the health module's risk-curve construction & GBD intake averaging (gated by health.gbd_intake_needs_conversion). Missing keys default to 1.0."
+      gdd_intake_needs_conversion:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9_]+$"
+        description: "Food groups whose GDD intake values should be converted by food_group_dry_equiv_factor in merge_dietary_sources. GDD's basis varies by country, so this is opt-in (default empty)."
       fbs_grain_supplement:
         type: object
         required: [enabled, threshold]

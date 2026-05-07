@@ -621,38 +621,51 @@ diet:
   # users who want strict GBD-anchoring at the cost of LIC accuracy.
   risk_group_anchor: "average"
   # Per-food-group "cooked / as-consumed" -> "dry / raw" conversion
-  # factors. Applied in two places:
+  # factors, declared once and consumed in two places:
   #
   # 1. merge_dietary_sources: GDD reports food intake in g/day of food
   #    *as consumed* (cooked rice, bread, cooked legumes, cooked meat)
   #    for cereals, legumes, and meats. The model's nutrition.csv uses
-  #    dry-/raw-weight kcal densities (e.g. flour-white 364 kcal/100g of
-  #    dry flour, not bread). Multiplying GDD's value by the factor here
+  #    dry/raw kcal densities (e.g. flour-white 364 kcal/100g of dry
+  #    flour, not bread). Multiplying GDD's value by the factor here
   #    converts the intake into the model's dry/raw mass basis so
-  #    consumption x kcal-density gives correct calories.
+  #    consumption x kcal-density gives correct calories. Applied only
+  #    to the food groups listed in gdd_intake_needs_conversion below.
   #
-  # 2. health risk-curve construction: GBD's relative-risk functions are
-  #    calibrated against survey-style intake. For groups where GBD's
-  #    risk basis differs from the dry/raw basis the model carries, the
-  #    health module multiplies the model's consumption by the inverse
-  #    of the factor before feeding it to the risk integral so the
-  #    dose-response x-axis matches the calibration basis.
+  # 2. health risk-curve construction & GBD intake averaging: GBD's
+  #    relative-risk functions are calibrated against survey-style
+  #    intake. For groups where the GBD basis differs from the model's
+  #    (see health.gbd_intake_needs_conversion), the IHME RR-curve
+  #    exposure axis and GBD's exposure values are scaled by this
+  #    factor so the dose-response x-axis aligns with the model's
+  #    consumption.
   #
   # Empirical anchor: factor 0.45 applied to Norway's GDD whole_grains
   # (31 g/day cooked) gives 14 g/day, matching GBD's reported value of
-  # 14.07 g/day. Caveat: GDD/GBD ratios vary widely per country for
-  # these groups (HICs cluster near 2.2 = 1/0.45; LICs/MICs are often
-  # lower, sometimes inverted). The uniform factor is most accurate for
-  # HICs and for countries whose surveys record cooked weight; it may
-  # over-correct for LICs whose surveys (e.g. NSS in India) already
-  # record raw cereal mass. Future work could derive country-specific
-  # factors from GDD-vs-GBD agreement.
-  #
-  # Groups not listed default to 1.0 (no conversion).
+  # 14.07 g/day on a dry whole-grain basis.
   food_group_dry_equiv_factor:
     grain: 0.45
     whole_grains: 0.45
     legumes: 0.40
+  # Risk-relevant food groups whose GDD intake values are in cooked /
+  # as-consumed weight, so the food_group_dry_equiv_factor above should
+  # be applied during merge_dietary_sources.
+  #
+  # Empirically the GDD basis varies by country: HICs whose surveys
+  # are FFQ-style typically record cooked weight; LICs whose surveys
+  # are household-acquisition style (NSS in India, household-budget
+  # surveys in much of sub-Saharan Africa) often record raw cereal
+  # mass already. Applying a uniform conversion to all GDD values
+  # over-corrects LICs (Ethiopia surveyed cereal kcal ~1500 falls to
+  # ~700 if the factor is applied). The default-empty list disables
+  # GDD-side conversion for now, accepting the small calorie inflation
+  # of HIC cereal kcal that the FBS grain supplement otherwise pulls
+  # back in via the floor mechanism.
+  #
+  # The GBD-side conversion (which is uniform globally per food group
+  # and well-anchored per the IHME methodology) stays on by default
+  # via health.gbd_intake_needs_conversion.
+  gdd_intake_needs_conversion: []
   # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
   # GDD systematically under-reports refined grain in some HICs (Norway:
   # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain

@@ -176,6 +176,7 @@ rule merge_dietary_sources:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     params:
         food_group_dry_equiv_factor=config["diet"]["food_group_dry_equiv_factor"],
+        gdd_intake_needs_conversion=config["diet"]["gdd_intake_needs_conversion"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
