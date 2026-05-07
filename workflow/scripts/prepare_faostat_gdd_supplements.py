@@ -7,12 +7,20 @@
 Prepare FAOSTAT supply data to supplement or override GDD dietary intake.
 
 The Global Dietary Database (GDD) is structurally missing or can be
-substantially biased low for some commodity groups in validation settings.
+substantially biased for some commodity groups in validation settings.
 This script reads supply data from a FAOSTAT FBS bulk CSV for:
 - Dairy (milk, butter, cream - converted to milk equivalents)
 - Eggs
 - Poultry meat (converted to model retail-meat basis)
 - Vegetable oils
+- Refined sugar (FBS item 2542 "Sugar Raw Equivalent")
+
+Sugar is sourced from FAOSTAT here because GDD's v35 ("Added sugars")
+variable is reported as %-of-total-energy and converted to g/day using
+a 2000 kcal/day denominator that is too coarse. The resulting g/day
+values are wildly inflated in some regions (India: 25.87% energy ->
+129 g/day, against an FAOSTAT supply of 48 g/day raw / ~36 g/day intake
+post-waste, and surveyed actual ~10-15 g/day refined sugar).
 
 Values are converted to g/day per capita. These supplement GDD data in
 merge_dietary_sources.py to create complete baseline dietary intake estimates.
@@ -49,6 +57,7 @@ FAO_ITEMS = {
     # distributed across modeled oil foods.
     "oil": [2914],  # Vegetable Oils
     "dairy": [2848, 2740, 2743],  # Milk (excl butter), Butter/Ghee, Cream
+    "sugar": [2542],  # Sugar (Raw Equivalent)
 }
 
 # Milk→product extraction rates from FAO dairy commodity tree
@@ -152,6 +161,10 @@ def main():
         oil_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["oil"])]
         supplies["oil"] = oil_rows["Value"].sum()
 
+        # Sugar (raw equivalent)
+        sugar_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["sugar"])]
+        supplies["sugar"] = sugar_rows["Value"].sum()
+
         # Dairy: convert butter/ghee and cream to milk equivalents
         dairy_sum = 0.0
         for item_code in FAO_ITEMS["dairy"]:
@@ -162,7 +175,12 @@ def main():
 
         for item, supply_kg in supplies.items():
             supply_g = (supply_kg * 1000.0) / 365.0
-            unit = "g/day (milk equiv)" if item == "dairy" else "g/day (fresh wt)"
+            if item == "dairy":
+                unit = "g/day (milk equiv)"
+            elif item == "sugar":
+                unit = "g/day (refined sugar eq)"
+            else:
+                unit = "g/day (fresh wt)"
 
             for age in AGE_GROUPS:
                 results.append(
