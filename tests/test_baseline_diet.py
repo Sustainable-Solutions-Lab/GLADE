@@ -169,7 +169,7 @@ def animal_production_df():
             "country": ["USA", "USA", "IND", "IND"],
             "product": ["dairy", "dairy-buffalo", "dairy", "dairy-buffalo"],
             "year": [2018] * 4,
-            "production_mt": [
+            "production_mt_fresh_retail": [
                 100.0,  # USA cattle milk
                 0.0,  # USA buffalo milk
                 80.0,  # IND cattle milk

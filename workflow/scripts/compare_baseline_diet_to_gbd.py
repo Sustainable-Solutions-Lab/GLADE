@@ -33,6 +33,7 @@ Output:
 
 import logging
 
+import numpy as np
 import pandas as pd
 
 from workflow.scripts.diet.basis import (
@@ -43,9 +44,6 @@ from workflow.scripts.diet.basis import (
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
-
-# GBD's "milk" risk factor maps to the model's "dairy" food group.
-GBD_TO_MODEL_GROUP = {"milk": "dairy"}
 
 
 def main():
@@ -96,8 +94,6 @@ def main():
     )
 
     gbd = pd.read_csv(gbd_path)
-    # Map GBD's "milk" -> model "dairy" if the model uses dairy as a risk factor
-    gbd["food_group"] = gbd["food_group"].replace(GBD_TO_MODEL_GROUP)
     gbd = gbd[gbd["food_group"].isin(risk_factors)]
     # Apply the same basis conversion the pipeline applies to GBD intake
     # so the comparison happens in a consistent basis. Per-country
@@ -163,19 +159,9 @@ def main():
             flagged_n,
             flagged_country_n,
         )
-        # Sort by absolute log-ratio (i.e., max divergence in either direction)
+        # Sort by |log(ratio)| so divergences in either direction rank symmetrically.
         flagged = flagged.copy()
-        flagged["abs_log_ratio"] = (
-            flagged["ratio"]
-            .abs()
-            .apply(
-                lambda r: abs(
-                    pd.Series([r])
-                    .apply(lambda x: 0 if x == 1 else (x if x > 1 else 1 / x))
-                    .iloc[0]
-                )
-            )
-        )
+        flagged["abs_log_ratio"] = np.log(flagged["ratio"]).abs()
         flagged = flagged.sort_values("abs_log_ratio", ascending=False)
         sample = flagged.head(15)[
             ["country", "risk_factor", "model_g_per_day", "gbd_g_per_day", "ratio"]

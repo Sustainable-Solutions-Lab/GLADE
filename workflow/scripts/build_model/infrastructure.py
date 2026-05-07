@@ -26,7 +26,7 @@ def add_carriers_and_buses(
     countries: list,
     regions: list,
     water_regions: list,
-    food_basis: dict[str, str] | None = None,
+    food_basis: dict[str, str],
 ) -> None:
     """Add all carriers and their corresponding buses to the network.
 
@@ -100,23 +100,21 @@ def add_carriers_and_buses(
         # Annotate each food bus with its native mass basis ("dry" or
         # "fresh") so downstream analysis can do consistency checks
         # without re-loading food_basis.csv.
-        if food_basis is not None:
-            missing = set(food_list) - set(food_basis)
-            if missing:
-                raise ValueError(
-                    f"food_basis missing for foods {sorted(missing)}; "
-                    "extend data/curated/food_basis.csv."
-                )
-            food_df["basis"] = df["item"].map(food_basis).to_numpy()
+        missing = set(food_list) - set(food_basis)
+        if missing:
+            raise ValueError(
+                f"food_basis missing for foods {sorted(missing)}; "
+                "extend data/curated/food_basis.csv."
+            )
+        food_df["basis"] = df["item"].map(food_basis).to_numpy()
         n.carriers.add(sorted({f"food_{food}" for food in food_list}), unit="Mt")
-        bus_kwargs = {
-            "carrier": food_df["carrier"],
-            "country": food_df["country"],
-            "food": food_df["food"],
-        }
-        if "basis" in food_df.columns:
-            bus_kwargs["basis"] = food_df["basis"]
-        n.buses.add(food_df.index, **bus_kwargs)
+        n.buses.add(
+            food_df.index,
+            carrier=food_df["carrier"],
+            country=food_df["country"],
+            food=food_df["food"],
+            basis=food_df["basis"],
+        )
 
     # Food groups per country
     if food_group_list:

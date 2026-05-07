@@ -223,13 +223,15 @@ def load_group_totals(
     return result_df
 
 
+GRAIN_GROUP = "grain"
+WHOLE_GRAINS_GROUP = "whole_grains"
+
+
 def apply_fbs_grain_supplement(
     group_totals: pd.DataFrame,
     fbs_cereal_intake_path: str,
     enabled: bool,
     threshold: float,
-    food_group: str = "grain",
-    whole_grains_group: str = "whole_grains",
 ) -> pd.DataFrame:
     """Backfill the refined-``grain`` total from FBS-derived cereal intake.
 
@@ -272,8 +274,8 @@ def apply_fbs_grain_supplement(
     wide = df.pivot(
         index="country", columns="food_group", values="group_total_g_per_day"
     )
-    if food_group not in wide.columns:
-        wide[food_group] = float("nan")
+    if GRAIN_GROUP not in wide.columns:
+        wide[GRAIN_GROUP] = float("nan")
     n_supplemented = 0
     skipped_negative_residual = 0
     skipped_already_above_floor = 0
@@ -282,19 +284,19 @@ def apply_fbs_grain_supplement(
         if country not in fbs_cereal.index:
             skipped_no_fbs += 1
             continue
-        wg = wide.loc[country].get(whole_grains_group, float("nan"))
+        wg = wide.loc[country].get(WHOLE_GRAINS_GROUP, float("nan"))
         wg = 0.0 if pd.isna(wg) else float(wg)
         residual = float(fbs_cereal.loc[country]) - wg
         if residual <= 0:
             skipped_negative_residual += 1
             continue
         floor = threshold * residual
-        current = wide.loc[country].get(food_group, float("nan"))
+        current = wide.loc[country].get(GRAIN_GROUP, float("nan"))
         current_val = 0.0 if pd.isna(current) else float(current)
         if current_val >= floor:
             skipped_already_above_floor += 1
             continue
-        wide.loc[country, food_group] = floor
+        wide.loc[country, GRAIN_GROUP] = floor
         n_supplemented += 1
 
     long = wide.reset_index().melt(
