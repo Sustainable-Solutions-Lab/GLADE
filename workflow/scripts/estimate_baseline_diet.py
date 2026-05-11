@@ -427,6 +427,26 @@ def build_within_group_shares(
         "supply_kg_per_capita_year"
     ].to_dict()
 
+    # Fail fast if any residual projection references an FBS code that the
+    # FBS fetch never pulled. This catches silent drift between
+    # ``RESIDUAL_PROJECTIONS`` here and the fetch list in
+    # ``prepare_faostat_fbs_items.py`` (which historically defaulted such
+    # codes to 0 supply and made entire residuals — plantain, apples,
+    # pineapples, dates — silently vanish from the projection).
+    fetched_codes = {int(code) for (_, code) in fbs_supply}
+    referenced_codes: set[int] = set()
+    for spec in RESIDUAL_PROJECTIONS:
+        for sub in _normalise_projection_spec(spec):
+            referenced_codes.update(int(c) for c in sub["residual_codes"])
+    missing_codes = referenced_codes - fetched_codes
+    if missing_codes:
+        raise ValueError(
+            "RESIDUAL_PROJECTIONS reference FBS codes that were not fetched "
+            f"by prepare_faostat_fbs_items: {sorted(missing_codes)}. "
+            "Either add them to data/curated/faostat_food_item_map.csv or to "
+            "RESIDUAL_FETCH_CODES in prepare_faostat_fbs_items.py."
+        )
+
     # Build QCL production lookups
     # Crop production: (country, qcl_item_code) → production_tonnes
     crop_prod_lookup = _build_crop_production_lookup(crop_production_df, qcl_lookup)

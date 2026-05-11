@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from workflow.scripts.build_harvested_area import _shares_for_crop
+from workflow.scripts.harvested_area_shares import shares_for_crop as _shares_for_crop
 
 
 def test_missing_module_sibling_uses_uniform_share():

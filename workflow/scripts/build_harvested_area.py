@@ -103,6 +103,15 @@ if __name__ == "__main__":
         ooc_olive_share_path = Path(ooc_olive_share_raw)
     else:
         ooc_olive_share_path = Path("")
+    frt_kept_share_raw = snakemake.input.get("frt_kept_share")  # type: ignore[name-defined]
+    if isinstance(frt_kept_share_raw, list):
+        frt_kept_share_path = (
+            Path(frt_kept_share_raw[0]) if frt_kept_share_raw else Path("")
+        )
+    elif frt_kept_share_raw:
+        frt_kept_share_path = Path(frt_kept_share_raw)
+    else:
+        frt_kept_share_path = Path("")
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     crop = str(snakemake.wildcards.crop)  # type: ignore[name-defined]
 
@@ -169,6 +178,29 @@ if __name__ == "__main__":
         )
         global_share = (
             float(olive_shares["olive_share"].mean()) if not olive_shares.empty else 1.0
+        )
+        deflation = extracted["country"].map(share_map).fillna(global_share)
+        extracted["value"] = extracted["value"] * deflation
+
+    if (
+        crop in ("citrus", "mango", "watermelon")
+        and frt_kept_share_path
+        and frt_kept_share_path.exists()
+    ):
+        # GAEZ Module VI FRT raster bundles wine grapes (excluded from the
+        # demand-side fruits projection: most grape harvest enters
+        # wine/raisin processing) and tree nuts (which belong to the
+        # nuts_seeds food group with its own NUTS projection) with the
+        # fruits the trio actually absorbs. Deflate per-country to the
+        # FAOSTAT "kept" share so supply and demand absorb the same
+        # unmodeled basket.
+        frt_shares = pd.read_csv(frt_kept_share_path)
+        frt_shares["country"] = frt_shares["country"].astype(str).str.upper()
+        share_map = dict(
+            zip(frt_shares["country"], frt_shares["kept_share"], strict=False)
+        )
+        global_share = (
+            float(frt_shares["kept_share"].mean()) if not frt_shares.empty else 1.0
         )
         deflation = extracted["country"].map(share_map).fillna(global_share)
         extracted["value"] = extracted["value"] * deflation

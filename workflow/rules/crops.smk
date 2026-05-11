@@ -160,6 +160,29 @@ rule build_ooc_olive_area_share:
         "../scripts/build_ooc_olive_area_share.py"
 
 
+rule build_frt_kept_area_share:
+    input:
+        qcl_csv="data/downloads/faostat/QCL.parquet",
+        fbs_csv="data/downloads/faostat/FBS.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        baseline_year=config["baseline_year"],
+    output:
+        "<processing>/{name}/frt_kept_area_share.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2900,
+    log:
+        "<logs>/{name}/build_frt_kept_area_share.log",
+    benchmark:
+        "<benchmarks>/{name}/build_frt_kept_area_share.tsv"
+    script:
+        "../scripts/build_frt_kept_area_share.py"
+
+
 rule build_fdd_area_shares:
     input:
         eurostat_fodder="data/downloads/eurostat_fodder_production.csv",
@@ -260,6 +283,15 @@ def _harvested_area_inputs(w):
         inputs["ooc_olive_share"] = f"<processing>/{w.name}/ooc_olive_area_share.csv"
     else:
         inputs["ooc_olive_share"] = []
+    if w.crop in ("citrus", "mango", "watermelon"):
+        # The GAEZ Module VI FRT raster bundles wine grapes (whose
+        # consumption is excluded from the demand-side fruits projection)
+        # and tree nuts (in the nuts_seeds food group, projected
+        # separately). Deflate per-country by the FAOSTAT "kept" share so
+        # the trio only absorbs the fruit area whose demand they project.
+        inputs["frt_kept_share"] = f"<processing>/{w.name}/frt_kept_area_share.csv"
+    else:
+        inputs["frt_kept_share"] = []
     return inputs
 
 

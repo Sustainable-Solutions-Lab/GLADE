@@ -31,8 +31,31 @@ from workflow.scripts.faostat_bulk import (
     load_m49_to_iso3,
 )
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.vegetable_projection import (
+    FRUITS_BAN_RESIDUAL_ITEM_CODES,
+    FRUITS_FRT_RESIDUAL_ITEM_CODES,
+    NUTS_RESIDUAL_ITEM_CODE,
+    STARCHY_RESIDUAL_ITEM_CODE,
+    VEGETABLE_RESIDUAL_ITEM_CODE,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# FBS item codes that drive the residual-supply projections in
+# estimate_baseline_diet.py but are not necessarily declared as explicit
+# food→FBS mappings in faostat_food_item_map.csv. Importing them here
+# keeps the fetch list in sync with the projection logic: if the
+# projection references a code, this script fetches it. Missing fetches
+# would otherwise silently default the residual pool to 0 (apples,
+# pineapples, dates, plantain — i.e. half the fruits residual).
+RESIDUAL_FETCH_CODES: tuple[int, ...] = (
+    VEGETABLE_RESIDUAL_ITEM_CODE,
+    STARCHY_RESIDUAL_ITEM_CODE,
+    NUTS_RESIDUAL_ITEM_CODE,
+    *FRUITS_BAN_RESIDUAL_ITEM_CODES,
+    *FRUITS_FRT_RESIDUAL_ITEM_CODES,
+)
 
 
 def main():
@@ -45,10 +68,20 @@ def main():
 
     # Load food-to-FBS-item mapping
     food_map_df = pd.read_csv(food_item_map_path, comment="#")
-    unique_item_codes = food_map_df["item_code"].dropna().astype(int).unique().tolist()
+    explicit_codes = food_map_df["item_code"].dropna().astype(int).unique().tolist()
+    unique_item_codes = sorted(set(explicit_codes) | set(RESIDUAL_FETCH_CODES))
 
     if not unique_item_codes:
         raise ValueError("No item codes found in food item mapping file")
+
+    extra_codes = sorted(set(RESIDUAL_FETCH_CODES) - set(explicit_codes))
+    if extra_codes:
+        logger.info(
+            "Adding %d residual FBS codes referenced by RESIDUAL_PROJECTIONS "
+            "but absent from food_item_map.csv: %s",
+            len(extra_codes),
+            extra_codes,
+        )
 
     logger.info("Found %d unique FBS item codes to fetch", len(unique_item_codes))
 
