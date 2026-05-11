@@ -118,7 +118,7 @@ validation:
     min_baseline: 0.000001  # Mt floor for relative-mode denominator
   animal_growth_cap:
     enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
-    max_relative_increase: 0.1  # Maximum relative increase from baseline (0.1 = +10%)
+    max_relative_increase: 0.5  # Maximum relative increase from baseline (0.1 = +10%)
   crop_growth_cap:
     # Per-(crop, country) hard upper bound on harvested area at
     # ``(1 + max_relative_increase) * sum_baseline``. Aggregates across
