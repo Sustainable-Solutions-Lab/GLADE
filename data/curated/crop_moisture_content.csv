@@ -3,50 +3,61 @@
 # Column definitions:
 # - crop: crop identifier used in configuration files
 # - moisture_fraction: share of fresh mass that is water (0-1 range)
+# - food_conversion: how food_processing pathways translate dry-matter crop
+#   bus mass into food bus mass.
+#     - inverse_moisture (default): apply 1/(1 - moisture_fraction) so the
+#       food bus carries commercial commodity weight (storage moisture). This
+#       matches FAOSTAT FBS supply units and the "as-purchased" basis used
+#       by nutrition.csv.
+#     - identity: skip the conversion. Used for the three crops whose food
+#       output IS the dried commodity at near-DM mass (cocoa beans, green
+#       coffee, dried tea). The small under-delivery vs commercial weight
+#       (~7-10% for cocoa/coffee) is absorbed by the FLW multiplier and
+#       documented as an accepted approximation.
 # - source: short citation for the value
 # - note: optional clarification when a value was inferred
-crop,moisture_fraction,source,note
-wheat,0.13,GAEZ v5 Module VII table (WHE),
-dryland-rice,0.13,GAEZ v5 Module VII table (RCW),Aligned with milled rice moisture
-wetland-rice,0.13,GAEZ v5 Module VII table (RCW),Aligned with milled rice moisture
-maize,0.14,GAEZ v5 Module VII table (MZE),
-barley,0.13,GAEZ v5 Module VII table (BRL),
-oat,0.13,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
-rye,0.13,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
-sorghum,0.13,GAEZ v5 Module VII table (SRG),
-buckwheat,0.13,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
-foxtail-millet,0.13,GAEZ v5 Module VII table (MLT),
-pearl-millet,0.13,GAEZ v5 Module VII table (MLT),
-soybean,0.09,GAEZ v5 Module VII table (SOY),
-dry-pea,0.10,GAEZ v5 Module VII table (PLS),
-chickpea,0.10,GAEZ v5 Module VII table (PLS),
-cowpea,0.10,GAEZ v5 Module VII table (PLS),
-gram,0.10,GAEZ v5 Module VII table (PLS),
-phaseolus-bean,0.10,GAEZ v5 Module VII table (PLS),
-pigeonpea,0.10,GAEZ v5 Module VII table (PLS),
-white-potato,0.77,GAEZ v5 Module VII table (POT),
-sweet-potato,0.77,GAEZ v5 Module VII table (POT),
-cassava,0.69,GAEZ v5 Module VII table (CSV),
-yam,0.69,GAEZ v5 Module VII table (ORT),
-tomato,0.925,GAEZ v5 Module VII table (TOM),
-carrot,0.90,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
-onion,0.90,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
-cabbage,0.90,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
-banana,0.75,GAEZ v5 Module VII table (BAN),
-citrus,0.85,GAEZ v5 Module VII table (FRT),Represents aggregated fruits and nuts entry
-coconut,0.47,Assumption (FAO food composition tables),Approximate moisture of fresh kernel
-sunflower,0.13,GAEZ v5 Module VII table (SFL),
-rapeseed,0.08,GAEZ v5 Module VII table (RSD),
-groundnut,0.05,GAEZ v5 Module VII table (GRD),Uses shelled kernel moisture
-sesame,0.05,GAEZ v5 Module VII table (SES),
-oil-palm,0.60,Assumption (MPOB fresh fruit bunch composition),Matches 24% oil share cited by GAEZ
-olive,0.50,Assumption (typical olive fruit analysis),Approximate moisture for fresh olives
-sugarcane,0.73,Assumption (aligned with 14% sugar extraction),Chooses 27% dry matter share
-sugarbeet,0.76,Assumption (aligned with 10% sugar extraction),Chooses 24% dry matter share
-cocoa,0.065,GAEZ v5 Module VII table (COC),Dried cocoa beans
-coffee,0.10,GAEZ v5 Module VII table (COF),Green coffee beans
-tea,0.75,GAEZ v5 Module VII table (TEA),Fresh tea leaves; dried tea ≈ DM
-alfalfa,0.70,GAEZ v5 Module VII table (FDD),
-silage-maize,0.70,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
-biomass-sorghum,0.70,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
-cotton,0.08,GAEZ v5 Module VII table (COT),Seed cotton after field drying
+crop,moisture_fraction,food_conversion,source,note
+wheat,0.13,inverse_moisture,GAEZ v5 Module VII table (WHE),
+dryland-rice,0.13,inverse_moisture,GAEZ v5 Module VII table (RCW),Aligned with milled rice moisture
+wetland-rice,0.13,inverse_moisture,GAEZ v5 Module VII table (RCW),Aligned with milled rice moisture
+maize,0.14,inverse_moisture,GAEZ v5 Module VII table (MZE),
+barley,0.13,inverse_moisture,GAEZ v5 Module VII table (BRL),
+oat,0.13,inverse_moisture,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
+rye,0.13,inverse_moisture,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
+sorghum,0.13,inverse_moisture,GAEZ v5 Module VII table (SRG),
+buckwheat,0.13,inverse_moisture,GAEZ v5 Module VII table (OCE),Shares minor cereal moisture value
+foxtail-millet,0.13,inverse_moisture,GAEZ v5 Module VII table (MLT),
+pearl-millet,0.13,inverse_moisture,GAEZ v5 Module VII table (MLT),
+soybean,0.09,inverse_moisture,GAEZ v5 Module VII table (SOY),
+dry-pea,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+chickpea,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+cowpea,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+gram,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+phaseolus-bean,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+pigeonpea,0.10,inverse_moisture,GAEZ v5 Module VII table (PLS),
+white-potato,0.77,inverse_moisture,GAEZ v5 Module VII table (POT),
+sweet-potato,0.77,inverse_moisture,GAEZ v5 Module VII table (POT),
+cassava,0.69,inverse_moisture,GAEZ v5 Module VII table (CSV),
+yam,0.69,inverse_moisture,GAEZ v5 Module VII table (ORT),
+tomato,0.925,inverse_moisture,GAEZ v5 Module VII table (TOM),
+carrot,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
+onion,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
+cabbage,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
+banana,0.75,inverse_moisture,GAEZ v5 Module VII table (BAN),
+citrus,0.85,inverse_moisture,GAEZ v5 Module VII table (FRT),Represents aggregated fruits and nuts entry
+coconut,0.47,inverse_moisture,Assumption (FAO food composition tables),Approximate moisture of fresh kernel
+sunflower,0.13,inverse_moisture,GAEZ v5 Module VII table (SFL),
+rapeseed,0.08,inverse_moisture,GAEZ v5 Module VII table (RSD),
+groundnut,0.05,inverse_moisture,GAEZ v5 Module VII table (GRD),Uses shelled kernel moisture
+sesame,0.05,inverse_moisture,GAEZ v5 Module VII table (SES),
+oil-palm,0.60,inverse_moisture,Assumption (MPOB fresh fruit bunch composition),Matches 24% oil share cited by GAEZ
+olive,0.50,inverse_moisture,Assumption (typical olive fruit analysis),Approximate moisture for fresh olives
+sugarcane,0.73,inverse_moisture,Assumption (aligned with 14% sugar extraction),Chooses 27% dry matter share
+sugarbeet,0.76,inverse_moisture,Assumption (aligned with 10% sugar extraction),Chooses 24% dry matter share
+cocoa,0.065,identity,GAEZ v5 Module VII table (COC),Dried cocoa beans
+coffee,0.10,identity,GAEZ v5 Module VII table (COF),Green coffee beans
+tea,0.75,identity,GAEZ v5 Module VII table (TEA),Fresh tea leaves; dried tea ≈ DM
+alfalfa,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),
+silage-maize,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
+biomass-sorghum,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
+cotton,0.08,inverse_moisture,GAEZ v5 Module VII table (COT),Seed cotton after field drying

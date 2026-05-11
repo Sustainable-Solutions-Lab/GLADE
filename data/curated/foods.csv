@@ -4,83 +4,85 @@
 # Multiple pathways for the same crop represent alternative processing options.
 # The model will choose which pathways to activate based on demand and costs.
 #
-# Conversion factors should sum to ≤ 1.0 per pathway (mass balance with losses).
+# Conversion factors should sum to <= 1.0 per pathway (mass balance with losses).
 # Sources are primarily from FAO Nutrient Conversion Table for SUA (2024), sheet 03.
+#
+# Per-crop "food_conversion" handling (inverse_moisture vs identity) lives in
+# data/curated/crop_moisture_content.csv -- see that file for semantics.
 #
 # Columns:
 # - pathway: unique identifier for the processing pathway
 # - crop: input crop name (must match config crops list)
 # - food: output food product name
 # - factor: conversion factor (mass of food output per unit mass of crop input)
-# - mass_basis: "fresh" (default) or "dry"; dry skips the DM-to-fresh conversion
 # - description: explanation of the conversion and source reference
-
-pathway,crop,food,factor,mass_basis,description
-white_flour,wheat,flour-white,0.75,fresh,White flour extraction rate (FAO SUA 2024 sheet 03)
-white_flour,wheat,wheat-bran,0.20,fresh,Bran byproduct from white flour milling (FAO SUA 2024 sheet 03)
-white_flour,wheat,wheat-germ,0.03,fresh,Germ separated during white flour milling (FAO SUA 2024 sheet 03)
-wholemeal_flour,wheat,flour-wholemeal,1.0,fresh,No processing
-milled_rice,dryland-rice,rice-white,0.68,fresh,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
-milled_rice,dryland-rice,rice-bran,0.08,fresh,Bran from rice milling (FAO SUA 2024 sheet 03)
-brown_rice,dryland-rice,rice-brown,0.77,fresh,Brown rice after hulling only (FAO SUA 2024 sheet 03)
-milled_rice_wetland,wetland-rice,rice-white,0.68,fresh,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
-milled_rice_wetland,wetland-rice,rice-bran,0.08,fresh,Bran from rice milling (FAO SUA 2024 sheet 03)
-brown_rice_wetland,wetland-rice,rice-brown,0.77,fresh,Brown rice after hulling only (FAO SUA 2024 sheet 03)
-hulled_barley,barley,barley-hulled,0.72,fresh,Hulled barley with processing losses (FAO SUA 2024 sheet 03)
-hulled_barley,barley,barley-bran,0.12,fresh,Bran from barley hulling (FAO SUA 2024 sheet 03)
-hulled_oat,oat,oat,0.78,fresh,Oat groats after hull removal (FAO SUA 2024 sheet 03)
-hulled_oat,oat,oat-bran,0.06,fresh,Bran from oat processing (FAO SUA 2024 sheet 03)
-hulled_buckwheat,buckwheat,buckwheat,0.78,fresh,Dehulled buckwheat groats (FAO SUA 2024 sheet 03)
-hulled_buckwheat,buckwheat,buckwheat-hulls,0.10,fresh,Hulls from buckwheat processing (FAO SUA 2024 sheet 03)
-rye_grain,rye,rye,1.0,fresh,No processing
-sorghum_grain,sorghum,sorghum,1.0,fresh,No processing
-foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,fresh,No processing
-pearl_millet_grain,pearl-millet,pearl-millet,1.0,fresh,No processing
-maize_grain,maize,maize,1.0,fresh,No processing
-soybean_whole,soybean,soy,1.0,fresh,No processing
-soybean_oil,soybean,soybean-oil,0.18,fresh,Oil extraction from soybeans (FAO SUA 2024 sheet 03)
-soybean_oil,soybean,oilseed-meal,0.78,fresh,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03)
-dry_pea_whole,dry-pea,dry-pea,1.0,fresh,No processing
-chickpea_whole,chickpea,chickpea,1.0,fresh,No processing
-cowpea_whole,cowpea,cowpea,1.0,fresh,No processing
-gram_whole,gram,gram,1.0,fresh,No processing
-phaseolus_bean_whole,phaseolus-bean,phaseolus-bean,1.0,fresh,No processing
-pigeonpea_whole,pigeonpea,pigeon-pea,1.0,fresh,No processing
-potato_fresh,white-potato,potato,1.0,fresh,No processing
-sweet_potato_fresh,sweet-potato,sweet-potato,1.0,fresh,No processing
-cassava_fresh,cassava,cassava,1.0,fresh,No processing
-yam_fresh,yam,yam,1.0,fresh,No processing
-tomato_fresh,tomato,tomato,1.0,fresh,No processing
-carrot_fresh,carrot,carrot,1.0,fresh,No processing
-onion_fresh,onion,onion,1.0,fresh,No processing
-cabbage_fresh,cabbage,cabbage,1.0,fresh,No processing
-banana_peeled,banana,banana,1.0,fresh,No processing
-citrus_fresh,citrus,citrus,1.0,fresh,No processing
-coconut_meat,coconut,coconut,1.0,fresh,No processing
-groundnut_oil,groundnut,groundnut-oil,0.45,fresh,Oil extraction from groundnuts (assumed industrial expeller yield)
-groundnut_oil,groundnut,oilseed-meal,0.50,fresh,Oilcake byproduct from groundnut oil extraction (assumed)
-groundnut_shelled,groundnut,groundnut,1.0,fresh,No processing (shell accounted for by edible portion)
-sesame_oil,sesame,sesame-oil,0.47,fresh,Oil extraction from sesame seed (assumed press yield)
-sesame_oil,sesame,oilseed-meal,0.47,fresh,Oilcake byproduct from sesame oil extraction (assumed)
-sesame_whole,sesame,sesame-seed,1.0,fresh,No processing
-coconut_oil,coconut,coconut-oil,0.35,fresh,Oil extraction from coconut kernel (assumed fresh-kernel basis)
-coconut_oil,coconut,oilseed-meal,0.45,fresh,Press-cake byproduct from coconut oil extraction (assumed)
-sunflower_oil,sunflower,sunflower-oil,0.35,fresh,TODO
-sunflower_oil,sunflower,oilseed-meal,0.50,fresh,TODO
-sunflower_seed,sunflower,sunflower-seed,1.0,fresh,No processing (shell accounted for by edible portion)
-rapeseed_oil,rapeseed,rapeseed-oil,0.38,fresh,Oil extraction from rapeseed (FAO SUA 2024 sheet 03)
-rapeseed_oil,rapeseed,rapeseed-meal,0.50,fresh,Meal from oil extraction (FAO SUA 2024 sheet 03)
-palm_oil,oil-palm,palm-oil,0.24,fresh,Oil extraction from fresh fruit bunches (GAEZ v5 assumption)
-olive_oil,olive,olive-oil,0.2,fresh,Oil extraction from olives (TODO: assumption)
-sugarcane_sugar,sugarcane,sugar,0.14,fresh,Sucrose extraction (GAEZ v5 assumption)
-sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,fresh,Fuel-equivalent DM fraction (assumption: 1 minus molasses fraction)
-sugarcane_ethanol,sugarcane,molasses,0.13,fresh,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3)
-maize_ethanol,maize,maize-ethanol,0.68,fresh,Fuel-equivalent DM fraction (assumption: 1 minus DDGS fraction)
-maize_ethanol,maize,ddgs,0.32,fresh,DDGS byproduct from corn ethanol (assumption: ~32% DM yield is industry standard)
-cocoa_beans,cocoa,cocoa-powder,1.0,dry,Dried cocoa beans (no further processing modeled)
-coffee_green_beans,coffee,coffee-green,1.0,dry,Green coffee beans (no further processing modeled)
-tea_dried_leaves,tea,tea-dried,1.0,dry,Dried tea leaves (no further processing modeled)
-sugarbeet_sugar,sugarbeet,sugar,0.10,fresh,Sucrose extraction (GAEZ v5 assumption)
-cotton_ginning,cotton,cotton-lint,0.38,fresh,Cotton lint from ginning (assumption: ~38% of seed cotton weight; global average gin-out-turn)
-cotton_ginning,cotton,cottonseed-oil,0.083,fresh,Cottonseed oil (assumption: 55% seed fraction × 15% oil extraction rate)
-cotton_ginning,cotton,oilseed-meal,0.275,fresh,Cottonseed meal as generic oilcake (assumption: 55% seed fraction × 50% meal yield)
+#
+pathway,crop,food,factor,description
+white_flour,wheat,flour-white,0.75,White flour extraction rate (FAO SUA 2024 sheet 03)
+white_flour,wheat,wheat-bran,0.2,Bran byproduct from white flour milling (FAO SUA 2024 sheet 03)
+white_flour,wheat,wheat-germ,0.03,Germ separated during white flour milling (FAO SUA 2024 sheet 03)
+wholemeal_flour,wheat,flour-wholemeal,1.0,No processing
+milled_rice,dryland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
+milled_rice,dryland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03)
+brown_rice,dryland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03)
+milled_rice_wetland,wetland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
+milled_rice_wetland,wetland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03)
+brown_rice_wetland,wetland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03)
+hulled_barley,barley,barley-hulled,0.72,Hulled barley with processing losses (FAO SUA 2024 sheet 03)
+hulled_barley,barley,barley-bran,0.12,Bran from barley hulling (FAO SUA 2024 sheet 03)
+hulled_oat,oat,oat,0.78,Oat groats after hull removal (FAO SUA 2024 sheet 03)
+hulled_oat,oat,oat-bran,0.06,Bran from oat processing (FAO SUA 2024 sheet 03)
+hulled_buckwheat,buckwheat,buckwheat,0.78,Dehulled buckwheat groats (FAO SUA 2024 sheet 03)
+hulled_buckwheat,buckwheat,buckwheat-hulls,0.1,Hulls from buckwheat processing (FAO SUA 2024 sheet 03)
+rye_grain,rye,rye,1.0,No processing
+sorghum_grain,sorghum,sorghum,1.0,No processing
+foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,No processing
+pearl_millet_grain,pearl-millet,pearl-millet,1.0,No processing
+maize_grain,maize,maize,1.0,No processing
+soybean_whole,soybean,soy,1.0,No processing
+soybean_oil,soybean,soybean-oil,0.18,Oil extraction from soybeans (FAO SUA 2024 sheet 03)
+soybean_oil,soybean,oilseed-meal,0.78,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03)
+dry_pea_whole,dry-pea,dry-pea,1.0,No processing
+chickpea_whole,chickpea,chickpea,1.0,No processing
+cowpea_whole,cowpea,cowpea,1.0,No processing
+gram_whole,gram,gram,1.0,No processing
+phaseolus_bean_whole,phaseolus-bean,phaseolus-bean,1.0,No processing
+pigeonpea_whole,pigeonpea,pigeon-pea,1.0,No processing
+potato_fresh,white-potato,potato,1.0,No processing
+sweet_potato_fresh,sweet-potato,sweet-potato,1.0,No processing
+cassava_fresh,cassava,cassava,1.0,No processing
+yam_fresh,yam,yam,1.0,No processing
+tomato_fresh,tomato,tomato,1.0,No processing
+carrot_fresh,carrot,carrot,1.0,No processing
+onion_fresh,onion,onion,1.0,No processing
+cabbage_fresh,cabbage,cabbage,1.0,No processing
+banana_peeled,banana,banana,1.0,No processing
+citrus_fresh,citrus,citrus,1.0,No processing
+coconut_meat,coconut,coconut,1.0,No processing
+groundnut_oil,groundnut,groundnut-oil,0.45,Oil extraction from groundnuts (assumed industrial expeller yield)
+groundnut_oil,groundnut,oilseed-meal,0.5,Oilcake byproduct from groundnut oil extraction (assumed)
+groundnut_shelled,groundnut,groundnut,1.0,No processing (shell accounted for by edible portion)
+sesame_oil,sesame,sesame-oil,0.47,Oil extraction from sesame seed (assumed press yield)
+sesame_oil,sesame,oilseed-meal,0.47,Oilcake byproduct from sesame oil extraction (assumed)
+sesame_whole,sesame,sesame-seed,1.0,No processing
+coconut_oil,coconut,coconut-oil,0.35,Oil extraction from coconut kernel (assumed fresh-kernel basis)
+coconut_oil,coconut,oilseed-meal,0.45,Press-cake byproduct from coconut oil extraction (assumed)
+sunflower_oil,sunflower,sunflower-oil,0.35,TODO
+sunflower_oil,sunflower,oilseed-meal,0.5,TODO
+sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for by edible portion)
+rapeseed_oil,rapeseed,rapeseed-oil,0.38,Oil extraction from rapeseed (FAO SUA 2024 sheet 03)
+rapeseed_oil,rapeseed,rapeseed-meal,0.5,Meal from oil extraction (FAO SUA 2024 sheet 03)
+palm_oil,oil-palm,palm-oil,0.24,Oil extraction from fresh fruit bunches (GAEZ v5 assumption)
+olive_oil,olive,olive-oil,0.2,Oil extraction from olives (TODO: assumption)
+sugarcane_sugar,sugarcane,sugar,0.14,Sucrose extraction (GAEZ v5 assumption)
+sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction (assumption: 1 minus molasses fraction)
+sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3)
+maize_ethanol,maize,maize-ethanol,0.68,Fuel-equivalent DM fraction (assumption: 1 minus DDGS fraction)
+maize_ethanol,maize,ddgs,0.32,DDGS byproduct from corn ethanol (assumption: ~32% DM yield is industry standard)
+cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing modeled)
+coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled)
+tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled)
+sugarbeet_sugar,sugarbeet,sugar,0.1,Sucrose extraction (GAEZ v5 assumption)
+cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning (assumption: ~38% of seed cotton weight; global average gin-out-turn)
+cotton_ginning,cotton,cottonseed-oil,0.083,Cottonseed oil (assumption: 55% seed fraction × 15% oil extraction rate)
+cotton_ginning,cotton,oilseed-meal,0.275,Cottonseed meal as generic oilcake (assumption: 55% seed fraction × 50% meal yield)

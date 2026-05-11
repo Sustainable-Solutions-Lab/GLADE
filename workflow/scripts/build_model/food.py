@@ -92,7 +92,7 @@ def add_food_conversion_links(
         pathway = str(pathway).strip()
         crop = str(crop).strip()
 
-        output_rows = pathway_df[["food", "factor", "mass_basis"]].copy()
+        output_rows = pathway_df[["food", "factor"]].copy()
         output_rows["food"] = output_rows["food"].astype(str)
         output_rows["factor"] = output_rows["factor"].astype(float)
         n_outputs = len(output_rows.index)
@@ -104,7 +104,13 @@ def add_food_conversion_links(
         if total_factor > 1.01:  # Allow small rounding tolerance
             invalid_pathways.append(f"{pathway} ({crop}): sum={total_factor:.3f}")
 
-        # Get conversion factor (dry matter → fresh edible)
+        # Per-crop factor that translates dry-matter crop bus into food bus
+        # mass. ``inverse_moisture`` crops apply 1/(1-moisture) so the food
+        # bus is in commercial commodity weight; ``identity`` crops (cocoa,
+        # coffee, tea) leave it as dry matter. The policy is encoded in
+        # crop_moisture_content.csv and baked into ``crop_to_fresh_factor``
+        # by ``utils._fresh_mass_conversion_factors`` so this loop does not
+        # need to special-case any crop.
         conversion_factor = crop_to_fresh_factor[crop]
 
         names = pd.Index("pathway:" + pathway + ":" + countries_index, dtype="object")
@@ -118,12 +124,6 @@ def add_food_conversion_links(
         for output_idx, row in enumerate(output_rows.itertuples(index=False), start=1):
             food = row.food
             factor = row.factor
-            # For dry-commodity foods (e.g. dried tea, cocoa powder, green
-            # coffee), skip the DM→fresh conversion since demand is already
-            # on a dry basis.
-            effective_conversion = (
-                conversion_factor if row.mass_basis == "fresh" else 1.0
-            )
             bus_key = f"bus{output_idx}"
             eff_key = "efficiency" if output_idx == 1 else f"efficiency{output_idx}"
 
@@ -135,16 +135,14 @@ def add_food_conversion_links(
                 # Food has no group mapping - no loss/waste adjustment
                 if food not in byproduct_foods:
                     missing_group_foods.add(food)
-                link_df[eff_key] = factor * effective_conversion
+                link_df[eff_key] = factor * conversion_factor
             else:
                 multipliers = multiplier_by_group[group]
                 extreme_countries = extreme_countries_by_group.get(group, set())
                 excessive_losses.update(
                     (c, group) for c in extreme_countries & country_set
                 )
-                link_df[eff_key] = (
-                    factor * effective_conversion * multipliers.to_numpy()
-                )
+                link_df[eff_key] = factor * conversion_factor * multipliers.to_numpy()
 
         batched_frames.setdefault(n_outputs, []).append(link_df)
 

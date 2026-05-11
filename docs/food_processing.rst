@@ -16,7 +16,7 @@ The food processing module converts raw agricultural products (crops and animal 
 * **Multi-output processing**: Single crops can produce multiple co-products (e.g., wheat → white flour + bran + germ)
 * **Alternative pathways**: Different processing options for the same crop (e.g., white flour vs. wholemeal flour from wheat)
 * **Mass balance**: Processing losses and byproducts are explicitly tracked
-* **Unit conversion**: Conversion from dry matter (DM) to fresh weight as consumed (configurable per food via ``mass_basis``)
+* **Unit conversion**: Conversion from dry matter (DM) to commercial commodity weight as traded/consumed (per-crop policy declared in ``data/curated/crop_moisture_content.csv``)
 
 Processing is represented in the model as PyPSA multi-output links with crop buses as inputs and multiple food buses as outputs. Each pathway creates one link per country, with efficiencies adjusted for food loss and waste factors.
 
@@ -33,8 +33,7 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
   * ``pathway``: Unique identifier for the processing pathway (e.g., ``white_flour``, ``milled_rice``)
   * ``crop``: Input crop name (must match config crops list)
   * ``food``: Output food product name
-  * ``factor``: Conversion factor (mass of food output per unit mass of crop input)
-  * ``mass_basis``: Either ``fresh`` (default) or ``dry``. When ``fresh``, the standard DM-to-fresh conversion (``edible_portion / (1 - moisture)``) is applied to the pathway efficiency. When ``dry``, no moisture re-inflation is applied — the food is already a dry commodity (e.g., dried tea, cocoa powder, green coffee beans) and pathway factors represent DM-to-DM ratios.
+  * ``factor``: Conversion factor (mass of food output per unit mass of crop input). Pathway efficiencies are then multiplied by the per-crop dry-matter-to-food factor from ``data/curated/crop_moisture_content.csv`` (the ``food_conversion`` column controls whether the moisture inversion is applied — ``inverse_moisture`` for most crops, ``identity`` for cocoa, coffee, and tea where the food bus is already at near-DM mass).
   * ``description``: Explanation of the conversion and source reference
 
   **Multi-output pathways**: Multiple rows with the same pathway name represent co-products from a single processing operation. For example, the ``white_flour`` pathway produces flour-white (0.75), wheat-bran (0.20), and wheat-germ (0.03) from wheat, with factors summing to ≤ 1.0 to respect mass balance.

@@ -114,10 +114,25 @@ def _fresh_mass_conversion_factors(
     moisture_df: pd.DataFrame,
     crops: set[str],
 ) -> dict[str, float]:
-    """Compute fresh mass conversion factors from edible portion and moisture data."""
+    """Compute crop-to-food conversion factors.
+
+    For each crop in ``crops`` this returns the factor that
+    ``build_model/food.py`` multiplies into every food_processing pathway
+    efficiency to translate dry-matter crop bus mass into food bus mass:
+
+      * ``inverse_moisture`` crops (the default): factor =
+        edible_portion / (1 - moisture). The food bus carries commercial
+        commodity weight (storage moisture).
+      * ``identity`` crops (currently cocoa, coffee, tea): factor =
+        edible_portion. The food output IS the dried commodity at near-DM
+        mass; no moisture inversion is applied.
+
+    The policy is encoded in ``crop_moisture_content.csv`` via the
+    ``food_conversion`` column so call sites do not need to special-case
+    individual crops.
+    """
     df = edible_portion_df.copy()
     df["crop"] = df["crop"].astype(str).str.strip()
-
     df = df.set_index("crop")
     df["edible_portion_coefficient"] = pd.to_numeric(
         df["edible_portion_coefficient"], errors="coerce"
@@ -130,7 +145,6 @@ def _fresh_mass_conversion_factors(
         moisture["moisture_fraction"], errors="coerce"
     )
 
-    # Join edible portion and moisture data, then compute factors vectorized
     sorted_crops = sorted(crops)
     crop_idx = pd.Index(sorted_crops, name="crop")
 
@@ -149,7 +163,7 @@ def _fresh_mass_conversion_factors(
         )
 
     joined = df.loc[crop_idx, ["edible_portion_coefficient"]].join(
-        moisture.loc[crop_idx, ["moisture_fraction"]]
+        moisture.loc[crop_idx, ["moisture_fraction", "food_conversion"]]
     )
 
     na_edible = joined["edible_portion_coefficient"].isna()
@@ -166,8 +180,21 @@ def _fresh_mass_conversion_factors(
             + ", ".join(sorted(joined.index[na_moisture].tolist()))
         )
 
+    valid = {"inverse_moisture", "identity"}
+    bad = joined[~joined["food_conversion"].isin(valid)]
+    if not bad.empty:
+        raise ValueError(
+            "Invalid food_conversion values in crop_moisture_content.csv "
+            f"(must be one of {sorted(valid)}): "
+            + ", ".join(f"{c}={v!r}" for c, v in bad["food_conversion"].items())
+        )
+
     dry_fraction = 1 - joined["moisture_fraction"]
-    factor_series = joined["edible_portion_coefficient"] / dry_fraction
+    inverse_factor = joined["edible_portion_coefficient"] / dry_fraction
+    identity_factor = joined["edible_portion_coefficient"]
+    factor_series = inverse_factor.where(
+        joined["food_conversion"] == "inverse_moisture", identity_factor
+    )
 
     return factor_series.to_dict()
 

@@ -2,7 +2,15 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Unit tests for food conversion link construction (mass_basis handling)."""
+"""Unit tests for food_processing pathway efficiency.
+
+The per-crop ``inverse_moisture`` vs ``identity`` policy lives in
+``data/curated/crop_moisture_content.csv`` and is baked into the
+``crop_to_fresh_factor`` dict produced by
+``utils._fresh_mass_conversion_factors``. These tests therefore exercise
+``add_food_conversion_links`` with two contrived ``crop_to_fresh_factor``
+entries representing the two cases.
+"""
 
 import pandas as pd
 import pypsa
@@ -35,20 +43,20 @@ def loss_waste():
     )
 
 
-class TestMassBasis:
-    """Test that mass_basis=dry skips the crop_to_fresh_factor."""
+class TestFoodConversionFactor:
+    """Pathway efficiency = factor * crop_to_fresh_factor[crop] * FLW."""
 
-    def test_fresh_applies_conversion_factor(self, empty_network, loss_waste):
-        """A fresh-basis food should have efficiency = factor * crop_to_fresh_factor * FLW."""
+    def test_inverse_moisture_factor_applied(self, empty_network, loss_waste):
+        """A crop with inverse_moisture policy passes a >1 factor through."""
         foods = pd.DataFrame(
             {
                 "pathway": ["white_flour"],
                 "crop": ["wheat"],
                 "food": ["flour-white"],
                 "factor": [0.75],
-                "mass_basis": ["fresh"],
             }
         )
+        # wheat: edible 1.0 / (1 - 0.13) = 1.149... approximated as 1.2 here.
         crop_to_fresh = {"wheat": 1.2}
         food_to_group = {"flour-white": "grain"}
 
@@ -69,19 +77,20 @@ class TestMassBasis:
         # = 0.75 * 1.2 * 1.0 = 0.9
         assert link["efficiency"] == pytest.approx(0.9)
 
-    def test_dry_skips_conversion_factor(self, empty_network, loss_waste):
-        """A dry-basis food should have efficiency = factor * FLW (no fresh conversion)."""
+    def test_identity_factor_passes_through(self, empty_network, loss_waste):
+        """Identity-policy crops pass crop_to_fresh_factor=edible_portion (=1.0)."""
         foods = pd.DataFrame(
             {
                 "pathway": ["tea_dried_leaves"],
                 "crop": ["tea"],
                 "food": ["tea-dried"],
                 "factor": [1.0],
-                "mass_basis": ["dry"],
             }
         )
-        # Tea has a large crop_to_fresh_factor (~4.0) that should NOT be applied
-        crop_to_fresh = {"tea": 4.0}
+        # Tea: identity policy -> crop_to_fresh_factor = edible_portion (=1.0).
+        # If the factor were the inverse-moisture value (~4.0) tea-dried would
+        # be 4x over-supplied, hence the explicit 1.0 here.
+        crop_to_fresh = {"tea": 1.0}
         food_to_group = {"tea-dried": "stimulants"}
 
         add_food_conversion_links(
@@ -97,22 +106,21 @@ class TestMassBasis:
         )
 
         link = empty_network.links.static.loc["pathway:tea_dried_leaves:USA"]
-        # efficiency = factor * 1.0 * FLW_multiplier = 1.0 * 1.0 * 1.0 = 1.0
-        # NOT 1.0 * 4.0 = 4.0
+        # efficiency = factor * conversion_factor * FLW_multiplier
+        # = 1.0 * 1.0 * 1.0 = 1.0
         assert link["efficiency"] == pytest.approx(1.0)
 
-    def test_mixed_pathway_outputs(self, empty_network, loss_waste):
-        """Both fresh and dry outputs in separate pathways are handled correctly."""
+    def test_mixed_crops_use_per_crop_factor(self, empty_network, loss_waste):
+        """Crops with different policies each see their own crop_to_fresh value."""
         foods = pd.DataFrame(
             {
                 "pathway": ["white_flour", "tea_dried_leaves"],
                 "crop": ["wheat", "tea"],
                 "food": ["flour-white", "tea-dried"],
                 "factor": [0.75, 1.0],
-                "mass_basis": ["fresh", "dry"],
             }
         )
-        crop_to_fresh = {"wheat": 1.2, "tea": 4.0}
+        crop_to_fresh = {"wheat": 1.2, "tea": 1.0}
         food_to_group = {"flour-white": "grain", "tea-dried": "stimulants"}
 
         add_food_conversion_links(
