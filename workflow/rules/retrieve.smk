@@ -560,7 +560,7 @@ rule download_gaez_growing_season_start:
             f"gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAPSET/RES02-CBD/"
             f"GAEZ-V5.RES02-CBD."
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
-            f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
+            f"{get_gaez_res02_code(w.crop)}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
         runtime="30m",
@@ -584,7 +584,7 @@ rule download_gaez_growing_season_length:
             f"gs://fao-gismgr-gaez-v5-data/DATA/GAEZ-V5/MAPSET/RES02-CYL/"
             f"GAEZ-V5.RES02-CYL."
             f"{w.period}.{w.climate_model}.{w.climate_scenario}."
-            f"{get_gaez_code(w.crop, 'res02')}.{w.input_level}{w.water_supply.upper()}LM.tif"
+            f"{get_gaez_res02_code(w.crop)}.{w.input_level}{w.water_supply.upper()}LM.tif"
         ),
     resources:
         runtime="30m",

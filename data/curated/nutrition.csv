@@ -99,6 +99,10 @@ maize,cal,kcal/100g,364.96
 maize,carb,g/100g,74.26
 maize,fat,g/100g,4.74
 maize,protein,g/100g,9.42
+mango,cal,kcal/100g,59.75
+mango,carb,g/100g,14.98
+mango,fat,g/100g,0.38
+mango,protein,g/100g,0.82
 meat-cattle,cal,kcal/100g,214.63
 meat-cattle,carb,g/100g,0.0
 meat-cattle,fat,g/100g,15.0
@@ -207,6 +211,10 @@ tomato,cal,kcal/100g,17.69
 tomato,carb,g/100g,3.89
 tomato,fat,g/100g,0.2
 tomato,protein,g/100g,0.88
+watermelon,cal,kcal/100g,30.35
+watermelon,carb,g/100g,7.55
+watermelon,fat,g/100g,0.15
+watermelon,protein,g/100g,0.61
 yam,cal,kcal/100g,118.07
 yam,carb,g/100g,27.88
 yam,fat,g/100g,0.17

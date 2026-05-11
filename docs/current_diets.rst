@@ -339,6 +339,11 @@ The mapping between model foods and FBS items is defined in
   ``citrus`` maps to four FBS items: Oranges/Mandarines (2611),
   Lemons/Limes (2612), Grapefruit (2613), and Citrus Other (2614).
 
+* Some model foods represent residual FBS categories. For example,
+  ``watermelon`` and ``mango`` map to "Fruits, other" (2625), because the FBS
+  data do not expose either as a separate food-supply item. Their shared FBS
+  supply is split with FAOSTAT QCL production data where possible.
+
 * Multiple foods can share a **single FBS item** (requiring disambiguation).
   For example, ``cowpea``, ``chickpea``, ``gram``, ``phaseolus-bean``, and
   ``pigeon-pea`` all map to FBS item "Beans" (2546).

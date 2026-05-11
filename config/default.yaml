@@ -264,6 +264,8 @@ crops:
 - cabbage
 # Fruits
 - banana
+- watermelon
+- mango
 - citrus
 - coconut
 # Stimulant crops
@@ -286,7 +288,8 @@ crops:
 - alfalfa
 - silage-maize
 - biomass-sorghum
-# Note: mango and taro excluded - missing RES02 (growing season) data for GFDL-ESM4
+# Note: mango uses citrus as an explicit RES02 growing-season fallback.
+# Taro excluded - missing RES02 (growing season) data for GFDL-ESM4.
 
 # --- section: non_food_crops ---
 # Crops not intended for human food production (fodder, biomass).
@@ -776,6 +779,8 @@ trade:
       - onion
       - cabbage
       - banana
+      - watermelon
+      - mango
       - sugarcane
       - sunflower
       - rapeseed
@@ -1497,7 +1502,7 @@ plotting:
       crops: [tomato, carrot, onion, cabbage]
     Fruits:
       color: "#D95F02"  # Dark2 #2
-      crops: [banana, citrus, coconut]
+      crops: [banana, watermelon, mango, citrus, coconut]
     Oilseeds:
       color: "#7570B3"  # Dark2 #3
       crops: [sunflower, rapeseed, groundnut, sesame, oil-palm, olive]
@@ -1570,6 +1575,8 @@ plotting:
       onion: "#D35400"
       cabbage: "#27AE60"
       banana: "#F7DC6F"
+      watermelon: "#E74C3C"
+      mango: "#F4A62A"
       citrus: "#F39C12"
       coconut: "#8E735B"
       sunflower: "#F1C40F"

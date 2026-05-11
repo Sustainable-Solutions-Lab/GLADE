@@ -162,6 +162,7 @@ with open("data/curated/gaez_crop_code_mapping.csv", newline="") as _gaez_mappin
             "res02": row["res02_code"],
             "res05": row["res05_code"],
             "res06": row["res06_code"],
+            "res02_fallback_crop": row["res02_fallback_crop"],
         }
         for row in csv.DictReader(_gaez_mapping_file)
     }
@@ -183,6 +184,26 @@ def get_gaez_code(crop_name: str, module: str) -> str:
         raise ValueError(f"Crop '{crop_name}' has no {module_key} code")
 
     return code.strip().upper()
+
+
+def get_gaez_res02_source_crop(crop_name: str) -> str:
+    """Return the crop whose RES02 calendar rasters should be used."""
+
+    try:
+        fallback_crop = _GAEZ_CODE_MAPPING[crop_name]["res02_fallback_crop"]
+    except KeyError as exc:
+        raise ValueError(f"Crop '{crop_name}' not found in mapping") from exc
+
+    if fallback_crop:
+        return fallback_crop.strip()
+
+    return crop_name
+
+
+def get_gaez_res02_code(crop_name: str) -> str:
+    """Look up the RES02 code, following an explicit calendar fallback if set."""
+
+    return get_gaez_code(get_gaez_res02_source_crop(crop_name), "res02")
 
 
 def gaez_path(kind: str, water_supply: str, crop: str) -> str:

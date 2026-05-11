@@ -70,6 +70,8 @@ carrot_fresh,carrot,carrot,1.0,No processing,
 onion_fresh,onion,onion,1.0,No processing,
 cabbage_fresh,cabbage,cabbage,1.0,No processing,
 banana_peeled,banana,banana,1.0,No processing,
+watermelon_fresh,watermelon,watermelon,1.0,No processing,
+mango_fresh,mango,mango,1.0,No processing,
 citrus_fresh,citrus,citrus,1.0,No processing,
 coconut_meat,coconut,coconut,1.0,No processing,
 groundnut_oil,groundnut,groundnut-oil,0.45,Oil extraction from groundnuts (FAO Technical Conversion Factors),FAO_TCF

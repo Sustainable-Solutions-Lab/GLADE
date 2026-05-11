@@ -74,7 +74,7 @@ CROP_GROUPS = [
         ],
     ),
     ("Vegetables", "#1B9E77", ["tomato", "carrot", "onion", "cabbage"]),
-    ("Fruits", "#D95F02", ["banana", "citrus", "coconut"]),
+    ("Fruits", "#D95F02", ["banana", "watermelon", "mango", "citrus", "coconut"]),
     (
         "Oilseeds",
         "#7570B3",

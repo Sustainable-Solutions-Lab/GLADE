@@ -21,8 +21,8 @@
 #  - Vegetatively propagated crops (cassava, sweet-potato, banana) record 0:
 #    FAOSTAT does not book the planting material as Seed because cuttings
 #    come from above-ground biomass, not harvested production.
-#  - Perennials with no annual seed reservation (oil-palm, olive, citrus,
-#    coconut, cocoa, coffee, tea) record 0.
+#  - Perennials with no annual seed reservation (oil-palm, olive, mango,
+#    citrus, coconut, cocoa, coffee, tea) record 0.
 #  - 'gram' is identical to 'chickpea' (same crop in Indian English).
 #  - Where no credible citation could be found the source begins with
 #    "ASSUMED" and explains the analogy used; the url column is empty.
@@ -55,6 +55,8 @@ carrot,4,"Stark Ayres Carrot Production Guideline; direct-sown 3-5 kg/ha.",https
 onion,6,"NHRDF Onion Agro Techniques; direct-sown 5-8 kg/ha; nursery raise ~3.",http://www.nhrdf.org/pAgroTechniques_o.php
 cabbage,0.5,"Stark Ayres Cabbage Production Guideline; 250-400 g/ha for nursery-transplant.",https://www.starkeayres.com/uploads/files/Cabbage-Production-Guideline-2019.pdf
 banana,0,"Vegetatively propagated (suckers/tissue-culture); not booked annually as Seed.",
+watermelon,2,"Texas A&M seeded watermelon crop guide; 1-3 lb/acre seeding rate converted to ~1.1-3.4 kg/ha, chose midpoint.",https://aggie-horticulture.tamu.edu/vegetable/watermelon/seeded-watermelon-crop-guide/
+mango,0,"Perennial tree crop; no annual seed reservation booked in FAOSTAT.",
 citrus,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
 coconut,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
 sunflower,4,"Nuseed Sunflower Seeding Rates; hybrid oilseed 3.3-4.4 kg/ha.",https://nuseed.com/us/planting-seeding-rates/

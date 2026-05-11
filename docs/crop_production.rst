@@ -31,7 +31,7 @@ The default configuration includes over 60 crops spanning major food categories:
   * Tomato, carrot, onion, cabbage
 
 **Fruits**
-  * Banana, citrus, coconut
+  * Banana, watermelon, mango, citrus, coconut
 
 **Oil Crops**
   * Sunflower, rapeseed, groundnut
@@ -191,9 +191,15 @@ Annualisation conventions encoded in the table:
 
 * **Multi-year crops** (alfalfa, sugarcane): the establishment-year sowing rate is divided by typical stand life so that a fixed annual deduction does not over-count seed.
 * **Vegetatively propagated crops** (cassava, sweet-potato, banana): zero, because cuttings come from above-ground biomass that FAOSTAT does not book under the Seed element.
-* **Perennials** (oil-palm, olive, citrus, coconut, cocoa, coffee, tea): zero, no annual seed reservation.
+* **Perennials** (oil-palm, olive, mango, citrus, coconut, cocoa, coffee, tea): zero, no annual seed reservation.
 
 Sowing rates are drawn from agronomy literature; one row (`biomass-sorghum`) is explicitly marked ``ASSUMED`` because no global review was found at the time of compilation. The full table is reproduced below for spot-checking; each row carries its source description and (where available) a URL.
+
+Mango uses its own GAEZ v5 RES05 yield, suitability, and water-deficit rasters,
+but GAEZ v5 does not currently provide mango RES02 growing-season start/length
+rasters. The workflow therefore uses citrus as an explicit RES02 calendar
+fallback via ``data/curated/gaez_crop_code_mapping.csv`` while keeping mango's
+own output filenames and downstream crop identity.
 
 .. raw:: html
 

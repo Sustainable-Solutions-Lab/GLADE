@@ -17,6 +17,7 @@ GAEZ_MAPPING_SCHEMA = DataFrameSchema(
         "res02_code": Column(str, nullable=False, coerce=True),
         "res05_code": Column(str, nullable=False, coerce=True),
         "res06_code": Column(str, nullable=False, coerce=True),
+        "res02_fallback_crop": Column(str, nullable=True, coerce=True),
     },
     strict=True,
     coerce=True,
@@ -39,6 +40,21 @@ def validate_gaez_crop_mapping(config: dict, project_root: Path) -> None:
 
     config_crops = set(config["crops"])
     mapped_crops = set(df["crop_name"].unique())
+
+    fallback_crops = (
+        df["res02_fallback_crop"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .loc[lambda s: s != ""]
+    )
+    missing_fallbacks = sorted(set(fallback_crops) - mapped_crops)
+    if missing_fallbacks:
+        missing_text = ", ".join(missing_fallbacks)
+        raise ValueError(
+            "GAEZ RES02 fallback crops missing mappings in "
+            f"gaez_crop_code_mapping.csv: {missing_text}"
+        )
 
     # Check that all config crops have mappings
     missing = sorted(config_crops - mapped_crops)

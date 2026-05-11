@@ -1,4 +1,4 @@
-crop_name,description,res02_code,res05_code,res06_code
+crop_name,description,res02_code,res05_code,res06_code,res02_fallback_crop
 wheat,Wheat,WHEA,WHE,WHE
 dryland-rice,Dryland rice,RICD,RCD,RCW
 wetland-rice,Wetland rice,RICW,RCW,RCW
@@ -14,6 +14,7 @@ carrot,Carrot,CARR,CAR,OVG
 onion,Onion,ONIO,ONI,OVG
 cabbage,Cabbage,CABB,CAB,OVG
 banana,Banana,BANA,BAN,BAN
+watermelon,Watermelon,WMEL,WMEL,FRT
 cassava,Cassava,CASV,CSV,CSV
 sweet-potato,Sweet potato,SPOT,SPO,POT
 yam,Yam,YAMS,YAM,ORT
@@ -36,7 +37,7 @@ phaseolus-bean,Phaseolus bean,BEAN,PHB,PLS
 pigeonpea,Pigeonpea,PIGP,PIG,PLS
 citrus,Citrus,CITR,CIT,FRT
 coconut,Coconut,COCN,CON,CON
-mango,Mango,MANGO,MNG,FRT
+mango,Mango,MANGO,MNG,FRT,citrus
 olive,Olive,OLIV,OLV,OOC
 sesame,Sesame,SESA,SES,SES
 oil-palm,Oil palm,OILP,OLP,OLP
