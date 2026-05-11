@@ -30,12 +30,18 @@ barley-hulled,Barley and products,2513
 oat,Oats,2516
 rye,Rye and products,2515
 soy,Soyabeans,2555
-cowpea,Beans,2546
-gram,Beans,2546
 phaseolus-bean,Beans,2546
-pigeon-pea,Beans,2546
 dry-pea,Peas,2547
-chickpea,Beans,2546
+# FBS 2549 "Pulses, Other and products" aggregates QCL items 181 broad beans,
+# 191 chick peas, 195 cow peas, 197 pigeon peas, 201 lentils, 203 Bambara,
+# 205 vetches, 210 lupins, 211 pulses-nes, 212 pulses flour. The model maps
+# the four modelled minor pulses here so they share the (much larger) FBS
+# 2549 supply via QCL within-item resolution, leaving the FBS 2546 "Beans"
+# pool entirely to phaseolus-bean.
+cowpea,"Pulses, Other and products",2549
+gram,"Pulses, Other and products",2549
+pigeon-pea,"Pulses, Other and products",2549
+chickpea,"Pulses, Other and products",2549
 potato,Potatoes and products,2531
 sweet-potato,Sweet potatoes,2533
 cassava,Cassava and products,2532
