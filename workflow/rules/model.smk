@@ -123,6 +123,7 @@ rule build_model:
         fertilizer_n_rates="<processing>/{name}/global_fertilizer_n_rates.csv",
         foods="data/curated/foods.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
+        seed_rates="data/curated/seed_rates.csv",
         ruminant_feed_categories="<processing>/{name}/ruminant_feed_categories.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_categories="<processing>/{name}/monogastric_feed_categories.csv",

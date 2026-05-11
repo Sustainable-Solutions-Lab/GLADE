@@ -173,6 +173,40 @@ The following figure illustrates this variation, comparing rainfed wheat yields 
 
 .. Note:: Yields for individual crops need not always be better in a high resource class. This is because resource classes are determined "globally" for all crops at once, so that each grid cell is assigned a resource class independent of any crop. So while resource class 2 has better *average* yields than resource class 1 in every region, that might not be true for some individual crops (e.g. rainfed wheat in the Western USA region in the above example.)
 
+Seed Reservation
+----------------
+
+Per growing cycle, a fraction of harvested mass is reserved as seed for the next planting and never reaches the crop bus. The model deducts this on the production side as a yield haircut:
+
+.. math::
+
+   \text{post-seed yield} = \text{yield} \times \left(1 - \text{seed\_share}\right), \qquad
+   \text{seed\_share} = \min\!\left(\frac{\text{seed\_kg\_per\_ha}}{1000 \cdot \text{yield\_t\_per\_ha}},\; 0.5\right).
+
+Sowing rates are looked up per crop in :file:`data/curated/seed_rates.csv` and combined with the per-(country, region, class, water) yield. This makes the seed share country-specific by construction: low-yield countries reserve a larger fraction of the harvest. The deduction is applied uniformly to single-crop and multi-crop links (``workflow/scripts/build_model/crops.py``).
+
+The seed share is **separate** from food-loss-and-waste accounting; FLW only handles supply-chain and consumer-side losses applied at the food bus. Coverage of every configured crop is enforced by ``workflow.validation.seed_rates`` so a missing row triggers a startup error rather than a silent zero.
+
+Annualisation conventions encoded in the table:
+
+* **Multi-year crops** (alfalfa, sugarcane): the establishment-year sowing rate is divided by typical stand life so that a fixed annual deduction does not over-count seed.
+* **Vegetatively propagated crops** (cassava, sweet-potato, banana): zero, because cuttings come from above-ground biomass that FAOSTAT does not book under the Seed element.
+* **Perennials** (oil-palm, olive, citrus, coconut, cocoa, coffee, tea): zero, no annual seed reservation.
+
+Sowing rates are drawn from agronomy literature; one row (`biomass-sorghum`) is explicitly marked ``ASSUMED`` because no global review was found at the time of compilation. The full table is reproduced below for spot-checking; each row carries its source description and (where available) a URL.
+
+.. raw:: html
+
+   <details>
+     <summary><strong>Show seed_rates.csv</strong> (per-crop sowing rates and citations)</summary>
+
+.. literalinclude:: ../data/curated/seed_rates.csv
+   :language: text
+
+.. raw:: html
+
+   </details>
+
 Production Constraints
 ----------------------
 
@@ -188,7 +222,7 @@ In the PyPSA model (``workflow/scripts/build_model.py``), crop production is rep
   * Emissions (CO₂, CH₄, N₂O)
 
 **Efficiency Parameters**:
-  * ``efficiency`` (bus0→bus1): Yield in t/ha
+  * ``efficiency`` (bus0→bus1): Yield in t/ha (already net of the seed reservation described above)
   * ``efficiency2`` (bus2, negative): Water requirement in m³/t
   * ``efficiency3`` (bus3, negative): Fertilizer requirement in kg/t
   * ``efficiency4`` (bus4, positive): Emissions in tCO₂-eq/t

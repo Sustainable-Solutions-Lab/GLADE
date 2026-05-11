@@ -494,6 +494,13 @@ if __name__ == "__main__":
     crop_costs = costs_df.set_index(["crop", "country"])[cost_col].astype(float)
     global_median_cost = costs_df.groupby("crop")[cost_col].median()
 
+    # Per-crop sowing rates (kg seed per ha per year). Used by the crop-link
+    # builders to deduct a country-specific seed share from yield (seed share =
+    # seed_kg_per_ha / yield_kg_per_ha). See data/curated/seed_rates.csv for
+    # citations and data/curated/seed_rates.csv header for conventions.
+    seed_rates_df = read_csv(snakemake.input.seed_rates, comment="#")
+    seed_kg_per_ha = seed_rates_df.set_index("crop")["seed_kg_per_ha"].astype(float)
+
     # Optional cost calibration corrections (crops, grassland, animals)
     crop_cost_calibration = None
     grassland_cost_calibration = None
@@ -784,6 +791,7 @@ if __name__ == "__main__":
         use_actual_production=use_actual_production,
         cost_calibration=crop_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
+        seed_kg_per_ha=seed_kg_per_ha,
     )
     land.add_multi_cropping_land_correction(
         n,
@@ -807,6 +815,7 @@ if __name__ == "__main__":
             fertilizer_n_rates,
             residue_lookup,
             min_yield_t_per_ha=min_crop_yield,
+            seed_kg_per_ha=seed_kg_per_ha,
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")

@@ -24,6 +24,7 @@ from .multi_cropping import validate_multi_cropping
 from .optimal_taxes import validate_optimal_taxes
 from .restricted_data import validate_restricted_data
 from .secrets import load_secrets_with_env_fallback
+from .seed_rates import validate_seed_rates
 from .sensitivity_generator import validate_sensitivity_generator
 
 Validator = Callable[[dict, Path], None]
@@ -40,6 +41,7 @@ _CHECKS: dict[str, Validator] = {
     "crop_food_pathways": validate_crop_food_pathways,
     "crop_groups": validate_crop_groups,
     "gaez_crop_mapping": validate_gaez_crop_mapping,
+    "seed_rates": validate_seed_rates,
     "health_map": validate_health_map,
     "multi_cropping": validate_multi_cropping,
     "sensitivity_generator": validate_sensitivity_generator,

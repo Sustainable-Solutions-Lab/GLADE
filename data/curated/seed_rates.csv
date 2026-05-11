@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Per-crop sowing rates (kg of seed planted per hectare per growing cycle).
+# Used in build_model/crops.py to deduct a "seed share" from crop_production
+# link efficiency: post-seed yield = yield * (1 - seed_kg_per_ha/1000 / yield_t_per_ha).
+# Country-specific yields therefore generate country-specific seed shares
+# (low-yield countries reserve a higher fraction). The deduction is
+# intentionally separate from FLW / consumption-side accounting.
+#
+# Validation: workflow/validation/seed_rates.py requires every crop in
+# config["crops"] to have a row here. There is no fallback default in
+# build_model.
+#
+# Conventions:
+#  - Annual rate: for multi-year crops (alfalfa, sugarcane) the value is
+#    AMORTIZED over typical stand life so it can be deducted yearly without
+#    over-counting (alfalfa: 22 kg/ha establishment / ~5 yr stand ~= 4;
+#    sugarcane: 6000 kg/ha fresh planting / ~4 yr ratoon cycle ~= 1500).
+#  - Vegetatively propagated crops (cassava, sweet-potato, banana) record 0:
+#    FAOSTAT does not book the planting material as Seed because cuttings
+#    come from above-ground biomass, not harvested production.
+#  - Perennials with no annual seed reservation (oil-palm, olive, citrus,
+#    coconut, cocoa, coffee, tea) record 0.
+#  - 'gram' is identical to 'chickpea' (same crop in Indian English).
+#  - Where no credible citation could be found the source begins with
+#    "ASSUMED" and explains the analogy used; the url column is empty.
+#
+crop,seed_kg_per_ha,source,url
+wheat,140,"UMN Extension small grains seeding rate; range 100-200 chose median.",https://extension.umn.edu/planting-small-grains/seeding-rate-small-grains
+dryland-rice,70,"IRRI Rice Knowledge Bank Direct Seeded Rice; range 60-80 kg/ha.",http://www.knowledgebank.irri.org/decision-tools/rice-doctor/rice-doctor-fact-sheets/item/direct-seeded-rice
+wetland-rice,40,"IRRI Rice Knowledge Bank Transplanting; nursery seed for transplanted paddy 35-50 kg/ha.",http://www.knowledgebank.irri.org/step-by-step-production/growth/planting/transplanting
+maize,22,"TNAU Crop Production Guide 126 (Maize); hybrid grain ~70-80k seeds/ha at TKW 250-300 g.",https://tnagriculture.in/dashboard/CPG/02_%20Maize.pdf
+barley,110,"NDSU Extension Fertilizing Malting and Feed Barley; range 90-130.",https://www.ndsu.edu/agriculture/extension/publications/fertilizing-malting-and-feed-barley
+oat,100,"Iowa State Extension Fine-tune Oat Seeding Rate; range 85-115 kg/ha.",https://crops.extension.iastate.edu/cropnews/2016/03/fine-tune-oat-seeding-rate-spring
+rye,110,"USDA-ARS Brennan et al. Agron. J. 101:47; range 80-130.",https://www.ars.usda.gov/ARSUserFiles/21904/BrennanPeerRevPdfs/Agron%20J%20101p47.pdf
+sorghum,10,"Sorghum Checkoff Sorghum Seeding Rates; range 7-12.",https://www.sorghumcheckoff.com/agronomy-insights/sorghum-seeding-rates/
+buckwheat,55,"University of Missouri Extension G4163 Growing Buckwheat for Grain or Cover Crop; drilled 50-65 kg/ha.",https://extension.missouri.edu/publications/g4163
+foxtail-millet,10,"ICAR-IIMR Foxtail Millet brochure; line-sown 8-10 broadcast up to 15.",https://www.millets.res.in/technologies/brochures/Foxtail_Millet_Brochure.pdf
+pearl-millet,4,"ICRISAT Pearl Millet Crop Manual; direct-seeded 4-5 kg/ha.",https://oar.icrisat.org/4060/1/158_07_Pearl_Millet_Manual.pdf
+soybean,75,"Purdue Extension AY-217-W Plant Populations and Seeding Rates for Soybeans; ~370k seeds/ha at TKW 150-180 g.",https://www.extension.purdue.edu/extmedia/ay/ay-217-w.pdf
+dry-pea,200,"Saskatchewan Pulse Growers seeding-rate guide; large seed (TKW 200-250 g) range 100-230.",https://saskpulse.com/resources/calculating-seeding-rates/
+chickpea,80,"Tropical Legumes Hub Chickpea Seed Production Manual; range 75-100 (kabuli higher).",https://tropicallegumeshub.com/wp-content/uploads/2020/07/ChickpeaManual_full.pdf
+cowpea,20,"ARC South Africa Production guidelines for Cowpeas; range 12-25.",https://www.arc.agric.za/arc-gci/Fact%20Sheets%20Library/Cowpea%20-%20Production%20guidelines%20for%20cowpea.pdf
+gram,80,"Same as chickpea (gram = Bengal gram = chickpea in Indian English; both map to QCL Chick peas dry).",https://tropicallegumeshub.com/wp-content/uploads/2020/07/ChickpeaManual_full.pdf
+phaseolus-bean,65,"CIAT improved bean varieties guide (Kholophethe & Kabalabala); range 50-80.",http://ciat-library.ciat.cgiar.org/articulos_ciat/Kholophethe%20and%20Kabalabala.pdf
+pigeonpea,8,"ICRISAT Pigeonpea Botany and Production Practices; standard direct-sown rate at 90x75 cm spacing.",https://oar.icrisat.org/2422/1/Pigeonpea-Botany-Production-Practices.pdf
+white-potato,2200,"AGRICURA Production guidelines for 1 ha of potatoes; range 2000-2500 (4 tubers/m^2 x ~55 g).",https://agricura.co.zw/wp-content/uploads/2017/11/AGRICURA-1HA-POTATOES-2017.pdf
+sweet-potato,0,"Vegetatively propagated from stem cuttings (slips); FAOSTAT does not book Seed for sweet potato.",
+cassava,0,"Vegetatively propagated from stem cuttings; FAOSTAT does not book Seed for cassava.",
+yam,850,"Cornet et al. 2025 PLANTS PEOPLE PLANET 10.1002/ppp3.10446 (851 kg/ha minisett system at ~17k plants/ha); traditional whole-tuber systems can reach 2000-10000 kg/ha.",https://nph.onlinelibrary.wiley.com/doi/full/10.1002/ppp3.10446
+tomato,0.4,"AVRDC Raising Healthy Tomato Seedlings; 400 g/ha for nursery-transplant (dominant global practice).",https://avrdc.org/download/publications/from_the_field/technol/Tomato-Seedlings_web.pdf
+carrot,4,"Stark Ayres Carrot Production Guideline; direct-sown 3-5 kg/ha.",https://www.starkeayres.com/uploads/files/Carrot-Production-Guideline-2019.pdf
+onion,6,"NHRDF Onion Agro Techniques; direct-sown 5-8 kg/ha; nursery raise ~3.",http://www.nhrdf.org/pAgroTechniques_o.php
+cabbage,0.5,"Stark Ayres Cabbage Production Guideline; 250-400 g/ha for nursery-transplant.",https://www.starkeayres.com/uploads/files/Cabbage-Production-Guideline-2019.pdf
+banana,0,"Vegetatively propagated (suckers/tissue-culture); not booked annually as Seed.",
+citrus,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+coconut,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+sunflower,4,"Nuseed Sunflower Seeding Rates; hybrid oilseed 3.3-4.4 kg/ha.",https://nuseed.com/us/planting-seeding-rates/
+rapeseed,6,"Canola Council of Canada Seeding Rate; range 4-8 kg/ha.",https://www.canolacouncil.org/canola-encyclopedia/plant-establishment/seeding-rate/
+groundnut,130,"ARC-GCI Groundnut Production: A Concise Guide (Cilliers); kernel 80-110 -> in-shell ~130 (shelling % ~0.7).",https://www.arc.agric.za/arc-gci/Fact%20Sheets%20Library/Groundnut%20Production.pdf
+sesame,5,"ICAR-IIOR Sesame PoP; drilled 4-6 kg/ha.",https://icar-iior.org.in/sites/default/files/iiorcontent/pops/sesame.pdf
+oil-palm,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+olive,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+sugarcane,1500,"TNAU eAgri AGR301 Lec15 Sugarcane; 6 t/ha per fresh planting amortized over ~4-yr ratoon cycle ~= 1500 kg/ha/yr.",http://eagri.org/eagri50/AGRO301/lec15.html
+sugarbeet,3,"NDSU 2022 Sugarbeet Production Guide A1698; modern monogerm pelleted 1-3 kg/ha; chose top of range as bag-mass.",https://www.ndsu.edu/agriculture/sites/default/files/2022-01/a1698.pdf
+cocoa,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+coffee,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+tea,0,"Perennial; no annual seed reservation booked in FAOSTAT.",
+alfalfa,4,"Wisconsin Extension Determining the Optimum Alfalfa Seeding Rate; 22 kg/ha establishment amortized over ~5-yr stand life ~= 4 kg/ha/yr.",https://fyi.extension.wisc.edu/forage/determining-the-optimum-alfalfa-seeding-rate/
+cotton,22,"TNAU Irrigated Cotton Crop Geometry & Seed Rate; fuzzy-seed 20-25 kg/ha (delinted seed lower 3-7).",http://www.agritech.tnau.ac.in/agriculture/agri_cotton_Crop%20geometry_Seed%20Rate.html
+biomass-sorghum,12,"ASSUMED 20% above grain sorghum by analogy (forage/biomass cultivars seeded heavier for thinner-stand uniformity); only one trial paper found, no solid global review.",
+silage-maize,25,"UMN Extension Strategies to Optimize Corn Silage Production; silage corn target population ~83-88k plants/ha (10-15% above grain maize at same TKW).",https://extension.umn.edu/corn-planting/strategies-optimize-corn-silage-production
