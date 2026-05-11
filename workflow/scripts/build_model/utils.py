@@ -123,9 +123,12 @@ def _fresh_mass_conversion_factors(
       * ``inverse_moisture`` crops (the default): factor =
         edible_portion / (1 - moisture). The food bus carries commercial
         commodity weight (storage moisture).
-      * ``identity`` crops (currently cocoa, coffee, tea): factor =
-        edible_portion. The food output IS the dried commodity at near-DM
-        mass; no moisture inversion is applied.
+      * ``identity`` crops (currently only tea): factor = edible_portion.
+        Used when the moisture entry refers to the as-harvested form
+        rather than the as-traded commodity, so that the build_crop_yields
+        deflation by ``(1 - moisture)`` already lands the crop bus on a
+        commercial-commodity-equivalent dry mass and a further inversion
+        would overshoot.
 
     The policy is encoded in ``crop_moisture_content.csv`` via the
     ``food_conversion`` column so call sites do not need to special-case

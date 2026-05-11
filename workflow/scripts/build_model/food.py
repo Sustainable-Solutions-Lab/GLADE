@@ -106,8 +106,9 @@ def add_food_conversion_links(
 
         # Per-crop factor that translates dry-matter crop bus into food bus
         # mass. ``inverse_moisture`` crops apply 1/(1-moisture) so the food
-        # bus is in commercial commodity weight; ``identity`` crops (cocoa,
-        # coffee, tea) leave it as dry matter. The policy is encoded in
+        # bus is in commercial commodity weight; ``identity`` crops (only
+        # tea today) leave it as dry matter because their moisture entry
+        # refers to the as-harvested form. The policy is encoded in
         # crop_moisture_content.csv and baked into ``crop_to_fresh_factor``
         # by ``utils._fresh_mass_conversion_factors`` so this loop does not
         # need to special-case any crop.

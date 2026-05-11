@@ -9,11 +9,15 @@
 #       food bus carries commercial commodity weight (storage moisture). This
 #       matches FAOSTAT FBS supply units and the "as-purchased" basis used
 #       by nutrition.csv.
-#     - identity: skip the conversion. Used for the three crops whose food
-#       output IS the dried commodity at near-DM mass (cocoa beans, green
-#       coffee, dried tea). The small under-delivery vs commercial weight
-#       (~7-10% for cocoa/coffee) is absorbed by the FLW multiplier and
-#       documented as an accepted approximation.
+#     - identity: skip the conversion. Used for tea, where the
+#       moisture_fraction (0.75) refers to the AS-HARVESTED fresh leaf
+#       form rather than the as-traded commercial commodity. The GAEZ
+#       deflation by (1 - moisture) already converts fresh leaves to a
+#       dried-tea-equivalent dry mass, and re-inflating would over-
+#       supply by 4x. Cocoa and coffee, although also "dry commodities",
+#       carry commercial-weight moisture in this column (6.5% for cocoa,
+#       10% for green coffee), so they use inverse_moisture like the
+#       cereals/pulses/oils.
 # - source: short citation for the value
 # - note: optional clarification when a value was inferred
 crop,moisture_fraction,food_conversion,source,note
@@ -44,6 +48,8 @@ carrot,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetable
 onion,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
 cabbage,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
 banana,0.75,inverse_moisture,GAEZ v5 Module VII table (BAN),
+watermelon,0.914,inverse_moisture,FAO SUA NCT 2024 sheet 03,
+mango,0.84,inverse_moisture,FAO SUA NCT 2024 sheet 03,
 citrus,0.85,inverse_moisture,GAEZ v5 Module VII table (FRT),Represents aggregated fruits and nuts entry
 coconut,0.47,inverse_moisture,Assumption (FAO food composition tables),Approximate moisture of fresh kernel
 sunflower,0.13,inverse_moisture,GAEZ v5 Module VII table (SFL),
@@ -54,8 +60,8 @@ oil-palm,0.60,inverse_moisture,Assumption (MPOB fresh fruit bunch composition),M
 olive,0.50,inverse_moisture,Assumption (typical olive fruit analysis),Approximate moisture for fresh olives
 sugarcane,0.73,inverse_moisture,Assumption (aligned with 14% sugar extraction),Chooses 27% dry matter share
 sugarbeet,0.76,inverse_moisture,Assumption (aligned with 10% sugar extraction),Chooses 24% dry matter share
-cocoa,0.065,identity,GAEZ v5 Module VII table (COC),Dried cocoa beans
-coffee,0.10,identity,GAEZ v5 Module VII table (COF),Green coffee beans
+cocoa,0.065,inverse_moisture,GAEZ v5 Module VII table (COC),Dried cocoa beans at storage moisture
+coffee,0.10,inverse_moisture,GAEZ v5 Module VII table (COF),Green coffee beans at storage moisture
 tea,0.75,identity,GAEZ v5 Module VII table (TEA),Fresh tea leaves; dried tea ≈ DM
 alfalfa,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),
 silage-maize,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops

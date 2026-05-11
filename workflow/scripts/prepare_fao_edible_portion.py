@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)
 ALTERNATE_ITEM_NAMES: dict[str, str] = {
     "rape or colza seed": "rapeseed or colza seed",
     "oil palm fruit": "palm-oil",
+    # FAOSTAT QCL uses "Mangoes, guavas and mangosteens"; the FAO Nutrient
+    # Conversion Table sheet 03 uses "Mangoes, guavas, mangosteens" (no
+    # 'and'). Map between them so the lookup resolves.
+    "mangoes, guavas and mangosteens": "mangoes, guavas, mangosteens",
 }
 
 # Crops for which the edible portion coefficient should be set to 1.0 despite

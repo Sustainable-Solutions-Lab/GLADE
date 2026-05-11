@@ -33,7 +33,7 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
   * ``pathway``: Unique identifier for the processing pathway (e.g., ``white_flour``, ``milled_rice``)
   * ``crop``: Input crop name (must match config crops list)
   * ``food``: Output food product name
-  * ``factor``: Conversion factor (mass of food output per unit mass of crop input). Pathway efficiencies are then multiplied by the per-crop dry-matter-to-food factor from ``data/curated/crop_moisture_content.csv`` (the ``food_conversion`` column controls whether the moisture inversion is applied — ``inverse_moisture`` for most crops, ``identity`` for cocoa, coffee, and tea where the food bus is already at near-DM mass).
+  * ``factor``: Conversion factor (mass of food output per unit mass of crop input). Pathway efficiencies are then multiplied by the per-crop dry-matter-to-food factor from ``data/curated/crop_moisture_content.csv`` (the ``food_conversion`` column controls whether the moisture inversion is applied — ``inverse_moisture`` for almost every crop, ``identity`` only for tea where the listed moisture refers to the as-harvested fresh leaf form rather than the as-traded commercial commodity).
   * ``description``: Explanation of the conversion and source reference
 
   **Multi-output pathways**: Multiple rows with the same pathway name represent co-products from a single processing operation. For example, the ``white_flour`` pathway produces flour-white (0.75), wheat-bran (0.20), and wheat-germ (0.03) from wheat, with factors summing to ≤ 1.0 to respect mass balance.
