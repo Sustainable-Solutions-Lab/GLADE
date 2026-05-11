@@ -5,7 +5,19 @@
 # The model will choose which pathways to activate based on demand and costs.
 #
 # Conversion factors should sum to <= 1.0 per pathway (mass balance with losses).
-# Sources are primarily from FAO Nutrient Conversion Table for SUA (2024), sheet 03.
+# Sources are primarily from FAO Nutrient Conversion Table for SUA (2024), sheet 03,
+# and FAO Technical Conversion Factors for processing extraction rates.
+#
+# Source URL aliases used in the url column:
+# - FAO_SUA_NCT_2024: https://www.fao.org/food-composition/tables-and-databases/detail/global-nutrient-conversion-table-for-fao-supply-utilization-accounts/en
+# - FAO_TCF: https://www.fao.org/fileadmin/templates/ess/documents/methodology/tcf.pdf
+# - FAO_GAEZ: https://www.fao.org/gaez/en
+# - FAO_PALM_PROCESSING: https://www.fao.org/4/y4355e/y4355e04.htm
+# - FAO_OLIVE: https://www.fao.org/land-water/databases-and-software/crop-information/olive/en/
+# - USDA_ARS_DDGS: https://www.ars.usda.gov/research/publications/publication/?seqNo115=243737
+# - GLEAM_TABLE_3_3: data/bundled/gleam3/ruminants_feed_yield_fractions.csv
+# - NCC_COTTONSEED: https://www.cotton.org/pubs/cottoncounts/fieldtofabric/cottonseed.cfm
+# - FEEDIPEDIA_COPRA: https://www.feedipedia.org/node/46
 #
 # Per-crop "food_conversion" handling (inverse_moisture vs identity) lives in
 # data/curated/crop_moisture_content.csv -- see that file for semantics.
@@ -16,73 +28,74 @@
 # - food: output food product name
 # - factor: conversion factor (mass of food output per unit mass of crop input)
 # - description: explanation of the conversion and source reference
+# - url: source URL alias from above; blank when no external source is needed
 #
-pathway,crop,food,factor,description
-white_flour,wheat,flour-white,0.75,White flour extraction rate (FAO SUA 2024 sheet 03)
-white_flour,wheat,wheat-bran,0.2,Bran byproduct from white flour milling (FAO SUA 2024 sheet 03)
-white_flour,wheat,wheat-germ,0.03,Germ separated during white flour milling (FAO SUA 2024 sheet 03)
-wholemeal_flour,wheat,flour-wholemeal,1.0,No processing
-milled_rice,dryland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
-milled_rice,dryland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03)
-brown_rice,dryland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03)
-milled_rice_wetland,wetland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03)
-milled_rice_wetland,wetland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03)
-brown_rice_wetland,wetland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03)
-hulled_barley,barley,barley-hulled,0.72,Hulled barley with processing losses (FAO SUA 2024 sheet 03)
-hulled_barley,barley,barley-bran,0.12,Bran from barley hulling (FAO SUA 2024 sheet 03)
-hulled_oat,oat,oat,0.78,Oat groats after hull removal (FAO SUA 2024 sheet 03)
-hulled_oat,oat,oat-bran,0.06,Bran from oat processing (FAO SUA 2024 sheet 03)
-hulled_buckwheat,buckwheat,buckwheat,0.78,Dehulled buckwheat groats (FAO SUA 2024 sheet 03)
-hulled_buckwheat,buckwheat,buckwheat-hulls,0.1,Hulls from buckwheat processing (FAO SUA 2024 sheet 03)
-rye_grain,rye,rye,1.0,No processing
-sorghum_grain,sorghum,sorghum,1.0,No processing
-foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,No processing
-pearl_millet_grain,pearl-millet,pearl-millet,1.0,No processing
-maize_grain,maize,maize,1.0,No processing
-soybean_whole,soybean,soy,1.0,No processing
-soybean_oil,soybean,soybean-oil,0.18,Oil extraction from soybeans (FAO SUA 2024 sheet 03)
-soybean_oil,soybean,oilseed-meal,0.78,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03)
-dry_pea_whole,dry-pea,dry-pea,1.0,No processing
-chickpea_whole,chickpea,chickpea,1.0,No processing
-cowpea_whole,cowpea,cowpea,1.0,No processing
-gram_whole,gram,gram,1.0,No processing
-phaseolus_bean_whole,phaseolus-bean,phaseolus-bean,1.0,No processing
-pigeonpea_whole,pigeonpea,pigeon-pea,1.0,No processing
-potato_fresh,white-potato,potato,1.0,No processing
-sweet_potato_fresh,sweet-potato,sweet-potato,1.0,No processing
-cassava_fresh,cassava,cassava,1.0,No processing
-yam_fresh,yam,yam,1.0,No processing
-tomato_fresh,tomato,tomato,1.0,No processing
-carrot_fresh,carrot,carrot,1.0,No processing
-onion_fresh,onion,onion,1.0,No processing
-cabbage_fresh,cabbage,cabbage,1.0,No processing
-banana_peeled,banana,banana,1.0,No processing
-citrus_fresh,citrus,citrus,1.0,No processing
-coconut_meat,coconut,coconut,1.0,No processing
-groundnut_oil,groundnut,groundnut-oil,0.45,Oil extraction from groundnuts (assumed industrial expeller yield)
-groundnut_oil,groundnut,oilseed-meal,0.5,Oilcake byproduct from groundnut oil extraction (assumed)
-groundnut_shelled,groundnut,groundnut,1.0,No processing (shell accounted for by edible portion)
-sesame_oil,sesame,sesame-oil,0.47,Oil extraction from sesame seed (assumed press yield)
-sesame_oil,sesame,oilseed-meal,0.47,Oilcake byproduct from sesame oil extraction (assumed)
-sesame_whole,sesame,sesame-seed,1.0,No processing
-coconut_oil,coconut,coconut-oil,0.35,Oil extraction from coconut kernel (assumed fresh-kernel basis)
-coconut_oil,coconut,oilseed-meal,0.45,Press-cake byproduct from coconut oil extraction (assumed)
-sunflower_oil,sunflower,sunflower-oil,0.35,TODO
-sunflower_oil,sunflower,oilseed-meal,0.5,TODO
-sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for by edible portion)
-rapeseed_oil,rapeseed,rapeseed-oil,0.38,Oil extraction from rapeseed (FAO SUA 2024 sheet 03)
-rapeseed_oil,rapeseed,rapeseed-meal,0.5,Meal from oil extraction (FAO SUA 2024 sheet 03)
-palm_oil,oil-palm,palm-oil,0.24,Oil extraction from fresh fruit bunches (GAEZ v5 assumption)
-olive_oil,olive,olive-oil,0.2,Oil extraction from olives (TODO: assumption)
-sugarcane_sugar,sugarcane,sugar,0.14,Sucrose extraction (GAEZ v5 assumption)
-sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction (assumption: 1 minus molasses fraction)
-sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3)
-maize_ethanol,maize,maize-ethanol,0.68,Fuel-equivalent DM fraction (assumption: 1 minus DDGS fraction)
-maize_ethanol,maize,ddgs,0.32,DDGS byproduct from corn ethanol (assumption: ~32% DM yield is industry standard)
-cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing modeled)
-coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled)
-tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled)
-sugarbeet_sugar,sugarbeet,sugar,0.1,Sucrose extraction (GAEZ v5 assumption)
-cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning (assumption: ~38% of seed cotton weight; global average gin-out-turn)
-cotton_ginning,cotton,cottonseed-oil,0.083,Cottonseed oil (assumption: 55% seed fraction × 15% oil extraction rate)
-cotton_ginning,cotton,oilseed-meal,0.275,Cottonseed meal as generic oilcake (assumption: 55% seed fraction × 50% meal yield)
+pathway,crop,food,factor,description,url
+white_flour,wheat,flour-white,0.75,White flour extraction rate (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+white_flour,wheat,wheat-bran,0.2,Bran byproduct from white flour milling (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+white_flour,wheat,wheat-germ,0.03,Germ separated during white flour milling (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+wholemeal_flour,wheat,flour-wholemeal,1.0,No processing,
+milled_rice,dryland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+milled_rice,dryland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+brown_rice,dryland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+milled_rice_wetland,wetland-rice,rice-white,0.68,Milled white rice from paddy - husking + polishing losses (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+milled_rice_wetland,wetland-rice,rice-bran,0.08,Bran from rice milling (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+brown_rice_wetland,wetland-rice,rice-brown,0.77,Brown rice after hulling only (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_barley,barley,barley-hulled,0.72,Hulled barley with processing losses (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_barley,barley,barley-bran,0.12,Bran from barley hulling (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_oat,oat,oat,0.78,Oat groats after hull removal (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_oat,oat,oat-bran,0.06,Bran from oat processing (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_buckwheat,buckwheat,buckwheat,0.78,Dehulled buckwheat groats (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+hulled_buckwheat,buckwheat,buckwheat-hulls,0.1,Hulls from buckwheat processing (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+rye_grain,rye,rye,1.0,No processing,
+sorghum_grain,sorghum,sorghum,1.0,No processing,
+foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,No processing,
+pearl_millet_grain,pearl-millet,pearl-millet,1.0,No processing,
+maize_grain,maize,maize,1.0,No processing,
+soybean_whole,soybean,soy,1.0,No processing,
+soybean_oil,soybean,soybean-oil,0.18,Oil extraction from soybeans (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+soybean_oil,soybean,oilseed-meal,0.78,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+dry_pea_whole,dry-pea,dry-pea,1.0,No processing,
+chickpea_whole,chickpea,chickpea,1.0,No processing,
+cowpea_whole,cowpea,cowpea,1.0,No processing,
+gram_whole,gram,gram,1.0,No processing,
+phaseolus_bean_whole,phaseolus-bean,phaseolus-bean,1.0,No processing,
+pigeonpea_whole,pigeonpea,pigeon-pea,1.0,No processing,
+potato_fresh,white-potato,potato,1.0,No processing,
+sweet_potato_fresh,sweet-potato,sweet-potato,1.0,No processing,
+cassava_fresh,cassava,cassava,1.0,No processing,
+yam_fresh,yam,yam,1.0,No processing,
+tomato_fresh,tomato,tomato,1.0,No processing,
+carrot_fresh,carrot,carrot,1.0,No processing,
+onion_fresh,onion,onion,1.0,No processing,
+cabbage_fresh,cabbage,cabbage,1.0,No processing,
+banana_peeled,banana,banana,1.0,No processing,
+citrus_fresh,citrus,citrus,1.0,No processing,
+coconut_meat,coconut,coconut,1.0,No processing,
+groundnut_oil,groundnut,groundnut-oil,0.45,Oil extraction from groundnuts (FAO Technical Conversion Factors),FAO_TCF
+groundnut_oil,groundnut,oilseed-meal,0.54,Oilcake byproduct from groundnut oil extraction (FAO Technical Conversion Factors),FAO_TCF
+groundnut_shelled,groundnut,groundnut,1.0,No processing (shell accounted for by edible portion),
+sesame_oil,sesame,sesame-oil,0.47,Oil extraction from sesame seed (FAO Technical Conversion Factors),FAO_TCF
+sesame_oil,sesame,oilseed-meal,0.5,Oilcake byproduct from sesame oil extraction (FAO Technical Conversion Factors),FAO_TCF
+sesame_whole,sesame,sesame-seed,1.0,No processing,
+coconut_oil,coconut,coconut-oil,0.35,Oil extraction from fresh coconut kernel inferred from copra oil yield and coconut moisture,FEEDIPEDIA_COPRA
+coconut_oil,coconut,oilseed-meal,0.17,Press-cake byproduct inferred from copra meal yield and coconut moisture,FEEDIPEDIA_COPRA
+sunflower_oil,sunflower,sunflower-oil,0.35,Oil extraction from sunflower seed (FAO Technical Conversion Factors),FAO_TCF
+sunflower_oil,sunflower,oilseed-meal,0.55,Oilcake byproduct from sunflower oil extraction (FAO Technical Conversion Factors),FAO_TCF
+sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for by edible portion),
+rapeseed_oil,rapeseed,rapeseed-oil,0.38,Oil extraction from rapeseed (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+rapeseed_oil,rapeseed,rapeseed-meal,0.5,Meal from oil extraction (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
+palm_oil,oil-palm,palm-oil,0.24,Oil extraction from fresh fruit bunches (FAO palm oil processing guide),FAO_PALM_PROCESSING
+olive_oil,olive,olive-oil,0.2,Oil extraction from fresh olives; FAO reports 20-25% oil in fresh fruit,FAO_OLIVE
+sugarcane_sugar,sugarcane,sugar,0.14,Sucrose extraction retained from GAEZ v5 yield convention,FAO_GAEZ
+sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction retained as complement to molasses fraction,GLEAM_TABLE_3_3
+sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3),GLEAM_TABLE_3_3
+maize_ethanol,maize,maize-ethanol,0.68,Fuel-equivalent DM fraction retained as complement to DDGS fraction,USDA_ARS_DDGS
+maize_ethanol,maize,ddgs,0.32,DDGS byproduct from corn ethanol (USDA ARS reports about 18 lb DDGS per 56 lb corn bushel),USDA_ARS_DDGS
+cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing modeled),
+coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled),
+tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled),
+sugarbeet_sugar,sugarbeet,sugar,0.1,Sucrose extraction retained from GAEZ v5 yield convention,FAO_GAEZ
+cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning; National Cotton Council reports 100 lb lint with about 162 lb cottonseed,NCC_COTTONSEED
+cotton_ginning,cotton,cottonseed-oil,0.107,Cottonseed oil from seed-cotton seed fraction and FAO cottonseed oil extraction rate,"NCC_COTTONSEED;FAO_TCF"
+cotton_ginning,cotton,oilseed-meal,0.296,Cottonseed meal from seed-cotton seed fraction and FAO cottonseed cake extraction rate,"NCC_COTTONSEED;FAO_TCF"

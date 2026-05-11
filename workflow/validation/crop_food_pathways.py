@@ -17,6 +17,7 @@ FOODS_SCHEMA = DataFrameSchema(
         "food": Column(str, nullable=False, coerce=True),
         "factor": Column(float, nullable=False, coerce=True),
         "description": Column(str, nullable=False, coerce=True),
+        "url": Column(str, nullable=True, coerce=True),
     },
     strict=True,
     coerce=True,
