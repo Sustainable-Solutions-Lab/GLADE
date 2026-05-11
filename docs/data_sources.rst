@@ -468,9 +468,9 @@ Grassland Yield Data (ISIMIP / LPJmL)
 
 **Provider**: ISIMIP (Inter-Sectoral Impact Model Intercomparison Project) |
 **Access**: `ISIMIP data portal <https://www.isimip.org/outputdata/>`_ |
-**License**: ISIMIP terms
+**License**: `CC BY 4.0 <https://creativecommons.org/licenses/by/4.0/>`_ (ISIMIP2a agriculture-sector LPJmL output; see `ISIMIP data licenses <https://www.isimip.org/gettingstarted/terms-of-use/licenses-publicly-available-isimip-data/>`_)
 
-Historical managed grassland yields from LPJmL model (above-ground dry matter production) at 0.5° x 0.5° resolution. Used for grazing-based livestock production potential estimates.
+Historical managed grassland yields from the LPJmL model (above-ground dry matter production) at 0.5° x 0.5° resolution, ISIMIP2a agriculture sector, WATCH forcing, no bias correction, variable CO2, 1971-2001 (`yield-mgr-noirr-default`). Used for grazing-based livestock production potential estimates. Cite the ISIMIP2a agriculture-sector archive (`10.5880/PIK.2017.006 <https://doi.org/10.5880/PIK.2017.006>`_) and Schaphoff et al. (2018, `gmd-11-1343-2018 <https://doi.org/10.5194/gmd-11-1343-2018>`_) for LPJmL.
 
 Spatial and Land Use Data
 --------------------------
@@ -985,7 +985,7 @@ Most datasets used in this project require attribution. Some disallow redistribu
 **Open licenses (attribution required, redistribution allowed)**:
 
 * **CC0 1.0 / Public domain** (USDA FoodData Central, IFA FUBC, BLS CPI-U): No restrictions; attribution requested
-* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS): Requires attribution
+* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS, ISIMIP2a / LPJmL grassland yield): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
 * **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
 * **Eurostat copyright** (Eurostat apro_cpsh1): Free reuse with attribution
@@ -996,4 +996,4 @@ Most datasets used in this project require attribution. Some disallow redistribu
 * **Non-commercial, no redistribution** (IHME GBD mortality, IHME GBD relative risks, IHME GBD dietary exposure, GDD): Free for non-commercial research; data may not be redistributed or used commercially without permission
 * **Non-commercial with attribution** (GADM, FADN): Free for academic/non-commercial use; GADM prohibits redistribution, FADN requires EU attribution
 * **FAO terms** (GLEAM 3.0 Supplement, FAO Nutrient Conversion): Non-commercial reuse with FAO acknowledgement; commercial use requires prior permission
-* **Custom terms** (ESA Biomass CCI, Copernicus Land Cover, ISIMIP/LPJmL, Water Footprint Network): Various provider-specific terms; see individual entries above
+* **Custom terms** (ESA Biomass CCI, Copernicus Land Cover, Water Footprint Network): Various provider-specific terms; see individual entries above

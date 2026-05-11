@@ -513,24 +513,44 @@ Run for a specific crop with::
 
 Or for all crops automatically via dependencies of the ``build_model`` rule.
 
-.. TODO: update this with reference to yield plotting rule, etc.
-..
-   Visualization
-   -------------
+Visualization
+-------------
 
-   Crop production results can be visualized with several plotting rules:
+Once a scenario has been solved, several plotting rules in
+``workflow/rules/plotting.smk`` produce diagnostic figures for the crop
+sector. All outputs land under
+``results/{name}/plots/scen-{scenario}/``.
 
-   **Production totals**::
+**Dominant-crop-group map** — gridcell-level map of cropland intensity
+coloured by the locally dominant crop group::
 
-       tools/smk results/{name}/plots/crop_production.pdf
+    tools/smk -- results/{name}/plots/scen-{scenario}/crop_production_map.pdf
 
-   **Land use intensity** (gridcell-level map showing dominant crop group and utilization)::
+Produced by ``rule plot_crop_production_map``
+(``workflow/scripts/plotting/plot_crop_production_map.py``). Feed crops
+(pasture, forage) dominate area everywhere and are excluded from the
+raster so they do not overwhelm the other groups; they remain visible in
+the accompanying bar chart.
 
-       tools/smk results/{name}/plots/scen-default/crop_production_map.pdf
+**Crop-use breakdown** — stacked bar chart of global crop production
+allocated to food, animal feed, and other uses, with separate irrigated
+and rainfed totals::
 
-   **Crop utilization** (food vs. feed vs. waste)::
+    tools/smk -- results/{name}/plots/scen-{scenario}/crop_use_breakdown.pdf
 
-       tools/smk results/{name}/plots/crop_use_breakdown.pdf
+Produced by ``rule plot_crop_use_breakdown``
+(``workflow/scripts/plotting/plot_crop_use_breakdown.py``). The companion
+CSV (``crop_use_breakdown.csv``) carries the same numbers in tabular
+form for downstream notebooks.
+
+**Crop-trade map** — same gridcell map as above, overlaid with the
+largest hub-to-hub trade flows (arrow colour by commodity group, width
+by volume)::
+
+    tools/smk -- results/{name}/plots/scen-{scenario}/crop_trade_map.pdf
+
+Produced by ``rule plot_crop_trade_map``
+(``workflow/scripts/plotting/plot_crop_trade_map.py``).
 
 
 References

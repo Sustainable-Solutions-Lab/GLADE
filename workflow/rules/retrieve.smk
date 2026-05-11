@@ -663,15 +663,21 @@ rule download_gaez_irrigated_landshare_map:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
 
-# TODO: license. Different variations?
-
-# See https://data.isimip.org/search/crop/mgr/variable/yield/irrigation/noirr/
-
-
-# The following is a future projection, but not about yields but primary productivity
-# See https://data.isimip.org/search/simulation_round/ISIMIP2b/sector/biomes/model/lpjml/pft/mgr-rainfed/
-# url="https://files.isimip.org/ISIMIP2b/OutputData/biomes/LPJmL/gfdl-esm2m/future/lpjml_gfdl-esm2m_ewembi_rcp26_2005soc_2005co2_gpp-mgr-irrigated_global_annual_2006_2099.nc4",
 rule download_grassland_yield_data:
+    """Retrieve historical managed-grassland yield from ISIMIP2a / LPJmL.
+
+    ISIMIP2a agriculture-sector LPJmL output (``yield-mgr-noirr-default``,
+    WATCH forcing, no bias correction, variable CO2, 1971-2001, 0.5 deg).
+    The full managed-grassland yield catalogue is browsable at
+    https://data.isimip.org/search/crop/mgr/variable/yield/irrigation/noirr/.
+
+    License: CC BY 4.0. ISIMIP releases agriculture-sector LPJmL output
+    under CC BY 4.0; only LPJ-GUESS in that sector carries CC BY-NC 4.0.
+    See https://www.isimip.org/gettingstarted/terms-of-use/licenses-publicly-available-isimip-data/.
+    Attribution: cite the ISIMIP2a agriculture data archive
+    (https://doi.org/10.5880/PIK.2017.006) and Schaphoff et al. (2018,
+    https://doi.org/10.5194/gmd-11-1343-2018) for LPJmL.
+    """
     output:
         "data/downloads/grassland_yield_historical.nc4",
     params:

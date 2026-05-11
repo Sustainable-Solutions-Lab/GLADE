@@ -33,10 +33,63 @@ Macronutrient constraints are specified in ``config/default.yaml``:
 * ``max``: Upper bound (≤)
 * ``equal``: Exact requirement (=)
 
-.. TODO: write in more detail about the implementation
-..
-   Model Implementation
-   ~~~~~~~~~~~~~~~~~~~~
+Model Implementation
+~~~~~~~~~~~~~~~~~~~~
+
+Macronutrients are realised in the PyPSA network as a per-country
+**store** for each nutrient, fed by **food-consumption links** that
+convert food flows (Mt/year) into nutrient flows. The construction
+happens in ``workflow/scripts/build_model/nutrition.py``; the bounds
+themselves are added at solve time in
+``workflow/scripts/solve_model/core.py``.
+
+**Nutrient buses and stores.** ``add_macronutrient_loads`` creates one
+bus ``nutrient:{nutrient}:{country}`` and one extendable store
+``store:nutrient:{nutrient}:{country}`` for every configured nutrient
+and country. The store carrier name equals the nutrient (e.g.
+``protein``); its ``unit`` (``Mt`` for mass nutrients, ``PJ`` for
+energy) tells downstream code how to convert per-capita requirements
+into network units.
+
+**Food → nutrient conversion.** ``add_food_nutrition_links`` adds one
+multi-output link ``consume:{food}:{country}`` per food and country,
+with ``bus0 = food:{food}:{country}`` and additional output buses for
+every nutrient. The efficiency on bus *i* equals the food's content of
+nutrient *i*, taken from ``data/curated/nutrition.csv`` (USDA FDC SR
+Legacy values per 100 g) and rescaled by
+``_nutrition_efficiency_factor`` so that food flows in Mt/year map onto
+the carrier units above. Foods listed in ``byproducts.include`` are
+excluded from these links so they cannot enter human consumption.
+
+**Bounds on store level.** Because the network is solved over a single
+representative snapshot ``now``, the macronutrient store level
+``Store-e`` equals the annual nutrient throughput. ``add_macronutrient_constraints``
+adds one constraint per nutrient and per country to the linopy model,
+selecting ``Store-e`` for the matching nutrient stores and comparing it
+to a population-scaled RHS. The RHS conversion is
+
+.. math::
+
+   \text{rhs}_{n,c} =
+   \begin{cases}
+     \dfrac{r_n \cdot p_c \cdot 365}{10^{12}} & \text{(mass nutrients, Mt/year)} \\[6pt]
+     r_n \cdot p_c \cdot 365 \cdot K_{\mathrm{kcal\rightarrow PJ}} & \text{(energy, PJ/year)}
+   \end{cases}
+
+where :math:`r_n` is the per-capita daily requirement (g/day or
+kcal/day), :math:`p_c` is the population of country :math:`c` (persons),
+and :math:`K_{\mathrm{kcal\rightarrow PJ}} = 4.184 \times 10^{-12}`.
+Configuration entries map to operators as
+
+* ``min: x`` → ``Store-e ≥ rhs``
+* ``max: x`` → ``Store-e ≤ rhs``
+* ``equal: x`` or ``equal_to_baseline: true`` → ``Store-e == rhs``
+
+Equality constraints silence any ``min``/``max`` on the same nutrient;
+``equal_to_baseline`` uses each country's baseline per-capita intake
+(``_compute_baseline_macronutrient_by_country``) as the RHS instead of a
+global value, so countries hold their own current diet on that
+nutrient.
 
 Food Groups
 -----------
@@ -56,22 +109,57 @@ constraints for the ones that need limits (``min``, ``max``, or ``equal`` in
 g/person/day). Leaving ``constraints`` empty allows the optimizer to choose any
 mix of foods that satisfies macronutrient and other requirements.
 
-Foods are assigned to groups in ``data/curated/food_groups.csv``. Example:
+Foods are assigned to groups in ``data/curated/food_groups.csv`` (one
+``food,group`` row per food). Unmapped foods bypass the group buses
+entirely — their nutrients still count, but they are unconstrained at
+the group level.
 
-.. TODO: refine this section
-..
-   Model Implementation
-   ~~~~~~~~~~~~~~~~~~~~
+Model Implementation
+~~~~~~~~~~~~~~~~~~~~
 
-   Food group constraints work similarly to macronutrients:
+Food groups mirror the macronutrient pattern but route a *mass* of food
+to a per-country store instead of a nutrient mass:
 
-   1. **Food group buses**: Per-country buses (e.g., ``food_group_fruit_USA``)
+1. **Group buses and stores.** ``add_food_group_buses_and_loads``
+   (``workflow/scripts/build_model/nutrition.py``) creates a bus
+   ``group:{group}:{country}`` and an extendable store
+   ``store:group:{group}:{country}`` (carrier ``group_{group}``) for
+   every included group. When ``food_groups.max_per_capita`` is set,
+   the store's ``e_nom_max`` is pre-clamped to the corresponding
+   Mt/year cap (g/person/day × population × 365 / 10¹²), so the
+   network rejects infeasible diets up-front.
+2. **Food → group routing.** The same multi-link that carries food into
+   the nutrient buses (``consume:{food}:{country}``) also adds an extra
+   output bus ``group:{group}:{country}`` with efficiency 1, looked up
+   from ``food_groups.csv``. One unit of food therefore deposits one
+   unit of mass on its group's store, in addition to its nutrient
+   contributions.
+3. **Population-scaled bounds.** ``add_food_group_constraints``
+   (``workflow/scripts/solve_model/core.py``) selects the
+   ``Store-e`` variables for each ``group_{group}`` carrier and adds
+   one linopy constraint per country:
 
-   2. **Food → Group links**: Foods contribute to their group bus
+   .. math::
 
-   3. **Population constraints**: Σ(group consumption) ≥ population × min requirement
+      \text{Store-e}_{g,c}\;\{\le,\ge,=\}\;\frac{r_g \cdot p_c \cdot 365}{10^{12}}\quad [\text{Mt/year}]
 
-   This ensures dietary diversity even if macronutrient needs could be met by a narrow set of crops.
+   with operator chosen from ``min``/``max``/``equal`` in the config.
+   As with macronutrients, an ``equal`` bound silences ``min``/``max``
+   for that group.
+4. **Per-country equality from the baseline diet.** When the diet
+   module is configured to anchor a group to current per-country
+   consumption (``diet.enforce_baseline`` or an equality CSV), the
+   solver builds a ``per_country_equal`` mapping
+   ``{group: {country: g/person/day}}`` from the baseline diet and
+   feeds it to ``add_food_group_constraints``. The equality RHS then
+   uses the country-specific value instead of a global one — useful
+   when the goal is *to hold today's group mix fixed and let the model
+   choose within-group composition*.
+
+This setup keeps dietary diversity decoupled from macronutrient
+adequacy: the optimizer can satisfy energy/protein/fat from a narrow
+set of foods only if no binding group ``min`` (e.g. fruits, vegetables)
+prevents it.
 
 Population Data
 ---------------

@@ -757,9 +757,9 @@ The LUC pipeline harmonises several global datasets to the common grid:
 
 * Land cover fractions and forest masks from Copernicus ESA CCI land cover (:ref:`copernicus-land-cover`)
 * Above-ground biomass from ESA Biomass CCI v6.0 (:ref:`esa-biomass-cci`)
-* Soil organic carbon stocks (0–30 cm) from ISRIC SoilGrids 2.0 (:ref:`soilgrids-soc`), scaled to 1 m depth using IPCC Tier 1 factors
+* Soil organic carbon stocks (0–30 cm) from ISRIC SoilGrids 2.0 (:ref:`soilgrids-soc`), scaled to 1 m depth using biome-specific ratios from Jobbágy & Jackson (2000)
 * Natural forest regrowth rates from Cook-Patton & Griscom (2020) (:ref:`cook-patton-regrowth`), representing the carbon that would accumulate if previously cleared land were reforested, masked by a biome-based reforestation eligibility layer from Hayek et al. (2024) (:ref:`hayek-reforestation-mask`) to exclude native grasslands and open savannas
-* IPCC Tier 1 below-ground biomass ratios, soil depletion factors, and agricultural equilibrium assumptions stored in ``data/curated/luc_zone_parameters.csv``
+* IPCC Tier 1 below-ground biomass ratios, soil depletion factors (F\ :sub:`LU`), and agricultural equilibrium assumptions stored in ``data/curated/luc_zone_parameters.csv``
 
 These layers are reprojected, resampled, and combined by dedicated Snakemake rules to produce per-cell biomass/SOC stocks, forest masks, and regrowth rates ready for downstream processing. The figure below summarises the harmonised rasters on the common model grid.
 
@@ -888,7 +888,7 @@ The current implementation makes several simplifying assumptions that should be 
 
 * **Forest mask threshold**: Regrowth sequestration is only applied to cells with ≥20% forest fraction in the land-cover-derived potential forest layer (i.e., areas that would naturally support forest if unmanaged). This threshold can be adjusted via ``config['luc']['forest_fraction_threshold']`` (default: 0.2). Raising the threshold restricts eligibility to areas that are strongly classified as forest; lowering it allows credits on lightly wooded mosaics.
 
-* **Soil organic carbon depth**: SOC stocks in the 0-30 cm layer (from SoilGrids) are scaled to 1 m depth using zone-specific factors from ``data/curated/luc_zone_parameters.csv``. **TODO**: These factors require verification against IPCC 2006/2019 Guidelines Volume 4 Chapter 2 to ensure they match the intended Tier 1 methodology.
+* **Soil organic carbon depth**: SOC stocks in the 0–30 cm layer (SoilGrids 2.0) are scaled to 1 m using biome-aggregate ``soc_depth_factor`` ratios from Jobbágy & Jackson [#jobbagy]_ Table 3 (tropical 2.27, temperate 1.80, boreal 1.60; see ``data/curated/luc_zone_parameters.csv``). IPCC Tier 1 stock-change factors (F\ :sub:`LU`) are formally defined at the 30 cm reference depth [#ipcc2019_v4_ch5]_; applying them to the full 1 m stock is a deliberate extension beyond Tier 1 and implicitly assumes that the relative LUC-induced depletion observed in topsoil propagates uniformly to depth. The empirical evidence [#jobbagy]_ is that subsoil SOC responds more weakly and more slowly than topsoil, so this approach is expected to over-state cropland-conversion SOC losses; a stricter Tier 1 treatment (drop ``soc_depth_factor`` and stay at 30 cm) would reduce the SOC component of LUC emission factors proportionally.
 
 * **Managed flux**: Set to zero everywhere (:math:`M_{i,u} = 0`), meaning ongoing emissions from agricultural management (e.g., peat oxidation, tillage-induced decomposition) are not currently modeled. Future work could incorporate organic soil maps and management-specific emission factors.
 
@@ -919,3 +919,14 @@ The current implementation makes several simplifying assumptions that should be 
 .. [#searchinger] Searchinger, T. D. et al., 2018: Assessing the efficiency of
    changes in land use for mitigating climate change. *Nature*, **564**\ (7735),
    249--253. https://doi.org/10.1038/s41586-018-0757-z
+
+.. [#jobbagy] Jobbágy, E. G. and Jackson, R. B., 2000: The vertical
+   distribution of soil organic carbon and its relation to climate and
+   vegetation. *Ecological Applications*, **10**\ (2), 423--436.
+   https://doi.org/10.1890/1051-0761(2000)010[0423:TVDOSO]2.0.CO;2
+
+.. [#ipcc2019_v4_ch5] IPCC, 2019: 2019 Refinement to the 2006 IPCC
+   Guidelines for National Greenhouse Gas Inventories, Volume 4
+   (Agriculture, Forestry and Other Land Use), Chapter 5 (Cropland).
+   IPCC, Geneva.
+   https://www.ipcc-nggip.iges.or.jp/public/2019rf/pdf/4_Volume4/19R_V4_Ch05_Cropland.pdf
