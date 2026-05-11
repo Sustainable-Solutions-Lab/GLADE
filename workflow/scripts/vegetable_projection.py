@@ -29,6 +29,27 @@ NUTS_PROJECTION_FOODS: tuple[str, ...] = (
 NUTS_RESIDUAL_ITEM_CODE = 2551
 NUTS_COUNTRY_SHARE_BLEND = 0.7
 
+# Modeled fruits absorb FBS supply from unmodeled fruit items so the
+# GBD-anchored fruits group total stays consistent with the model. The
+# pooled FBS items (excluding the directly-modeled bananas/citrus) are:
+#   2616 Plantains, 2617 Apples, 2618 Pineapples, 2619 Dates,
+#   2625 Fruits, other.
+# Grapes (FBS 2620) are intentionally excluded: although the FBS "Food"
+# element is in principle net of wine processing, most of the world's
+# grape harvest enters the alcohol industry which the model does not
+# treat as fruit consumption and which GBD's fruits risk factor
+# excludes. The pool is projected across {banana, citrus, mango,
+# watermelon} by per-country/global crop-production share (same
+# machinery as vegetables / nuts_seeds / starchy_vegetable).
+FRUITS_PROJECTION_FOODS: tuple[str, ...] = (
+    "banana",
+    "citrus",
+    "mango",
+    "watermelon",
+)
+FRUITS_RESIDUAL_ITEM_CODES: tuple[int, ...] = (2616, 2617, 2618, 2619, 2625)
+FRUITS_COUNTRY_SHARE_BLEND = 0.7
+
 
 def build_blended_crop_shares(
     crop_production_df: pd.DataFrame,

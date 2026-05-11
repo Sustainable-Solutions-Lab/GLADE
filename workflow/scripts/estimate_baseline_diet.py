@@ -48,6 +48,9 @@ from workflow.scripts.diet.basis import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.vegetable_projection import (
+    FRUITS_COUNTRY_SHARE_BLEND,
+    FRUITS_PROJECTION_FOODS,
+    FRUITS_RESIDUAL_ITEM_CODES,
     NUTS_COUNTRY_SHARE_BLEND,
     NUTS_PROJECTION_FOODS,
     NUTS_RESIDUAL_ITEM_CODE,
@@ -75,13 +78,19 @@ WITHIN_QCL_FOOD_SPLITS: dict[str, float] = {
 }
 
 
-# Per-(food_group, FBS residual code) projection table used by
-# _project_residual_supply. Each entry says: when FBS lists a "residual"
-# bucket item (e.g. 2605 "Vegetables, Other"), distribute that supply
-# across the listed projection_foods using a country/global blended
-# crop-production share. crop_to_food maps FAOSTAT crop names (as they
-# appear in faostat_crop_production.csv) to the modeled food names so the
+# Per-food-group projection table used by _project_residual_supply.
+# Each entry says: when FBS supply lives in one or more "residual" items
+# (e.g. 2605 "Vegetables, Other", or the union of 2616-2625 unmodeled
+# fruit items), distribute that supply across the listed
+# projection_foods using a country/global blended crop-production share.
+# crop_to_food maps FAOSTAT crop names (as they appear in
+# faostat_crop_production.csv) to the modeled food names so the
 # crop-share table is keyed consistently with the projection_foods.
+#
+# An entry may declare either ``residual_code`` (single int) for the
+# common case of one FBS residual, or ``residual_codes`` (sequence of
+# ints) when several FBS items together stand in for the unmodeled
+# portion of the group — they are pooled by summing supplies per country.
 RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
     {
         "food_group": "vegetables",
@@ -113,6 +122,23 @@ RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
             "yam": "yam",
             "cassava": "cassava",
         },
+    },
+    {
+        # Fruits: the FBS bucket for unmodeled fruits (apples, plantains,
+        # pineapples, dates, grapes, and the FBS 2625 "Fruits, other"
+        # residual) is pooled and projected onto the four modeled fruits
+        # by QCL crop-production share. Without this, GBD's fruit intake
+        # (~313 Mt globally) is split across modeled fruits using only
+        # their direct FBS items, which leaves the bulk of FBS 2616-2625
+        # demand unattributed (banana/citrus under-allocated; mango and
+        # watermelon, the two foods that map to the residual 2625,
+        # absorb the wrong share). See vegetable_projection.py for the
+        # constants.
+        "food_group": "fruits",
+        "residual_codes": FRUITS_RESIDUAL_ITEM_CODES,
+        "projection_foods": FRUITS_PROJECTION_FOODS,
+        "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
+        "crop_to_food": None,  # FAOSTAT crop names match modeled fruits
     },
 ]
 
@@ -484,10 +510,16 @@ def build_within_group_shares(
         .copy()
     )
     for spec in RESIDUAL_PROJECTIONS:
+        # Each spec may declare either a single ``residual_code`` or a
+        # list ``residual_codes``; normalise to a tuple of ints here.
+        if "residual_codes" in spec:
+            residual_codes = tuple(int(c) for c in spec["residual_codes"])
+        else:
+            residual_codes = (int(spec["residual_code"]),)
         shares_df = _project_residual_supply(
             shares_df,
             food_group=spec["food_group"],
-            residual_code=spec["residual_code"],
+            residual_codes=residual_codes,
             projection_foods=list(spec["projection_foods"]),
             blend_weight=float(spec["blend_weight"]),
             crop_to_food=spec["crop_to_food"],
@@ -519,7 +551,7 @@ def _project_residual_supply(
     shares_df: pd.DataFrame,
     *,
     food_group: str,
-    residual_code: int,
+    residual_codes: tuple[int, ...],
     projection_foods: list[str],
     blend_weight: float,
     crop_to_food: dict[str, str] | None,
@@ -533,11 +565,20 @@ def _project_residual_supply(
     """Distribute FAOSTAT residual-bucket supply across modeled foods.
 
     FAOSTAT FBS lumps minor commodities into "Other"-style residual items
-    (e.g. 2605 "Vegetables, Other"). For each (food_group, residual_code)
-    in RESIDUAL_PROJECTIONS we split the residual supply across
+    (e.g. 2605 "Vegetables, Other"). For each food group in
+    RESIDUAL_PROJECTIONS we split the residual supply across
     *projection_foods* using a blended country/global crop-production
     share. Foods in the group that are NOT in *projection_foods* keep
     only their explicit FBS-item supply (e.g. tomato in vegetables).
+
+    *residual_codes* may contain one code (the most common case) or
+    several codes that together stand in for the unmodeled portion of a
+    group (e.g. fruits pools 2616 Plantains + 2617 Apples + 2618
+    Pineapples + 2619 Dates + 2620 Grapes + 2625 Fruits-other). The
+    supplies are summed before projection and the same codes are
+    filtered out of each food's *explicit* supply so a food that maps
+    directly to one of the residual codes (e.g. mango -> 2625) does not
+    double-count.
 
     *crop_to_food* renames FAOSTAT crop names to model food names so the
     crop-share table is keyed consistently with *projection_foods*; pass
@@ -566,14 +607,17 @@ def _project_residual_supply(
         blend_weight=blend_weight,
     )
 
+    residual_code_set = set(residual_codes)
     rebuilt_rows: list[dict[str, object]] = []
     for country in countries:
-        residual_supply = float(fbs_supply.get((country, residual_code), 0.0))
+        residual_supply = float(
+            sum(fbs_supply.get((country, code), 0.0) for code in residual_codes)
+        )
         for food in group_foods:
             explicit_codes = [
                 int(code)
                 for code in fbs_codes_by_food.get(food, [])
-                if int(code) != residual_code
+                if int(code) not in residual_code_set
             ]
             explicit_supply = float(
                 sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
