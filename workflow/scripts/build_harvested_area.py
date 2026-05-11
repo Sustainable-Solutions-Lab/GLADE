@@ -94,6 +94,15 @@ if __name__ == "__main__":
         fdd_shares_path = Path(fdd_shares_raw)
     else:
         fdd_shares_path = Path("")
+    ooc_olive_share_raw = snakemake.input.get("ooc_olive_share")  # type: ignore[name-defined]
+    if isinstance(ooc_olive_share_raw, list):
+        ooc_olive_share_path = (
+            Path(ooc_olive_share_raw[0]) if ooc_olive_share_raw else Path("")
+        )
+    elif ooc_olive_share_raw:
+        ooc_olive_share_path = Path(ooc_olive_share_raw)
+    else:
+        ooc_olive_share_path = Path("")
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     crop = str(snakemake.wildcards.crop)  # type: ignore[name-defined]
 
@@ -148,6 +157,21 @@ if __name__ == "__main__":
 
     extracted = extracted.merge(regions[["region", "country"]], on="region", how="left")
     extracted = apply_country_shares(extracted, shares_lookup, fallback_share)
+
+    if crop == "olive" and ooc_olive_share_path and ooc_olive_share_path.exists():
+        # GAEZ Module VI OOC raster mixes olive with other minor oilseed land
+        # (linseed, mustard, etc.). Deflate per-country to the FAOSTAT-derived
+        # olive share within OOC so non-olive area is not attributed to olive.
+        olive_shares = pd.read_csv(ooc_olive_share_path)
+        olive_shares["country"] = olive_shares["country"].astype(str).str.upper()
+        share_map = dict(
+            zip(olive_shares["country"], olive_shares["olive_share"], strict=False)
+        )
+        global_share = (
+            float(olive_shares["olive_share"].mean()) if not olive_shares.empty else 1.0
+        )
+        deflation = extracted["country"].map(share_map).fillna(global_share)
+        extracted["value"] = extracted["value"] * deflation
 
     extracted["variable"] = "harvested_area"
     extracted["unit"] = "ha"

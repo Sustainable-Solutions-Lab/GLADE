@@ -67,6 +67,11 @@ EDIBLE_PORTION_EXCEPTIONS: set[str] = {
     # Fiber crops: GAEZ and FAOSTAT report seed cotton; no edible-portion
     # conversion applies.
     "cotton",
+    # Olive: GAEZ Module VI OOC raster yield is in oil-equivalent t/ha, so the
+    # olive crop bus carries oil mass directly. FAO's 0.9 edible-portion
+    # coefficient refers to fresh olive fruit pulp vs. pit and is not applicable
+    # at the oil basis used here; the olive_oil pathway runs at 1:1.
+    "olive",
 }
 
 FALLBACK_FULL_EDIBLE: set[str] = {"oil-palm", "sugarcane", "sugarbeet", "tea", "cotton"}

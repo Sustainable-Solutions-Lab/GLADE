@@ -13,7 +13,9 @@
 # - FAO_TCF: https://www.fao.org/fileadmin/templates/ess/documents/methodology/tcf.pdf
 # - FAO_GAEZ: https://www.fao.org/gaez/en
 # - FAO_PALM_PROCESSING: https://www.fao.org/4/y4355e/y4355e04.htm
-# - FAO_OLIVE: https://www.fao.org/land-water/databases-and-software/crop-information/olive/en/
+# - GAEZ_OLIVE_OIL_BASIS: https://github.com/un-fao/gaezv5/wiki/08.-Module-VI-(Actual-yield-and-production)
+#                         (Module VI OOC group reports yield in oil-equivalent t/ha;
+#                          v4 Model Documentation Table 9-2 documents the same convention.)
 # - USDA_ARS_DDGS: https://www.ars.usda.gov/research/publications/publication/?seqNo115=243737
 # - GLEAM_TABLE_3_3: data/bundled/gleam3/ruminants_feed_yield_fractions.csv
 # - NCC_COTTONSEED: https://www.cotton.org/pubs/cottoncounts/fieldtofabric/cottonseed.cfm
@@ -88,7 +90,7 @@ sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for b
 rapeseed_oil,rapeseed,rapeseed-oil,0.38,Oil extraction from rapeseed (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
 rapeseed_oil,rapeseed,rapeseed-meal,0.5,Meal from oil extraction (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
 palm_oil,oil-palm,palm-oil,0.24,Oil extraction from fresh fruit bunches (FAO palm oil processing guide),FAO_PALM_PROCESSING
-olive_oil,olive,olive-oil,0.2,Oil extraction from fresh olives; FAO reports 20-25% oil in fresh fruit,FAO_OLIVE
+olive_oil,olive,olive-oil,1.0,GAEZ RES06 OOC olive yield is reported in oil-equivalent t/ha so the olive crop bus carries oil tonnes directly; this pathway is 1:1,GAEZ_OLIVE_OIL_BASIS
 sugarcane_sugar,sugarcane,sugar,0.14,Sucrose extraction retained from GAEZ v5 yield convention,FAO_GAEZ
 sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction retained as complement to molasses fraction,GLEAM_TABLE_3_3
 sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3),GLEAM_TABLE_3_3

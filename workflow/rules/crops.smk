@@ -138,6 +138,28 @@ _fdd_crops_in_config = set(config["fodder_decomposition"]["fdd_crops"]) & set(
 )
 
 
+rule build_ooc_olive_area_share:
+    input:
+        qcl_csv="data/downloads/faostat/QCL.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        baseline_year=config["baseline_year"],
+    output:
+        "<processing>/{name}/ooc_olive_area_share.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2900,
+    log:
+        "<logs>/{name}/build_ooc_olive_area_share.log",
+    benchmark:
+        "<benchmarks>/{name}/build_ooc_olive_area_share.tsv"
+    script:
+        "../scripts/build_ooc_olive_area_share.py"
+
+
 rule build_fdd_area_shares:
     input:
         eurostat_fodder="data/downloads/eurostat_fodder_production.csv",
@@ -231,6 +253,13 @@ def _harvested_area_inputs(w):
         inputs["fdd_shares"] = f"<processing>/{w.name}/fdd_area_shares.csv"
     else:
         inputs["fdd_shares"] = []
+    if w.crop == "olive":
+        # The GAEZ Module VI OOC raster pools olive area with linseed, mustard,
+        # safflower and other minor oilseed land. Deflate per-country to the
+        # FAOSTAT olive share so we don't attribute non-olive OOC land to olive.
+        inputs["ooc_olive_share"] = f"<processing>/{w.name}/ooc_olive_area_share.csv"
+    else:
+        inputs["ooc_olive_share"] = []
     return inputs
 
 

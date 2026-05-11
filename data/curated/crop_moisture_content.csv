@@ -9,14 +9,19 @@
 #       food bus carries commercial commodity weight (storage moisture). This
 #       matches FAOSTAT FBS supply units and the "as-purchased" basis used
 #       by nutrition.csv.
-#     - identity: skip the conversion. Used for tea, where the
-#       moisture_fraction (0.75) refers to the AS-HARVESTED fresh leaf
-#       form rather than the as-traded commercial commodity. The GAEZ
-#       deflation by (1 - moisture) already converts fresh leaves to a
-#       dried-tea-equivalent dry mass, and re-inflating would over-
-#       supply by 4x. Cocoa and coffee, although also "dry commodities",
-#       carry commercial-weight moisture in this column (6.5% for cocoa,
-#       10% for green coffee), so they use inverse_moisture like the
+#     - identity: skip the conversion. Used for crops whose GAEZ raster
+#       already encodes the commercial product (not fresh weight):
+#         * tea: GAEZ "yield" refers to dried tea-equivalent dry mass; the
+#           (1-moisture) deflation handled at raster ingestion already
+#           lands tea on a commercial basis (re-inflating would 4x oversupply).
+#         * olive: GAEZ Module VI (RES06) OOC raster reports yield as
+#           olive oil tons/ha (per v4 Table 9-2 convention, preserved in
+#           v5 for the OOC group). The crop bus therefore carries oil
+#           tonnes directly; moisture is set to 0 (oil is anhydrous) and
+#           the olive_oil pathway in foods.csv runs at 1:1.
+#       Cocoa and coffee, although also "dry commodities", carry
+#       commercial-weight moisture in this column (6.5% for cocoa, 10%
+#       for green coffee), so they use inverse_moisture like the
 #       cereals/pulses/oils.
 # - source: short citation for the value
 # - note: optional clarification when a value was inferred
@@ -57,7 +62,7 @@ rapeseed,0.08,inverse_moisture,GAEZ v5 Module VII table (RSD),
 groundnut,0.05,inverse_moisture,GAEZ v5 Module VII table (GRD),Uses shelled kernel moisture
 sesame,0.05,inverse_moisture,GAEZ v5 Module VII table (SES),
 oil-palm,0.60,inverse_moisture,Assumption (MPOB fresh fruit bunch composition),Matches 24% oil share cited by GAEZ
-olive,0.50,inverse_moisture,Assumption (typical olive fruit analysis),Approximate moisture for fresh olives
+olive,0.0,identity,GAEZ v5 RES06 OOC raster (oil-equivalent t/ha),Crop bus carries olive oil tonnes; the olive_oil pathway is 1:1
 sugarcane,0.73,inverse_moisture,Assumption (aligned with 14% sugar extraction),Chooses 27% dry matter share
 sugarbeet,0.76,inverse_moisture,Assumption (aligned with 10% sugar extraction),Chooses 24% dry matter share
 cocoa,0.065,inverse_moisture,GAEZ v5 Module VII table (COC),Dried cocoa beans at storage moisture
