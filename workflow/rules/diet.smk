@@ -198,6 +198,7 @@ rule prepare_food_loss_waste:
         m49="data/curated/M49-codes.csv",
         animal_production="<processing>/{name}/faostat_animal_production.csv",
         faostat_food_group_supply="<processing>/{name}/faostat_food_group_supply.csv",
+        faostat_fbs_items="<processing>/{name}/faostat_fbs_items.csv",
         population="<processing>/{name}/population.csv",
         fbs_csv="data/downloads/faostat/FBS.parquet",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",

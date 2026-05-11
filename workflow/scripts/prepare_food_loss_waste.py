@@ -769,6 +769,7 @@ def main():
     m49_file = snakemake.input["m49"]
     animal_production_file = snakemake.input["animal_production"]
     faostat_food_group_supply_file = snakemake.input["faostat_food_group_supply"]
+    faostat_fbs_items_file = snakemake.input["faostat_fbs_items"]
     population_file = snakemake.input["population"]
     fbs_csv = snakemake.input["fbs_csv"]
     overrides_file = snakemake.input["overrides"]
@@ -786,9 +787,14 @@ def main():
     m49_regions = load_m49_regions(m49_file)
     logger.info("Loaded M49 regions for %d countries", len(m49_regions))
 
-    # Load FAOSTAT data for dairy loss calculation
+    # Load FAOSTAT data for animal-group implicit-loss calculation.
+    # Dairy/oil/sugar live in faostat_food_group_supply.csv; poultry meat
+    # supply (FBS item 2734) is read separately from faostat_fbs_items.csv
+    # because that file is intentionally not emitted there (the diet
+    # pipeline FBS-overrides poultry directly from raw FBS items).
     animal_production = pd.read_csv(animal_production_file)
     faostat_supply = pd.read_csv(faostat_food_group_supply_file)
+    fbs_items = pd.read_csv(faostat_fbs_items_file)
     population = pd.read_csv(population_file)
 
     # Read FAOSTAT food supply data from bulk CSV
@@ -843,14 +849,24 @@ def main():
     # Override animal-food loss with FBS-derived implicit loss where possible.
     # Generic SDG loss factors can be inconsistent with the production/supply
     # definitions used elsewhere in the workflow (notably for dairy and poultry).
+    #
+    # Supply lookups differ by group:
+    #   - dairy: from faostat_food_group_supply.csv in g/day fresh weight
+    #     (already milk-equivalent, matches production_mt_fresh_retail).
+    #   - poultry: from faostat_fbs_items.csv (FBS item 2734 "Poultry Meat")
+    #     in kg/cap/year carcass weight; multiplied by carcass-to-retail to
+    #     align with production_mt_fresh_retail (retail meat).
     animal_group_sources = {
         "dairy": {
             "products": ["dairy", "dairy-buffalo"],
+            "supply_source": "food_group_supply",
             "fbs_item": "dairy",
         },
         "poultry": {
             "products": ["meat-chicken"],
-            "fbs_item": "poultry",
+            "supply_source": "fbs_items",
+            "fbs_item_code": 2734,
+            "carcass_to_retail": 0.60,
         },
     }
 
@@ -861,25 +877,43 @@ def main():
             continue
 
         products = source["products"]
-        fbs_item = source["fbs_item"]
 
         production_total = animal_production[
             animal_production["product"].isin(products)
         ]["production_mt_fresh_retail"].sum()
 
-        supply_rows = faostat_supply[faostat_supply["item"] == fbs_item]
-        supply_per_country = supply_rows.drop_duplicates(subset=["country"]).set_index(
-            "country"
-        )["value"]
-
-        # supply_mt = supply_g_day * population * 365 / 1e12
-        supply_total = 0.0
-        for country in supply_per_country.index:
-            if country not in pop_per_country.index:
-                continue
-            supply_g_day = supply_per_country[country]
-            pop = pop_per_country[country]
-            supply_total += supply_g_day * pop * 365 / 1e12
+        if source["supply_source"] == "food_group_supply":
+            supply_rows = faostat_supply[faostat_supply["item"] == source["fbs_item"]]
+            supply_per_country = supply_rows.drop_duplicates(
+                subset=["country"]
+            ).set_index("country")["value"]
+            # supply_mt = supply_g_day * population * 365 / 1e12
+            supply_total = 0.0
+            for country in supply_per_country.index:
+                if country not in pop_per_country.index:
+                    continue
+                supply_total += (
+                    supply_per_country[country] * pop_per_country[country] * 365 / 1e12
+                )
+        elif source["supply_source"] == "fbs_items":
+            item_rows = fbs_items[fbs_items["item_code"] == source["fbs_item_code"]]
+            supply_per_country = item_rows.drop_duplicates(
+                subset=["country"]
+            ).set_index("country")["supply_kg_per_capita_year"]
+            # supply_mt_carcass = supply_kg_per_cap_yr * pop / 1e9
+            # supply_mt_retail = supply_mt_carcass * carcass_to_retail
+            c2r = float(source["carcass_to_retail"])
+            supply_total = 0.0
+            for country in supply_per_country.index:
+                if country not in pop_per_country.index:
+                    continue
+                supply_total += (
+                    supply_per_country[country] * pop_per_country[country] / 1e9 * c2r
+                )
+        else:
+            raise ValueError(
+                f"Unknown supply_source '{source['supply_source']}' for {food_group}"
+            )
 
         implicit_loss = 0.0
         if production_total > 0:

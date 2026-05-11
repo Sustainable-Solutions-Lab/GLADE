@@ -12,14 +12,18 @@ per-food consumption estimates (g/person/day).
 
 Algorithm:
     1. Load food group totals from dietary_intake.csv (GDD + FAOSTAT supplements)
-    2. For overlapping groups, average GDD and GBD estimates
+    2. For groups in ``health.risk_factors`` (GBD-anchored), the per-country
+       group total is taken from GBD when GBD reports a value, else the
+       GDD/FAOSTAT value. No averaging; GBD strictly takes precedence on
+       these groups so the baseline aligns with the same intake basis the
+       GBD relative-risk functions are calibrated against.
     3. Build within-group food shares from FAOSTAT FBS item-level supply
     4. Resolve shared FBS items using QCL production data
     5. Compute per-food consumption = group_total x within_group_share
 
 Input:
     - dietary_intake.csv: Food group totals (GDD + FAOSTAT, waste-corrected)
-    - gbd_food_group_intake.csv: GBD estimates for averaging/cross-validation
+    - gbd_food_group_intake.csv: GBD per-country group totals for risk groups
     - faostat_fbs_items.csv: Item-level food supply for within-group shares
     - faostat_crop_production.csv: Crop production for QCL-based resolution
     - faostat_animal_production.csv: Animal production (dairy vs buffalo)
@@ -1079,23 +1083,32 @@ def main():
     if not direct_foods.empty:
         result = pd.concat([result, direct_foods], ignore_index=True)
 
-    # Insert placeholder rows for FBS override foods not yet in result
-    # (e.g. cocoa-powder when its group has no group-level total)
+    # Insert placeholder rows for FBS override foods missing from result for
+    # any country. The check is per-(food, country): an override food may be
+    # partially present (e.g. meat-chicken via NHANES for USA) while other
+    # countries lack the underlying group total in dietary_intake (GDD has
+    # no poultry variable). Without per-country placeholders the FBS override
+    # loop, which iterates only existing rows, would silently leave those
+    # countries at zero intake despite valid FBS Poultry Meat supply.
     fg_map = food_groups_df.set_index("food")["group"].to_dict()
+    all_countries = result["country"].unique()
     for food in fbs_override_foods:
-        if food not in result["food"].values:
-            food_group = fg_map.get(food)
-            if food_group is not None:
-                countries = result["country"].unique()
-                placeholders = pd.DataFrame(
-                    {
-                        "country": countries,
-                        "food": food,
-                        "food_group": food_group,
-                        "consumption_g_per_day": 0.0,
-                    }
-                )
-                result = pd.concat([result, placeholders], ignore_index=True)
+        food_group = fg_map.get(food)
+        if food_group is None:
+            continue
+        existing = set(result.loc[result["food"] == food, "country"])
+        missing = [c for c in all_countries if c not in existing]
+        if not missing:
+            continue
+        placeholders = pd.DataFrame(
+            {
+                "country": missing,
+                "food": food,
+                "food_group": food_group,
+                "consumption_g_per_day": 0.0,
+            }
+        )
+        result = pd.concat([result, placeholders], ignore_index=True)
 
     result = result.sort_values(["country", "food_group", "food"]).reset_index(
         drop=True
