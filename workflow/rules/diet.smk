@@ -208,6 +208,7 @@ rule prepare_food_loss_waste:
         food_groups=config["food_groups"]["included"],
         baseline_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
+        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
     output:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     group:

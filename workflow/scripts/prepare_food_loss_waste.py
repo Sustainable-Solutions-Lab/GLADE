@@ -771,6 +771,11 @@ def main():
     faostat_food_group_supply_file = snakemake.input["faostat_food_group_supply"]
     faostat_fbs_items_file = snakemake.input["faostat_fbs_items"]
     population_file = snakemake.input["population"]
+    # Carcass-to-retail factors per meat product, sourced from config so the
+    # FBS-implicit-loss override here uses the same conversions as the rest
+    # of the workflow (animal_production link efficiencies and the diet
+    # pipeline's fbs_override_foods path).
+    c2r_meat = dict(snakemake.params["carcass_to_retail_meat"])
     fbs_csv = snakemake.input["fbs_csv"]
     overrides_file = snakemake.input["overrides"]
     output_file = snakemake.output["food_loss_waste"]
@@ -847,15 +852,19 @@ def main():
     result["waste_fraction"] = result["waste_fraction"].fillna(0.0)
 
     # Override animal-food loss with FBS-derived implicit loss where possible.
-    # Generic SDG loss factors can be inconsistent with the production/supply
-    # definitions used elsewhere in the workflow (notably for dairy and poultry).
+    # Generic SDG loss factors (UNSD AG_FLS_PCT) lump all animal products
+    # together at ~15% which is too aggressive for animal commodities whose
+    # FBS "Food supply" element (5142) is already net of slaughter/processing
+    # losses. Without this override, the validation model double-counts the
+    # supply-side loss and shows a multi-Mt food-bus deficit.
     #
     # Supply lookups differ by group:
-    #   - dairy: from faostat_food_group_supply.csv in g/day fresh weight
-    #     (already milk-equivalent, matches production_mt_fresh_retail).
-    #   - poultry: from faostat_fbs_items.csv (FBS item 2734 "Poultry Meat")
-    #     in kg/cap/year carcass weight; multiplied by carcass-to-retail to
-    #     align with production_mt_fresh_retail (retail meat).
+    #   - dairy: from faostat_food_group_supply.csv in g/day milk-equivalent
+    #     fresh weight (matches production_mt_fresh_retail directly).
+    #   - meat / eggs: from faostat_fbs_items.csv (FBS items in kg/cap/year
+    #     carcass weight); each item is multiplied by its carcass-to-retail
+    #     factor to align with production_mt_fresh_retail. Eggs use c2r=1.0
+    #     because FBS 2744 already reports eggs as whole-egg mass.
     animal_group_sources = {
         "dairy": {
             "products": ["dairy", "dairy-buffalo"],
@@ -865,8 +874,22 @@ def main():
         "poultry": {
             "products": ["meat-chicken"],
             "supply_source": "fbs_items",
-            "fbs_item_code": 2734,
-            "carcass_to_retail": 0.60,
+            "fbs_item_codes": [{"code": 2734, "c2r": c2r_meat["meat-chicken"]}],
+        },
+        "red_meat": {
+            "products": ["meat-cattle", "meat-pig", "meat-sheep"],
+            "supply_source": "fbs_items",
+            "fbs_item_codes": [
+                {"code": 2731, "c2r": c2r_meat["meat-cattle"]},  # Bovine Meat
+                {"code": 2733, "c2r": c2r_meat["meat-pig"]},  # Pigmeat
+                {"code": 2732, "c2r": c2r_meat["meat-sheep"]},  # Mutton & Goat Meat
+            ],
+        },
+        "eggs": {
+            "products": ["eggs"],
+            # FBS 2744 reports whole-egg mass; no carcass conversion applies.
+            "supply_source": "fbs_items",
+            "fbs_item_codes": [{"code": 2744, "c2r": 1.0}],
         },
     }
 
@@ -896,20 +919,26 @@ def main():
                     supply_per_country[country] * pop_per_country[country] * 365 / 1e12
                 )
         elif source["supply_source"] == "fbs_items":
-            item_rows = fbs_items[fbs_items["item_code"] == source["fbs_item_code"]]
-            supply_per_country = item_rows.drop_duplicates(
-                subset=["country"]
-            ).set_index("country")["supply_kg_per_capita_year"]
-            # supply_mt_carcass = supply_kg_per_cap_yr * pop / 1e9
-            # supply_mt_retail = supply_mt_carcass * carcass_to_retail
-            c2r = float(source["carcass_to_retail"])
+            # Sum supply across one or more FBS items, each with its own
+            # carcass-to-retail factor. The result is in retail mass and
+            # comparable to production_mt_fresh_retail.
             supply_total = 0.0
-            for country in supply_per_country.index:
-                if country not in pop_per_country.index:
-                    continue
-                supply_total += (
-                    supply_per_country[country] * pop_per_country[country] / 1e9 * c2r
-                )
+            for item_spec in source["fbs_item_codes"]:
+                code = int(item_spec["code"])
+                c2r = float(item_spec["c2r"])
+                item_rows = fbs_items[fbs_items["item_code"] == code]
+                supply_per_country = item_rows.drop_duplicates(
+                    subset=["country"]
+                ).set_index("country")["supply_kg_per_capita_year"]
+                for country in supply_per_country.index:
+                    if country not in pop_per_country.index:
+                        continue
+                    supply_total += (
+                        supply_per_country[country]
+                        * pop_per_country[country]
+                        / 1e9
+                        * c2r
+                    )
         else:
             raise ValueError(
                 f"Unknown supply_source '{source['supply_source']}' for {food_group}"
