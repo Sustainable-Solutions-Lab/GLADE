@@ -48,9 +48,11 @@ from workflow.scripts.diet.basis import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.vegetable_projection import (
+    FRUITS_BAN_PROJECTION_FOODS,
+    FRUITS_BAN_RESIDUAL_ITEM_CODES,
     FRUITS_COUNTRY_SHARE_BLEND,
-    FRUITS_PROJECTION_FOODS,
-    FRUITS_RESIDUAL_ITEM_CODES,
+    FRUITS_FRT_PROJECTION_FOODS,
+    FRUITS_FRT_RESIDUAL_ITEM_CODES,
     NUTS_COUNTRY_SHARE_BLEND,
     NUTS_PROJECTION_FOODS,
     NUTS_RESIDUAL_ITEM_CODE,
@@ -87,10 +89,26 @@ WITHIN_QCL_FOOD_SPLITS: dict[str, float] = {
 # faostat_crop_production.csv) to the modeled food names so the
 # crop-share table is keyed consistently with the projection_foods.
 #
-# An entry may declare either ``residual_code`` (single int) for the
-# common case of one FBS residual, or ``residual_codes`` (sequence of
-# ints) when several FBS items together stand in for the unmodeled
-# portion of the group — they are pooled by summing supplies per country.
+# Spec shape per entry:
+#   - ``food_group``: name of the model food group to rebuild.
+#   - ``projections``: a list of sub-projections, each with
+#     ``residual_codes`` (tuple of FBS item codes whose supplies are
+#     pooled), ``projection_foods`` (the modeled foods that absorb the
+#     pool), ``blend_weight`` (country/global crop-share blend), and
+#     ``crop_to_food`` (optional FAOSTAT-name -> model-food rename).
+#   For the common single-projection case, a thin top-level shorthand
+#   (``residual_code``/``residual_codes`` + ``projection_foods`` +
+#   ``blend_weight`` + ``crop_to_food``) is auto-converted to a one-
+#   element ``projections`` list at runtime.
+#
+# Fruits uses two sub-projections (one per GAEZ RES06 module) so demand
+# attribution mirrors the module-aligned supply attribution:
+#   * BAN module: plantain FBS 2616 -> banana exclusively (they share
+#     the GAEZ BAN raster on the supply side).
+#   * FRT module: apples 2617 + pineapples 2618 + dates 2619 + fruits-
+#     other 2625 pooled and split across citrus/mango/watermelon (the
+#     three modeled crops that share the GAEZ FRT raster).
+# Grapes (FBS 2620) are intentionally excluded; see vegetable_projection.py.
 RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
     {
         "food_group": "vegetables",
@@ -124,21 +142,21 @@ RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
         },
     },
     {
-        # Fruits: the FBS bucket for unmodeled fruits (apples, plantains,
-        # pineapples, dates, grapes, and the FBS 2625 "Fruits, other"
-        # residual) is pooled and projected onto the four modeled fruits
-        # by QCL crop-production share. Without this, GBD's fruit intake
-        # (~313 Mt globally) is split across modeled fruits using only
-        # their direct FBS items, which leaves the bulk of FBS 2616-2625
-        # demand unattributed (banana/citrus under-allocated; mango and
-        # watermelon, the two foods that map to the residual 2625,
-        # absorb the wrong share). See vegetable_projection.py for the
-        # constants.
         "food_group": "fruits",
-        "residual_codes": FRUITS_RESIDUAL_ITEM_CODES,
-        "projection_foods": FRUITS_PROJECTION_FOODS,
-        "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
-        "crop_to_food": None,  # FAOSTAT crop names match modeled fruits
+        "projections": [
+            {
+                "residual_codes": FRUITS_BAN_RESIDUAL_ITEM_CODES,
+                "projection_foods": FRUITS_BAN_PROJECTION_FOODS,
+                "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
+                "crop_to_food": None,
+            },
+            {
+                "residual_codes": FRUITS_FRT_RESIDUAL_ITEM_CODES,
+                "projection_foods": FRUITS_FRT_PROJECTION_FOODS,
+                "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
+                "crop_to_food": None,
+            },
+        ],
     },
 ]
 
@@ -510,19 +528,11 @@ def build_within_group_shares(
         .copy()
     )
     for spec in RESIDUAL_PROJECTIONS:
-        # Each spec may declare either a single ``residual_code`` or a
-        # list ``residual_codes``; normalise to a tuple of ints here.
-        if "residual_codes" in spec:
-            residual_codes = tuple(int(c) for c in spec["residual_codes"])
-        else:
-            residual_codes = (int(spec["residual_code"]),)
+        sub_specs = _normalise_projection_spec(spec)
         shares_df = _project_residual_supply(
             shares_df,
             food_group=spec["food_group"],
-            residual_codes=residual_codes,
-            projection_foods=list(spec["projection_foods"]),
-            blend_weight=float(spec["blend_weight"]),
-            crop_to_food=spec["crop_to_food"],
+            sub_specs=sub_specs,
             included_foods=included_foods,
             fg_map=fg_map,
             fbs_codes_by_food=fbs_codes_by_food,
@@ -547,14 +557,38 @@ def build_within_group_shares(
     return shares_df[["country", "food", "food_group", "share"]].copy()
 
 
+def _normalise_projection_spec(spec: dict) -> list[dict]:
+    """Return the list of sub-projections for a RESIDUAL_PROJECTIONS entry.
+
+    Accepts either the long-form ``projections`` list (for groups whose
+    unmodelled residual splits along module boundaries — currently
+    fruits) or the short-form single-projection layout (one
+    ``residual_code`` or ``residual_codes`` plus ``projection_foods``,
+    ``blend_weight``, ``crop_to_food``). The short form is auto-converted
+    to a one-element list so the rebuild logic only needs to handle one
+    shape.
+    """
+    if "projections" in spec:
+        return list(spec["projections"])
+    if "residual_codes" in spec:
+        codes: tuple[int, ...] = tuple(int(c) for c in spec["residual_codes"])
+    else:
+        codes = (int(spec["residual_code"]),)
+    return [
+        {
+            "residual_codes": codes,
+            "projection_foods": spec["projection_foods"],
+            "blend_weight": spec["blend_weight"],
+            "crop_to_food": spec["crop_to_food"],
+        }
+    ]
+
+
 def _project_residual_supply(
     shares_df: pd.DataFrame,
     *,
     food_group: str,
-    residual_codes: tuple[int, ...],
-    projection_foods: list[str],
-    blend_weight: float,
-    crop_to_food: dict[str, str] | None,
+    sub_specs: list[dict],
     included_foods: list[str],
     fg_map: dict[str, str],
     fbs_codes_by_food: dict[str, list[int]],
@@ -562,70 +596,107 @@ def _project_residual_supply(
     countries: list[str],
     crop_production_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Distribute FAOSTAT residual-bucket supply across modeled foods.
+    """Distribute FAOSTAT residual-bucket supply across modelled foods.
 
     FAOSTAT FBS lumps minor commodities into "Other"-style residual items
     (e.g. 2605 "Vegetables, Other"). For each food group in
-    RESIDUAL_PROJECTIONS we split the residual supply across
-    *projection_foods* using a blended country/global crop-production
-    share. Foods in the group that are NOT in *projection_foods* keep
-    only their explicit FBS-item supply (e.g. tomato in vegetables).
+    RESIDUAL_PROJECTIONS this function rebuilds every food's
+    ``supply_weight`` as the sum of:
 
-    *residual_codes* may contain one code (the most common case) or
-    several codes that together stand in for the unmodeled portion of a
-    group (e.g. fruits pools 2616 Plantains + 2617 Apples + 2618
-    Pineapples + 2619 Dates + 2620 Grapes + 2625 Fruits-other). The
-    supplies are summed before projection and the same codes are
-    filtered out of each food's *explicit* supply so a food that maps
-    directly to one of the residual codes (e.g. mango -> 2625) does not
-    double-count.
+      * **Explicit FBS supply** — its own FBS-item supplies, excluding
+        any FBS items that appear in any sub-spec's ``residual_codes``
+        (so a food that maps directly to a residual item does not
+        double-count).
+      * **One or more projected residual contributions** — for each
+        sub-spec, the food gets a share of that sub-spec's pooled
+        residual supply if it is in ``projection_foods`` for that
+        sub-spec, weighted by per-country/global crop-production share
+        of the sub-spec's projection_foods.
 
-    *crop_to_food* renames FAOSTAT crop names to model food names so the
-    crop-share table is keyed consistently with *projection_foods*; pass
-    None when the FAOSTAT names already match.
+    Splitting a group's residuals across several sub-specs lets demand
+    attribution mirror GAEZ-module-aligned supply attribution: for
+    fruits we project plantain (FBS 2616) only onto banana and the
+    apple/pineapple/dates/fruits-other pool only onto citrus/mango/
+    watermelon, matching the BAN vs FRT raster split on the supply side.
+
+    Each sub-spec carries:
+      - ``residual_codes`` (tuple[int]): FBS items pooled by summing.
+      - ``projection_foods`` (sequence[str]): modelled foods that absorb
+        the pool.
+      - ``blend_weight`` (float): country/global crop-share blend.
+      - ``crop_to_food`` (dict|None): FAOSTAT-crop-name -> model-food
+        rename (None when names already match).
     """
     group_foods = [food for food in included_foods if fg_map.get(food) == food_group]
     if not group_foods:
         return shares_df
 
-    active_projection = [food for food in projection_foods if food in group_foods]
-    if not active_projection:
+    # Pre-compute per-sub-spec shares and pooled supplies; build the
+    # union of residual codes to filter from explicit FBS supply.
+    sub_resolved: list[dict] = []
+    all_residual_codes: set[int] = set()
+    for sub in sub_specs:
+        codes = tuple(int(c) for c in sub["residual_codes"])
+        projection_foods = list(sub["projection_foods"])
+        blend_weight = float(sub["blend_weight"])
+        crop_to_food = sub.get("crop_to_food")
+
+        active_projection = [f for f in projection_foods if f in group_foods]
+        all_residual_codes.update(codes)
+        if not active_projection:
+            sub_resolved.append(
+                {"codes": codes, "active": [], "share": {}, "global": {}}
+            )
+            continue
+
+        if crop_to_food is None:
+            prod_for_shares = crop_production_df
+        else:
+            prod_for_shares = crop_production_df.copy()
+            prod_for_shares["crop"] = (
+                prod_for_shares["crop"].astype(str).str.strip().map(crop_to_food)
+            )
+            prod_for_shares = prod_for_shares[prod_for_shares["crop"].notna()]
+
+        share_lookup, global_share = build_blended_crop_shares(
+            prod_for_shares,
+            active_projection,
+            blend_weight=blend_weight,
+        )
+        sub_resolved.append(
+            {
+                "codes": codes,
+                "active": active_projection,
+                "share": share_lookup,
+                "global": global_share,
+            }
+        )
+
+    if not any(sub["active"] for sub in sub_resolved):
         return shares_df
 
-    if crop_to_food is None:
-        prod_for_shares = crop_production_df
-    else:
-        prod_for_shares = crop_production_df.copy()
-        prod_for_shares["crop"] = (
-            prod_for_shares["crop"].astype(str).str.strip().map(crop_to_food)
-        )
-        prod_for_shares = prod_for_shares[prod_for_shares["crop"].notna()]
-
-    share_lookup, global_share = build_blended_crop_shares(
-        prod_for_shares,
-        active_projection,
-        blend_weight=blend_weight,
-    )
-
-    residual_code_set = set(residual_codes)
     rebuilt_rows: list[dict[str, object]] = []
     for country in countries:
-        residual_supply = float(
-            sum(fbs_supply.get((country, code), 0.0) for code in residual_codes)
-        )
         for food in group_foods:
             explicit_codes = [
                 int(code)
                 for code in fbs_codes_by_food.get(food, [])
-                if int(code) not in residual_code_set
+                if int(code) not in all_residual_codes
             ]
             explicit_supply = float(
                 sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
             )
             projected_supply = 0.0
-            if food in active_projection and residual_supply > 0.0:
-                projected_supply = residual_supply * share_lookup.get(
-                    (country, food), global_share[food]
+            for sub in sub_resolved:
+                if food not in sub["active"]:
+                    continue
+                residual_supply = float(
+                    sum(fbs_supply.get((country, code), 0.0) for code in sub["codes"])
+                )
+                if residual_supply <= 0.0:
+                    continue
+                projected_supply += residual_supply * sub["share"].get(
+                    (country, food), sub["global"].get(food, 0.0)
                 )
             rebuilt_rows.append(
                 {

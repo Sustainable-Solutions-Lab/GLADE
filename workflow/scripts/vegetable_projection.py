@@ -31,23 +31,34 @@ NUTS_COUNTRY_SHARE_BLEND = 0.7
 
 # Modeled fruits absorb FBS supply from unmodeled fruit items so the
 # GBD-anchored fruits group total stays consistent with the model. The
-# pooled FBS items (excluding the directly-modeled bananas/citrus) are:
-#   2616 Plantains, 2617 Apples, 2618 Pineapples, 2619 Dates,
-#   2625 Fruits, other.
+# projection is split along GAEZ RES06 module boundaries so that supply
+# (which is allocated per module) and demand (this projection) attribute
+# the same unmodeled fruits in parallel, avoiding the "banana competes
+# with apples on the demand side but not on the supply side" asymmetry:
+#
+#  * BAN module — banana and plantain share the same GAEZ raster. Map
+#    plantain FBS supply (FBS 2616) exclusively onto banana, matching
+#    the supply side where banana's area already absorbs plantain area.
+#  * FRT module — citrus, mango, watermelon share the GAEZ FRT raster
+#    along with the broader unmodeled fruit basket (apples, pineapples,
+#    dates, and the FBS 2625 "Fruits, other" residual). Pool those FBS
+#    items and project across the three FRT-modeled crops by per-country
+#    / global crop-production share.
+#
 # Grapes (FBS 2620) are intentionally excluded: although the FBS "Food"
 # element is in principle net of wine processing, most of the world's
 # grape harvest enters the alcohol industry which the model does not
 # treat as fruit consumption and which GBD's fruits risk factor
-# excludes. The pool is projected across {banana, citrus, mango,
-# watermelon} by per-country/global crop-production share (same
-# machinery as vegetables / nuts_seeds / starchy_vegetable).
-FRUITS_PROJECTION_FOODS: tuple[str, ...] = (
-    "banana",
-    "citrus",
-    "mango",
-    "watermelon",
+# excludes.
+FRUITS_BAN_PROJECTION_FOODS: tuple[str, ...] = ("banana",)
+FRUITS_BAN_RESIDUAL_ITEM_CODES: tuple[int, ...] = (2616,)  # Plantains
+FRUITS_FRT_PROJECTION_FOODS: tuple[str, ...] = ("citrus", "mango", "watermelon")
+FRUITS_FRT_RESIDUAL_ITEM_CODES: tuple[int, ...] = (
+    2617,  # Apples
+    2618,  # Pineapples
+    2619,  # Dates
+    2625,  # Fruits, other
 )
-FRUITS_RESIDUAL_ITEM_CODES: tuple[int, ...] = (2616, 2617, 2618, 2619, 2625)
 FRUITS_COUNTRY_SHARE_BLEND = 0.7
 
 
