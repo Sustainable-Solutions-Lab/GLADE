@@ -73,10 +73,52 @@ def main() -> None:
 
     mapping_df["item_code"] = mapping_df["faostat_item"].map(item_map)
 
-    # Build exploded mapping: one row per (item_code, crop) with equal share
-    crop_mapping = mapping_df[["item_code", "crop"]].drop_duplicates()
+    # Build exploded mapping: one row per (item_code, crop) with a share that
+    # determines how the FAOSTAT item's production is split among modelled
+    # crops when more than one maps to the same item.
+    #
+    # Default policy is an equal 1/N split among the crops mapped to a given
+    # item. The mapping CSV may carry an optional ``share`` column to override
+    # this — useful when modelled crops share a FAOSTAT item but real-world
+    # production is heavily skewed (e.g. FAOSTAT "Rice, paddy" is ~95 %
+    # wetland-rice and ~5 % dryland/upland). The override is all-or-nothing
+    # per FAOSTAT item: every row for an item must have an explicit share if
+    # any does, and the shares must sum to 1.
+    if "share" in mapping_df.columns:
+        share_input = pd.to_numeric(mapping_df["share"], errors="coerce")
+        crop_mapping = mapping_df[["item_code", "crop"]].assign(share=share_input)
+    else:
+        crop_mapping = mapping_df[["item_code", "crop"]].assign(share=float("nan"))
+
+    has_override = crop_mapping.groupby("item_code")["share"].transform(
+        lambda s: s.notna().any()
+    )
+    mixed = (
+        has_override
+        & crop_mapping["share"].isna()
+        & (crop_mapping.groupby("item_code")["crop"].transform("count") > 1)
+    )
+    if mixed.any():
+        bad_items = sorted(crop_mapping.loc[mixed, "item_code"].unique().tolist())
+        raise ValueError(
+            "FAOSTAT crop item map specifies share for only some crops of "
+            f"item(s) {bad_items}; either set share on every row of an item "
+            "or leave them all blank."
+        )
+
+    # Default 1/N for items with no override; explicit shares retained as-is.
     crop_counts = crop_mapping.groupby("item_code")["crop"].transform("count")
-    crop_mapping = crop_mapping.assign(share=1.0 / crop_counts)
+    default_share = 1.0 / crop_counts
+    crop_mapping["share"] = crop_mapping["share"].where(has_override, default_share)
+
+    # Sanity check: shares should sum to ~1.0 per FAOSTAT item.
+    share_sums = crop_mapping.groupby("item_code")["share"].sum()
+    bad_sums = share_sums[(share_sums < 0.99) | (share_sums > 1.01)]
+    if not bad_sums.empty:
+        raise ValueError(
+            "FAOSTAT item share overrides do not sum to 1.0 per item: "
+            + ", ".join(f"{int(i)}={s:.3f}" for i, s in bad_sums.items())
+        )
 
     # Add ISO3 column from M49 codes
     m49_to_iso3 = load_m49_to_iso3(m49_codes)

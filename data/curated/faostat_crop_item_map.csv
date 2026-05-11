@@ -1,50 +1,50 @@
-crop,faostat_item
-wheat,"Wheat"
-dryland-rice,"Rice"
-wetland-rice,"Rice"
-maize,"Maize (corn)"
-barley,"Barley"
-oat,"Oats"
-rye,"Rye"
-sorghum,"Sorghum"
-buckwheat,"Buckwheat"
-foxtail-millet,"Millet"
-pearl-millet,"Millet"
-soybean,"Soya beans"
-dry-pea,"Peas, dry"
-chickpea,"Chick peas, dry"
-cowpea,"Cow peas, dry"
-gram,"Chick peas, dry"
-phaseolus-bean,"Beans, dry"
-pigeonpea,"Pigeon peas, dry"
-white-potato,"Potatoes"
-sweet-potato,"Sweet potatoes"
-cassava,"Cassava, fresh"
-yam,"Yams"
-tomato,"Tomatoes"
-carrot,"Carrots and turnips"
-onion,"Onions and shallots, dry (excluding dehydrated)"
-cabbage,"Cabbages"
-banana,"Bananas"
-watermelon,"Watermelons"
-mango,"Mangoes, guavas and mangosteens"
-citrus,"Other citrus fruit, n.e.c."
-citrus,"Tangerines, mandarins, clementines"
-citrus,"Lemons and limes"
-citrus,"Pomelos and grapefruits"
-citrus,"Oranges"
-coconut,"Coconuts, in shell"
-sunflower,"Sunflower seed"
-rapeseed,"Rape or colza seed"
-groundnut,"Groundnuts, excluding shelled"
-sesame,"Sesame seed"
-oil-palm,"Oil palm fruit"
-olive,"Olives"
-sugarcane,"Sugar cane"
-sugarbeet,"Sugar beet"
-cocoa,"Cocoa beans"
-coffee,"Coffee, green"
-tea,"Tea leaves"
-alfalfa,
-cotton,"Seed cotton, unginned"
-biomass-sorghum,
+crop,faostat_item,share
+wheat,"Wheat",
+dryland-rice,"Rice",0.05
+wetland-rice,"Rice",0.95
+maize,"Maize (corn)",
+barley,"Barley",
+oat,"Oats",
+rye,"Rye",
+sorghum,"Sorghum",
+buckwheat,"Buckwheat",
+foxtail-millet,"Millet",
+pearl-millet,"Millet",
+soybean,"Soya beans",
+dry-pea,"Peas, dry",
+chickpea,"Chick peas, dry",
+cowpea,"Cow peas, dry",
+gram,"Chick peas, dry",
+phaseolus-bean,"Beans, dry",
+pigeonpea,"Pigeon peas, dry",
+white-potato,"Potatoes",
+sweet-potato,"Sweet potatoes",
+cassava,"Cassava, fresh",
+yam,"Yams",
+tomato,"Tomatoes",
+carrot,"Carrots and turnips",
+onion,"Onions and shallots, dry (excluding dehydrated)",
+cabbage,"Cabbages",
+banana,"Bananas",
+watermelon,"Watermelons",
+mango,"Mangoes, guavas and mangosteens",
+citrus,"Other citrus fruit, n.e.c.",
+citrus,"Tangerines, mandarins, clementines",
+citrus,"Lemons and limes",
+citrus,"Pomelos and grapefruits",
+citrus,"Oranges",
+coconut,"Coconuts, in shell",
+sunflower,"Sunflower seed",
+rapeseed,"Rape or colza seed",
+groundnut,"Groundnuts, excluding shelled",
+sesame,"Sesame seed",
+oil-palm,"Oil palm fruit",
+olive,"Olives",
+sugarcane,"Sugar cane",
+sugarbeet,"Sugar beet",
+cocoa,"Cocoa beans",
+coffee,"Coffee, green",
+tea,"Tea leaves",
+alfalfa,,
+cotton,"Seed cotton, unginned",
+biomass-sorghum,,
