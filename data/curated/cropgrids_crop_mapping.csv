@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Mapping from model crops in config["cropgrids_crops"] to CROPGRIDS v1.08
+# NetCDF filenames and FAOSTAT QCL item codes.
+#
+# Columns:
+#   crop                       — model crop name (must appear in config["crops"])
+#   cropgrids_name             — basename inside CROPGRIDSv1.08_NC_maps.zip,
+#                                i.e. the file CROPGRIDSv1.08_<name>.nc
+#   faostat_qcl_item_code      — FAOSTAT QCL item code used to look up
+#                                per-country fresh-weight yield (element 5419,
+#                                hg/ha) for broadcasting to all (region,
+#                                resource_class) cells inside each country.
+#
+# Cross-array invariants (subset of config["crops"]; disjoint from
+# irrigation.irrigated_crops and multiple_cropping member crops; not also
+# listed in gaez_crop_code_mapping.csv) are enforced by
+# workflow/validation/cropgrids_crops.py.
+crop,cropgrids_name,faostat_qcl_item_code
+apple,apple,515

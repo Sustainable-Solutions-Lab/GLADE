@@ -53,6 +53,7 @@ carrot,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetable
 onion,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
 cabbage,0.90,inverse_moisture,GAEZ v5 Module VII table (OVG),Uses other-vegetables placeholder
 banana,0.75,inverse_moisture,GAEZ v5 Module VII table (BAN),
+apple,0.86,inverse_moisture,USDA FoodData Central SR Legacy (FDC 171688),"Apples, raw, with skin: 85.56 g water per 100 g"
 watermelon,0.914,inverse_moisture,FAO SUA NCT 2024 sheet 03,
 mango,0.84,inverse_moisture,FAO SUA NCT 2024 sheet 03,
 citrus,0.85,inverse_moisture,GAEZ v5 Module VII table (FRT),Represents aggregated fruits and nuts entry

@@ -28,6 +28,8 @@ required:
   - luc
   - crops
   - non_food_crops
+  - cropgrids_crops
+  - cropgrids
   - multiple_cropping
   - macronutrients
   - byproducts
@@ -670,6 +672,36 @@ properties:
       type: string
       pattern: "^[a-z0-9-]+$"
     description: "Crops not intended for human food (e.g. fodder, biomass); excluded from foods.csv validation"
+
+  cropgrids_crops:
+    type: array
+    uniqueItems: true
+    items:
+      type: string
+      pattern: "^[a-z0-9-]+$"
+    description: |
+      Crops whose yield, harvested area and suitable area come from CROPGRIDS
+      + FAOSTAT instead of GAEZ. Listed crops are always rainfed-only and
+      cannot expand beyond their current CROPGRIDS harvested area (modulo
+      cropgrids.suitable_area_expansion). Cross-array invariants (subset of
+      crops; disjoint from irrigation.irrigated_crops; disjoint from
+      multiple_cropping member crops; row in data/curated/cropgrids_crop_mapping.csv)
+      are enforced by workflow/validation/cropgrids_crops.py.
+
+  cropgrids:
+    type: object
+    additionalProperties: false
+    required: [suitable_area_expansion]
+    properties:
+      suitable_area_expansion:
+        type: number
+        minimum: 1.0
+        description: |
+          Multiplier on CROPGRIDS harvested area used to derive suitable_area
+          (= p_nom_max). 1.0 freezes the modeled crop on its current
+          footprint; values > 1.0 allow proportional expansion within each
+          region/resource_class. Per-crop overrides may be added later.
+    description: "Settings for crops backed by CROPGRIDS rather than GAEZ"
 
   multiple_cropping:
     type: object

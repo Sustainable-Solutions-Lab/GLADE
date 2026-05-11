@@ -88,7 +88,7 @@ def _resource_class_rasters(kind):
     return [
         gaez_path(kind, water_supply, crop)
         for water_supply in _RESOURCE_CLASS_WATER_SUPPLIES
-        for crop in config["crops"]
+        for crop in gaez_crops()
     ]
 
 
@@ -122,7 +122,7 @@ rule compute_resource_classes:
         resource_class_quantiles=config["aggregation"]["resource_class_quantiles"],
         resource_class_score=_RESOURCE_CLASS_SCORE,
         use_actual_yields=config["validation"]["use_actual_yields"],
-        crops=config["crops"],
+        crops=gaez_crops(),
         water_supplies=_RESOURCE_CLASS_WATER_SUPPLIES,
         non_food_crops=config["non_food_crops"],
     output:
@@ -143,8 +143,8 @@ rule compute_resource_classes:
 rule aggregate_class_areas:
     input:
         classes="<processing>/{name}/resource_classes.nc",
-        sr=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
-        si=[gaez_path("suitability", "i", crop) for crop in config["crops"]],
+        sr=[gaez_path("suitability", "r", crop) for crop in gaez_crops()],
+        si=[gaez_path("suitability", "i", crop) for crop in gaez_crops()],
         irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
         regions="<processing>/{name}/regions.geojson",
     params:

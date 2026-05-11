@@ -268,6 +268,7 @@ crops:
 - mango
 - citrus
 - coconut
+- apple
 # Stimulant crops
 - cocoa
 - coffee
@@ -290,6 +291,28 @@ crops:
 - biomass-sorghum
 # Note: mango uses citrus as an explicit RES02 growing-season fallback.
 # Taro excluded - missing RES02 (growing season) data for GFDL-ESM4.
+
+# --- section: cropgrids_crops ---
+# Crops whose yield, harvested area and suitable area come from CROPGRIDS +
+# FAOSTAT instead of GAEZ. Listed crops bypass GAEZ rasters entirely (yield,
+# suitability, water requirement, growing season, harvested area). They are
+# always rainfed-only and their suitable area is set equal to their current
+# CROPGRIDS harvested area (× cropgrids.suitable_area_expansion), so no new
+# land can be brought into production for them. Each entry must:
+#   * appear in `crops`,
+#   * be absent from `irrigation.irrigated_crops` (rainfed-only),
+#   * not appear in any `multiple_cropping` combination,
+#   * have a row in data/curated/cropgrids_crop_mapping.csv,
+# enforced by workflow/validation/cropgrids_crops.py.
+cropgrids_crops:
+- apple
+
+cropgrids:
+  # Multiplier on CROPGRIDS harvested area to derive suitable_area. 1.0 means
+  # the crop can only be grown on land currently growing it; larger values
+  # allow some local expansion (uniformly across resource classes within the
+  # region). Per-crop overrides could be added later if needed.
+  suitable_area_expansion: 1.0
 
 # --- section: non_food_crops ---
 # Crops not intended for human food production (fodder, biomass).
@@ -1502,7 +1525,7 @@ plotting:
       crops: [tomato, carrot, onion, cabbage]
     Fruits:
       color: "#D95F02"  # Dark2 #2
-      crops: [banana, watermelon, mango, citrus, coconut]
+      crops: [banana, watermelon, mango, citrus, coconut, apple]
     Oilseeds:
       color: "#7570B3"  # Dark2 #3
       crops: [sunflower, rapeseed, groundnut, sesame, oil-palm, olive]
@@ -1579,6 +1602,7 @@ plotting:
       mango: "#F4A62A"
       citrus: "#F39C12"
       coconut: "#8E735B"
+      apple: "#E64C3C"
       sunflower: "#F1C40F"
       rapeseed: "#F5B041"
       groundnut: "#A8683C"

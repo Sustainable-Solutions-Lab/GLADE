@@ -1,4 +1,8 @@
 food,nutrient,unit,value
+apple,cal,kcal/100g,52.1
+apple,carb,g/100g,13.81
+apple,fat,g/100g,0.17
+apple,protein,g/100g,0.26
 banana,cal,kcal/100g,88.67
 banana,carb,g/100g,22.84
 banana,fat,g/100g,0.33

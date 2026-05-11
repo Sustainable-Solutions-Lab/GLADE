@@ -206,6 +206,33 @@ def get_gaez_res02_code(crop_name: str) -> str:
     return get_gaez_code(get_gaez_res02_source_crop(crop_name), "res02")
 
 
+def gaez_crops(crops=None):
+    """Return crops sourced from GAEZ (config["crops"] minus cropgrids_crops).
+
+    Used by rules that build per-crop GAEZ raster inputs. CROPGRIDS-backed
+    crops bypass GAEZ entirely and must not appear in those input lists.
+    """
+    base = list(crops) if crops is not None else list(config["crops"])
+    cropgrids_set = set(config.get("cropgrids_crops") or [])
+    return [c for c in base if c not in cropgrids_set]
+
+
+def irrigated_crops():
+    """Return the list of crops with irrigated production.
+
+    Resolves ``config["irrigation"]["irrigated_crops"]`` ("all" → every model
+    crop) and strips out ``cropgrids_crops`` (rainfed-only by construction,
+    enforced by validate_cropgrids_crops).
+    """
+    irr_cfg = config["irrigation"]["irrigated_crops"]
+    if irr_cfg == "all":
+        base = list(config["crops"])
+    else:
+        base = list(irr_cfg)
+    cropgrids_set = set(config.get("cropgrids_crops") or [])
+    return [c for c in base if c not in cropgrids_set]
+
+
 def gaez_path(kind: str, water_supply: str, crop: str) -> str:
     """Return GAEZ v5 raster path for a given kind and water supply.
 
@@ -213,6 +240,13 @@ def gaez_path(kind: str, water_supply: str, crop: str) -> str:
     water_supply: "i" (irrigated) or "r" (rainfed)
     crop: crop name (e.g., "wheat")
     """
+    cropgrids_set = set(config.get("cropgrids_crops") or [])
+    if crop in cropgrids_set:
+        raise ValueError(
+            f"gaez_path() called for CROPGRIDS-backed crop '{crop}'; this "
+            "crop has no GAEZ raster. Use gaez_crops() to filter the crop "
+            "list before iterating."
+        )
     ws = water_supply.lower()
     if ws not in {"i", "r"}:
         raise ValueError(f"Unsupported water supply '{water_supply}'")

@@ -663,6 +663,64 @@ rule download_gaez_irrigated_landshare_map:
         "pixi run gsutil cp {params.gcs_url} {output} > {log} 2>&1"
 
 
+rule download_cropgrids_nc_maps:
+    """Download the CROPGRIDS v1.08 NetCDF bundle from Figshare.
+
+    Source: Tang et al. (2023), "CROPGRIDS", https://doi.org/10.6084/m9.figshare.22491997.
+    License: CC BY 4.0. The zip ships per-crop 0.05° harvested and physical
+    crop area rasters for ~170 crops; we extract only the crops listed in
+    ``config["cropgrids_crops"]`` (see ``extract_cropgrids_nc`` below).
+    """
+    output:
+        "data/downloads/cropgrids_v1_08_nc_maps.zip",
+    params:
+        article_id=22491997,
+        file_name="CROPGRIDSv1.08_NC_maps.zip",
+        show_progress=config["downloads"]["show_progress"],
+    resources:
+        runtime="60m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_cropgrids_nc_maps.log",
+    benchmark:
+        "<benchmarks>/shared/download_cropgrids_nc_maps.tsv"
+    script:
+        "../scripts/download_figshare_file.py"
+
+
+rule extract_cropgrids_nc:
+    """Unpack a single crop's CROPGRIDS NetCDF from the bundle zip.
+
+    The mapping CSV resolves model crop name → CROPGRIDS .nc filename
+    (e.g. apple → CROPGRIDSv1.08_apple.nc). Crops listed in
+    ``config["cropgrids_crops"]`` must have a non-empty entry there
+    (enforced by ``validate_cropgrids_crops``).
+    """
+    input:
+        zip_path="data/downloads/cropgrids_v1_08_nc_maps.zip",
+        mapping="data/curated/cropgrids_crop_mapping.csv",
+    output:
+        "<processing>/shared/cropgrids_nc/CROPGRIDSv1.08_{crop}.nc",
+    resources:
+        runtime="5m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/extract_cropgrids_{crop}.log",
+    shell:
+        r"""
+        mapped=$(awk -F, -v c="{wildcards.crop}" 'NR>1 && $1==c {{print $2}}' {input.mapping})
+        if [ -z "$mapped" ]; then
+          echo "No cropgrids_name for crop {wildcards.crop} in {input.mapping}" >&2
+          exit 1
+        fi
+        mkdir -p "$(dirname {output})"
+        unzip -oj {input.zip_path} "CROPGRIDSv1.08_NC_maps/CROPGRIDSv1.08_${{mapped}}.nc" -d "$(dirname {output})" > {log} 2>&1
+        if [ "$mapped" != "{wildcards.crop}" ]; then
+          mv "$(dirname {output})/CROPGRIDSv1.08_${{mapped}}.nc" {output}
+        fi
+        """
+
+
 rule download_grassland_yield_data:
     """Retrieve historical managed-grassland yield from ISIMIP2a / LPJmL.
 

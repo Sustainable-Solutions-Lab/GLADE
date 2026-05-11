@@ -44,7 +44,17 @@ def _resolve_file(article_id: int, file_name: str) -> int:
 
 
 def _download_file(file_id: int, output: Path, show_progress: bool) -> None:
-    download_url = f"https://figshare.com/ndownloader/files/{file_id}"
+    # Use the API-issued ``ndownloader.figshare.com`` host (which the
+    # ``download_url`` field of the article-files endpoint points at):
+    # it 302-redirects directly to a presigned S3 URL.
+    #
+    # Do NOT use ``figshare.com/ndownloader/files/{id}`` here even though
+    # it looks like the same endpoint — that host is fronted by AWS WAF
+    # and now returns a permanent HTTP 202 (``x-amzn-waf-action:
+    # challenge``) for non-interactive clients, which our 202-retry loop
+    # below would otherwise treat as "file still preparing" and spin
+    # silently for minutes.
+    download_url = f"https://ndownloader.figshare.com/files/{file_id}"
 
     # Retry loop to handle Figshare's 202 (Accepted) responses
     delay = RETRY_DELAY

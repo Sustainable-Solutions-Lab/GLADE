@@ -152,7 +152,30 @@ GAEZ (Global Agro-Ecological Zones) v5
 
 **Retrieval**: Automatic via Snakemake rules in ``workflow/rules/retrieve.smk``
 
-**Usage**: Crop yield and suitability rasters feeding into production potential calculations
+**Usage**: Crop yield and suitability rasters feeding into production potential calculations. Crops listed in ``config["cropgrids_crops"]`` bypass GAEZ entirely and are sourced from CROPGRIDS + FAOSTAT instead (see next section).
+
+CROPGRIDS v1.08
+~~~~~~~~~~~~~~~
+
+**Provider**: Tang, Nguyen, Conchedda, Casse, Tubiello & Maggi (2024)
+
+**Description**: Global geo-referenced harvested and physical crop area maps for 173 crops around 2020 at 0.05° (~5.6 km) resolution; compiled from Monfreda et al. (2008) and 28 newer gridded sources, aligned to FAOSTAT statistics.
+
+**Version**: v1.08 (Figshare release v9). The model uses only the per-crop NetCDF ``harvarea`` band.
+
+**Coverage**:
+  * Spatial: Global, 0.05° × 0.05°
+  * Temporal: Reference around 2020
+
+**Access**: https://figshare.com/articles/dataset/CROPGRIDS/22491997 (full dataset; DOI https://doi.org/10.6084/m9.figshare.22491997)
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+**Citation**: Tang, F. H. M., Nguyen, T. H., Conchedda, G., Casse, L., Tubiello, F. N., & Maggi, F. (2024). *CROPGRIDS: a global geo-referenced dataset of 173 crops*. Scientific Data 11, 413. https://doi.org/10.1038/s41597-024-03247-7
+
+**Retrieval**: Bulk zip download via ``download_cropgrids_nc_maps`` (uses ``download_figshare_file.py``); per-crop NetCDFs extracted on demand by ``extract_cropgrids_nc``.
+
+**Usage**: Fallback source of harvested area and current cropland footprint for crops listed in ``config["cropgrids_crops"]`` (e.g. ``apple``), which are not covered by GAEZ. The CROPGRIDS ``harvarea`` raster drives both ``baseline_area_mha`` and ``suitable_area`` for these crops (see ``build_crop_yields_cropgrids.py``); per-country FAOSTAT QCL yields (item 515 for apple, element 5419 hg/ha) supply the dry-matter yield, broadcast uniformly to every (region, resource_class) cell within each country.
 
 FAOSTAT Prices (PP)
 ~~~~~~~~~~~~~~~~~~~~

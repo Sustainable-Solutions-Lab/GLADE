@@ -120,6 +120,10 @@ rule build_crop_yields:
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
         "<processing>/{name}/crop_yields/{crop}_{water_supply}.csv",
+    # Crops sourced from CROPGRIDS are routed to build_crop_yields_cropgrids
+    # below; this rule only matches GAEZ-backed crops.
+    wildcard_constraints:
+        crop="|".join(gaez_crops()) if gaez_crops() else "__never__",
     group:
         "prep"
     resources:
@@ -131,6 +135,47 @@ rule build_crop_yields:
         "<benchmarks>/{name}/build_crop_yields_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_crop_yields.py"
+
+
+rule build_crop_yields_cropgrids:
+    """Build yield and harvested-area CSVs for cropgrids-backed crops.
+
+    Produces both ``crop_yields/{crop}_r.csv`` and
+    ``harvested_area/gaez/{crop}_r.csv`` in one go, matching the schema of
+    the GAEZ pipeline. Rainfed only.
+    """
+    input:
+        cropgrids_nc="<processing>/shared/cropgrids_nc/CROPGRIDSv1.08_{crop}.nc",
+        cropgrids_mapping="data/curated/cropgrids_crop_mapping.csv",
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
+        moisture_content="data/curated/crop_moisture_content.csv",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        averaging_period=config["costs"]["averaging_period"],
+        suitable_area_expansion=config["cropgrids"]["suitable_area_expansion"],
+    output:
+        crop_yields="<processing>/{name}/crop_yields/{crop}_r.csv",
+        harvested_area="<processing>/{name}/harvested_area/gaez/{crop}_r.csv",
+    wildcard_constraints:
+        crop=(
+            "|".join(config["cropgrids_crops"])
+            if config.get("cropgrids_crops")
+            else "__never__"
+        ),
+    group:
+        "prep"
+    resources:
+        runtime="5m",
+        mem_mb=3500,
+    log:
+        "<logs>/{name}/build_crop_yields_cropgrids_{crop}.log",
+    benchmark:
+        "<benchmarks>/{name}/build_crop_yields_cropgrids_{crop}.tsv"
+    script:
+        "../scripts/build_crop_yields_cropgrids.py"
 
 
 _fdd_crops_in_config = set(config["fodder_decomposition"]["fdd_crops"]) & set(
@@ -211,11 +256,7 @@ rule build_fdd_area_shares:
 
 def _fodder_yield_correction_inputs(_wildcards):
     """Get GAEZ yield and area files for all FDD crops (both water supplies)."""
-    irr_cfg = config["irrigation"]["irrigated_crops"]
-    if irr_cfg == "all":
-        irrigated_crops = set(config["crops"])
-    else:
-        irrigated_crops = set(irr_cfg)
+    irrigated = set(irrigated_crops())
 
     inputs = {"regions": "<processing>/{name}/regions.geojson"}
     for crop in config["fodder_decomposition"]["fdd_crops"]:
@@ -227,7 +268,7 @@ def _fodder_yield_correction_inputs(_wildcards):
         inputs[f"gaez_harvested_{crop}_r"] = (
             f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
         )
-        if crop in irrigated_crops:
+        if crop in irrigated:
             inputs[f"gaez_yield_{crop}_i"] = (
                 f"<processing>/{{name}}/crop_yields/{crop}_i.csv"
             )
@@ -302,6 +343,9 @@ rule build_harvested_area_gaez:
         non_food_crops=config["non_food_crops"],
     output:
         "<processing>/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
+    # Cropgrids-backed crops produce this output via build_crop_yields_cropgrids.
+    wildcard_constraints:
+        crop="|".join(gaez_crops()) if gaez_crops() else "__never__",
     group:
         "prep"
     resources:

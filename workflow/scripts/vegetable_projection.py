@@ -39,11 +39,17 @@ NUTS_COUNTRY_SHARE_BLEND = 0.7
 #  * BAN module — banana and plantain share the same GAEZ raster. Map
 #    plantain FBS supply (FBS 2616) exclusively onto banana, matching
 #    the supply side where banana's area already absorbs plantain area.
-#  * FRT module — citrus, mango, watermelon share the GAEZ FRT raster
-#    along with the broader unmodeled fruit basket (apples, pineapples,
-#    dates, and the FBS 2625 "Fruits, other" residual). Pool those FBS
-#    items and project across the three FRT-modeled crops by per-country
-#    / global crop-production share.
+#  * FRT module — citrus, mango, watermelon share the GAEZ FRT raster,
+#    and apple has its own CROPGRIDS-based supply. They jointly absorb
+#    the unmodeled fruit basket (pineapples, dates, the FBS 2625
+#    "Fruits, other" residual): pool those FBS items and project across
+#    the four FRT-/CROPGRIDS-modeled crops by per-country / global
+#    crop-production share.
+#
+# Apples (FBS 2617) used to be a residual member, but with apple a
+# directly-modeled crop (via CROPGRIDS) it now has an explicit
+# faostat_food_item_map row (food → 2617) and so is consumed via the
+# normal explicit-supply path, not via the residual pool.
 #
 # Grapes (FBS 2620) are intentionally excluded: although the FBS "Food"
 # element is in principle net of wine processing, most of the world's
@@ -52,9 +58,13 @@ NUTS_COUNTRY_SHARE_BLEND = 0.7
 # excludes.
 FRUITS_BAN_PROJECTION_FOODS: tuple[str, ...] = ("banana",)
 FRUITS_BAN_RESIDUAL_ITEM_CODES: tuple[int, ...] = (2616,)  # Plantains
-FRUITS_FRT_PROJECTION_FOODS: tuple[str, ...] = ("citrus", "mango", "watermelon")
+FRUITS_FRT_PROJECTION_FOODS: tuple[str, ...] = (
+    "citrus",
+    "mango",
+    "watermelon",
+    "apple",
+)
 FRUITS_FRT_RESIDUAL_ITEM_CODES: tuple[int, ...] = (
-    2617,  # Apples
     2618,  # Pineapples
     2619,  # Dates
     2625,  # Fruits, other

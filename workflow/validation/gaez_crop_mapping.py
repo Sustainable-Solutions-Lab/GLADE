@@ -38,7 +38,10 @@ def validate_gaez_crop_mapping(config: dict, project_root: Path) -> None:
 
     df = GAEZ_MAPPING_SCHEMA.validate(pd.read_csv(csv_path))
 
-    config_crops = set(config["crops"])
+    # Crops sourced from CROPGRIDS bypass GAEZ entirely and have no mapping
+    # row by design (enforced by validate_cropgrids_crops).
+    cropgrids_crops = set(config.get("cropgrids_crops") or [])
+    config_crops = set(config["crops"]) - cropgrids_crops
     mapped_crops = set(df["crop_name"].unique())
 
     fallback_crops = (

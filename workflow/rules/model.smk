@@ -14,18 +14,17 @@ import math
 
 
 def yield_inputs(wildcards):
-    """Get all crop yield files for model building."""
-    irr_cfg = config["irrigation"]["irrigated_crops"]
-    if irr_cfg == "all":
-        irrigated_crops = config["crops"]
-    else:
-        irrigated_crops = list(irr_cfg)
+    """Get all crop yield files for model building.
 
+    Yield CSVs share one schema regardless of source: GAEZ-backed crops get
+    them from build_crop_yields, CROPGRIDS-backed crops (config["cropgrids_crops"])
+    from build_crop_yields_cropgrids. Cropgrids-backed crops are rainfed-only.
+    """
     return {
         f"{crop}_yield_{water_supply}": f"<processing>/{{name}}/crop_yields/{crop}_{water_supply}.csv"
         for crop, water_supply in (
             list(zip(config["crops"], itertools.repeat("r")))  # Rainfed
-            + list(zip(irrigated_crops, itertools.repeat("i")))
+            + list(zip(irrigated_crops(), itertools.repeat("i")))
         )
     }
 
@@ -33,21 +32,15 @@ def yield_inputs(wildcards):
 def harvested_area_model_inputs(wildcards):
     """Return harvested area files for all crops.
 
-    Harvested area comes from the same GAEZ source as yields and is always
-    loaded so that ``baseline_area_mha`` can be computed on every crop
-    production link.
+    Both GAEZ and CROPGRIDS-backed crops write into the same
+    ``harvested_area/gaez/{crop}_{water_supply}.csv`` path so downstream
+    consumers see a uniform layout. Cropgrids-backed crops are rainfed-only.
     """
-    irr_cfg = config["irrigation"]["irrigated_crops"]
-    if irr_cfg == "all":
-        irrigated_crops = config["crops"]
-    else:
-        irrigated_crops = list(irr_cfg)
-
     inputs = {
         f"{crop}_harvested_r": f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
         for crop in config["crops"]
     }
-    for crop in irrigated_crops:
+    for crop in irrigated_crops():
         inputs[f"{crop}_harvested_i"] = (
             f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
         )

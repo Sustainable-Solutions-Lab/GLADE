@@ -150,6 +150,17 @@ def load_crop_growing_seasons(
             .reset_index()
         )
 
+        # Skip crops whose yield CSV lacks growing-season columns
+        # (CROPGRIDS-backed crops, which are rainfed-only and absent from
+        # the irrigation water-use accounting).
+        required = {
+            "suitable_area",
+            "growing_season_start_day",
+            "growing_season_length_days",
+        }
+        if not required.issubset(pivot.columns):
+            continue
+
         pivot = pivot.dropna(
             subset=[
                 "region",

@@ -422,7 +422,7 @@ rule doc_fig_grazing_only_land_fraction:
         classes=f"<processing>/{DOC_FIG_NAME}/resource_classes.nc",
         lc_masks=f"<processing>/{DOC_FIG_NAME}/luc/lc_masks.nc",
         regions=f"<processing>/{DOC_FIG_NAME}/regions.geojson",
-        suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
+        suitability=[gaez_path("suitability", "r", crop) for crop in gaez_crops()],
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/grazing_only_land_fraction.svg",

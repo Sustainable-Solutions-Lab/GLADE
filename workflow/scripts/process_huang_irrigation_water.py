@@ -156,6 +156,17 @@ def load_crop_growing_seasons(crop_files: Iterable[str]) -> pd.DataFrame:
             .reset_index()
         )
 
+        # CROPGRIDS-backed crops (config["cropgrids_crops"]) don't carry
+        # GAEZ growing-season rasters and contribute no irrigation demand
+        # (they're rainfed-only). Skip them rather than dropna-erroring.
+        required = {
+            "suitable_area",
+            "growing_season_start_day",
+            "growing_season_length_days",
+        }
+        if not required.issubset(pivot.columns):
+            continue
+
         pivot = pivot.dropna(
             subset=[
                 "region",

@@ -46,3 +46,9 @@ crops:
   - tomato
   - banana
   - sugarcane
+  - apple  # CROPGRIDS-backed crop; exercises build_crop_yields_cropgrids
+
+# Inherited default.yaml lists apple here, but be explicit so the
+# cropgrids_crops <-> crops invariant is obvious in the test config.
+cropgrids_crops:
+  - apple

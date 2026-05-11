@@ -101,13 +101,15 @@ WITHIN_QCL_FOOD_SPLITS: dict[str, float] = {
 #   ``blend_weight`` + ``crop_to_food``) is auto-converted to a one-
 #   element ``projections`` list at runtime.
 #
-# Fruits uses two sub-projections (one per GAEZ RES06 module) so demand
-# attribution mirrors the module-aligned supply attribution:
+# Fruits uses two sub-projections (one per GAEZ RES06 module / data
+# source) so demand attribution mirrors the module-aligned supply
+# attribution:
 #   * BAN module: plantain FBS 2616 -> banana exclusively (they share
 #     the GAEZ BAN raster on the supply side).
-#   * FRT module: apples 2617 + pineapples 2618 + dates 2619 + fruits-
-#     other 2625 pooled and split across citrus/mango/watermelon (the
-#     three modeled crops that share the GAEZ FRT raster).
+#   * FRT module + CROPGRIDS apple: pineapples 2618 + dates 2619 +
+#     fruits-other 2625 pooled and split across citrus/mango/watermelon
+#     (GAEZ FRT) and apple (CROPGRIDS). Apples (FBS 2617) are not in
+#     the residual pool — apple has a direct faostat_food_item_map row.
 # Grapes (FBS 2620) are intentionally excluded; see vegetable_projection.py.
 RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
     {

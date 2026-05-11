@@ -88,6 +88,13 @@ TREE_NUT_ITEM_CODES: tuple[int, ...] = (
     226,  # Areca nuts
     234,  # Other nuts (excluding wild edible nuts and groundnuts), n.e.c.
 )
+# QCL items modelled outside the FRT pool. Apples are sourced from CROPGRIDS
+# (see config["cropgrids_crops"]) and have their own supply chain, so their
+# area must be deflated out of the FRT raster before the citrus/mango/
+# watermelon trio absorbs it. Add other CROPGRIDS-modelled fruit items here
+# as they come online.
+APPLE_ITEM_CODES: tuple[int, ...] = (515,)  # Apples (FBS 2617)
+
 FRUIT_ITEM_CODES: tuple[int, ...] = (
     # Melons, tropical and subtropical fruits
     567,  # Watermelons
@@ -106,7 +113,8 @@ FRUIT_ITEM_CODES: tuple[int, ...] = (
     507,  # Pomelos and grapefruits
     512,  # Other citrus fruit, n.e.c.
     # Pome and stone fruits
-    515,  # Apples
+    *APPLE_ITEM_CODES,  # Apples (deflated below; included so FRT_area totals
+    # match what GAEZ actually packs into the FRT raster).
     521,  # Pears
     523,  # Quinces
     526,  # Apricots
@@ -241,11 +249,14 @@ def main() -> None:
 
     grape_area = pivot[list(GRAPE_ITEM_CODES)].sum(axis=1)
     tree_nut_area = pivot[list(TREE_NUT_ITEM_CODES)].sum(axis=1)
+    apple_area = pivot[list(APPLE_ITEM_CODES)].sum(axis=1)
     aligned_wine_fraction = wine_fraction.reindex(
         pivot.index, fill_value=global_wine_fraction
     )
     excluded_grape = grape_area * aligned_wine_fraction
-    excluded_area = excluded_grape + tree_nut_area
+    # Apples are now modeled directly from CROPGRIDS; their area must be
+    # stripped from the FRT pool so it is not double-counted by the trio.
+    excluded_area = excluded_grape + tree_nut_area + apple_area
     frt_total_area = pivot.sum(axis=1)
 
     global_excluded = float(excluded_area.sum())
@@ -254,11 +265,12 @@ def main() -> None:
         (global_total - global_excluded) / global_total if global_total > 0 else 1.0
     )
     logger.info(
-        "Global kept share of FRT area: %.3f "
-        "(excluded wine-grape=%.2f Mha + tree-nut=%.2f Mha, FRT total=%.2f Mha)",
+        "Global kept share of FRT area: %.3f (excluded wine-grape=%.2f Mha "
+        "+ tree-nut=%.2f Mha + apple=%.2f Mha, FRT total=%.2f Mha)",
         global_share,
         float(excluded_grape.sum()) / 1e6,
         float(tree_nut_area.sum()) / 1e6,
+        float(apple_area.sum()) / 1e6,
         global_total / 1e6,
     )
 

@@ -16,6 +16,7 @@ from .country_regions import validate_country_regions
 from .crop_food_pathways import validate_crop_food_pathways
 from .crop_groups import validate_crop_groups
 from .crop_moisture_content import validate_crop_moisture_content
+from .cropgrids_crops import validate_cropgrids_crops
 from .diet_basis import validate_diet_basis
 from .food_basis import validate_food_basis
 from .food_groups import validate_food_groups
@@ -42,6 +43,7 @@ _CHECKS: dict[str, Validator] = {
     "crop_food_pathways": validate_crop_food_pathways,
     "crop_groups": validate_crop_groups,
     "crop_moisture_content": validate_crop_moisture_content,
+    "cropgrids_crops": validate_cropgrids_crops,
     "gaez_crop_mapping": validate_gaez_crop_mapping,
     "seed_rates": validate_seed_rates,
     "health_map": validate_health_map,

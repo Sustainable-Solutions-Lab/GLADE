@@ -55,7 +55,11 @@ def _get_unique_res06_rasters(crops: list[str]) -> dict[str, str]:
     return rasters
 
 
-_first_crop = _default_config["crops"][0]
+# Pick the first GAEZ-backed crop for grid extraction. The cell resolution
+# and extent of any GAEZ yield raster will do; we just need to avoid picking
+# a CROPGRIDS-backed crop, whose GAEZ raster doesn't exist.
+_cropgrids_default = set(_default_config.get("cropgrids_crops") or [])
+_first_crop = next(c for c in _default_config["crops"] if c not in _cropgrids_default)
 _default_gaez_cfg = _default_config["data"]["gaez"]
 # Hardcoded: water supply is arbitrary for grid extraction (only resolution/extent matter)
 _grid_yield_raster = (
@@ -224,7 +228,7 @@ rule build_current_grassland_area:
 
 def _gaez_cropland_baseline_inputs(_wildcards):
     """Return input dict for GAEZ-based cropland baseline rule."""
-    return _get_unique_res06_rasters(config["crops"])
+    return _get_unique_res06_rasters(gaez_crops())
 
 
 if config["luc"]["cropland_source"] == "gaez":
@@ -281,7 +285,7 @@ rule build_grazing_only_land:
         regions="<processing>/{name}/regions.geojson",
         lc_masks=rules.prepare_luc_inputs.output.lc_masks,
         luicube=rules.resample_luicube_grassland.output[0],
-        suitability=[gaez_path("suitability", "r", crop) for crop in config["crops"]],
+        suitability=[gaez_path("suitability", "r", crop) for crop in gaez_crops()],
     output:
         grazing_area="<processing>/{name}/land_grazing_only_by_class.csv",
     group:
