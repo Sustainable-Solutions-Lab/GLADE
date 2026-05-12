@@ -92,7 +92,7 @@ PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
     "milk": "dairy",
     "eggs": "eggs",
     "stimulants": "stimulants",
-    # fat_ani: out-of-scope until rendered-fat is wired into animal_production
+    "fat_ani": "animal_fat",  # rendered animal fat (lard/tallow)
 }
 
 # `prcd` rows providing the whole/refined cereal split.
@@ -121,7 +121,6 @@ OUT_OF_SCOPE_KCAL: list[str] = [
     "shellfish",
     "spices",
     "other",
-    "fat_ani",  # rendered animal fat — pending animal_production co-product wiring
 ]
 
 # Country proxies for the 12 GDD-IA-missing required countries.

@@ -464,6 +464,15 @@ animal_products:
     eggs: 1.00         # No conversion needed (whole egg = retail product)
     dairy: 1.00        # No conversion needed (whole milk = retail product)
     dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
+  # Rendered fat (tallow / lard) yielded as a co-product of animal
+  # production. Mt rendered fat per Mt retail meat, derived from
+  # typical carcass-fat fractions (tallow ~6% of cattle carcass /
+  # carcass_to_retail 0.67 = 0.090; lard ~10% / 0.73 = 0.137). Products
+  # not listed yield no rendered fat in the food supply.
+  # Sources: USDA AH 697; FAOSTAT FBS item 2737 cross-check.
+  rendered_fat_yield_per_retail:
+    meat-cattle: 0.090
+    meat-pig: 0.137
   # FAOSTAT QCL item names to aggregate for each model product.
   # First item is the primary product; additional items are proxied species
   # whose production is lumped into the model product.
@@ -555,7 +564,7 @@ food_groups:
   - eggs
   - sugar
   - stimulants
-  # animal_fat (rendered fat): pending animal_production co-product wiring
+  - animal_fat
   # Optional per-group constraints with "min", "max" or "equal" in g/person/day
   constraints: {}
   equal_by_country_source: null
@@ -579,6 +588,7 @@ food_groups:
     eggs: 213
     sugar: 133
     stimulants: 50
+    animal_fat: 50
   # Fix relative food contributions within each food group based on baseline
   # consumption data. When enabled, the model maintains baseline ratios between
   # foods in each group (e.g., if wheat is 60% and rice 40% of grains, that
@@ -735,6 +745,7 @@ biomass:
   - foxtail-millet
   - chickpea
   - gram
+  - rendered-fat  # tallow/lard yielded as a co-product of cattle/pig animal_production; ~50% goes to industrial uses (soap, biofuel) not captured in IA food intake
 
 # --- section: trade ---
 trade:
@@ -1606,6 +1617,7 @@ plotting:
       dairy: "#A6CEE3"  # Paired #1
       eggs: "#FDBF6F"  # Paired #7
       stimulants: "#B15928"  # Paired #12
+      animal_fat: "#FFFF99"  # Paired #11
 
   fallback_cmaps:
     crops: "Set3"

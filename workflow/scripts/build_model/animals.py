@@ -206,6 +206,7 @@ def add_feed_to_animal_product_links(
     feed_baseline: pd.DataFrame | None = None,
     enforce_baseline_feed: bool = False,
     cost_calibration: pd.Series | None = None,
+    rendered_fat_yield_per_retail: dict[str, float] | None = None,
 ) -> None:
     """Add links that convert feed pools into animal products with emissions and manure N.
 
@@ -511,8 +512,24 @@ def add_feed_to_animal_product_links(
     link_df["efficiency3"] = link_df["n_fert_per_t_feed"]
     link_df["efficiency4"] = link_df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE
 
+    # Rendered-fat co-product (tallow for cattle, lard for pigs).
+    # Yields are configured per product in
+    # animal_products.rendered_fat_yield_per_retail (Mt rendered fat per
+    # Mt retail meat). Products not listed yield no rendered fat.
+    fat_yield_map = {
+        str(k): float(v) for k, v in (rendered_fat_yield_per_retail or {}).items()
+    }
+    link_df["rendered_fat_yield"] = link_df["product"].map(fat_yield_map).fillna(0.0)
+    link_df["efficiency5"] = (
+        link_df["adjusted_efficiency"] * link_df["rendered_fat_yield"]
+    )
+    # bus5: rendered-fat (only meaningful when rendered_fat_yield > 0; for
+    # other products efficiency5 = 0 makes the link inert on this bus).
+    link_df["bus5"] = "food:rendered-fat:" + link_df["country"]
+
     # All animal production links now have multiple outputs:
-    # bus1: animal product, bus2: CH4, bus3: manure N fertilizer (country-specific), bus4: N2O
+    # bus1: animal product, bus2: CH4, bus3: manure N fertilizer
+    # (country-specific), bus4: N2O, bus5: rendered fat (cattle, pig)
     n.links.add(
         link_df.index,
         bus0=link_df["feed_bus"],
@@ -527,6 +544,8 @@ def add_feed_to_animal_product_links(
         efficiency3=link_df["efficiency3"],
         bus4="emission:n2o",
         efficiency4=link_df["efficiency4"],
+        bus5=link_df["bus5"],
+        efficiency5=link_df["efficiency5"],
         country=link_df["country"],
         product=link_df["product"],
         feed_category=link_df["feed_category"],

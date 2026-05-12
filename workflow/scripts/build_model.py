@@ -915,6 +915,9 @@ if __name__ == "__main__":
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
         cost_calibration=animal_cost_calibration,
+        rendered_fat_yield_per_retail=animal_products_cfg[
+            "rendered_fat_yield_per_retail"
+        ],
     )
 
     # Add exogenous feed generators (leaves/browse, swill)
