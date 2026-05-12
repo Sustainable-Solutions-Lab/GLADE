@@ -96,13 +96,17 @@ Software to install manually
 Accounts and credentials
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Three health/dietary datasets cannot be redistributed and must be downloaded
-manually after free registration:
+Three health/dietary datasets cannot be redistributed and must be placed
+manually:
 
 * **IHME GBD 2023 mortality rates** — `IHME GBD Results Tool
-  <https://vizhub.healthdata.org/gbd-results/>`_.
-* **IHME GBD 2019 relative risk data** — same source, separate export.
-* **Global Dietary Database** — `GDD <https://www.globaldietarydatabase.org/>`_.
+  <https://vizhub.healthdata.org/gbd-results/>`_ (free registration).
+* **IHME GBD 2019 relative risk and dietary exposure data** — same
+  source, separate exports (free registration).
+* **GDD-IA (Global Dietary Database — Integrated Assessment)** —
+  available upon personal request from Marco Springmann, pending
+  publication (will be released under CC-BY-NC). See :doc:`current_diets`
+  and the :ref:`gdd-ia-dietary-intake` entry in :doc:`data_sources`.
 
 Two API credentials are needed for automatic downloads:
 

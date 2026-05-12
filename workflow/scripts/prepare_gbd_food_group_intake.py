@@ -76,11 +76,11 @@ GBD_RISK_TO_FOOD_GROUP = {
     # adding it pushes red_meat consumption ~30% above what slaughter can
     # support globally (likely because GBD's Bayesian-smoothed exposures
     # over-estimate processed-meat intake relative to FAOSTAT QCL volumes).
-    # GDD v09 still folds into red_meat upstream in
-    # prepare_gdd_dietary_intake.py; the GDD/GBD averaging in
-    # estimate_baseline_diet.py therefore partially dilutes the v09
-    # contribution but stays below the production envelope. See
-    # docs/health.rst and docs/data_sources.rst for the trade-off.
+    # GDD-IA's processed-meat ``othr_meat`` already folds into red_meat
+    # upstream in prepare_gdd_ia_dietary_intake.py; GBD anchoring on
+    # red_meat in estimate_baseline_diet.py therefore overrides that fold
+    # for countries where GBD reports red_meat. See docs/health.rst and
+    # docs/data_sources.rst for the trade-off.
     "MILK": "milk",  # Cross-validation only; not used for dairy group total
 }
 

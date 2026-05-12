@@ -278,18 +278,19 @@ Appendix 1, p. 171).
   GBD also provides seafood omega-3 and processed meat risk factors, but
   fish/seafood and processed meat are not currently modelled as separate
   food groups.
-- **Processed meat in red_meat**: GDD's processed-meat variable (v09) is
-  folded into the ``red_meat`` exposure used by the health module so that
-  consumption mass stays consistent with FAOSTAT slaughter-volume animal
-  production (see :doc:`current_diets`). Because GBD's red-meat
-  exposure-response curve was calibrated against unprocessed red meat
-  intake levels, the resulting risk attribution is a slight conservative
-  approximation: the higher per-gram carcinogenic risk that GBD assigns
-  specifically to processed meat is not reproduced. A future improvement
-  would be to add ``prc_meat`` as a real food group with its own RR; in
-  the current model this trade-off is preferred over silently dropping
-  v09 (which was the prior behaviour) since closing the
-  consumption-vs-production leak matters for emissions accounting.
+- **Processed meat in red_meat**: GDD-IA's processed/"other" red-meat
+  category (``othr_meat``) is folded into the ``red_meat`` exposure used
+  by the health module so that consumption mass stays consistent with
+  FAOSTAT slaughter-volume animal production (see :doc:`current_diets`).
+  Because GBD's red-meat exposure-response curve was calibrated against
+  unprocessed red meat intake levels, the resulting risk attribution is
+  a slight conservative approximation: the higher per-gram carcinogenic
+  risk that GBD assigns specifically to processed meat is not
+  reproduced. A future improvement would be to add ``prc_meat`` as a
+  real food group with its own RR; in the current model this trade-off
+  is preferred over silently dropping the processed-meat mass, since
+  closing the consumption-vs-production leak matters for emissions
+  accounting.
 - **Disease causes modelled**: CHD (coronary heart disease), Stroke, T2DM (type
   2 diabetes), CRC (colorectal cancer)
 - **Sugar**: The GBD dataset includes relative risk factors for
@@ -302,8 +303,10 @@ Appendix 1, p. 171).
   (``health.intake_age_min``). Age-specific RR curves are extracted for all
   15 adult age groups (25–29 through 95+) and combined into YLL-weighted
   effective RR curves per health cluster (see :ref:`age-specific-rr`).
-- **Intake units**: All quantities in fresh (as consumed) weight, matching GDD
-  dietary data conventions
+- **Intake units**: Per-group basis matches the baseline-diet pipeline
+  output (model basis; see :doc:`current_diets`). GBD exposure is
+  converted to that basis at load time via ``diet.source_basis`` and
+  ``diet.weight_conversion``.
 - **Alternative RR sources**: The ``health.alternative_rr`` config option allows
   substituting GBD dose-response curves with log-linear curves from literature
   meta-analyses on a per-risk-factor basis. By default, red meat uses literature
@@ -503,8 +506,10 @@ Data Inputs
 
 ``workflow/scripts/prepare_health_costs.py`` assembles the following datasets:
 
-- **Baseline diet** (``processing/{name}/dietary_intake.csv``): average daily
-  intake by country and food item from the Global Dietary Database (GDD)
+- **Baseline diet** (``processing/{name}/dietary_intake.csv``): average
+  daily food-group intake by country, merged from GDD-IA and NHANES
+  (USA) — see :doc:`current_diets`. The per-food disaggregation lives
+  in ``processing/{name}/baseline_diet.csv``.
 - **Relative risks** (``processing/{name}/health/relative_risks.csv``):
   dose–response pairs for each (risk factor, cause) combination from GBD
 - **Mortality rates** (``processing/{name}/health/gbd_mortality_rates.csv``):

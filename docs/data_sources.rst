@@ -22,7 +22,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 1. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
 2. Download the IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`).
 3. Download the IHME 2019 dietary risk exposure estimates ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA`` (:ref:`ihme-diet-risk-exposure`).
-4. Register at the Global Dietary Database portal and download the dataset, placed locally as the directory ``GDD-dietary-intake`` (:ref:`gdd-dietary-intake`).
+4. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
 
 **Required API key setup:**
 
@@ -276,7 +276,7 @@ FAOSTAT Food Balance Sheets (FBS)
 
 **Provider**: FAO Statistics Division
 
-**Description**: Per-capita food supply quantities (kg/capita/year) by country, item, and year from FAO's global statistical database covering 245+ countries from 1961 onward. We use the Grand Total item to benchmark available food supply when scaling food waste fractions, and per-commodity supply data to supplement baseline dietary intake estimates.
+**Description**: Per-capita food supply quantities (kg/capita/year) by country, item, and year from FAO's global statistical database covering 245+ countries from 1961 onward. The model uses FBS item-level supply to disaggregate food-group totals into per-food consumption shares, to anchor the FBS-override foods in the baseline diet (meats, eggs, yam, coffee, cocoa), and to feed the food-loss-waste accounting.
 
 **Version**: Retrieved via the FAOSTAT API using the ``faostat`` Python client (JSON -> Pandas DataFrame)
 
@@ -290,11 +290,12 @@ FAOSTAT Food Balance Sheets (FBS)
 
 **Citation**: FAO. FAOSTAT Food Balance Sheets. https://www.fao.org/faostat/en/
 
-**Retrieval**: Downloaded as bulk CSVs from FAOSTAT and processed by scripts in ``workflow/scripts/`` (e.g., ``prepare_faostat_food_group_supply.py``, ``prepare_food_loss_waste.py``).
+**Retrieval**: Downloaded as a bulk CSV from FAOSTAT (converted to Parquet) and processed by scripts in ``workflow/scripts/`` (e.g., ``prepare_faostat_fbs_items.py``, ``prepare_food_loss_waste.py``, ``prepare_faostat_food_group_supply.py``).
 
 **Usage**:
-  * **Food Waste**: Converts per-capita waste (kg) to fractions relative to available food supply.
-  * **Dietary Intake**: Provides baseline consumption data for **dairy**, **poultry**, and **vegetable oils**, supplementing the GDD intake surveys.
+  * **Within-group disaggregation**: FBS item-level supply is the basis for per-food shares within each food group in ``estimate_baseline_diet.py``.
+  * **FBS-anchored intake**: For the foods in ``diet.fbs_override_foods`` (meats, eggs, yam, coffee, cocoa), per-country intake is computed directly from FBS supply, the within-FBS-item share, the carcass-to-retail factor for meat, and the country/group consumer-waste fraction.
+  * **Food loss and waste**: FBS Grand Total and per-item supply benchmark per-capita waste data when computing country- and group-level loss/waste fractions in ``prepare_food_loss_waste.py``.
 
 UNSD SDG Indicator 12.3.1 (Food Loss & Waste)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -797,7 +798,7 @@ IHME GBD 2019 -- Dietary Risk Exposure Estimates
 
 **Provider**: Institute for Health Metrics and Evaluation (IHME)
 
-**Description**: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2019, covering 15 dietary risk factors with mean exposure, uncertainty, and summary exposure values (SEVs) by country, age, sex, and year. Supplements the Global Dietary Database (GDD) baseline dietary intake data.
+**Description**: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2019, covering 15 dietary risk factors with mean exposure, uncertainty, and summary exposure values (SEVs) by country, age, sex, and year. Used as the **anchor source** for risk-factor food groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat) in the baseline diet, so the model's intake basis matches the basis the GBD relative-risk functions are calibrated against. GDD-IA provides the fallback when GBD lacks a country.
 
 **Version**: GBD 2019; ZIP archive containing per-risk-factor CSVs (~47 MB each)
 
@@ -821,35 +822,61 @@ IHME GBD 2019 -- Dietary Risk Exposure Estimates
 3. Download ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip`` (direct link: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip).
 4. Extract the ZIP file and place the resulting directory as ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA``.
 
-.. _gdd-dietary-intake:
+.. _gdd-ia-dietary-intake:
 
-Global Dietary Database (GDD)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Global Dietary Database — Integrated Assessment (GDD-IA)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Provider**: Tufts University Friedman School of Nutrition Science and Policy
+**Provider**: Marco Springmann (University of Oxford / UCL).
 
-**Description**: Country-level estimates of dietary intake for major food groups and dietary risk factors based on systematic review and meta-analysis of national dietary surveys.
+**Description**: Country-level dietary intake estimates that combine
+the Global Dietary Database (GDD) survey-based intake data with
+FAOSTAT Food Balance Sheet supply data and apply a multi-source
+caloric-intake normalisation procedure to reconcile the two against
+country-level energy totals. The result is a harmonised per-country
+intake dataset reported in parallel grams/day and kcal/day for every
+food category. The IA release is the input the model uses for the
+baseline diet pipeline; it supersedes the older GDD Country-level
+estimates download.
 
-**Version**: Downloaded as CSV (~1.6 GB); coverage circa 2015-2020 depending on country survey availability
+**Version**: Two CSVs, one in grams/day and one in kcal/day, at the
+configured ``baseline_year``.
 
 **Coverage**:
-  * Spatial: 185+ countries
-  * Content: Mean daily intake (g/day per capita) for major food groups including vegetables, fruits, whole grains, legumes, nuts & seeds, red meat, processed meat, and seafood, with uncertainty estimates
+  * Spatial: ~185 countries (a small number are filled via configured
+    proxies — see :doc:`current_diets`).
+  * Content: per-country mean dietary intake covering the major food
+    groups the model represents (cereals — refined and whole-grain —
+    vegetables, fruits, nuts and seeds, oils, sugar, legumes, poultry,
+    red meat, dairy, eggs) plus out-of-scope categories (alcohol,
+    seafood, spices, rendered animal fats) used only for the
+    caloric-normalisation step. All-ages, both-sexes, all-residences
+    mean strata are consumed by the pipeline.
 
-**Access**: https://globaldietarydatabase.org/data-download
+**Access**: Pending publication. Currently available on personal request
+from Marco Springmann; an automatic retrieval rule will be added once
+the public release is live.
 
-**License**: Free for non-commercial research, teaching, and private study with attribution. Data may not be redistributed or used commercially without Tufts permission. (`Terms and conditions <https://globaldietarydatabase.org/terms-and-conditions-use>`_)
+**License**: Pending publication; will be released under Creative
+Commons Attribution-NonCommercial (CC-BY-NC).
 
-**Citation**: Global Dietary Database. Dietary intake data by country. https://www.globaldietarydatabase.org/
+**Citation**: Springmann M, *Global Dietary Database — Integrated
+Assessment dataset (GDD-IA)*. Pending publication. Used here with
+permission.
 
-**Retrieval**: Automatically processed via ``workflow/scripts/prepare_gdd_dietary_intake.py``
+**Retrieval**: Manually placed; processed by
+``workflow/scripts/prepare_gdd_ia_dietary_intake.py`` (rule
+``prepare_gdd_ia_dietary_intake``).
 
-**Manual download steps**:
+**Manual placement steps**:
 
-1. Create or sign in to a Global Dietary Database account at https://globaldietarydatabase.org/data-download.
-2. When you are signed in, navigate back to the download page, accept the terms and proceed to download the GDD dataset, which will be ~1.6GB zip file.
-3. Extract the zip file; you will get a directory named ``GDD_FinalEstimates_01102022``
-4. Move this directory to ``data/manually_downloaded`` and rename the directory to ``GDD-dietary-intake``.
+1. Contact Marco Springmann to request access to the GDD-IA release for
+   your reference year.
+2. Save the two CSVs as
+   ``data/manually_downloaded/GDD-IA-intake_grams_{baseline_year}.csv``
+   and
+   ``data/manually_downloaded/GDD-IA-intake_kcals_{baseline_year}.csv``
+   where ``{baseline_year}`` matches ``config.baseline_year``.
 
 NHANES / FPED -- What We Eat in America
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1016,7 +1043,8 @@ Most datasets used in this project require attribution. Some disallow redistribu
 
 **Restrictive licenses (non-commercial use and/or no redistribution)**:
 
-* **Non-commercial, no redistribution** (IHME GBD mortality, IHME GBD relative risks, IHME GBD dietary exposure, GDD): Free for non-commercial research; data may not be redistributed or used commercially without permission
+* **Non-commercial, no redistribution** (IHME GBD mortality, IHME GBD relative risks, IHME GBD dietary exposure): Free for non-commercial research; data may not be redistributed or used commercially without permission
+* **Pending publication — CC-BY-NC on release** (GDD-IA): Available upon personal request from Marco Springmann; will be re-licensed under CC-BY-NC when published
 * **Non-commercial with attribution** (GADM, FADN): Free for academic/non-commercial use; GADM prohibits redistribution, FADN requires EU attribution
 * **FAO terms** (GLEAM 3.0 Supplement, FAO Nutrient Conversion): Non-commercial reuse with FAO acknowledgement; commercial use requires prior permission
 * **Custom terms** (ESA Biomass CCI, Copernicus Land Cover, Water Footprint Network): Various provider-specific terms; see individual entries above

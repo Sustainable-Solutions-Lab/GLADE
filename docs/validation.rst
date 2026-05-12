@@ -49,7 +49,7 @@ These settings collectively remove the optimizer's degrees of freedom:
   pinned (see :doc:`livestock`).
 - **Demand side**: ``enforce_baseline_diet`` fixes food consumption links to
   baseline values via ``p_set`` and adds bidirectional slack generators on each
-  food bus, so realized consumption exactly matches the processed GDD baseline
+  food bus, so realized consumption exactly matches the processed baseline
   diet (see :doc:`current_diets`). ``enforce_baseline_feed`` pins animal feed
   use to GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
 - **Land use**: Sparing of existing cropland and grassland is disabled so the
