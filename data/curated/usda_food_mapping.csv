@@ -62,3 +62,5 @@ coffee-green,171890,"Beverages, coffee, brewed, prepared with tap water",Brewed 
 tea-dried,171917,"Beverages, tea, green, brewed, regular",Brewed tea (near-zero nutrition per gram)
 cottonseed-oil,172335,"Oil, cottonseed, salad or cooking",Cottonseed oil
 meat-sheep,172479,"Lamb, composite of trimmed retail cuts, separable lean and fat, trimmed to 1/4"" fat, choice, raw",Lamb meat
+plantain,169126,"Plantains, yellow, raw",Fresh raw yellow plantain (SR Legacy)
+rendered-fat,171026,Lard,Rendered animal fat (lard proxy; tallow is FDC 171018 — using lard for the model food in animal_fat group)

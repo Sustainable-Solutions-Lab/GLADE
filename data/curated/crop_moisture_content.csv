@@ -73,3 +73,4 @@ alfalfa,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),
 silage-maize,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
 biomass-sorghum,0.70,inverse_moisture,GAEZ v5 Module VII table (FDD),Assumed equal to generic fodder crops
 cotton,0.08,inverse_moisture,GAEZ v5 Module VII table (COT),Seed cotton after field drying
+plantain,0.65,inverse_moisture,USDA FoodData Central SR Legacy (FDC 173947),"Plantains, raw: 65.28 g water per 100 g"

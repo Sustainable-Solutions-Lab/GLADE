@@ -104,3 +104,4 @@ sugarbeet_sugar,sugarbeet,sugar,0.1,Sucrose extraction retained from GAEZ v5 yie
 cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning; National Cotton Council reports 100 lb lint with about 162 lb cottonseed,NCC_COTTONSEED
 cotton_ginning,cotton,cottonseed-oil,0.107,Cottonseed oil from seed-cotton seed fraction and FAO cottonseed oil extraction rate,"NCC_COTTONSEED;FAO_TCF"
 cotton_ginning,cotton,oilseed-meal,0.296,Cottonseed meal from seed-cotton seed fraction and FAO cottonseed cake extraction rate,"NCC_COTTONSEED;FAO_TCF"
+plantain_cooked,plantain,plantain,1.0,No processing,

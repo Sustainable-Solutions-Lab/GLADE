@@ -151,6 +151,10 @@ pigeon-pea,cal,kcal/100g,342.97
 pigeon-pea,carb,g/100g,62.78
 pigeon-pea,fat,g/100g,1.49
 pigeon-pea,protein,g/100g,21.7
+plantain,cal,kcal/100g,59.99
+plantain,carb,g/100g,15.7
+plantain,fat,g/100g,0.08
+plantain,protein,g/100g,0.42
 potato,cal,kcal/100g,76.96
 potato,carb,g/100g,17.49
 potato,fat,g/100g,0.09
@@ -159,6 +163,10 @@ rapeseed-oil,cal,kcal/100g,884.08
 rapeseed-oil,carb,g/100g,0.0
 rapeseed-oil,fat,g/100g,100.0
 rapeseed-oil,protein,g/100g,0.0
+rendered-fat,cal,kcal/100g,884.08
+rendered-fat,carb,g/100g,0.0
+rendered-fat,fat,g/100g,100.0
+rendered-fat,protein,g/100g,0.0
 rice-brown,cal,kcal/100g,366.63
 rice-brown,carb,g/100g,76.25
 rice-brown,fat,g/100g,3.2
