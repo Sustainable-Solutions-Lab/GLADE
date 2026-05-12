@@ -85,7 +85,7 @@ validation:
     animal_feed_l1_cost: "calibrated"  # bn USD per Mt DM deviation (animal feed use). Set to null to fall back to automatic Mha-equivalent scaling from land_l1_cost.
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
-      enabled: false
+      enabled: true
       max_relative_deviation: 0.2  # ±20%
       enable_slack: false  # Allow violating minimum production bounds at penalty cost
       min_baseline: 0.000001  # Mha denominator floor for relative penalty modes.

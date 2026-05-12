@@ -27,6 +27,8 @@ scenarios:
   baseline:
     validation:
       enforce_baseline_diet: true
+      production_stability:
+        enabled: false  # consumer-values extraction only; no stability constraints
     food_utility_piecewise:
       enabled: false
     emissions:
