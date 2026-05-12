@@ -3,8 +3,12 @@
 # SPDX-License-Identifier: CC-BY-4.0
 #
 # Per-crop sowing rates (kg of seed planted per hectare per growing cycle).
+# Values are in *fresh / as-planted* mass to match the source citations
+# (e.g. seed tubers for potato, seed setts for sugarcane). build_model.py
+# converts them to dry matter via (1 - moisture_fraction) before computing
+# the seed share against the DM yield basis used elsewhere in the model.
 # Used in build_model/crops.py to deduct a "seed share" from crop_production
-# link efficiency: post-seed yield = yield * (1 - seed_kg_per_ha/1000 / yield_t_per_ha).
+# link efficiency: post-seed yield = yield * (1 - seed_kg_dm_per_ha/1000 / yield_t_dm_per_ha).
 # Country-specific yields therefore generate country-specific seed shares
 # (low-yield countries reserve a higher fraction). The deduction is
 # intentionally separate from FLW / consumption-side accounting.

@@ -497,12 +497,20 @@ if __name__ == "__main__":
     crop_costs = costs_df.set_index(["crop", "country"])[cost_col].astype(float)
     global_median_cost = costs_df.groupby("crop")[cost_col].median()
 
-    # Per-crop sowing rates (kg seed per ha per year). Used by the crop-link
-    # builders to deduct a country-specific seed share from yield (seed share =
-    # seed_kg_per_ha / yield_kg_per_ha). See data/curated/seed_rates.csv for
-    # citations and data/curated/seed_rates.csv header for conventions.
+    # Per-crop sowing rates (kg seed per ha per year). Source values in
+    # data/curated/seed_rates.csv are fresh / as-planted mass to match the
+    # citation literature (e.g. 2200 kg/ha seed tubers for potato). The
+    # crop-link builders compare seed against yield in *dry-matter* units
+    # (the basis of yields_data), so the seed series is converted to DM
+    # here via (1 - moisture_fraction) before being passed downstream.
+    # Without this conversion, high-moisture crops (potato, yam, sugarcane)
+    # see their seed share massively inflated and clip against the 50% cap,
+    # halving their effective yield.
     seed_rates_df = read_csv(snakemake.input.seed_rates, comment="#")
-    seed_kg_per_ha = seed_rates_df.set_index("crop")["seed_kg_per_ha"].astype(float)
+    moisture_by_crop = moisture_df.set_index("crop")["moisture_fraction"].astype(float)
+    seed_kg_dm_per_ha = seed_rates_df.set_index("crop")["seed_kg_per_ha"].astype(
+        float
+    ) * (1.0 - moisture_by_crop)
 
     # Optional cost calibration corrections (crops, grassland, animals)
     crop_cost_calibration = None
@@ -794,7 +802,7 @@ if __name__ == "__main__":
         use_actual_production=use_actual_production,
         cost_calibration=crop_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
-        seed_kg_per_ha=seed_kg_per_ha,
+        seed_kg_dm_per_ha=seed_kg_dm_per_ha,
     )
     land.add_multi_cropping_land_correction(
         n,
@@ -818,7 +826,7 @@ if __name__ == "__main__":
             fertilizer_n_rates,
             residue_lookup,
             min_yield_t_per_ha=min_crop_yield,
-            seed_kg_per_ha=seed_kg_per_ha,
+            seed_kg_dm_per_ha=seed_kg_dm_per_ha,
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")
@@ -838,7 +846,8 @@ if __name__ == "__main__":
             cost_calibration=grassland_cost_calibration,
         )
 
-    # Food conversion
+    # Food conversion. FLW is not applied here — it is applied on the
+    # consumption side via ``add_food_nutrition_links`` below.
     food.add_food_conversion_links(
         n,
         food_list,
@@ -846,7 +855,6 @@ if __name__ == "__main__":
         cfg_countries,
         crop_to_fresh_factor,
         food_to_group,
-        food_loss_waste,
         snakemake.params.crops,
         byproduct_list,
     )
@@ -897,7 +905,8 @@ if __name__ == "__main__":
         frac_leach,
     )
 
-    # Animal production
+    # Animal production. FLW is not applied here — it is applied on the
+    # consumption side via ``add_food_nutrition_links`` below.
     animals.add_feed_to_animal_product_links(
         n,
         animal_product_list,
@@ -910,7 +919,6 @@ if __name__ == "__main__":
         snakemake.params.emissions,
         cfg_countries,
         food_to_group,
-        food_loss_waste,
         animal_costs_per_mt,
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
@@ -961,6 +969,7 @@ if __name__ == "__main__":
         nutrient_units,
         cfg_countries,
         byproduct_list,
+        food_loss_waste,
     )
 
     # Trade networks

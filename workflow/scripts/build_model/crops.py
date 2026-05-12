@@ -91,7 +91,7 @@ def add_regional_crop_production_links(
     *,
     cost_calibration: pd.Series | None = None,
     min_yield_t_per_ha: float,
-    seed_kg_per_ha: pd.Series,
+    seed_kg_dm_per_ha: pd.Series,
 ) -> None:
     """Add crop production links per region/resource class and water supply.
 
@@ -107,11 +107,13 @@ def add_regional_crop_production_links(
         Index crop → global median cost USD/ha (fallback).
     cost_calibration : pd.Series | None
         MultiIndex (crop, country) → correction in bnUSD/Mha (additive).
-    seed_kg_per_ha : pd.Series
-        Index crop → annualized seed reservation in kg per hectare planted.
+    seed_kg_dm_per_ha : pd.Series
+        Index crop → annualized seed reservation in kg DM per hectare
+        planted (already moisture-corrected upstream in build_model.py
+        from the fresh-weight values in data/curated/seed_rates.csv).
         Used to deduct a per-link seed share from yield: post-seed yield =
-        yield * (1 - seed_kg_per_ha/1000 / yield_t_per_ha). The seed share
-        is clipped to [0, 0.5]. Coverage is enforced upstream by
+        yield * (1 - seed_kg_dm_per_ha/1000 / yield_t_dm_per_ha). The seed
+        share is clipped to [0, 0.5]. Coverage is enforced upstream by
         ``workflow.validation.seed_rates`` — every config crop must have a
         row, so a missing key raises ``KeyError`` here rather than silently
         defaulting to zero.
@@ -232,7 +234,7 @@ def add_regional_crop_production_links(
             yield_t_per_ha = pd.to_numeric(df["yield"], errors="coerce").to_numpy(
                 dtype=float
             )
-            seed_t_per_ha = float(seed_kg_per_ha[crop]) / 1000.0
+            seed_t_per_ha = float(seed_kg_dm_per_ha[crop]) / 1000.0
             with np.errstate(divide="ignore", invalid="ignore"):
                 seed_share = np.where(
                     yield_t_per_ha > 0, seed_t_per_ha / yield_t_per_ha, 0.0
@@ -422,13 +424,13 @@ def add_multi_cropping_links(
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
     *,
     min_yield_t_per_ha: float,
-    seed_kg_per_ha: pd.Series,
+    seed_kg_dm_per_ha: pd.Series,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow.
 
     The seed-share deduction (see ``add_regional_crop_production_links``) is
     applied per cycle: each cycle's per-ha yield is reduced by
-    ``seed_kg_per_ha[crop] / 1000 / yield_t_per_ha``.
+    ``seed_kg_dm_per_ha[crop] / 1000 / yield_t_per_ha``.
     """
 
     if eligible_area.empty or cycle_yields.empty:
@@ -489,7 +491,7 @@ def add_multi_cropping_links(
     merged["crop"] = merged["crop"].astype(str).str.strip()
     merged["country"] = merged["country"].astype(str).str.strip()
     merged["crop_bus"] = "crop:" + merged["crop"] + ":" + merged["country"]
-    seed_t_per_ha = merged["crop"].map(seed_kg_per_ha).astype(float) / 1000.0
+    seed_t_per_ha = merged["crop"].map(seed_kg_dm_per_ha).astype(float) / 1000.0
     seed_share = (seed_t_per_ha / merged["yield_t_per_ha"]).clip(lower=0.0, upper=0.5)
     merged["seed_share"] = seed_share.to_numpy(dtype=float)
     merged["yield_efficiency"] = merged["yield_t_per_ha"] * (1.0 - seed_share)
