@@ -250,6 +250,68 @@ def _build_tidy_harvested_area(
     return out.sort_values(["region", "resource_class"], ignore_index=True)
 
 
+def _apply_frt_residual(
+    harvarea_df: pd.DataFrame,
+    regions_gdf: gpd.GeoDataFrame,
+    attribution_path: Path,
+    crop: str,
+) -> pd.DataFrame:
+    """Add per-country FRT residual area to harvarea_df, distributed
+    proportional to existing CROPGRIDS density.
+
+    The residual represents non-modelled FRT-pool fruits (pears, peaches,
+    plums for apple; cantaloupes, papayas for banana) that the model
+    routes onto a CROPGRIDS-backed crop on the supply side. Distributing
+    the residual via the CROPGRIDS footprint keeps the addition on cells
+    where the crop is already grown.
+    """
+    attribution = pd.read_csv(attribution_path)
+    attribution["country"] = attribution["country"].astype(str).str.upper()
+    attribution["crop"] = attribution["crop"].astype(str).str.strip()
+    residual_by_country = (
+        attribution[attribution["crop"] == crop]
+        .set_index("country")["residual_share_ha"]
+        .astype(float)
+    )
+    if residual_by_country.sum() <= 0:
+        return harvarea_df
+
+    region_lookup = regions_gdf[["region", "country"]].copy()
+    region_lookup["region_id"] = np.arange(len(region_lookup), dtype=np.int32)
+    region_lookup["country"] = region_lookup["country"].astype(str).str.upper()
+
+    df = harvarea_df.merge(region_lookup, on="region_id", how="left")
+    df = df[df["country"].notna()].copy()
+    country_total = df.groupby("country")["harvested_area"].sum()
+
+    df["residual_share"] = df["country"].map(residual_by_country).fillna(0.0)
+    df["country_total"] = df["country"].map(country_total).fillna(0.0)
+    valid = (
+        (df["residual_share"] > 0)
+        & (df["country_total"] > 0)
+        & (df["harvested_area"] > 0)
+    )
+    df["addition"] = 0.0
+    df.loc[valid, "addition"] = (
+        df.loc[valid, "residual_share"]
+        * df.loc[valid, "harvested_area"]
+        / df.loc[valid, "country_total"]
+    )
+    df["harvested_area"] = df["harvested_area"] + df["addition"]
+
+    base_total_mha = float(country_total.sum()) / 1e6
+    added_total_mha = float(df["addition"].sum()) / 1e6
+    logger.info(
+        "%s: CROPGRIDS area=%.3f Mha + FRT residual addition=%.3f Mha = %.3f Mha",
+        crop,
+        base_total_mha,
+        added_total_mha,
+        base_total_mha + added_total_mha,
+    )
+
+    return df[["region_id", "resource_class", "harvested_area"]].reset_index(drop=True)
+
+
 if __name__ == "__main__":
     setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)  # type: ignore[name-defined]
 
@@ -311,6 +373,16 @@ if __name__ == "__main__":
         class_labels_cg = _reproject_classes_to_cropgrids(classes_ds)
     region_ids = _rasterize_regions(regions_gdf)
     harvarea_df = _aggregate_harvarea(harvarea, region_ids, class_labels_cg)
+
+    # Optional: absorb a share of the GAEZ-FRT residual (non-modelled fruits)
+    # onto the crop, distributed proportional to its existing CROPGRIDS density.
+    frt_attribution_input = getattr(snakemake.input, "frt_attribution", None)  # type: ignore[name-defined]
+    if frt_attribution_input:
+        frt_attribution_path = Path(frt_attribution_input)
+        if frt_attribution_path.exists():
+            harvarea_df = _apply_frt_residual(
+                harvarea_df, regions_gdf, frt_attribution_path, crop
+            )
 
     country_yields_dm = _country_yield_t_per_ha_dm(
         qcl_csv,

@@ -81,37 +81,80 @@ def _extract_harvested_area(
     return combined
 
 
+def _optional_path(value) -> Path:
+    """Coerce snakemake.input.get('foo') → Path (handles list / str / None)."""
+    if isinstance(value, list):
+        return Path(value[0]) if value else Path("")
+    if value:
+        return Path(value)
+    return Path("")
+
+
+def _yield_weighted_residual_addition(
+    yields_path: Path,
+    attribution_path: Path,
+    crop: str,
+    regions: gpd.GeoDataFrame,
+) -> pd.DataFrame:
+    """Distribute per-country residual area across cells using yield x suit weights.
+
+    Returns a per-(region, resource_class) frame with column ``value`` in ha.
+    Empty if no residual is allocated to this crop.
+    """
+    attribution = pd.read_csv(attribution_path)
+    attribution["country"] = attribution["country"].astype(str).str.upper()
+    attribution["crop"] = attribution["crop"].astype(str).str.strip()
+    residual_by_country = (
+        attribution[attribution["crop"] == crop]
+        .set_index("country")["residual_share_ha"]
+        .astype(float)
+    )
+    if residual_by_country.sum() <= 0:
+        return pd.DataFrame(columns=["region", "resource_class", "value"])
+
+    y_tidy = pd.read_csv(yields_path)
+    if y_tidy.empty:
+        return pd.DataFrame(columns=["region", "resource_class", "value"])
+    pivot = y_tidy.pivot(
+        index=["region", "resource_class"], columns="variable", values="value"
+    ).reset_index()
+    if "yield" not in pivot.columns or "suitable_area" not in pivot.columns:
+        return pd.DataFrame(columns=["region", "resource_class", "value"])
+
+    pivot["yield"] = pd.to_numeric(pivot["yield"], errors="coerce").fillna(0.0)
+    pivot["suitable_area"] = pd.to_numeric(
+        pivot["suitable_area"], errors="coerce"
+    ).fillna(0.0)
+    pivot["weight"] = pivot["yield"] * pivot["suitable_area"]
+
+    df = pivot.merge(regions[["region", "country"]], on="region", how="left")
+    df = df[df["country"].notna()].copy()
+    country_weight = df.groupby("country")["weight"].sum()
+
+    df["target"] = df["country"].map(residual_by_country).fillna(0.0)
+    df["cw"] = df["country"].map(country_weight).fillna(0.0)
+    valid = (df["target"] > 0) & (df["cw"] > 0) & (df["weight"] > 0)
+    df["value"] = 0.0
+    df.loc[valid, "value"] = (
+        df.loc[valid, "target"] * df.loc[valid, "weight"] / df.loc[valid, "cw"]
+    )
+    out = df.loc[df["value"] > 0, ["region", "resource_class", "value"]].copy()
+    out["resource_class"] = out["resource_class"].astype(int)
+    return out
+
+
 if __name__ == "__main__":
     classes_nc = Path(snakemake.input.classes)  # type: ignore[name-defined]
     raster_path = Path(snakemake.input.harvested_area_raster)  # type: ignore[name-defined]
     regions_path = Path(snakemake.input.regions)  # type: ignore[name-defined]
     mapping_path = Path(snakemake.input.crop_mapping)  # type: ignore[name-defined]
     production_path = Path(snakemake.input.faostat_production)  # type: ignore[name-defined]
-    fdd_shares_raw = snakemake.input.get("fdd_shares")  # type: ignore[name-defined]
-    if isinstance(fdd_shares_raw, list):
-        fdd_shares_path = Path(fdd_shares_raw[0]) if fdd_shares_raw else Path("")
-    elif fdd_shares_raw:
-        fdd_shares_path = Path(fdd_shares_raw)
-    else:
-        fdd_shares_path = Path("")
-    ooc_olive_share_raw = snakemake.input.get("ooc_olive_share")  # type: ignore[name-defined]
-    if isinstance(ooc_olive_share_raw, list):
-        ooc_olive_share_path = (
-            Path(ooc_olive_share_raw[0]) if ooc_olive_share_raw else Path("")
-        )
-    elif ooc_olive_share_raw:
-        ooc_olive_share_path = Path(ooc_olive_share_raw)
-    else:
-        ooc_olive_share_path = Path("")
-    frt_kept_share_raw = snakemake.input.get("frt_kept_share")  # type: ignore[name-defined]
-    if isinstance(frt_kept_share_raw, list):
-        frt_kept_share_path = (
-            Path(frt_kept_share_raw[0]) if frt_kept_share_raw else Path("")
-        )
-    elif frt_kept_share_raw:
-        frt_kept_share_path = Path(frt_kept_share_raw)
-    else:
-        frt_kept_share_path = Path("")
+    fdd_shares_path = _optional_path(snakemake.input.get("fdd_shares"))  # type: ignore[name-defined]
+    ooc_olive_share_path = _optional_path(snakemake.input.get("ooc_olive_share"))  # type: ignore[name-defined]
+    # Banana absorbs a share of the GAEZ-FRT residual via build_frt_area_attribution.
+    # The yields CSV is needed to weight that residual share by yield x suit.
+    frt_attribution_path = _optional_path(snakemake.input.get("frt_attribution"))  # type: ignore[name-defined]
+    crop_yields_path = _optional_path(snakemake.input.get("crop_yields"))  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     crop = str(snakemake.wildcards.crop)  # type: ignore[name-defined]
 
@@ -182,32 +225,41 @@ if __name__ == "__main__":
         deflation = extracted["country"].map(share_map).fillna(global_share)
         extracted["value"] = extracted["value"] * deflation
 
+    extracted = extracted.loc[:, ["region", "resource_class", "country", "value"]]
+
+    # Banana (and other BAN-module crops added later) absorb a share of the
+    # GAEZ-FRT residual (non-modelled fruits: pears, peaches, plums, pineapples,
+    # papayas, kiwi, etc.) through build_frt_area_attribution. Distribute that
+    # residual across cells weighted by the crop's GAEZ yield x suitable_area
+    # so it lands on agroecologically suitable cells only.
     if (
-        crop in ("citrus", "mango", "watermelon")
-        and frt_kept_share_path
-        and frt_kept_share_path.exists()
+        crop == "banana"
+        and frt_attribution_path
+        and frt_attribution_path.exists()
+        and crop_yields_path
+        and crop_yields_path.exists()
     ):
-        # GAEZ Module VI FRT raster bundles wine grapes (excluded from the
-        # demand-side fruits projection: most grape harvest enters
-        # wine/raisin processing) and tree nuts (which belong to the
-        # nuts_seeds food group with its own NUTS projection) with the
-        # fruits the trio actually absorbs. Deflate per-country to the
-        # FAOSTAT "kept" share so supply and demand absorb the same
-        # unmodeled basket.
-        frt_shares = pd.read_csv(frt_kept_share_path)
-        frt_shares["country"] = frt_shares["country"].astype(str).str.upper()
-        share_map = dict(
-            zip(frt_shares["country"], frt_shares["kept_share"], strict=False)
+        addition = _yield_weighted_residual_addition(
+            crop_yields_path, frt_attribution_path, crop, regions
         )
-        global_share = (
-            float(frt_shares["kept_share"].mean()) if not frt_shares.empty else 1.0
-        )
-        deflation = extracted["country"].map(share_map).fillna(global_share)
-        extracted["value"] = extracted["value"] * deflation
+        if not addition.empty:
+            combined = (
+                pd.concat([extracted, addition.assign(country=None)], ignore_index=True)
+                .groupby(["region", "resource_class"], as_index=False)["value"]
+                .sum()
+            )
+            ba = float(extracted["value"].sum()) / 1e6
+            ra = float(addition["value"].sum()) / 1e6
+            logger.info(
+                "banana: BAN raster=%.3f Mha + FRT residual addition=%.3f Mha = %.3f Mha",
+                ba,
+                ra,
+                ba + ra,
+            )
+            extracted = combined
 
     extracted["variable"] = "harvested_area"
     extracted["unit"] = "ha"
-
     extracted = extracted.loc[
         :, ["region", "resource_class", "variable", "unit", "value"]
     ]

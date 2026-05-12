@@ -152,6 +152,10 @@ rule build_crop_yields_cropgrids:
         moisture_content="data/curated/crop_moisture_content.csv",
         qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
+        # CROPGRIDS-backed fruits absorb a share of the non-modelled FRT
+        # residual via build_frt_area_attribution (distributed proportional
+        # to the crop's CROPGRIDS density).
+        frt_attribution="<processing>/{name}/frt_area_attribution.csv",
     params:
         countries=config["countries"],
         averaging_period=config["costs"]["averaging_period"],
@@ -205,7 +209,17 @@ rule build_ooc_olive_area_share:
         "../scripts/build_ooc_olive_area_share.py"
 
 
-rule build_frt_kept_area_share:
+rule build_frt_area_attribution:
+    """Per-(country, modelled-fruit) target harvested area for the FRT pool.
+
+    Combines FAOSTAT direct area for each modelled FRT-pool fruit (citrus,
+    mango, watermelon, apple) with a projection of the non-modelled FRT
+    residual (pears, peaches, plums, pineapples, papayas, kiwi, ...) onto
+    all 5 modelled fruits (banana included) by per-country FAOSTAT-area
+    share. Replaces build_frt_kept_area_share, which only deflated the
+    trio's area scalar and could not enforce agroecological consistency
+    at the cell level.
+    """
     input:
         qcl_csv="data/downloads/faostat/QCL.parquet",
         fbs_csv="data/downloads/faostat/FBS.parquet",
@@ -214,18 +228,18 @@ rule build_frt_kept_area_share:
         countries=config["countries"],
         baseline_year=config["baseline_year"],
     output:
-        "<processing>/{name}/frt_kept_area_share.csv",
+        "<processing>/{name}/frt_area_attribution.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=2900,
     log:
-        "<logs>/{name}/build_frt_kept_area_share.log",
+        "<logs>/{name}/build_frt_area_attribution.log",
     benchmark:
-        "<benchmarks>/{name}/build_frt_kept_area_share.tsv"
+        "<benchmarks>/{name}/build_frt_area_attribution.tsv"
     script:
-        "../scripts/build_frt_kept_area_share.py"
+        "../scripts/build_frt_area_attribution.py"
 
 
 rule build_fdd_area_shares:
@@ -304,6 +318,14 @@ rule build_fodder_yield_corrections:
         "../scripts/build_fodder_yield_corrections.py"
 
 
+# Modelled fruits whose harvested area is sourced via FAOSTAT-attribution +
+# yield-weighted cell distribution (instead of GAEZ-FRT-raster scaling).
+# Apple goes via CROPGRIDS; banana absorbs FRT residual on top of its BAN
+# raster output. These four constants are mirrored on the demand side by
+# FRUITS_FRT_PROJECTION_FOODS in vegetable_projection.py.
+_FRT_YIELD_WEIGHTED_TRIO = ("citrus", "mango", "watermelon")
+
+
 def _harvested_area_inputs(w):
     """Get inputs for build_harvested_area_gaez, including FDD shares when relevant."""
     inputs = {
@@ -324,15 +346,12 @@ def _harvested_area_inputs(w):
         inputs["ooc_olive_share"] = f"<processing>/{w.name}/ooc_olive_area_share.csv"
     else:
         inputs["ooc_olive_share"] = []
-    if w.crop in ("citrus", "mango", "watermelon"):
-        # The GAEZ Module VI FRT raster bundles wine grapes (whose
-        # consumption is excluded from the demand-side fruits projection)
-        # and tree nuts (in the nuts_seeds food group, projected
-        # separately). Deflate per-country by the FAOSTAT "kept" share so
-        # the trio only absorbs the fruit area whose demand they project.
-        inputs["frt_kept_share"] = f"<processing>/{w.name}/frt_kept_area_share.csv"
-    else:
-        inputs["frt_kept_share"] = []
+    if w.crop == "banana":
+        # Banana absorbs a per-country share of the non-modelled FRT-pool
+        # residual on top of its BAN-raster area; the addition is
+        # distributed across cells by GAEZ banana yield x suitable_area.
+        inputs["frt_attribution"] = f"<processing>/{w.name}/frt_area_attribution.csv"
+        inputs["crop_yields"] = f"<processing>/{w.name}/crop_yields/{w.crop}_r.csv"
     return inputs
 
 
@@ -343,9 +362,14 @@ rule build_harvested_area_gaez:
         non_food_crops=config["non_food_crops"],
     output:
         "<processing>/{name}/harvested_area/gaez/{crop}_{water_supply}.csv",
-    # Cropgrids-backed crops produce this output via build_crop_yields_cropgrids.
+    # Cropgrids-backed crops produce this output via build_crop_yields_cropgrids;
+    # FRT-trio crops via build_harvested_area_yield_weighted (below).
     wildcard_constraints:
-        crop="|".join(gaez_crops()) if gaez_crops() else "__never__",
+        crop=(
+            "|".join(c for c in gaez_crops() if c not in _FRT_YIELD_WEIGHTED_TRIO)
+            if [c for c in gaez_crops() if c not in _FRT_YIELD_WEIGHTED_TRIO]
+            else "__never__"
+        ),
     group:
         "prep"
     resources:
@@ -357,6 +381,77 @@ rule build_harvested_area_gaez:
         "<benchmarks>/{name}/build_harvested_area_gaez_{crop}_{water_supply}.tsv"
     script:
         "../scripts/build_harvested_area.py"
+
+
+def _yield_weighted_trio_in_config():
+    return [c for c in _FRT_YIELD_WEIGHTED_TRIO if c in config["crops"]]
+
+
+def _yield_weighted_inputs(w):
+    """Inputs for the yield-weighted rule (jointly produces _r and _i)."""
+    inputs = {
+        "yields_r": f"<processing>/{w.name}/crop_yields/{w.crop}_r.csv",
+        "attribution": f"<processing>/{w.name}/frt_area_attribution.csv",
+        "regions": f"<processing>/{w.name}/regions.geojson",
+    }
+    if w.crop in irrigated_crops():
+        inputs["yields_i"] = f"<processing>/{w.name}/crop_yields/{w.crop}_i.csv"
+    return inputs
+
+
+def _yield_weighted_outputs(crop: str) -> dict[str, str]:
+    out = {"rainfed": f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"}
+    if crop in irrigated_crops():
+        out["irrigated"] = f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
+    return out
+
+
+def _crop_moisture(crop: str) -> float:
+    import csv
+    import pathlib
+
+    moisture_path = pathlib.Path("data/curated/crop_moisture_content.csv")
+    with open(moisture_path, newline="") as f:
+        for row in csv.DictReader(filter(lambda x: not x.startswith("#"), f)):
+            if row["crop"].strip() == crop:
+                return float(row["moisture_fraction"])
+    raise ValueError(f"Crop '{crop}' not found in {moisture_path}")
+
+
+rule build_harvested_area_yield_weighted:
+    """Cell-level area distribution for FRT-trio fruits, weighted by GAEZ
+    yield x suitable_area, target-production-rescaled per country so the
+    area x yield total matches the FAOSTAT-derived production target
+    (replaces the misallocating FRT-raster scaling).
+
+    Jointly emits the rainfed and (when the crop is irrigated) irrigated
+    harvested-area CSVs from a single per-country target so the r/i split
+    is set endogenously by the GAEZ yield-weight ratio.
+    """
+    input:
+        unpack(_yield_weighted_inputs),
+    params:
+        moisture_fraction=lambda w: _crop_moisture(w.crop),
+    output:
+        rainfed="<processing>/{name}/harvested_area/gaez/{crop}_r.csv",
+        irrigated="<processing>/{name}/harvested_area/gaez/{crop}_i.csv",
+    wildcard_constraints:
+        crop=(
+            "|".join(_yield_weighted_trio_in_config())
+            if _yield_weighted_trio_in_config()
+            else "__never__"
+        ),
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=700,
+    log:
+        "<logs>/{name}/build_harvested_area_yield_weighted_{crop}.log",
+    benchmark:
+        "<benchmarks>/{name}/build_harvested_area_yield_weighted_{crop}.tsv"
+    script:
+        "../scripts/build_harvested_area_yield_weighted.py"
 
 
 def multi_cropping_inputs(_wildcards):
