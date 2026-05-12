@@ -28,7 +28,6 @@ def add_food_conversion_links(
     countries: list,
     crop_to_fresh_factor: dict[str, float],
     food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     crop_list: list,
     byproduct_list: list,
 ) -> None:
@@ -38,6 +37,11 @@ def add_food_conversion_links(
     Each pathway creates one multi-output Link per country.
     Only processes crops that are in the configured crop_list.
     Foods flagged as byproducts are ignored when checking for food-group mappings.
+
+    Food loss and waste is *not* applied here; it lives on the consumer
+    side (``add_food_nutrition_links``). The food bus therefore carries
+    supply-basis mass (edible-portion fresh equivalent of the crop input),
+    pre-consumer-FLW.
     """
 
     # Filter foods DataFrame to only include configured crops and foods.
@@ -49,39 +53,10 @@ def add_food_conversion_links(
 
     missing_group_foods: set[str] = set()
     byproduct_foods: set[str] = set(byproduct_list or [])
-    excessive_losses: set[tuple[str, str]] = set()
     invalid_pathways: list[str] = []
 
     normalized_countries = [str(c).upper() for c in countries]
-
-    # Pre-compute FLW multipliers for vectorized lookup
-    _lw = loss_waste.copy()
-    _lw["loss_fraction"] = _lw["loss_fraction"].clip(0.0, 1.0)
-    _lw["waste_fraction"] = _lw["waste_fraction"].clip(0.0, 1.0)
-    _lw["multiplier"] = (1 - _lw["loss_fraction"]) * (1 - _lw["waste_fraction"])
-    _lw.loc[_lw["multiplier"] <= 0, "multiplier"] = 0.01
-    multiplier_lookup = _lw.set_index(["country", "food_group"])["multiplier"]
-    # Track extreme values for warnings
-    _extreme = _lw[
-        ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
-        | (_lw["multiplier"] <= 0.01)
-    ]
-    extreme_countries_by_group = (
-        _extreme.groupby("food_group")["country"].agg(set).to_dict()
-    )
-
     countries_index = pd.Index(normalized_countries, dtype="object")
-    country_set = set(normalized_countries)
-    groups = sorted({group for group in food_to_group.values() if pd.notna(group)})
-    multiplier_by_group = {}
-    for group in groups:
-        keys = pd.MultiIndex.from_arrays(
-            [normalized_countries, [group] * len(normalized_countries)]
-        )
-        multiplier_by_group[group] = pd.Series(
-            multiplier_lookup.reindex(keys).to_numpy(),
-            index=countries_index,
-        )
 
     batched_frames = {}
 
@@ -122,6 +97,8 @@ def add_food_conversion_links(
         link_df["pathway"] = pathway
 
         # Add each output food as a separate bus with its efficiency.
+        # No country-specific factor on processing: FLW is applied on the
+        # consumption side.
         for output_idx, row in enumerate(output_rows.itertuples(index=False), start=1):
             food = row.food
             factor = row.factor
@@ -130,20 +107,10 @@ def add_food_conversion_links(
 
             link_df[bus_key] = "food:" + food + ":" + countries_index
 
-            # Calculate efficiencies per country (including loss/waste adjustments)
             group = food_to_group.get(food)
-            if group is None or pd.isna(group):
-                # Food has no group mapping - no loss/waste adjustment
-                if food not in byproduct_foods:
-                    missing_group_foods.add(food)
-                link_df[eff_key] = factor * conversion_factor
-            else:
-                multipliers = multiplier_by_group[group]
-                extreme_countries = extreme_countries_by_group.get(group, set())
-                excessive_losses.update(
-                    (c, group) for c in extreme_countries & country_set
-                )
-                link_df[eff_key] = factor * conversion_factor * multipliers.to_numpy()
+            if (group is None or pd.isna(group)) and food not in byproduct_foods:
+                missing_group_foods.add(food)
+            link_df[eff_key] = factor * conversion_factor
 
         batched_frames.setdefault(n_outputs, []).append(link_df)
 
@@ -175,18 +142,8 @@ def add_food_conversion_links(
 
     if missing_group_foods:
         logger.warning(
-            "Food items without food-group mapping (loss/waste ignored): %s",
+            "Food items without food-group mapping (consumer FLW will not apply): %s",
             ", ".join(sorted(missing_group_foods)),
-        )
-
-    if excessive_losses:
-        sample = ", ".join(
-            f"{country}:{group}" for country, group in sorted(excessive_losses)[:10]
-        )
-        logger.warning(
-            "Extreme food loss/waste values for %d country-group pairs (efficiency clamped to feasible range). Examples: %s",
-            len(excessive_losses),
-            sample,
         )
 
 

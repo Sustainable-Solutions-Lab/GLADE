@@ -136,10 +136,26 @@ def add_food_nutrition_links(
     nutrient_units: dict[str, str],
     countries: list,
     byproduct_list: list,
+    loss_waste: pd.DataFrame,
 ) -> None:
     """Add multilinks per country for converting foods to groups and macronutrients.
 
     Byproduct foods (from config) are excluded from human consumption.
+
+    Country- and food-group-specific food-loss-and-waste (FLW) fractions are
+    applied here, on the consumption side, rather than on food_processing.
+    Each consume link's nutrient and group efficiencies are scaled by the
+    country's FLW multiplier ``(1 - loss) * (1 - waste)`` for the food's
+    group, and the per-link multiplier is preserved on a ``flw_multiplier``
+    column so downstream code (e.g. ``fix_food_consumption_to_baseline``)
+    can translate between intake-basis demand and supply-basis bus flow.
+
+    Putting FLW on consumption (rather than on processing as previously)
+    removes a global LP arbitrage where low-FLW countries would import dry
+    crop and re-export fresh food to extract the cross-country efficiency
+    differential. With FLW on consumption every country pays its own waste
+    regardless of where processing happened, so the LP defaults to local
+    processing and trade carries supply-mass between countries.
     """
     # Pre-index food_groups for lookup
     food_to_group = food_groups.set_index("food")["group"].to_dict()
@@ -178,7 +194,31 @@ def add_food_nutrition_links(
         logger.info("No consumable foods configured; skipping food consumption links")
         return
 
-    countries_index = pd.Index(countries, dtype="object")
+    # Build per-(country, food_group) FLW multipliers. Foods without a group
+    # (e.g. byproducts that re-enter as ingredients) get multiplier 1.0.
+    normalized_countries = [str(c).upper() for c in countries]
+    _lw = loss_waste.copy()
+    _lw["loss_fraction"] = _lw["loss_fraction"].clip(0.0, 1.0)
+    _lw["waste_fraction"] = _lw["waste_fraction"].clip(0.0, 1.0)
+    _lw["multiplier"] = (1 - _lw["loss_fraction"]) * (1 - _lw["waste_fraction"])
+    _lw.loc[_lw["multiplier"] <= 0, "multiplier"] = 0.01
+    multiplier_lookup = _lw.set_index(["country", "food_group"])["multiplier"]
+    extreme_pairs = set(
+        zip(
+            _lw.loc[
+                ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
+                | (_lw["multiplier"] <= 0.01),
+                "country",
+            ],
+            _lw.loc[
+                ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
+                | (_lw["multiplier"] <= 0.01),
+                "food_group",
+            ],
+        )
+    )
+
+    countries_index = pd.Index(normalized_countries, dtype="object")
     foods_index = pd.Index(consumable_foods, dtype="object")
 
     links_df = (
@@ -192,29 +232,64 @@ def add_food_nutrition_links(
     links_df["bus0"] = "food:" + links_df["food"] + ":" + links_df["country"]
     links_df["food_group"] = links_df["food"].map(food_to_group)
 
-    # Food bus flows are Mt/year, so efficiencies below represent nutrient fractions.
+    # Per-link FLW multiplier: lookup by (country, food_group). For links
+    # without a food_group the multiplier is 1.0 (no waste accounting).
+    with_group_keys = pd.MultiIndex.from_arrays(
+        [links_df["country"].values, links_df["food_group"].astype(str).values]
+    )
+    looked_up = multiplier_lookup.reindex(with_group_keys).to_numpy()
+    flw_mult = pd.Series(looked_up, index=links_df.index)
+    flw_mult = flw_mult.where(links_df["food_group"].notna(), 1.0)
+    if flw_mult.isna().any():
+        missing = links_df.loc[
+            flw_mult.isna(), ["country", "food_group"]
+        ].drop_duplicates()
+        raise ValueError(
+            "Missing food_loss_waste entries for (country, food_group) pairs: "
+            f"{missing.to_dict('records')[:5]} ..."
+        )
+    links_df["flw_multiplier"] = flw_mult.astype(float)
+
+    encountered_extreme = {
+        (c, g)
+        for c, g in zip(links_df["country"], links_df["food_group"])
+        if (c, g) in extreme_pairs
+    }
+    if encountered_extreme:
+        sample = ", ".join(f"{c}:{g}" for c, g in sorted(encountered_extreme)[:10])
+        logger.warning(
+            "Extreme food loss/waste values for %d country-group pairs (multiplier clamped to feasible range). Examples: %s",
+            len(encountered_extreme),
+            sample,
+        )
+
+    # Food bus flows are Mt/year (supply basis: pre-consumer-FLW). Each
+    # nutrient/group efficiency is scaled by the consumer-side FLW multiplier
+    # so the downstream loads receive intake-basis mass.
     def _add_links(batch_df: pd.DataFrame, *, include_group: bool) -> None:
         links = batch_df.set_index("name", drop=False)
+        mult = links["flw_multiplier"].astype(float).to_numpy()
         params = {
             "bus0": links["bus0"],
             "carrier": "food_consumption",
             "marginal_cost": _LOW_DEFAULT_MARGINAL_COST,
             "food": links["food"],
             "country": links["country"],
+            "flw_multiplier": links["flw_multiplier"],
         }
 
         for i, nutrient in enumerate(nutrients, start=1):
             bus_key = f"bus{i}"
             eff_key = "efficiency" if i == 1 else f"efficiency{i}"
             params[bus_key] = "nutrient:" + nutrient + ":" + links["country"]
-            params[eff_key] = links["food"].map(eff_matrix[nutrient])
+            params[eff_key] = links["food"].map(eff_matrix[nutrient]).to_numpy() * mult
 
         if include_group:
             idx = len(nutrients) + 1
             params[f"bus{idx}"] = (
                 "group:" + links["food_group"].astype(str) + ":" + links["country"]
             )
-            params[f"efficiency{idx}"] = 1.0
+            params[f"efficiency{idx}"] = mult
             params["food_group"] = links["food_group"]
 
         n.links.add(links.index, p_nom_extendable=True, **params)

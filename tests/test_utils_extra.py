@@ -9,7 +9,6 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.build_model.utils import (
-    _build_loss_waste_lookup,
     _build_luc_lef_lookup,
     _carrier_unit_for_nutrient,
     _fresh_mass_conversion_factors,
@@ -23,52 +22,6 @@ from workflow.scripts.constants import (
     FOOD_PORTION_TO_MASS_FRACTION,
     KCAL_PER_100G_TO_PJ_PER_MEGATONNE,
 )
-
-# ---------------------------------------------------------------------------
-# Tests: _build_loss_waste_lookup
-# ---------------------------------------------------------------------------
-
-
-class TestBuildLossWasteLookup:
-    """Tests for _build_loss_waste_lookup."""
-
-    def test_round_trip(self):
-        """Create a DataFrame, build lookup, and verify values match."""
-        df = pd.DataFrame(
-            {
-                "country": ["USA", "USA", "IND"],
-                "food_group": ["grain", "dairy", "grain"],
-                "loss_fraction": [0.1, 0.05, 0.15],
-                "waste_fraction": [0.2, 0.03, 0.12],
-            }
-        )
-        lookup = _build_loss_waste_lookup(df)
-
-        assert lookup[("USA", "grain")] == pytest.approx((0.1, 0.2))
-        assert lookup[("USA", "dairy")] == pytest.approx((0.05, 0.03))
-        assert lookup[("IND", "grain")] == pytest.approx((0.15, 0.12))
-
-    def test_keys_are_tuples(self):
-        """Verify lookup keys are (country, food_group) tuples."""
-        df = pd.DataFrame(
-            {
-                "country": ["BRA"],
-                "food_group": ["vegetables"],
-                "loss_fraction": [0.07],
-                "waste_fraction": [0.11],
-            }
-        )
-        lookup = _build_loss_waste_lookup(df)
-        assert ("BRA", "vegetables") in lookup
-
-    def test_empty_dataframe(self):
-        """An empty DataFrame should produce an empty lookup."""
-        df = pd.DataFrame(
-            columns=["country", "food_group", "loss_fraction", "waste_fraction"]
-        )
-        lookup = _build_loss_waste_lookup(df)
-        assert lookup == {}
-
 
 # ---------------------------------------------------------------------------
 # Tests: _per_capita_mass_to_mt_per_year

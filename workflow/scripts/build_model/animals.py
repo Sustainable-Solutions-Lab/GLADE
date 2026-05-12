@@ -17,7 +17,6 @@ import pypsa
 
 from .. import constants
 from .utils import (
-    _build_loss_waste_lookup,
     _calculate_ch4_per_feed_intake,
     _calculate_manure_n_outputs,
 )
@@ -201,7 +200,6 @@ def add_feed_to_animal_product_links(
     emissions_config: dict,
     countries: list,
     food_to_group: dict[str, str],
-    loss_waste: pd.DataFrame,
     animal_costs: pd.Series | None = None,
     feed_baseline: pd.DataFrame | None = None,
     enforce_baseline_feed: bool = False,
@@ -223,7 +221,8 @@ def add_feed_to_animal_product_links(
 
       - Incorporates carcass-to-retail conversion for meat products
       - Generated from Wirsenius (2000) + GLEAM feed energy values
-      - Adjusted for food loss and waste fractions
+      - Output is supply-basis (pre-FLW); the consumer-side FLW factor is
+        applied on food_consumption links in ``add_food_nutrition_links``.
 
     Outputs per link:
 
@@ -255,10 +254,9 @@ def add_feed_to_animal_product_links(
     countries : list
         List of country codes
     food_to_group : dict[str, str]
-        Mapping from food names to food group names for FLW lookup
-    loss_waste : pd.DataFrame
-        Food loss and waste fractions with columns: country, food_group,
-        loss_fraction, waste_fraction
+        Mapping from food names to food group names (kept on links for
+        downstream filtering; no longer used here for FLW since FLW is
+        applied on the consumption side).
     animal_costs : pd.Series | None, optional
         Animal product costs indexed by product (USD per Mt product).
         If provided, converted to cost per Mt feed via efficiency.
@@ -276,9 +274,6 @@ def add_feed_to_animal_product_links(
     if not animal_products:
         logger.info("No animal products configured; skipping feed→animal links")
         return
-
-    # Build food loss/waste lookup: (country, food_group) -> (loss_fraction, waste_fraction)
-    loss_waste_pairs = _build_loss_waste_lookup(loss_waste)
 
     # Build enteric methane yield lookup from ruminant feed categories
     enteric_my_lookup = (
@@ -491,13 +486,11 @@ def add_feed_to_animal_product_links(
             int((cal_adj < 0).sum()),
         )
 
-    # Calculate FLW-adjusted efficiency
+    # No FLW multiplier here: animal_production outputs supply-basis mass
+    # (pre-consumer-FLW). The consumer-side FLW is applied on the
+    # food_consumption link in nutrition.add_food_nutrition_links.
     df["group"] = df["product"].map(food_to_group)
-    lw_keys = list(zip(df["country"], df["group"]))
-    df["loss_frac"] = [loss_waste_pairs[k][0] for k in lw_keys]
-    df["waste_frac"] = [loss_waste_pairs[k][1] for k in lw_keys]
-    df["flw_multiplier"] = (1.0 - df["loss_frac"]) * (1.0 - df["waste_frac"])
-    df["adjusted_efficiency"] = df["efficiency"] * df["flw_multiplier"]
+    df["adjusted_efficiency"] = df["efficiency"]
 
     # Build all link data with vectorized string ops
     names = pd.Index(

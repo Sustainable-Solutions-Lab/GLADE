@@ -278,6 +278,14 @@ def _match_baseline_to_consume_links(
 
     Returns a DataFrame with columns: name, food, food_group, country,
     consumption_g_per_day, target_mt — or None if no links matched.
+
+    The baseline diet on disk is in intake basis (post-FLW), matching the
+    GDD-IA / FAOSTAT intake exposures. The food bus and consume link p0 are
+    on supply basis (pre-consumer-FLW) because the FLW multiplier is now
+    applied as an efficiency on the consume link (see
+    nutrition.add_food_nutrition_links). To pin the consume link's p0
+    correctly we divide the intake-basis Mt target by the link's
+    ``flw_multiplier`` attribute.
     """
     df = _prepare_baseline_diet_for_food_constraints(baseline_df, consume_links)
 
@@ -288,7 +296,7 @@ def _match_baseline_to_consume_links(
     df["key"] = df["food"] + ":" + df["country"]
 
     matched = df.merge(
-        consume_links_keyed[["key"]].reset_index(),
+        consume_links_keyed[["key", "flw_multiplier"]].reset_index(),
         on="key",
     )
 
@@ -296,7 +304,7 @@ def _match_baseline_to_consume_links(
         logger.warning("No matching food consumption links for baseline diet data")
         return None
 
-    matched["target_mt"] = np.array(
+    intake_target = np.array(
         [
             _per_capita_mass_to_mt_per_year(g, population[c])
             for g, c in zip(
@@ -304,6 +312,9 @@ def _match_baseline_to_consume_links(
             )
         ]
     )
+    flw_mult = pd.to_numeric(matched["flw_multiplier"], errors="coerce").fillna(1.0)
+    flw_mult = flw_mult.clip(lower=0.01).to_numpy()
+    matched["target_mt"] = intake_target / flw_mult
     return matched
 
 

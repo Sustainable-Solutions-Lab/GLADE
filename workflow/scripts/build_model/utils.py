@@ -18,16 +18,6 @@ from .. import constants
 logger = logging.getLogger(__name__)
 
 
-def _build_loss_waste_lookup(
-    loss_waste: pd.DataFrame,
-) -> dict[tuple[str, str], tuple[float, float]]:
-    lw = loss_waste.set_index(["country", "food_group"])
-    return {
-        idx: (float(r["loss_fraction"]), float(r["waste_fraction"]))
-        for idx, r in lw.iterrows()
-    }
-
-
 def _per_capita_mass_to_mt_per_year(
     value_per_person_per_day: float, population: float
 ) -> float:
