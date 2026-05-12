@@ -248,89 +248,183 @@ GRAIN_GROUP = "grain"
 WHOLE_GRAINS_GROUP = "whole_grains"
 
 
-def apply_fbs_grain_supplement(
+def apply_cereal_residual_fix(
     group_totals: pd.DataFrame,
-    fbs_cereal_intake_path: str,
-    enabled: bool,
-    threshold: float,
+    kcal_target_df: pd.DataFrame,
+    kcal_per_g_group: dict[str, float],
 ) -> pd.DataFrame:
-    """Backfill the refined-``grain`` total from FBS-derived cereal intake.
+    """Reallocate cereal kcal lost to the GBD whole_grain anchor into refined grain.
 
-    GDD systematically under-reports refined grain in some HICs
-    (Norway: 13.5 g/day GDD vs ~185 g/day inferred from FBS supply
-    minus whole-grain consumption). The pipeline has no FAOSTAT
-    supplement for cereals because GBD covers ``whole_grains`` as a
-    risk factor and we don't want to disturb that anchor.
+    GBD's ``whole_grains`` risk factor is defined narrowly (dry whole-
+    grain flour). GDD-IA's ``whole_grains`` is broader (any product with
+    substantial whole-grain content). When ``load_group_totals`` anchors
+    ``whole_grains`` to GBD, ~250 kcal/d of cereal energy can disappear
+    (India typical). To preserve the country's cereal energy budget,
+    we reassign the deficit to refined ``grain``.
 
-    For every country, define the FBS-implied refined-grain
-    residual as
+    The deficit is computed against IA's *actual* cereal kcal pool
+    (whole_grains kcal + prc_grains kcal) carried via
+    ``gdd_ia_kcal_target.csv``, not via the broader nutrition.csv per-
+    group density — because IA's whole_grain mass is in a different
+    basis (~2.5-3 kcal/g) than the model's dry-flour basis (3.3 kcal/g).
 
-        residual = max(0, fbs_cereal_intake - whole_grains_total)
-
-    Then apply
-
-        new_grain = max(current_grain, threshold * residual)
-
-    so that countries with plausible GDD coverage are left untouched
-    while obvious holes are lifted to a defensible floor. *threshold*
-    is the minimum fraction of the FBS residual we are willing to
-    accept as refined-grain intake; with the historical FLW
-    under-correction for HIC consumer waste, ``threshold = 0.5``
-    matches the ~50% of FBS-supply level that household-survey
-    studies typically hit in HICs. The current value is preserved
-    when it is already at or above this floor.
-
-    If ``residual <= 0`` (FBS thinks cereals are essentially entirely
-    whole grain, common for some LICs where FBS coverage is sparse),
-    we skip the supplement to avoid pushing grain to zero.
+        deficit_kcal = (kcal_whole_grains_ia + kcal_grain_ia)
+                       - g_whole_anchored x k_whole_model
+        new_g_grain = max(0, deficit_kcal) / k_grain_model
     """
-    if not enabled:
-        return group_totals
+    k_whole = float(kcal_per_g_group.get(WHOLE_GRAINS_GROUP, 3.3))
+    k_grain = float(kcal_per_g_group.get(GRAIN_GROUP, 3.6))
 
-    fbs_cereal = pd.read_csv(fbs_cereal_intake_path).set_index("country")[
-        "fbs_cereal_intake_g_per_day"
-    ]
+    targets = kcal_target_df.set_index("country")
     totals = group_totals.set_index(["country", "food_group"])[
         "group_total_g_per_day"
     ].copy()
 
-    countries = totals.index.get_level_values("country").unique()
-    n_supplemented = 0
-    skipped_negative_residual = 0
-    skipped_already_above_floor = 0
-    skipped_no_fbs = 0
-    for country in countries:
-        if country not in fbs_cereal.index:
-            skipped_no_fbs += 1
+    n_fixed = 0
+    n_skipped = 0
+    total_deficit_kcal = 0.0
+    for country in totals.index.get_level_values("country").unique():
+        if country not in targets.index:
+            n_skipped += 1
             continue
-        wg = float(totals.get((country, WHOLE_GRAINS_GROUP), 0.0) or 0.0)
-        residual = float(fbs_cereal.loc[country]) - wg
-        if residual <= 0:
-            skipped_negative_residual += 1
+        whole_anchored = float(totals.get((country, WHOLE_GRAINS_GROUP), 0.0) or 0.0)
+        ia_cereal_kcal = float(targets.at[country, "kcal_whole_grains_ia"]) + float(
+            targets.at[country, "kcal_grain_ia"]
+        )
+        deficit_kcal = ia_cereal_kcal - whole_anchored * k_whole
+        if deficit_kcal <= 0:
+            n_skipped += 1
             continue
-        floor = threshold * residual
-        current = float(totals.get((country, GRAIN_GROUP), 0.0) or 0.0)
-        if current >= floor:
-            skipped_already_above_floor += 1
-            continue
-        totals.loc[(country, GRAIN_GROUP)] = floor
-        n_supplemented += 1
+        new_grain = deficit_kcal / k_grain
+        totals.loc[(country, GRAIN_GROUP)] = new_grain
+        n_fixed += 1
+        total_deficit_kcal += deficit_kcal
 
     logger.info(
-        "FBS grain supplement: lifted refined-grain in %d countries to "
-        "%.0f%% of (FBS cereal - whole_grains); skipped %d already at/above "
-        "floor, %d with non-positive residual, %d with no FBS data",
-        n_supplemented,
-        threshold * 100,
-        skipped_already_above_floor,
-        skipped_negative_residual,
-        skipped_no_fbs,
+        "Cereal residual fix: set refined-grain to absorb IA cereal kcal "
+        "minus anchored whole-grain kcal in %d countries (skipped %d). "
+        "Mean refined-grain kcal per fixed country: %.0f kcal/d.",
+        n_fixed,
+        n_skipped,
+        total_deficit_kcal / max(n_fixed, 1),
     )
     return (
         totals.reset_index()
         .sort_values(["country", "food_group"])
         .reset_index(drop=True)
     )
+
+
+def apply_kcal_normalisation(
+    group_totals: pd.DataFrame,
+    kcal_target_df: pd.DataFrame,
+    gbd_anchored_groups: set[str],
+    kcal_per_g_group: dict[str, float],
+) -> pd.DataFrame:
+    """Anchor-aware kcal normalisation to GDD-IA's country-level target.
+
+    For each country, scale unanchored groups so that total kcal hits
+    ``kcal_target_modelled = all-fg - out-of-scope`` while leaving
+    GBD-anchored groups (and the refined-grain residual) untouched.
+
+    Anchored groups: those in ``gbd_anchored_groups`` plus ``grain``
+    (which is set by the cereal residual fix and shouldn't be rescaled).
+    """
+    anchored = set(gbd_anchored_groups) | {GRAIN_GROUP}
+    totals_idx = group_totals.set_index(["country", "food_group"])[
+        "group_total_g_per_day"
+    ]
+    targets = kcal_target_df.set_index("country")["kcal_target_modelled"]
+
+    rows = []
+    skipped_countries = []
+    factors = []
+    for country in totals_idx.index.get_level_values("country").unique():
+        target = float(targets.get(country, float("nan")))
+        country_totals = totals_idx.xs(country, level="country")
+        if pd.isna(target) or target <= 0:
+            skipped_countries.append(country)
+            for fg, g in country_totals.items():
+                rows.append(
+                    {
+                        "country": country,
+                        "food_group": fg,
+                        "group_total_g_per_day": float(g),
+                    }
+                )
+            continue
+
+        kcal_anchored = 0.0
+        kcal_unanchored = 0.0
+        for fg, g in country_totals.items():
+            kpg = float(kcal_per_g_group.get(fg, 0.0))
+            kcal = float(g) * kpg
+            if fg in anchored:
+                kcal_anchored += kcal
+            else:
+                kcal_unanchored += kcal
+
+        target_unanchored = target - kcal_anchored
+        if kcal_unanchored <= 0 or target_unanchored <= 0:
+            factor = 1.0
+        else:
+            factor = target_unanchored / kcal_unanchored
+            factor = max(0.1, min(5.0, factor))
+        factors.append(factor)
+
+        for fg, g in country_totals.items():
+            new_g = float(g) if fg in anchored else float(g) * factor
+            rows.append(
+                {"country": country, "food_group": fg, "group_total_g_per_day": new_g}
+            )
+
+    if skipped_countries:
+        logger.warning(
+            "kcal normalisation: %d countries had no kcal target; passed "
+            "through unchanged: %s",
+            len(skipped_countries),
+            ", ".join(sorted(skipped_countries)[:8])
+            + ("…" if len(skipped_countries) > 8 else ""),
+        )
+
+    if factors:
+        ser = pd.Series(factors)
+        logger.info(
+            "kcal normalisation: unanchored scaling factor "
+            "mean=%.3f std=%.3f range=[%.3f, %.3f] (n=%d)",
+            ser.mean(),
+            ser.std(),
+            ser.min(),
+            ser.max(),
+            len(ser),
+        )
+
+    return (
+        pd.DataFrame(rows).sort_values(["country", "food_group"]).reset_index(drop=True)
+    )
+
+
+def build_kcal_per_g_group(
+    food_groups_df: pd.DataFrame,
+    nutrition_df: pd.DataFrame,
+) -> dict[str, float]:
+    """Global per-group kcal/g from nutrition.csv averaged over the foods
+    in each group. Used by the cereal residual fix and kcal normalisation.
+
+    For dairy specifically we override to the cow-milk density (0.607
+    kcal/g) so the mass is interpreted as strict milk-equivalent.
+    """
+    kcal_per_100g = nutrition_df[nutrition_df["nutrient"] == "cal"].set_index("food")[
+        "value"
+    ]
+    fg = food_groups_df.merge(
+        kcal_per_100g.rename("kcal_per_100g").reset_index(),
+        on="food",
+        how="left",
+    )
+    out = (fg.groupby("group")["kcal_per_100g"].mean() / 100.0).to_dict()
+    out["dairy"] = 0.607  # cow-milk density for strict milk-equivalent
+    return out
 
 
 def log_gdd_gbd_agreement(
@@ -1085,7 +1179,8 @@ def main():
     dietary_intake_path = snakemake.input.dietary_intake
     gbd_exposure_path = snakemake.input.gbd_exposure
     fbs_items_path = snakemake.input.fbs_items
-    fbs_cereal_intake_path = snakemake.input.fbs_cereal_intake
+    kcal_target_path = snakemake.input.kcal_target
+    nutrition_path = snakemake.input.nutrition
     crop_production_path = snakemake.input.crop_production
     animal_production_path = snakemake.input.animal_production
     food_item_map_path = snakemake.input.food_item_map
@@ -1104,12 +1199,10 @@ def main():
         for food, factor in snakemake.params.carcass_to_retail_meat.items()
     }
     # Food groups for which GBD provides intake exposure data; the
-    # baseline-diet anchors to GBD for these (with GDD/FAOSTAT as
-    # fallback). Sourced from health.risk_factors so the diet anchor
-    # and the health-impact RR machinery never drift on which groups
-    # they cover.
+    # baseline-diet anchors to GBD for these. Sourced from
+    # health.risk_factors so the diet anchor and the health-impact RR
+    # machinery never drift on which groups they cover.
     gbd_anchored_groups = {str(g) for g in snakemake.params.gbd_anchored_groups}
-    fbs_grain_cfg = dict(snakemake.params.fbs_grain_supplement)
     source_basis = {
         src: {str(g): str(b) for g, b in groups.items()}
         for src, groups in dict(snakemake.params.source_basis).items()
@@ -1141,7 +1234,7 @@ def main():
     food_to_group = food_groups_df.set_index("food")["group"].to_dict()
     group_basis_map = build_group_basis(food_basis, food_to_group)
 
-    # Step 1: Food group totals (GBD-anchored for risk groups, GDD/FAOSTAT
+    # Step 1: Food group totals (GBD-anchored for risk groups, GDD-IA
     # for everything else).
     logger.info("Step 1: Computing food group totals...")
     group_totals = load_group_totals(
@@ -1161,12 +1254,28 @@ def main():
         group_totals["food_group"].nunique(),
     )
 
-    # Step 1b: Optionally backfill refined-grain hole from FBS cereal supply.
-    group_totals = apply_fbs_grain_supplement(
+    # Step 1b: Cereal residual fix — when GBD's narrow whole_grain anchor
+    # discards cereal kcal from the GDD-IA source, reassign that deficit
+    # to refined grain. Uses IA's actual cereal kcal pool carried in
+    # gdd_ia_kcal_target.csv.
+    kcal_target_df = pd.read_csv(kcal_target_path)
+    nutrition_df = pd.read_csv(nutrition_path)
+    kcal_per_g_group = build_kcal_per_g_group(food_groups_df, nutrition_df)
+    group_totals = apply_cereal_residual_fix(
         group_totals,
-        fbs_cereal_intake_path,
-        enabled=bool(fbs_grain_cfg["enabled"]),
-        threshold=float(fbs_grain_cfg["threshold"]),
+        kcal_target_df,
+        kcal_per_g_group,
+    )
+
+    # Step 1c: Anchor-aware kcal normalisation to GDD-IA's country-level
+    # target (all-fg minus out-of-scope categories). Scales unanchored
+    # groups so total kcal lands on target; GBD-anchored values and the
+    # refined-grain residual are preserved.
+    group_totals = apply_kcal_normalisation(
+        group_totals,
+        kcal_target_df,
+        gbd_anchored_groups=gbd_anchored_groups,
+        kcal_per_g_group=kcal_per_g_group,
     )
 
     # Step 1a: Extract direct per-food items (e.g. coffee-green, tea-dried)

@@ -648,21 +648,9 @@ diet:
   # - NHANES values pass through FPED ounce-equivalents: a hybrid
   #   basis we leave untouched.
   source_basis:
-    gdd:
-      grain: cooked
-      whole_grains: cooked
-      legumes: cooked
-      red_meat: cooked
-      poultry: cooked
-      starchy_vegetable: cooked
-      fruits: fresh
-      vegetables: fresh
-      nuts_seeds: dry
-      eggs: fresh
-      oil: dry
-      sugar: dry
-      dairy: fresh
-      tea-dried: brewed
+    # GDD-IA mass is derived from kcal (g = kcal_ia / kcal_per_g_model_basis)
+    # in prepare_gdd_ia_dietary_intake, so it's already in model basis
+    # by construction. No `gdd_ia` source_basis entries needed.
     gbd:
       whole_grains: dry
       legumes: cooked
@@ -671,12 +659,6 @@ diet:
       vegetables: fresh
       nuts_seeds: dry
       milk: fresh
-    faostat_fbs_supplement:
-      dairy: fresh
-      eggs: fresh
-      poultry: fresh
-      oil: dry
-      sugar: dry
     # NHANES is intentionally absent: FPED ounce-equivalents are a
     # hybrid basis (flour-content for breads, cooked weight for rice)
     # that doesn't admit a single conversion factor, so the helper
@@ -691,43 +673,32 @@ diet:
   # Mass-conversion factor tables, keyed "<from>_to_<to>".
   # Foods/groups not listed default to factor 1.0.
   weight_conversion:
-    # Cereals/legumes lose ~55-60% mass when uncooked (cooked rice 100g
-    # ≈ 33g raw; cooked pasta 100g ≈ 40g dry; cooked beans 100g ≈ 40g
-    # dry). Empirical anchor: 0.45 applied to Norway's GDD whole_grains
-    # (31 g/day cooked) gives 14 g/day, matching GBD's reported 14.07
-    # g/day on a dry whole-grain basis.
+    # Cereals/legumes: GBD whole_grain is reported on a dry whole-grain
+    # basis (the TMREL 100-150 g/day is calibrated on dry content); GBD
+    # legumes is reported on a cooked basis. Convert to model basis (dry)
+    # via 0.45 / 0.40.
     cooked_to_dry:
       grain: 0.45
       whole_grains: 0.45
       legumes: 0.40
-    # Meat gains mass-density when cooked (raw 100g → ~70g cooked,
-    # so cooked-to-fresh-equivalent ≈ 1.43 in principle). However, the
-    # existing pipeline (fbs_override_foods + production-side FLW)
-    # already mass-balances red meat to within ~1% per validation.yaml,
-    # so applying a 1.43 inflation here would distort that balance more
-    # than it corrects the basis. Left at 1.0 (no-op) until a future
-    # iteration audits the meat-side basis end-to-end.
+    # GBD red_meat is reported in cooked basis; the model uses raw retail
+    # mass. Inflation factor 1/0.7 ≈ 1.43 lands GBD red_meat exposure on
+    # raw retail basis. (Plan: complement with a basis correction to the
+    # health module's red_meat RR function so attributable burden uses
+    # cooked-basis exposure end to end.)
     cooked_to_fresh:
-      red_meat: 1.0
+      red_meat: 1.43
       poultry: 1.0
-    # Brewed beverage mass to dry commodity weight. GDD reports tea (v18)
-    # as cups/day; the cup→gram unit conversion happens in
-    # prepare_gdd_dietary_intake; this factor (≈ 1g of dry tea leaves
-    # per 100g of brewed beverage) lands the value on the model's dry
-    # commodity basis declared for tea-dried in food_basis.csv.
-    brewed_to_dry:
-      tea-dried: 0.01
-  # Backfill the refined-``grain`` total from FAOSTAT FBS cereal supply.
-  # GDD systematically under-reports refined grain in some HICs (Norway:
-  # 13.5 g/day GDD vs ~185 g/day implied by FBS supply minus whole-grain
-  # intake). When enabled, refined grain is lifted to
-  # ``threshold * max(0, fbs_cereal_intake - whole_grains_total)``
-  # whenever the existing total is below that floor; otherwise the
-  # current value is preserved. Whole grains stay anchored to GBD so
-  # this does not perturb the health-risk calibration.
-  fbs_grain_supplement:
-    enabled: true
-    threshold: 0.5
+  # GDD-IA pipeline configuration.
+  gdd_ia:
+    # GDD-IA reports meat in cooked weight (implied kcal/g for beef
+    # ≈ 2.4, between raw 2.15 and cooked 2.50). Apply cooked-to-raw
+    # inflation 1/0.7 ≈ 1.43 to land on raw retail (model basis).
+    cooked_to_raw:
+      red_meat: 1.43
+    # Extra per-country proxies on top of the built-in COUNTRY_PROXIES
+    # in prepare_gdd_ia_dietary_intake.py. Mapping country → proxy code.
+    country_proxies: {}
 
 # --- section: biomass ---
 biomass:

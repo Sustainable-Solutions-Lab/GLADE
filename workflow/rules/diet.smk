@@ -10,26 +10,77 @@ GBD dietary risk exposure, and per-food baseline diet estimation.
 """
 
 
-rule prepare_gdd_dietary_intake:
+rule prepare_gdd_ia_dietary_intake:
+    """Process Global Dietary Database — Integrated Assessment (GDD-IA) dataset.
+
+    Reads the parallel grams and kcal CSVs, maps prim/prcd categories to
+    food-opt food groups (butter+cream folded into dairy as
+    milk-equivalent; fat_ani, fruits_starch, seafood, alcohol etc. left
+    out-of-scope), derives mass in model basis from energy
+    (``g_model = kcal_ia / kcal_per_g_model_basis``), and applies a
+    cooked-to-raw inflation for red_meat. Emits:
+
+      - gdd_ia_dietary_intake.csv: per-(country, group) intake (g/d)
+      - gdd_ia_kcal_target.csv: per-country all-fg / OOS / target
+        kcal/d for the anchor-aware normalisation in
+        ``estimate_baseline_diet``.
+    """
     input:
-        gdd_dir="data/manually_downloaded/GDD-dietary-intake",
+        grams=f"data/manually_downloaded/GDD-IA-intake_grams_{config['baseline_year']}.csv",
+        kcal=f"data/manually_downloaded/GDD-IA-intake_kcals_{config['baseline_year']}.csv",
+        food_groups="data/curated/food_groups.csv",
+        nutrition="data/curated/nutrition.csv",
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         reference_year=config["baseline_year"],
+        cooked_to_raw=config["diet"]["gdd_ia"]["cooked_to_raw"],
+        country_proxies=config["diet"]["gdd_ia"].get("country_proxies", {}),
     output:
-        diet="<processing>/{name}/gdd_dietary_intake.csv",
+        diet="<processing>/{name}/gdd_ia_dietary_intake.csv",
+        kcal_target="<processing>/{name}/gdd_ia_kcal_target.csv",
     group:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=1000,
+        mem_mb=1500,
     log:
-        "<logs>/{name}/prepare_gdd_dietary_intake.log",
+        "<logs>/{name}/prepare_gdd_ia_dietary_intake.log",
     benchmark:
-        "<benchmarks>/{name}/prepare_gdd_dietary_intake.tsv"
+        "<benchmarks>/{name}/prepare_gdd_ia_dietary_intake.tsv"
     script:
-        "../scripts/prepare_gdd_dietary_intake.py"
+        "../scripts/prepare_gdd_ia_dietary_intake.py"
+
+
+rule prepare_faostat_food_group_supply:
+    """Prepare FAOSTAT supply data for downstream waste accounting.
+
+    Previously also supplemented GDD dietary intake; now retained only
+    as an input to ``prepare_food_loss_waste`` (dairy/oil/sugar/eggs/
+    poultry supply totals used for FLW fractions). The diet pipeline
+    is fully GDD-IA-driven and no longer uses this file.
+    """
+    input:
+        fbs_csv="data/downloads/faostat/FBS.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        reference_year=config["baseline_year"],
+        baseline_age=config["diet"]["baseline_age"],
+        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
+    output:
+        supply="<processing>/{name}/faostat_food_group_supply.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=3300,
+    log:
+        "<logs>/{name}/prepare_faostat_food_group_supply.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_faostat_food_group_supply.tsv"
+    script:
+        "../scripts/prepare_faostat_food_group_supply.py"
 
 
 rule prepare_faostat_fbs_items:
@@ -59,71 +110,6 @@ rule prepare_faostat_fbs_items:
         "<benchmarks>/{name}/prepare_faostat_fbs_items.tsv"
     script:
         "../scripts/prepare_faostat_fbs_items.py"
-
-
-rule prepare_faostat_food_group_supply:
-    """Prepare FAOSTAT supply data to supplement GDD dietary intake.
-
-    Reads dairy, oil, and sugar supply data from FAOSTAT FBS bulk CSV
-    to fill gaps in the Global Dietary Database (GDD). Eggs and poultry
-    are not supplemented here; they are anchored end-to-end through
-    diet.fbs_override_foods in estimate_baseline_diet.
-    """
-    input:
-        fbs_csv="data/downloads/faostat/FBS.parquet",
-        m49_codes="data/curated/M49-codes.csv",
-    params:
-        countries=config["countries"],
-        reference_year=config["baseline_year"],
-        baseline_age=config["diet"]["baseline_age"],
-        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
-    output:
-        supply="<processing>/{name}/faostat_food_group_supply.csv",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=3300,
-    log:
-        "<logs>/{name}/prepare_faostat_food_group_supply.log",
-    benchmark:
-        "<benchmarks>/{name}/prepare_faostat_food_group_supply.tsv"
-    script:
-        "../scripts/prepare_faostat_food_group_supply.py"
-
-
-rule prepare_fbs_cereal_intake:
-    """Aggregate FAOSTAT FBS cereal supply to per-country intake (g/day).
-
-    Used by ``estimate_baseline_diet`` when
-    ``diet.fbs_grain_supplement.enabled`` is true: refined ``grain``
-    intake is anchored as ``max(0, fbs_cereal_intake - whole_grains)``,
-    closing the GDD data hole on refined grain in HICs without
-    disturbing the GBD-anchored ``whole_grains`` total.
-    """
-    input:
-        fbs_csv="data/downloads/faostat/FBS.parquet",
-        food_item_map="data/curated/faostat_food_item_map.csv",
-        food_groups="data/curated/food_groups.csv",
-        m49_codes="data/curated/M49-codes.csv",
-        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
-    params:
-        countries=config["countries"],
-        reference_year=config["baseline_year"],
-        fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
-    output:
-        cereal_intake="<processing>/{name}/fbs_cereal_intake.csv",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=3300,
-    log:
-        "<logs>/{name}/prepare_fbs_cereal_intake.log",
-    benchmark:
-        "<benchmarks>/{name}/prepare_fbs_cereal_intake.tsv"
-    script:
-        "../scripts/prepare_fbs_cereal_intake.py"
 
 
 rule prepare_nhanes_dietary_intake:
@@ -167,17 +153,16 @@ rule prepare_nhanes_dietary_intake:
 
 
 rule merge_dietary_sources:
+    """Merge GDD-IA dietary intake with NHANES USA override.
+
+    GDD-IA mass is already in model basis (kcal-derived). NHANES is
+    already in model basis. Output is the merged ``dietary_intake.csv``;
+    GBD anchoring and kcal normalisation happen in
+    ``estimate_baseline_diet``.
+    """
     input:
-        gdd="<processing>/{name}/gdd_dietary_intake.csv",
-        faostat="<processing>/{name}/faostat_food_group_supply.csv",
+        gdd_ia="<processing>/{name}/gdd_ia_dietary_intake.csv",
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
-        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
-        food_groups="data/curated/food_groups.csv",
-        food_basis="data/curated/food_basis.csv",
-        source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
-    params:
-        source_basis=config["diet"]["source_basis"],
-        weight_conversion=config["diet"]["weight_conversion"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
@@ -258,8 +243,9 @@ rule estimate_baseline_diet:
     input:
         dietary_intake="<processing>/{name}/dietary_intake.csv",
         gbd_exposure="<processing>/{name}/gbd_food_group_intake.csv",
+        kcal_target="<processing>/{name}/gdd_ia_kcal_target.csv",
+        nutrition="data/curated/nutrition.csv",
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
-        fbs_cereal_intake="<processing>/{name}/fbs_cereal_intake.csv",
         crop_production="<processing>/{name}/faostat_crop_production.csv",
         animal_production="<processing>/{name}/faostat_animal_production.csv",
         food_item_map="data/curated/faostat_food_item_map.csv",
@@ -276,7 +262,6 @@ rule estimate_baseline_diet:
         fbs_override_foods=config["diet"]["fbs_override_foods"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         gbd_anchored_groups=config["health"]["risk_factors"],
-        fbs_grain_supplement=config["diet"]["fbs_grain_supplement"],
         source_basis=config["diet"]["source_basis"],
         weight_conversion=config["diet"]["weight_conversion"],
     output:

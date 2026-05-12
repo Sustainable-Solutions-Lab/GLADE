@@ -1013,7 +1013,7 @@ properties:
       - baseline_age
       - source_basis
       - weight_conversion
-      - fbs_grain_supplement
+      - gdd_ia
     additionalProperties: false
     properties:
       baseline_age:
@@ -1058,20 +1058,25 @@ properties:
           additionalProperties:
             type: number
             exclusiveMinimum: 0.0
-      fbs_grain_supplement:
+      gdd_ia:
         type: object
-        required: [enabled, threshold]
+        required: [cooked_to_raw]
         additionalProperties: false
         properties:
-          enabled:
-            type: boolean
-            description: "Backfill refined-grain total from FAOSTAT cereal supply when GDD coverage is poor"
-          threshold:
-            type: number
-            minimum: 0.0
-            maximum: 1.0
-            description: "Apply supplement when current refined-grain < threshold * (fbs_cereal_intake - whole_grains)"
-        description: "Conditional FBS-derived backfill for refined-grain intake. Anchors total cereal mass to FAOSTAT supply (waste-corrected) without disturbing the GBD-anchored whole_grains total."
+          cooked_to_raw:
+            type: object
+            description: "Multiplicative factors applied per food group after kcal-derivation. Used to land cooked-basis GDD-IA values on the model's raw retail basis (red_meat)."
+            additionalProperties:
+              type: number
+              exclusiveMinimum: 0.0
+          country_proxies:
+            type: object
+            default: {}
+            description: "Per-country proxy override map (country code → proxy country code). Merges with the built-in proxies in prepare_gdd_ia_dietary_intake.py."
+            additionalProperties:
+              type: string
+              pattern: "^[A-Z]{3}$"
+        description: "GDD-IA pipeline configuration."
 
   biomass:
     type: object
