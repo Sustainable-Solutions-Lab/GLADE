@@ -30,14 +30,27 @@ def empty_network():
     return n
 
 
-class TestFoodConversionFactor:
-    """Pathway efficiency = factor * crop_to_fresh_factor[crop].
+@pytest.fixture
+def loss_waste():
+    """Minimal loss/waste DataFrame with zero loss for simple efficiency math."""
+    return pd.DataFrame(
+        {
+            "country": ["USA", "USA"],
+            "food_group": ["grain", "stimulants"],
+            "loss_fraction": [0.0, 0.0],
+            "waste_fraction": [0.0, 0.0],
+        }
+    )
 
-    Note: FLW is applied on the consumption side (nutrition.add_food_nutrition_links),
-    not in food_processing, so these tests only exercise the fresh-mass factor.
+
+class TestFoodConversionFactor:
+    """Pathway efficiency = factor * crop_to_fresh_factor * (1 - loss).
+
+    The consumer-side waste fraction is applied separately on the
+    food_consumption link in nutrition.add_food_nutrition_links.
     """
 
-    def test_inverse_moisture_factor_applied(self, empty_network):
+    def test_inverse_moisture_factor_applied(self, empty_network, loss_waste):
         """A crop with inverse_moisture policy passes a >1 factor through."""
         foods = pd.DataFrame(
             {
@@ -60,13 +73,14 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["wheat"],
             byproduct_list=[],
+            loss_waste=loss_waste,
         )
 
         link = empty_network.links.static.loc["pathway:white_flour:USA"]
         # efficiency = factor * conversion_factor = 0.75 * 1.2 = 0.9
         assert link["efficiency"] == pytest.approx(0.9)
 
-    def test_identity_factor_passes_through(self, empty_network):
+    def test_identity_factor_passes_through(self, empty_network, loss_waste):
         """Identity-policy crops pass crop_to_fresh_factor=edible_portion (=1.0)."""
         foods = pd.DataFrame(
             {
@@ -91,13 +105,14 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["tea"],
             byproduct_list=[],
+            loss_waste=loss_waste,
         )
 
         link = empty_network.links.static.loc["pathway:tea_dried_leaves:USA"]
         # efficiency = factor * conversion_factor = 1.0 * 1.0 = 1.0
         assert link["efficiency"] == pytest.approx(1.0)
 
-    def test_mixed_crops_use_per_crop_factor(self, empty_network):
+    def test_mixed_crops_use_per_crop_factor(self, empty_network, loss_waste):
         """Crops with different policies each see their own crop_to_fresh value."""
         foods = pd.DataFrame(
             {
@@ -119,6 +134,7 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["wheat", "tea"],
             byproduct_list=[],
+            loss_waste=loss_waste,
         )
 
         links = empty_network.links.static

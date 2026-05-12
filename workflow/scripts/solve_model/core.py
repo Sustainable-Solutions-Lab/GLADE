@@ -280,12 +280,13 @@ def _match_baseline_to_consume_links(
     consumption_g_per_day, target_mt — or None if no links matched.
 
     The baseline diet on disk is in intake basis (post-FLW), matching the
-    GDD-IA / FAOSTAT intake exposures. The food bus and consume link p0 are
-    on supply basis (pre-consumer-FLW) because the FLW multiplier is now
-    applied as an efficiency on the consume link (see
-    nutrition.add_food_nutrition_links). To pin the consume link's p0
-    correctly we divide the intake-basis Mt target by the link's
-    ``flw_multiplier`` attribute.
+    GDD-IA / FAOSTAT intake exposures. The food bus and consume link p0
+    are on post-loss / pre-waste retail-supply basis: producer-side loss
+    is applied at food_processing / animal_production, and consumer-side
+    waste is applied on the consume link via the ``flw_multiplier``
+    attribute (which carries ``1 - waste_fraction`` per (country,
+    food_group)). To pin the consume link's p0 correctly we divide the
+    intake-basis Mt target by that multiplier.
     """
     df = _prepare_baseline_diet_for_food_constraints(baseline_df, consume_links)
 

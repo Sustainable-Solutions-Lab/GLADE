@@ -200,6 +200,7 @@ def add_feed_to_animal_product_links(
     emissions_config: dict,
     countries: list,
     food_to_group: dict[str, str],
+    loss_waste: pd.DataFrame,
     animal_costs: pd.Series | None = None,
     feed_baseline: pd.DataFrame | None = None,
     enforce_baseline_feed: bool = False,
@@ -221,8 +222,10 @@ def add_feed_to_animal_product_links(
 
       - Incorporates carcass-to-retail conversion for meat products
       - Generated from Wirsenius (2000) + GLEAM feed energy values
-      - Output is supply-basis (pre-FLW); the consumer-side FLW factor is
-        applied on food_consumption links in ``add_food_nutrition_links``.
+      - Per-country food *loss* (pre-retail supply-chain loss) is applied
+        here as a (1 - loss_fraction) multiplier. The consumer-side
+        *waste* fraction is applied on food_consumption links in
+        ``add_food_nutrition_links``.
 
     Outputs per link:
 
@@ -254,9 +257,13 @@ def add_feed_to_animal_product_links(
     countries : list
         List of country codes
     food_to_group : dict[str, str]
-        Mapping from food names to food group names (kept on links for
-        downstream filtering; no longer used here for FLW since FLW is
-        applied on the consumption side).
+        Mapping from animal product names to food group names. Used to
+        look up the per-country loss multiplier.
+    loss_waste : pd.DataFrame
+        Food loss and waste fractions with columns: country, food_group,
+        loss_fraction, waste_fraction. Only the loss component is
+        consumed here; the waste component is applied on the
+        food_consumption link.
     animal_costs : pd.Series | None, optional
         Animal product costs indexed by product (USD per Mt product).
         If provided, converted to cost per Mt feed via efficiency.
@@ -486,11 +493,25 @@ def add_feed_to_animal_product_links(
             int((cal_adj < 0).sum()),
         )
 
-    # No FLW multiplier here: animal_production outputs supply-basis mass
-    # (pre-consumer-FLW). The consumer-side FLW is applied on the
-    # food_consumption link in nutrition.add_food_nutrition_links.
+    # Per-country food *loss* multiplier (pre-retail supply-chain loss) is
+    # applied to the efficiency; the consumer-side *waste* multiplier is
+    # applied later on food_consumption.
     df["group"] = df["product"].map(food_to_group)
-    df["adjusted_efficiency"] = df["efficiency"]
+    loss_lookup = (
+        loss_waste.set_index(["country", "food_group"])["loss_fraction"]
+        .clip(0.0, 1.0)
+        .rename("loss_fraction")
+    )
+    loss_keys = list(zip(df["country"], df["group"]))
+    df["loss_frac"] = loss_lookup.reindex(loss_keys).to_numpy()
+    if pd.isna(df["loss_frac"]).any():
+        missing = df.loc[df["loss_frac"].isna(), ["country", "group"]].drop_duplicates()
+        raise ValueError(
+            "Missing food_loss_waste entries for animal (country, group) pairs: "
+            f"{missing.to_dict('records')[:5]}"
+        )
+    loss_mult = (1.0 - df["loss_frac"].astype(float)).clip(lower=0.01)
+    df["adjusted_efficiency"] = df["efficiency"] * loss_mult
 
     # Build all link data with vectorized string ops
     names = pd.Index(

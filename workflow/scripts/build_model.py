@@ -846,8 +846,9 @@ if __name__ == "__main__":
             cost_calibration=grassland_cost_calibration,
         )
 
-    # Food conversion. FLW is not applied here — it is applied on the
-    # consumption side via ``add_food_nutrition_links`` below.
+    # Food conversion. Per-country food *loss* (pre-retail supply-chain
+    # loss) is applied here; consumer-side *waste* is applied later on the
+    # food_consumption link via ``add_food_nutrition_links``.
     food.add_food_conversion_links(
         n,
         food_list,
@@ -857,6 +858,7 @@ if __name__ == "__main__":
         food_to_group,
         snakemake.params.crops,
         byproduct_list,
+        food_loss_waste,
     )
 
     # Feed supply
@@ -905,8 +907,9 @@ if __name__ == "__main__":
         frac_leach,
     )
 
-    # Animal production. FLW is not applied here — it is applied on the
-    # consumption side via ``add_food_nutrition_links`` below.
+    # Animal production. Per-country food *loss* (pre-retail) is applied
+    # here; consumer-side *waste* is applied later on the food_consumption
+    # link via ``add_food_nutrition_links``.
     animals.add_feed_to_animal_product_links(
         n,
         animal_product_list,
@@ -919,6 +922,7 @@ if __name__ == "__main__":
         snakemake.params.emissions,
         cfg_countries,
         food_to_group,
+        food_loss_waste,
         animal_costs_per_mt,
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,

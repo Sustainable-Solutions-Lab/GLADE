@@ -142,20 +142,23 @@ def add_food_nutrition_links(
 
     Byproduct foods (from config) are excluded from human consumption.
 
-    Country- and food-group-specific food-loss-and-waste (FLW) fractions are
-    applied here, on the consumption side, rather than on food_processing.
-    Each consume link's nutrient and group efficiencies are scaled by the
-    country's FLW multiplier ``(1 - loss) * (1 - waste)`` for the food's
-    group, and the per-link multiplier is preserved on a ``flw_multiplier``
-    column so downstream code (e.g. ``fix_food_consumption_to_baseline``)
-    can translate between intake-basis demand and supply-basis bus flow.
+    The consumer-side *waste* fraction (post-retail loss in the consuming
+    country) is applied here as a (1 - waste_fraction) multiplier on each
+    consume link's nutrient and group efficiencies, so the downstream
+    loads receive intake-basis mass. The producer-side *loss* fraction
+    (pre-retail supply-chain loss in the producing country) is applied
+    earlier on the food_processing / animal_production links.
 
-    Putting FLW on consumption (rather than on processing as previously)
-    removes a global LP arbitrage where low-FLW countries would import dry
-    crop and re-export fresh food to extract the cross-country efficiency
-    differential. With FLW on consumption every country pays its own waste
-    regardless of where processing happened, so the LP defaults to local
-    processing and trade carries supply-mass between countries.
+    The per-link waste multiplier is preserved on a ``flw_multiplier``
+    column so downstream code (notably
+    ``fix_food_consumption_to_baseline``) can translate intake-basis
+    demand into the supply-basis bus flow the consume link needs.
+
+    Placing waste at the consumer (rather than baking it into processing
+    along with loss) removes the bulk of the global LP arbitrage where
+    low-FLW countries acted as processing hubs. Loss is kept at
+    production because supply-chain loss physically belongs to the
+    producing country's infrastructure.
     """
     # Pre-index food_groups for lookup
     food_to_group = food_groups.set_index("food")["group"].to_dict()
@@ -194,27 +197,19 @@ def add_food_nutrition_links(
         logger.info("No consumable foods configured; skipping food consumption links")
         return
 
-    # Build per-(country, food_group) FLW multipliers. Foods without a group
-    # (e.g. byproducts that re-enter as ingredients) get multiplier 1.0.
+    # Build per-(country, food_group) waste multiplier = 1 - waste_fraction.
+    # Foods without a group (e.g. byproducts that re-enter as ingredients)
+    # get multiplier 1.0.
     normalized_countries = [str(c).upper() for c in countries]
     _lw = loss_waste.copy()
-    _lw["loss_fraction"] = _lw["loss_fraction"].clip(0.0, 1.0)
     _lw["waste_fraction"] = _lw["waste_fraction"].clip(0.0, 1.0)
-    _lw["multiplier"] = (1 - _lw["loss_fraction"]) * (1 - _lw["waste_fraction"])
+    _lw["multiplier"] = 1.0 - _lw["waste_fraction"]
     _lw.loc[_lw["multiplier"] <= 0, "multiplier"] = 0.01
     multiplier_lookup = _lw.set_index(["country", "food_group"])["multiplier"]
     extreme_pairs = set(
         zip(
-            _lw.loc[
-                ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
-                | (_lw["multiplier"] <= 0.01),
-                "country",
-            ],
-            _lw.loc[
-                ((_lw["loss_fraction"] > 0.99) | (_lw["waste_fraction"] > 0.99))
-                | (_lw["multiplier"] <= 0.01),
-                "food_group",
-            ],
+            _lw.loc[_lw["waste_fraction"] > 0.5, "country"],
+            _lw.loc[_lw["waste_fraction"] > 0.5, "food_group"],
         )
     )
 
@@ -258,14 +253,14 @@ def add_food_nutrition_links(
     if encountered_extreme:
         sample = ", ".join(f"{c}:{g}" for c, g in sorted(encountered_extreme)[:10])
         logger.warning(
-            "Extreme food loss/waste values for %d country-group pairs (multiplier clamped to feasible range). Examples: %s",
+            "Extreme consumer waste fractions for %d country-group pairs (>50%%). Examples: %s",
             len(encountered_extreme),
             sample,
         )
 
-    # Food bus flows are Mt/year (supply basis: pre-consumer-FLW). Each
-    # nutrient/group efficiency is scaled by the consumer-side FLW multiplier
-    # so the downstream loads receive intake-basis mass.
+    # Food bus flows are Mt/year, in post-loss / pre-waste retail-supply
+    # basis. Each nutrient/group efficiency is scaled by the consumer-side
+    # waste multiplier so the downstream loads receive intake-basis mass.
     def _add_links(batch_df: pd.DataFrame, *, include_group: bool) -> None:
         links = batch_df.set_index("name", drop=False)
         mult = links["flw_multiplier"].astype(float).to_numpy()

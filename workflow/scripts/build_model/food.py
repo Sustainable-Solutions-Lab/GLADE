@@ -30,6 +30,7 @@ def add_food_conversion_links(
     food_to_group: dict[str, str],
     crop_list: list,
     byproduct_list: list,
+    loss_waste: pd.DataFrame,
 ) -> None:
     """Add links for converting crops to foods via processing pathways.
 
@@ -38,10 +39,12 @@ def add_food_conversion_links(
     Only processes crops that are in the configured crop_list.
     Foods flagged as byproducts are ignored when checking for food-group mappings.
 
-    Food loss and waste is *not* applied here; it lives on the consumer
-    side (``add_food_nutrition_links``). The food bus therefore carries
-    supply-basis mass (edible-portion fresh equivalent of the crop input),
-    pre-consumer-FLW.
+    The per-country food *loss* fraction (pre-retail supply-chain loss) is
+    applied here as part of the food_processing efficiency. The
+    consumer-side *waste* fraction (post-retail) is applied separately on
+    the food_consumption link in ``add_food_nutrition_links``. The food
+    bus therefore carries post-loss / pre-waste retail-supply mass, i.e.
+    the mass available at retail in the producing country.
     """
 
     # Filter foods DataFrame to only include configured crops and foods.
@@ -57,6 +60,38 @@ def add_food_conversion_links(
 
     normalized_countries = [str(c).upper() for c in countries]
     countries_index = pd.Index(normalized_countries, dtype="object")
+
+    # Per-(country, food_group) loss multiplier = 1 - loss_fraction. Loss
+    # is applied at production because it represents supply-chain loss in
+    # the producing country (harvest / storage / transport / processing),
+    # which is physically tied to the producer's infrastructure.
+    lw = loss_waste.copy()
+    lw["loss_fraction"] = lw["loss_fraction"].clip(0.0, 1.0)
+    lw["loss_multiplier"] = 1.0 - lw["loss_fraction"]
+    lw.loc[lw["loss_multiplier"] <= 0.0, "loss_multiplier"] = 0.01
+    loss_lookup = lw.set_index(["country", "food_group"])["loss_multiplier"]
+    groups = sorted({group for group in food_to_group.values() if pd.notna(group)})
+    loss_by_group: dict[str, pd.Series] = {}
+    for group in groups:
+        keys = pd.MultiIndex.from_arrays(
+            [normalized_countries, [group] * len(normalized_countries)]
+        )
+        loss_by_group[group] = pd.Series(
+            loss_lookup.reindex(keys).to_numpy(),
+            index=countries_index,
+        )
+
+    extreme_loss = lw[lw["loss_fraction"] > 0.5]
+    if not extreme_loss.empty:
+        sample = ", ".join(
+            f"{r.country}:{r.food_group}={r.loss_fraction:.0%}"
+            for r in extreme_loss.head(10).itertuples(index=False)
+        )
+        logger.warning(
+            "Extreme food loss values for %d country-group pairs (>50%%). Examples: %s",
+            len(extreme_loss),
+            sample,
+        )
 
     batched_frames = {}
 
@@ -97,8 +132,8 @@ def add_food_conversion_links(
         link_df["pathway"] = pathway
 
         # Add each output food as a separate bus with its efficiency.
-        # No country-specific factor on processing: FLW is applied on the
-        # consumption side.
+        # Efficiency = pathway_factor * crop_to_fresh_factor * (1 - loss).
+        # The (1 - waste) multiplier is applied later on food_consumption.
         for output_idx, row in enumerate(output_rows.itertuples(index=False), start=1):
             food = row.food
             factor = row.factor
@@ -108,9 +143,13 @@ def add_food_conversion_links(
             link_df[bus_key] = "food:" + food + ":" + countries_index
 
             group = food_to_group.get(food)
-            if (group is None or pd.isna(group)) and food not in byproduct_foods:
-                missing_group_foods.add(food)
-            link_df[eff_key] = factor * conversion_factor
+            base_eff = factor * conversion_factor
+            if group is None or pd.isna(group):
+                if food not in byproduct_foods:
+                    missing_group_foods.add(food)
+                link_df[eff_key] = base_eff
+            else:
+                link_df[eff_key] = base_eff * loss_by_group[group].to_numpy()
 
         batched_frames.setdefault(n_outputs, []).append(link_df)
 
