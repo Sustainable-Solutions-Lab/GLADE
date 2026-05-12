@@ -1473,7 +1473,7 @@ properties:
             description: "Version of land cover dataset"
       faostat:
         type: object
-        required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_other_uses_element_code]
+        required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_other_uses_element_code, fbs_production_element_code]
         additionalProperties: false
         properties:
           qcl_production_element_code:
@@ -1485,6 +1485,9 @@ properties:
           fbs_other_uses_element_code:
             type: integer
             description: "FAOSTAT element code for 'Other uses (non-food)' in 1000 tonnes (FBS dataset)"
+          fbs_production_element_code:
+            type: integer
+            description: "FAOSTAT element code for 'Production' in 1000 tonnes (FBS dataset)"
       soilgrids:
         type: object
         required: [target_resolution_m]

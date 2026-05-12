@@ -27,6 +27,7 @@ def main() -> None:
     mapping_path = Path(snakemake.input.mapping)  # type: ignore[name-defined]
     qcl_csv = snakemake.input.qcl_csv  # type: ignore[name-defined]
     m49_codes = snakemake.input.m49_codes  # type: ignore[name-defined]
+    override_path = Path(snakemake.input.banana_plantain_override)  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     countries = [str(c).upper() for c in snakemake.params.countries]  # type: ignore[name-defined]
     production_year = int(snakemake.params.production_year)  # type: ignore[name-defined]
@@ -174,6 +175,28 @@ def main() -> None:
         .sum()
         .sort_values(["country", "crop"])
     )
+
+    # Apply banana/plantain override derived from FAOSTAT FBS, which has a
+    # more reliable per-country split than QCL (where many large plantain
+    # producers misclassify all output as "Bananas").
+    override_df = pd.read_csv(override_path)
+    if not override_df.empty:
+        override_df["country"] = override_df["country"].astype(str).str.upper()
+        override_df["crop"] = override_df["crop"].astype(str).str.strip()
+        override_keys = set(
+            zip(override_df["country"], override_df["crop"], strict=False)
+        )
+        keep_mask = [
+            (c, cr) not in override_keys
+            for c, cr in zip(result["country"], result["crop"], strict=False)
+        ]
+        result = pd.concat(
+            [
+                result.loc[keep_mask],
+                override_df[["country", "crop", "year", "production_tonnes"]],
+            ],
+            ignore_index=True,
+        ).sort_values(["country", "crop"])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_path, index=False)

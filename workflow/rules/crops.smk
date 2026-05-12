@@ -46,6 +46,7 @@ rule prepare_faostat_crop_production:
         mapping="data/curated/faostat_crop_item_map.csv",
         qcl_csv="data/downloads/faostat/QCL.parquet",
         m49_codes="data/curated/M49-codes.csv",
+        banana_plantain_override="<processing>/{name}/banana_plantain_production.csv",
     params:
         countries=config["countries"],
         production_year=config["baseline_year"],
@@ -63,6 +64,44 @@ rule prepare_faostat_crop_production:
         "<benchmarks>/{name}/prepare_faostat_crop_production.tsv"
     script:
         "../scripts/prepare_faostat_crop_production.py"
+
+
+rule prepare_banana_plantain_production:
+    """Per-country banana/plantain production split from FAOSTAT FBS.
+
+    FAOSTAT QCL inconsistently classifies cooking bananas: several large
+    plantain producers (Nigeria, Burundi, Rwanda, ...) report all output
+    under "Bananas". The FBS dataset performs its own per-country
+    reconciliation between items 2615 (Bananas) and 2616 (Plantains),
+    which is more aligned with dietary reality. This rule writes a
+    production override file consumed by ``prepare_faostat_crop_production``.
+    """
+    input:
+        fbs_csv="data/downloads/faostat/FBS.parquet",
+        qcl_csv="data/downloads/faostat/QCL.parquet",
+        m49_codes="data/curated/M49-codes.csv",
+    params:
+        countries=config["countries"],
+        production_year=config["baseline_year"],
+        qcl_production_element_code=config["data"]["faostat"][
+            "qcl_production_element_code"
+        ],
+        fbs_production_element_code=config["data"]["faostat"][
+            "fbs_production_element_code"
+        ],
+    output:
+        "<processing>/{name}/banana_plantain_production.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=2900,
+    log:
+        "<logs>/{name}/prepare_banana_plantain_production.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_banana_plantain_production.tsv"
+    script:
+        "../scripts/prepare_banana_plantain_production.py"
 
 
 rule prepare_fao_edible_portion:
