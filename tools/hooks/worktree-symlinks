@@ -6,6 +6,14 @@
 # Symlink shared data directories from the main worktree into git worktrees,
 # so that expensive-to-recreate data is reused without re-downloading or
 # recomputing. Runs as a post-checkout hook via prek/pre-commit.
+#
+# Only gitignored subdirectories are symlinked. Git-tracked subdirectories
+# (data/curated/, data/bundled/) intentionally stay as per-worktree
+# checkouts so that branch-specific edits to tracked CSVs (e.g. adding a
+# new model crop) are visible to git in the worktree where the edit is
+# made. Symlinking the entire data/ directory was the historical pattern
+# but caused split-checkout problems: edits landed in the main worktree's
+# files instead of the active branch's working tree.
 
 set -euo pipefail
 
@@ -21,16 +29,12 @@ COMMON_DIR=$(git rev-parse --git-common-dir)
 MAIN_WORKTREE=$(cd "$COMMON_DIR/.." && pwd)
 WORKTREE_ROOT=$(git rev-parse --show-toplevel)
 
-# Directories to replace with symlinks to the main worktree.
-# data/ is checked out by git (it has tracked files), so we remove the
-# checkout and replace it with a symlink to share gitignored downloads,
-# manually_downloaded data, and restricted datasets.
-REPLACE_DIRS=(
-    data
-)
-
-# Gitignored directories to symlink (not checked out, so just create).
+# Gitignored directories that are heavy or slow to recreate. Symlinked
+# from the main worktree so worktrees share them instead of downloading
+# / recomputing per-branch.
 SHARED_DIRS=(
+    data/downloads
+    data/manually_downloaded
     processing
 )
 
@@ -38,16 +42,6 @@ SHARED_DIRS=(
 SHARED_FILES=(
     config/secrets.yaml
 )
-
-for dir in "${REPLACE_DIRS[@]}"; do
-    target="$MAIN_WORKTREE/$dir"
-    link="$WORKTREE_ROOT/$dir"
-    if [[ -d "$target" ]] && [[ -d "$link" ]] && [[ ! -L "$link" ]]; then
-        rm -rf "$link"
-        ln -s "$target" "$link"
-        echo "Worktree: symlinked $dir"
-    fi
-done
 
 for dir in "${SHARED_DIRS[@]}"; do
     target="$MAIN_WORKTREE/$dir"
