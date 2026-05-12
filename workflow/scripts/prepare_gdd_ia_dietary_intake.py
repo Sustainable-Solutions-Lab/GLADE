@@ -26,9 +26,12 @@ basis adjustment:
 
 Out-of-scope categories (kcal subtracted from country target):
 
-- ``fruits_starch`` (plantain) — until plantain is a model crop
-- ``fat_ani`` (rendered animal fat) — until rendered-fat is a model food
 - ``alcohol``, ``fish_*``, ``shellfish``, ``spices``, ``other``
+- ``fat_ani`` (rendered animal fat) — until rendered-fat is wired into
+  animal_production as a co-product
+
+``fruits_starch`` (plantain) maps to the ``starchy_vegetable`` food
+group (model crop ``plantain`` added).
 
 The output mirrors the schema of the legacy ``gdd_dietary_intake.csv``
 (unit, item, country, age, year, value), plus a companion
@@ -73,7 +76,7 @@ PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
     "vegetables": "vegetables",
     "fruits_trop": "fruits",
     "fruits_temp": "fruits",
-    # fruits_starch: out-of-scope until plantain is a model crop
+    "fruits_starch": "starchy_vegetable",  # plantain — model crop added
     "legumes": "legumes",
     "soybeans": "legumes",
     "nuts": "nuts_seeds",
@@ -89,6 +92,7 @@ PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
     "milk": "dairy",
     "eggs": "eggs",
     "stimulants": "stimulants",
+    # fat_ani: out-of-scope until rendered-fat is wired into animal_production
 }
 
 # `prcd` rows providing the whole/refined cereal split.
@@ -117,8 +121,7 @@ OUT_OF_SCOPE_KCAL: list[str] = [
     "shellfish",
     "spices",
     "other",
-    "fruits_starch",  # plantain — until model crop is added
-    "fat_ani",  # rendered animal fat — until model food is added
+    "fat_ani",  # rendered animal fat — pending animal_production co-product wiring
 ]
 
 # Country proxies for the 12 GDD-IA-missing required countries.

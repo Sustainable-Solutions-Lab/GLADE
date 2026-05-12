@@ -38,6 +38,10 @@ ALTERNATE_ITEM_NAMES: dict[str, str] = {
     # Conversion Table sheet 03 uses "Mangoes, guavas, mangosteens" (no
     # 'and'). Map between them so the lookup resolves.
     "mangoes, guavas and mangosteens": "mangoes, guavas, mangosteens",
+    # FAOSTAT QCL renamed "Plantains and others" -> "Plantains and cooking
+    # bananas"; FAO Nutrient Conversion Table sheet 03 still uses the
+    # shorter form.
+    "plantains and cooking bananas": "plantains and others",
 }
 
 # Crops for which the edible portion coefficient should be set to 1.0 despite

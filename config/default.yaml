@@ -257,6 +257,7 @@ crops:
 - sweet-potato
 - cassava
 - yam
+- plantain  # GAEZ-untracked; uses banana yield surface as a proxy. Harvested area is split off FAOSTAT QCL "Bananas" / "Plantains and others" via prepare_banana_plantain_split.
 # Vegetables
 - tomato
 - carrot
@@ -554,6 +555,7 @@ food_groups:
   - eggs
   - sugar
   - stimulants
+  # animal_fat (rendered fat): pending animal_production co-product wiring
   # Optional per-group constraints with "min", "max" or "equal" in g/person/day
   constraints: {}
   equal_by_country_source: null
@@ -1490,7 +1492,7 @@ plotting:
       crops: [soybean, dry-pea, chickpea, cowpea, gram, phaseolus-bean, pigeonpea]
     "Roots & tubers":
       color: "#A6761D"  # Dark2 #7
-      crops: [white-potato, sweet-potato, cassava, yam]
+      crops: [white-potato, sweet-potato, cassava, yam, plantain]
     Vegetables:
       color: "#1B9E77"  # Dark2 #1
       crops: [tomato, carrot, onion, cabbage]
