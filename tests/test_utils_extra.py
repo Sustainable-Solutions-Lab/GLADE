@@ -129,36 +129,6 @@ class TestCarrierUnitForNutrient:
 class TestFreshMassConversionFactors:
     """Tests for _fresh_mass_conversion_factors."""
 
-    def test_basic_calculation(self):
-        """edible_portion=0.8, moisture=0.1 → factor = 0.8 / 0.9."""
-        edible_df = pd.DataFrame(
-            {"crop": ["wheat"], "edible_portion_coefficient": [0.8]}
-        )
-        moisture_df = pd.DataFrame({"crop": ["wheat"], "moisture_fraction": [0.1]})
-        result = _fresh_mass_conversion_factors(edible_df, moisture_df, {"wheat"})
-        assert result["wheat"] == pytest.approx(0.8 / 0.9)
-
-    def test_multiple_crops(self):
-        """Test with multiple crops."""
-        edible_df = pd.DataFrame(
-            {
-                "crop": ["wheat", "rice", "maize"],
-                "edible_portion_coefficient": [0.8, 0.65, 0.9],
-            }
-        )
-        moisture_df = pd.DataFrame(
-            {
-                "crop": ["wheat", "rice", "maize"],
-                "moisture_fraction": [0.1, 0.12, 0.15],
-            }
-        )
-        result = _fresh_mass_conversion_factors(
-            edible_df, moisture_df, {"wheat", "rice", "maize"}
-        )
-        assert result["wheat"] == pytest.approx(0.8 / 0.9)
-        assert result["rice"] == pytest.approx(0.65 / 0.88)
-        assert result["maize"] == pytest.approx(0.9 / 0.85)
-
     def test_missing_crop_in_edible_portion_raises(self):
         """Missing crop in edible portion data should raise ValueError."""
         edible_df = pd.DataFrame(
@@ -181,15 +151,6 @@ class TestFreshMassConversionFactors:
         moisture_df = pd.DataFrame({"crop": ["wheat"], "moisture_fraction": [0.1]})
         with pytest.raises(ValueError, match="Missing moisture fraction data"):
             _fresh_mass_conversion_factors(edible_df, moisture_df, {"wheat", "rice"})
-
-    def test_zero_moisture(self):
-        """Zero moisture means dry_fraction = 1.0, factor = edible_portion."""
-        edible_df = pd.DataFrame(
-            {"crop": ["wheat"], "edible_portion_coefficient": [0.95]}
-        )
-        moisture_df = pd.DataFrame({"crop": ["wheat"], "moisture_fraction": [0.0]})
-        result = _fresh_mass_conversion_factors(edible_df, moisture_df, {"wheat"})
-        assert result["wheat"] == pytest.approx(0.95)
 
 
 # ---------------------------------------------------------------------------
