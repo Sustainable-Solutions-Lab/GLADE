@@ -26,4 +26,3 @@
 #
 # When both loss_fraction and waste_fraction are empty, the row is ignored.
 country,food_group,loss_fraction,waste_fraction,source
-*,dairy,,0.30,"USDA ERS Loss-Adjusted Food Availability (LAFA) reports combined retail- plus consumer-level loss for fluid milk and dairy products at ~32% in the United States; FAO Save Food (Gustavsson et al. 2011) reports comparable losses for industrialised regions and 14-19% post-harvest loss in low-income regions. Applied as a global default because the FAO FBS food supply already nets out pre-retail losses, but consistently over-estimates ingestion of dairy commodities by roughly a factor of two against intake surveys (e.g. NHANES What We Eat in America for the US). Replaces the country-level SDG-12.3.1(b) waste fraction, which is a single all-foods average that under-corrects dairy."
