@@ -92,6 +92,7 @@ def add_regional_crop_production_links(
     cost_calibration: pd.Series | None = None,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
+    crop_loss_multiplier: pd.Series,
 ) -> None:
     """Add crop production links per region/resource class and water supply.
 
@@ -117,6 +118,14 @@ def add_regional_crop_production_links(
         ``workflow.validation.seed_rates`` — every config crop must have a
         row, so a missing key raises ``KeyError`` here rather than silently
         defaulting to zero.
+    crop_loss_multiplier : pd.Series
+        MultiIndex (crop, country) → ``1 - loss_fraction`` for that crop's
+        primary food group, in the producing country. Applied as an
+        additional factor on the crop_production efficiency so the crop
+        bus carries post-supply-chain-loss DM. This makes food_processing
+        country-neutral (eliminating the cross-country loss-rate
+        arbitrage that would otherwise route processing through low-loss
+        countries). A missing key falls back to 1.0 (no loss).
     """
     residue_lookup = residue_lookup or {}
 
@@ -240,7 +249,18 @@ def add_regional_crop_production_links(
                     yield_t_per_ha > 0, seed_t_per_ha / yield_t_per_ha, 0.0
                 )
             seed_share = np.clip(seed_share, 0.0, 0.5)
-            row_df["efficiency"] = yield_t_per_ha * (1.0 - seed_share)
+            # Per-country supply-chain loss multiplier (post-harvest +
+            # storage + transport + processing losses); applied here so
+            # the crop bus carries post-loss DM and food_processing
+            # remains country-neutral.
+            loss_keys = pd.MultiIndex.from_arrays(
+                [
+                    [crop] * len(row_df),
+                    row_df["country"].astype(str).values,
+                ]
+            )
+            loss_mults = crop_loss_multiplier.reindex(loss_keys).fillna(1.0).to_numpy()
+            row_df["efficiency"] = yield_t_per_ha * (1.0 - seed_share) * loss_mults
             row_df["seed_share"] = seed_share
             ha = pd.to_numeric(df["harvested_area"], errors="coerce").to_numpy(
                 dtype=float
@@ -425,12 +445,15 @@ def add_multi_cropping_links(
     *,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
+    crop_loss_multiplier: pd.Series,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow.
 
     The seed-share deduction (see ``add_regional_crop_production_links``) is
     applied per cycle: each cycle's per-ha yield is reduced by
-    ``seed_kg_dm_per_ha[crop] / 1000 / yield_t_per_ha``.
+    ``seed_kg_dm_per_ha[crop] / 1000 / yield_t_per_ha``. The per-country
+    supply-chain loss multiplier is applied identically so the multi-crop
+    crop bus carries post-loss DM, matching the regular production path.
     """
 
     if eligible_area.empty or cycle_yields.empty:
@@ -494,7 +517,13 @@ def add_multi_cropping_links(
     seed_t_per_ha = merged["crop"].map(seed_kg_dm_per_ha).astype(float) / 1000.0
     seed_share = (seed_t_per_ha / merged["yield_t_per_ha"]).clip(lower=0.0, upper=0.5)
     merged["seed_share"] = seed_share.to_numpy(dtype=float)
-    merged["yield_efficiency"] = merged["yield_t_per_ha"] * (1.0 - seed_share)
+    loss_keys = pd.MultiIndex.from_arrays(
+        [merged["crop"].astype(str).values, merged["country"].astype(str).values]
+    )
+    loss_mults = crop_loss_multiplier.reindex(loss_keys).fillna(1.0).to_numpy()
+    merged["yield_efficiency"] = (
+        merged["yield_t_per_ha"] * (1.0 - seed_share) * loss_mults
+    )
     merged["output_idx"] = merged.groupby(key_cols).cumcount()
 
     base = (

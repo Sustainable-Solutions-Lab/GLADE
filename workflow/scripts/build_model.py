@@ -787,6 +787,40 @@ if __name__ == "__main__":
         luc_lef_lookup,
         disable_spared_cropland=disable_spared_cropland,
     )
+    # Per-(crop, country) supply-chain loss multiplier = 1 - loss_fraction
+    # applied to crop_production efficiency. The loss rate is sourced from
+    # the crop's *primary* food group (the food output with the highest
+    # pathway factor): for almost all crops this is unambiguous because
+    # the primary output and any byproducts share one SDG product type
+    # (CRL_PUL / FRT_VGT / RT_TBR). Applying loss at production puts the
+    # producer's supply-chain loss inside the crop bus mass, so trade and
+    # downstream processing are loss-neutral and the LP cannot route
+    # processing through low-loss countries to extract food efficiency.
+    foods_with_group = foods.copy()
+    foods_with_group["group"] = foods_with_group["food"].map(food_to_group)
+    primary_food_group = (
+        foods_with_group.dropna(subset=["group"])
+        .sort_values(["crop", "factor"], ascending=[True, False])
+        .drop_duplicates(subset=["crop"])
+        .set_index("crop")["group"]
+        .to_dict()
+    )
+    flw_loss = (
+        food_loss_waste.set_index(["country", "food_group"])["loss_fraction"]
+        .astype(float)
+        .clip(0.0, 1.0)
+    )
+    crop_loss_pairs = [(c, ct) for c in primary_food_group for ct in cfg_countries]
+    crop_loss_index = pd.MultiIndex.from_tuples(
+        crop_loss_pairs, names=["crop", "country"]
+    )
+    loss_values = [
+        flw_loss.get((ct, primary_food_group[c]), 0.0) for c, ct in crop_loss_pairs
+    ]
+    crop_loss_multiplier = (
+        1.0 - pd.Series(loss_values, index=crop_loss_index, dtype=float)
+    ).clip(lower=0.01)
+
     crops.add_regional_crop_production_links(
         n,
         crop_list,
@@ -803,6 +837,7 @@ if __name__ == "__main__":
         cost_calibration=crop_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
         seed_kg_dm_per_ha=seed_kg_dm_per_ha,
+        crop_loss_multiplier=crop_loss_multiplier,
     )
     land.add_multi_cropping_land_correction(
         n,
@@ -827,6 +862,7 @@ if __name__ == "__main__":
             residue_lookup,
             min_yield_t_per_ha=min_crop_yield,
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
+            crop_loss_multiplier=crop_loss_multiplier,
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")
@@ -846,9 +882,12 @@ if __name__ == "__main__":
             cost_calibration=grassland_cost_calibration,
         )
 
-    # Food conversion. Per-country food *loss* (pre-retail supply-chain
-    # loss) is applied here; consumer-side *waste* is applied later on the
-    # food_consumption link via ``add_food_nutrition_links``.
+    # Food conversion. food_processing is country-neutral: producer-side
+    # loss is applied earlier on crop_production (per crop's primary food
+    # group), and consumer-side waste is applied later on the
+    # food_consumption link via ``add_food_nutrition_links``. Animal
+    # products go through ``add_feed_to_animal_product_links`` where
+    # loss is applied on the animal_production link directly.
     food.add_food_conversion_links(
         n,
         food_list,
@@ -858,7 +897,6 @@ if __name__ == "__main__":
         food_to_group,
         snakemake.params.crops,
         byproduct_list,
-        food_loss_waste,
     )
 
     # Feed supply
