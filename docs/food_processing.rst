@@ -44,6 +44,10 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
 
   **Cotton ginning**: Cotton is processed via the ``cotton_ginning`` pathway, which produces three outputs from seed cotton: cotton lint (0.38), cottonseed oil (0.083), and oilseed meal (0.275). Cotton lint is a non-food byproduct routed to per-country fiber demand stores (see :doc:`configuration`); cottonseed oil enters the food system as an edible oil; oilseed meal enters the generic oilcake pool available as animal feed.
 
+  .. _palm-kernel-pathway:
+
+  **Palm oil and palm kernel**: The ``palm_oil`` pathway produces both crude palm oil from the mesocarp (0.24 t per t FFB) and palm-kernel-meal from the kernel-oil pressing step (0.022 t per t FFB). The factor for the meal byproduct is derived from the Malaysian Palm Oil Board's industry-standard kernel extraction rate (KER ≈ 4.5 % of FFB, see the ``MPOB_KER`` source URL in ``foods.csv``) combined with Feedipedia's ~50 % press cake yield from kernels (mechanical extraction, ``FEEDIPEDIA_PKM`` source URL). The ~2 % palm kernel oil that would jointly emerge from the kernel-pressing step is not separately tracked — it is small relative to global vegetable oil supply and is lumped into wastage. Palm-kernel-meal itself has a relatively low crude protein content (~17 % CP, N ≈ 27 g/kg DM) and would auto-categorise as a *grain* feed; the model overrides this to *protein* in ``data/curated/feed_category_overrides.csv`` to match GLEAM3's accounting convention (PKEXP is booked under the "Oil seed cakes" intake bucket together with the higher-protein meals) and to ensure the new supply lands on the right feed bus for closing the gap. See :ref:`exogenous-protein-feed` for the rest of the protein-feed story.
+
   .. note::
 
      When ``validation.use_actual_yields`` is true, the sugarcane, sugarbeet, and oil-palm rasters already deliver whole-crop fresh mass, so the workflow skips the conversion above and relies on the moisture table to convert to dry matter before applying extraction factors.

@@ -58,7 +58,7 @@ MLSOY,oilseed-meal,food,both,Soybean meal → oilseed meal (generic oilseed meal
 MLRAPE,rapeseed-meal,food,both,Rapeseed/canola meal
 MLCTTN,oilseed-meal,food,both,Cottonseed meal → generic oilcake (oilseed-meal proxy)
 MLOILSDS,oilseed-meal,food,monogastric,Other oilseed meals → oilseed meal
-PKEXP,,food,both,Palm kernel cake (not in model - skip for now)
+PKEXP,palm-kernel-meal,food,both,"Palm kernel cake — byproduct of palm kernel oil extraction (Feedipedia: ~17 % CP, ~5–12 % residual oil, high fibre). Modelled via the palm_oil pathway in foods.csv at 0.022 t PKM per t FFB."
 GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat bran"
 GRNBYWET,ddgs,food,both,DDGS from grain ethanol production (wet grain byproducts)
 MZGLTM,,food,ruminant,Maize gluten meal (high protein) - not in model

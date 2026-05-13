@@ -13,6 +13,14 @@
 # - FAO_TCF: https://www.fao.org/fileadmin/templates/ess/documents/methodology/tcf.pdf
 # - FAO_GAEZ: https://www.fao.org/gaez/en
 # - FAO_PALM_PROCESSING: https://www.fao.org/4/y4355e/y4355e04.htm
+# - MPOB_KER: http://poeb.mpob.gov.my/oil-and-kernel-extraction-rate-a-management-perspective/
+#                         (Malaysian Palm Oil Board "Oil and Kernel Extraction Rate" series;
+#                          typical KER ~4–5 % of FFB. Combined with the kernel→PKO/PKC
+#                          mass split below to derive the per-FFB byproduct factor.)
+# - FEEDIPEDIA_PKM: https://www.feedipedia.org/node/43
+#                         (Palm kernel meal proximate composition; mechanical-extraction
+#                          PKM contains ~5–12 % residual oil, leaving a press cake ~50 %
+#                          of original kernel mass with CPKO ~45 % and ~5 % losses.)
 # - GAEZ_OLIVE_OIL_BASIS: https://github.com/un-fao/gaezv5/wiki/08.-Module-VI-(Actual-yield-and-production)
 #                         (Module VI OOC group reports yield in oil-equivalent t/ha;
 #                          v4 Model Documentation Table 9-2 documents the same convention.)
@@ -91,6 +99,7 @@ sunflower_seed,sunflower,sunflower-seed,1.0,No processing (shell accounted for b
 rapeseed_oil,rapeseed,rapeseed-oil,0.38,Oil extraction from rapeseed (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
 rapeseed_oil,rapeseed,rapeseed-meal,0.5,Meal from oil extraction (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
 palm_oil,oil-palm,palm-oil,0.24,Oil extraction from fresh fruit bunches (FAO palm oil processing guide),FAO_PALM_PROCESSING
+palm_oil,oil-palm,palm-kernel-meal,0.022,"Palm kernel cake (PKEXP) byproduct: industrial KER ~4.5 % of FFB (MPOB) and a 50 % press cake yield from kernels (Feedipedia, mechanical extraction) give ~2.2 % PKM per t FFB. The corresponding ~2 % palm-kernel oil is not separately tracked.","MPOB_KER;FEEDIPEDIA_PKM"
 olive_oil,olive,olive-oil,1.0,GAEZ RES06 OOC olive yield is reported in oil-equivalent t/ha so the olive crop bus carries oil tonnes directly; this pathway is 1:1,GAEZ_OLIVE_OIL_BASIS
 sugarcane_sugar,sugarcane,sugar,0.14,Sucrose extraction retained from GAEZ v5 yield convention,FAO_GAEZ
 sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction retained as complement to molasses fraction,GLEAM_TABLE_3_3

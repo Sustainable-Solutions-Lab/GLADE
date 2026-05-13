@@ -42,3 +42,17 @@ feed_item,source_type,animal_type,category,share,notes
 # excess then dumps to biomass disposal instead of feeding pigs.
 ddgs,food,monogastric,grain,0.7,
 ddgs,food,monogastric,protein,0.3,
+# Palm kernel meal (PKEXP): ~17 % CP, ~5–12 % residual oil, very high
+# fibre (Feedipedia). By N content alone the auto-categorizer places it
+# in the grain bucket (N ≈ 27 < 50 g/kg DM for ruminants; ME ≈ 11.5 MJ
+# for pigs). However, GLEAM3 accounts for it under "Oil seed cakes" and
+# FAOSTAT books it as item 2575 "palm kernel cake", alongside the
+# higher-protein meals. We follow that accounting convention so that
+# (a) GLEAM-derived protein-feed demand stays a single coherent pool
+# and (b) the palm processing pathway in foods.csv contributes supply
+# on the right bus. Note that ruminant_protein has no upper bound on
+# fibre content in this model, so the heavier fibre of palm kernel
+# meal is captured through the entity's own N/digestibility metadata
+# downstream (e.g. enteric CH4 yields), not via the category split.
+palm-kernel-meal,food,monogastric,protein,1.0,
+palm-kernel-meal,food,ruminant,protein,1.0,
