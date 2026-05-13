@@ -558,8 +558,17 @@ food_loss_waste_calibration:
   generate: false
   calibration_file: "data/curated/calibration/food_waste.yaml"
   food_groups:
+  # Groups with documented FBS-vs-GDD gap that the SDG-based defaults
+  # under- or over-state. vegetables / fruits run a large global excess
+  # under the SDG defaults (~10% waste vs ~50% implied by FAO Save Food
+  # 2011 and the FBS-supply-to-GDD-intake ratio); starchy_vegetable runs
+  # a small shortage that absorbs cleanly into a slightly lower
+  # consumer-side waste (model production matches FAOSTAT closely while
+  # the SDG global all-foods 10% waste rate over-states consumer waste
+  # for storage-stable roots / tubers).
   - vegetables
   - fruits
+  - starchy_vegetable
   scenario: "default"
 
 # --- section: food_groups ---
@@ -758,6 +767,14 @@ biomass:
   - coconut-oil
   - coconut
   - foxtail-millet
+  # Major oilseed oils: disposal lets the LP process more oilseed to meet
+  # the meal-driven protein-feed demand without being constrained by the
+  # fixed enforce_baseline_diet oil consumption (real-world soybean/rapeseed/
+  # sunflower processing is meal-driven, with surplus oil going to biofuel
+  # or industrial uses that the model captures via this sink).
+  - soybean-oil
+  - rapeseed-oil
+  - sunflower-oil
   - chickpea
   - gram
   - rendered-fat  # tallow/lard yielded as a co-product of cattle/pig animal_production; ~50% goes to industrial uses (soap, biofuel) not captured in IA food intake
