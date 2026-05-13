@@ -5,7 +5,7 @@
 """Validate diet basis declarations and conversion-factor tables.
 
 Covers config.diet.source_basis (basis values, source coverage),
-config.diet.weight_conversion (table-name pattern), and
+config.weight_conversion (table-name pattern), and
 data/curated/diet_source_basis_overrides.csv (columns, basis values,
 source consistency).
 
@@ -21,7 +21,7 @@ import re
 
 import pandas as pd
 
-ALLOWED_BASES = {"dry", "fresh", "cooked", "brewed"}
+ALLOWED_BASES = {"dry", "fresh", "cooked", "carcass", "brewed"}
 TABLE_NAME_RE = re.compile(r"^([a-z]+)_to_([a-z]+)$")
 OVERRIDES_REQUIRED_COLUMNS = {"source", "country", "food_group", "basis"}
 
@@ -29,7 +29,7 @@ OVERRIDES_REQUIRED_COLUMNS = {"source", "country", "food_group", "basis"}
 def validate_diet_basis(config: dict, project_root: Path) -> None:
     diet_cfg = config["diet"]
     source_basis = diet_cfg["source_basis"]
-    weight_conversion = diet_cfg["weight_conversion"]
+    weight_conversion = config["weight_conversion"]
 
     errors: list[str] = []
 
@@ -49,7 +49,7 @@ def validate_diet_basis(config: dict, project_root: Path) -> None:
         m = TABLE_NAME_RE.match(table_name)
         if not m:
             errors.append(
-                f"diet.weight_conversion.{table_name}: name does not match "
+                f"weight_conversion.{table_name}: name does not match "
                 "'<from>_to_<to>'"
             )
             continue
@@ -57,12 +57,12 @@ def validate_diet_basis(config: dict, project_root: Path) -> None:
         bad = [b for b in (src, dst) if b not in ALLOWED_BASES]
         if bad:
             errors.append(
-                f"diet.weight_conversion.{table_name}: bases {bad} not in "
+                f"weight_conversion.{table_name}: bases {bad} not in "
                 f"{sorted(ALLOWED_BASES)}"
             )
         if src == dst:
             errors.append(
-                f"diet.weight_conversion.{table_name}: src and dst basis are equal"
+                f"weight_conversion.{table_name}: src and dst basis are equal"
             )
 
     # diet_source_basis_overrides.csv

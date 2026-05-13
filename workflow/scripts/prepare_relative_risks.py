@@ -546,8 +546,9 @@ def main() -> None:
     # Build per-risk-factor RR-curve x-axis conversion: each risk
     # factor's GBD basis (declared in diet.source_basis.gbd) is compared
     # to the matching food's basis (food_basis.csv via food_groups.csv);
-    # when they differ, the matching factor in diet.weight_conversion
-    # is applied so the curve x-axis lands in the model's consumption basis.
+    # when they differ, the matching factor in the top-level
+    # weight_conversion is applied so the curve x-axis lands in the
+    # model's consumption basis.
     from workflow.scripts.diet.basis import (
         build_group_basis,
         conversion_factor,

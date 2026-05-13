@@ -479,21 +479,9 @@ animal_products:
     k_m: 0.65  # Maintenance efficiency (NASEM 2016 / NRC 2000 Beef)
     k_g: 0.43  # Growth efficiency (NASEM 2016 / NRC 2000 Beef)
     k_l: 0.64  # Lactation efficiency, dairy (NRC 2001 Dairy)
-  # Carcass-to-retail meat conversion factors. Source: OECD-FAO
-  # Agricultural Outlook 2023-2032, Meat chapter, Box 6.1 ("Edible retail
-  # weight"), which gives carcass-to-boneless-retail-weight-equivalent
-  # percentages used by the OECD-FAO meat balance sheets. Cross-reference:
-  # USDA Agricultural Handbook 697 (1992) "Weights, Measures, and
-  # Conversion Factors for Agricultural Commodities and Their Products",
-  # Table 7.
-  carcass_to_retail_meat:
-    meat-cattle: 0.67  # OECD-FAO 2023 Box 6.1: Beef 67%
-    meat-pig: 0.73     # OECD-FAO 2023 Box 6.1: Pigmeat 73%
-    meat-chicken: 0.60 # OECD-FAO 2023 Box 6.1: Poultry 60%
-    meat-sheep: 0.66   # OECD-FAO 2023 Box 6.1: Sheep 66%
-    eggs: 1.00         # No conversion needed (whole egg = retail product)
-    dairy: 1.00        # No conversion needed (whole milk = retail product)
-    dairy-buffalo: 1.00 # No conversion needed (whole milk = retail product)
+  # Carcass-to-retail meat conversion factors live in the top-level
+  # `weight_conversion.carcass_to_fresh` table (single source of truth used
+  # by the animal-production, food-loss-waste, and baseline-diet pipelines).
   # Rendered fat (tallow / lard) yielded as a co-product of animal
   # production. Mt rendered fat per Mt retail meat, derived from
   # typical carcass-fat fractions (tallow ~6% of cattle carcass /
@@ -669,15 +657,63 @@ food_groups:
   fix_within_group_ratios:
     enabled: false
 
+# --- section: weight_conversion ---
+# Mass-basis conversion tables, keyed "<from>_to_<to>". Each table maps a
+# food (or food group) name to a multiplicative factor; foods not listed
+# default to 1.0. Consumed by the diet pipeline (baseline_diet, FLW,
+# health RR conversions) and by the animal-product pipeline (FAOSTAT QCL
+# carcass → retail conversion and feed→retail ME normalisation).
+# Bases recognised model-wide: dry, fresh, cooked, carcass, brewed.
+weight_conversion:
+  # GBD whole_grain is reported on a dry whole-grain basis (the TMREL
+  # 100-150 g/day is calibrated on dry content); GBD legumes is reported
+  # on a cooked basis. Convert to model basis (dry) via 0.45 / 0.40.
+  cooked_to_dry:
+    grain: 0.45
+    whole_grains: 0.45
+    legumes: 0.40
+  # GBD red_meat is reported in cooked basis; the model uses raw retail
+  # mass. Inflation factor 1/0.7 ≈ 1.43 lands GBD red_meat exposure on
+  # raw retail basis. (Plan: complement with a basis correction to the
+  # health module's red_meat RR function so attributable burden uses
+  # cooked-basis exposure end to end.)
+  cooked_to_fresh:
+    red_meat: 1.43
+    poultry: 1.0
+  # Green-tea-leaf → made (dry) tea: FAO uses 0.22 as the standard
+  # processing yield (1 kg of green leaf yields ~0.22 kg of dry made
+  # tea). Applied in the FBS override so the supply-side GAEZ tea yields
+  # (made-tea basis) and the demand-side baseline consumption (derived
+  # from FBS green-leaf supply) land in the same basis.
+  fresh_to_dry:
+    tea-dried: 0.22
+  # Carcass → retail (boneless, edible) conversion for meat products.
+  # Source: OECD-FAO Agricultural Outlook 2023-2032, Meat chapter,
+  # Box 6.1 ("Edible retail weight"). Cross-reference: USDA Agricultural
+  # Handbook 697 (1992), Table 7. The food bus carries retail mass, while
+  # FAOSTAT QCL reports meat in carcass weight — these factors land FBS
+  # supply (FBS override path), QCL production (prepare_faostat_animal_
+  # production), implicit FLW (prepare_food_loss_waste), and ME-per-kg
+  # requirements (build_feed_to_animal_products) on the retail/fresh basis
+  # the model uses internally. Eggs and dairy aren't listed because their
+  # FBS supply is already in retail mass (factor 1.0 by default).
+  carcass_to_fresh:
+    meat-cattle: 0.67  # OECD-FAO 2023 Box 6.1: Beef 67%
+    meat-pig: 0.73     # OECD-FAO 2023 Box 6.1: Pigmeat 73%
+    meat-sheep: 0.66   # OECD-FAO 2023 Box 6.1: Sheep 66%
+    meat-chicken: 0.60 # OECD-FAO 2023 Box 6.1: Poultry 60%
+
 # --- section: diet ---
 diet:
   baseline_age: "All ages"
   # Foods whose per-country intake is computed directly from FAOSTAT Food
   # Balance Sheet supply rather than disaggregated from GDD/GBD group
   # totals. For each listed food the override sets
-  #   intake_g_day = FBS_supply × within_FBS_share × carcass_to_retail
+  #   intake_g_day = FBS_supply × within_FBS_share × basis_factor
   #                  × (1 − loss_fraction) × (1 − waste_fraction)
   #                  × 1000 / 365
+  # where ``basis_factor`` is looked up via the shared weight_conversion
+  # table (e.g. carcass_to_fresh for meats, fresh_to_dry for tea-dried).
   # which mirrors the FLW correction the build_model animal_production and
   # food_processing links apply on the production side. This anchors the
   # diet to the same FAOSTAT backbone as baseline production.
@@ -746,14 +782,20 @@ diet:
       nuts_seeds: dry
       milk: fresh
     # FBS Food-supply "primary equivalents" each carry their own basis
-    # (cocoa beans, green coffee, milk-equiv, etc.). For most foods the
-    # FBS basis happens to match the model's food_basis after the
-    # carcass_to_retail_meat conversion for meats, so no entry is needed
-    # and the override pipeline applies factor 1.0. Tea is the exception:
-    # FBS item 2635 ("Tea incl. mate") supply is reported as green leaf,
-    # while food_basis declares tea-dried as dry — convert via
-    # weight_conversion.fresh_to_dry below.
+    # (cocoa beans, green coffee, milk-equiv, raw sugar, etc.). For most
+    # foods the FBS basis happens to match the model's food_basis and no
+    # entry is needed (the override pipeline applies factor 1.0).
+    # Exceptions:
+    #   - Meats: FBS reports carcass weight; food_basis declares retail
+    #     ("fresh"). Converted via weight_conversion.carcass_to_fresh.
+    #   - Tea: FBS item 2635 ("Tea incl. mate") supply is green leaf;
+    #     food_basis declares tea-dried as dry. Converted via
+    #     weight_conversion.fresh_to_dry.
     faostat_fbs_supply:
+      meat-cattle: carcass
+      meat-pig: carcass
+      meat-sheep: carcass
+      meat-chicken: carcass
       tea-dried: fresh
     # NHANES is intentionally absent: FPED ounce-equivalents are a
     # hybrid basis (flour-content for breads, cooked weight for rice)
@@ -766,33 +808,6 @@ diet:
   # high-volume per-country exceptions in the CSV (it scales better
   # than a YAML block) and reserve this YAML for the cross-cutting
   # global defaults.
-  # Mass-conversion factor tables, keyed "<from>_to_<to>".
-  # Foods/groups not listed default to factor 1.0.
-  weight_conversion:
-    # Cereals/legumes: GBD whole_grain is reported on a dry whole-grain
-    # basis (the TMREL 100-150 g/day is calibrated on dry content); GBD
-    # legumes is reported on a cooked basis. Convert to model basis (dry)
-    # via 0.45 / 0.40.
-    cooked_to_dry:
-      grain: 0.45
-      whole_grains: 0.45
-      legumes: 0.40
-    # GBD red_meat is reported in cooked basis; the model uses raw retail
-    # mass. Inflation factor 1/0.7 ≈ 1.43 lands GBD red_meat exposure on
-    # raw retail basis. (Plan: complement with a basis correction to the
-    # health module's red_meat RR function so attributable burden uses
-    # cooked-basis exposure end to end.)
-    cooked_to_fresh:
-      red_meat: 1.43
-      poultry: 1.0
-    # Green-tea-leaf → made (dry) tea: FAO uses 0.22 as the
-    # standard processing yield (1 kg of green leaf yields ~0.22 kg of
-    # dry made tea). Applied in the FBS override so the supply-side
-    # GAEZ tea yields (made-tea basis) and the demand-side baseline
-    # consumption (derived from FBS green-leaf supply) end up in the
-    # same basis.
-    fresh_to_dry:
-      tea-dried: 0.22
   # GDD-IA pipeline configuration.
   gdd_ia:
     # GDD-IA reports meat in cooked weight (implied kcal/g for beef

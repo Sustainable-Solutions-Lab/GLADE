@@ -36,6 +36,7 @@ import pandas as pd
 import pycountry
 import yaml
 
+from workflow.scripts.diet.basis import conversion_factor
 from workflow.scripts.faostat_bulk import (
     add_iso3_column,
     filter_bulk,
@@ -834,11 +835,15 @@ def main():
     faostat_food_group_supply_file = snakemake.input["faostat_food_group_supply"]
     faostat_fbs_items_file = snakemake.input["faostat_fbs_items"]
     population_file = snakemake.input["population"]
-    # Carcass-to-retail factors per meat product, sourced from config so the
-    # FBS-implicit-loss override here uses the same conversions as the rest
-    # of the workflow (animal_production link efficiencies and the diet
-    # pipeline's fbs_override_foods path).
-    c2r_meat = dict(snakemake.params["carcass_to_retail_meat"])
+    # Carcass-to-retail factors via the shared weight_conversion table so
+    # the FBS-implicit-loss override here uses the same conversions as the
+    # rest of the workflow (animal_production link efficiencies and the
+    # diet pipeline's fbs_override_foods path).
+    weight_conversion = dict(snakemake.params["weight_conversion"])
+
+    def _c2r(product: str) -> float:
+        return conversion_factor("carcass", "fresh", product, weight_conversion)
+
     fbs_csv = snakemake.input["fbs_csv"]
     overrides_file = snakemake.input["overrides"]
     output_file = snakemake.output["food_loss_waste"]
@@ -937,15 +942,15 @@ def main():
         "poultry": {
             "products": ["meat-chicken"],
             "supply_source": "fbs_items",
-            "fbs_item_codes": [{"code": 2734, "c2r": c2r_meat["meat-chicken"]}],
+            "fbs_item_codes": [{"code": 2734, "c2r": _c2r("meat-chicken")}],
         },
         "red_meat": {
             "products": ["meat-cattle", "meat-pig", "meat-sheep"],
             "supply_source": "fbs_items",
             "fbs_item_codes": [
-                {"code": 2731, "c2r": c2r_meat["meat-cattle"]},  # Bovine Meat
-                {"code": 2733, "c2r": c2r_meat["meat-pig"]},  # Pigmeat
-                {"code": 2732, "c2r": c2r_meat["meat-sheep"]},  # Mutton & Goat Meat
+                {"code": 2731, "c2r": _c2r("meat-cattle")},  # Bovine Meat
+                {"code": 2733, "c2r": _c2r("meat-pig")},  # Pigmeat
+                {"code": 2732, "c2r": _c2r("meat-sheep")},  # Mutton & Goat Meat
             ],
         },
         "eggs": {

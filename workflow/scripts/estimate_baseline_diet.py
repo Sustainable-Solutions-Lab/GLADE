@@ -601,7 +601,7 @@ def build_within_group_shares(
     animal_production_df: pd.DataFrame,
     food_groups_included: list[str],
     byproducts: list[str],
-    carcass_to_retail_meat: dict[str, float],
+    weight_conversion: dict[str, dict[str, float]],
     frt_attribution_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Build within-group food shares per country from FAOSTAT data.
@@ -737,22 +737,11 @@ def build_within_group_shares(
         axis=1,
     )
     # Convert FBS meat supply (carcass basis) to retail-equivalent mass so
-    # within-group shares are consistent with model meat units.
+    # within-group shares are consistent with model meat units. Foods not
+    # listed in carcass_to_fresh pass through with factor 1.0.
     shares_df["carcass_to_retail_factor"] = shares_df["food"].map(
-        carcass_to_retail_meat
+        lambda f: conversion_factor("carcass", "fresh", f, weight_conversion)
     )
-    meat_mask = shares_df["food"].astype(str).str.startswith("meat-")
-    missing_factors = shares_df.loc[
-        meat_mask & shares_df["carcass_to_retail_factor"].isna(), "food"
-    ].unique()
-    if len(missing_factors) > 0:
-        logger.warning(
-            "Missing carcass-to-retail factors for meats in baseline share estimation: %s",
-            ", ".join(sorted(missing_factors)),
-        )
-    shares_df["carcass_to_retail_factor"] = shares_df[
-        "carcass_to_retail_factor"
-    ].fillna(1.0)
     shares_df["fbs_supply_kg"] = (
         shares_df["fbs_supply_kg"] * shares_df["carcass_to_retail_factor"]
     )
@@ -1154,7 +1143,6 @@ def _apply_fbs_overrides(
     crop_production_df: pd.DataFrame,
     animal_production_df: pd.DataFrame,
     override_foods: list[str],
-    carcass_to_retail: dict[str, float],
     food_basis: dict[str, str],
     fbs_source_basis: dict[str, str],
     weight_conversion: dict[str, dict[str, float]],
@@ -1165,7 +1153,6 @@ def _apply_fbs_overrides(
 
         intake_g_day = FBS_supply_kg_per_capita_year
                        * within_FBS_item_share
-                       * carcass_to_retail
                        * basis_factor
                        * (1 - waste_fraction)
                        * 1000 / 365
@@ -1173,12 +1160,13 @@ def _apply_fbs_overrides(
     The FAOSTAT FBS "Food supply" element is already net of supply-chain
     and post-harvest losses (production - feed - seed - processing - other
     - losses = food); only consumer-level waste needs to be deducted to
-    land at consumer-eaten intake. Carcass_to_retail converts FBS meat
-    supply (carcass weight) to retail mass; non-meat foods use 1.0.
-    ``basis_factor`` converts between the FBS item's native mass basis
-    and the model's food basis when they differ (e.g. FBS Tea is in
-    green-leaf basis but tea-dried is dry); foods whose FBS basis is not
-    declared in ``fbs_source_basis`` pass through unchanged.
+    land at consumer-eaten intake. ``basis_factor`` converts between the
+    FBS item's native mass basis (declared in ``fbs_source_basis``) and
+    the model's food basis (``food_basis``) — e.g. FBS meats are in
+    carcass weight and convert to fresh/retail via
+    ``weight_conversion.carcass_to_fresh``; FBS tea is in green-leaf and
+    converts to dry via ``weight_conversion.fresh_to_dry``. Foods whose
+    FBS basis is not declared pass through with factor 1.0.
 
     When several override foods share a single FBS item code (e.g.
     dairy/dairy-buffalo both map to 2848 "Milk - Excluding Butter"), the
@@ -1232,7 +1220,6 @@ def _apply_fbs_overrides(
             continue
 
         food_group = result.loc[food_mask, "food_group"].iloc[0]
-        c2r = float(carcass_to_retail.get(food, 1.0))
         src_basis = fbs_source_basis.get(food)
         tgt_basis = food_basis.get(food)
         if src_basis is None or tgt_basis is None or src_basis == tgt_basis:
@@ -1266,7 +1253,7 @@ def _apply_fbs_overrides(
             # FBS supply is already post-loss; only deduct consumer waste.
             waste_frac = float(flw_lookup.get((country, food_group), 0.0))
             intake_g_day = (
-                supply_kg * c2r * basis_factor * (1.0 - waste_frac) * 1000.0 / 365.0
+                supply_kg * basis_factor * (1.0 - waste_frac) * 1000.0 / 365.0
             )
             new_intake.append(intake_g_day)
 
@@ -1275,11 +1262,10 @@ def _apply_fbs_overrides(
         after_total = result.loc[food_mask, "consumption_g_per_day"].sum()
         logger.info(
             "FBS override: %s — before=%.0f g/day total, after=%.0f g/day total "
-            "(c2r=%.2f, basis=%s→%s factor=%.3f, %d countries)",
+            "(basis=%s→%s factor=%.3f, %d countries)",
             food,
             before_total,
             after_total,
-            c2r,
             src_basis or "—",
             tgt_basis or "—",
             basis_factor,
@@ -1361,10 +1347,6 @@ def main():
     food_groups_included = list(snakemake.params.food_groups_included)
     byproducts = list(snakemake.params.byproducts)
     fbs_override_foods = list(snakemake.params.fbs_override_foods)
-    carcass_to_retail_meat = {
-        str(food): float(factor)
-        for food, factor in snakemake.params.carcass_to_retail_meat.items()
-    }
     # Food groups for which GBD provides intake exposure data; the
     # baseline-diet anchors to GBD for these. Sourced from
     # health.risk_factors so the diet anchor and the health-impact RR
@@ -1463,7 +1445,7 @@ def main():
         animal_production_df,
         food_groups_included,
         byproducts,
-        carcass_to_retail_meat,
+        weight_conversion,
         frt_attribution_df,
     )
     # Cap dairy-buffalo shares at domestic production so countries
@@ -1554,7 +1536,6 @@ def main():
             crop_production_df,
             animal_production_df,
             fbs_override_foods,
-            carcass_to_retail_meat,
             food_basis,
             source_basis.get("faostat_fbs_supply", {}),
             weight_conversion,

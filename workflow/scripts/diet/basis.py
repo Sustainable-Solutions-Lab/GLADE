@@ -11,7 +11,7 @@ are ``dry``; fruits, vegetables, raw retail meat, eggs, and dairy are
 intake in their own basis per food group, declared in
 ``config["diet"]["source_basis"]``. When the source's basis differs from
 the food's basis, ``convert_intake`` multiplies by the matching factor
-in ``config["diet"]["weight_conversion"]``.
+in the top-level ``config["weight_conversion"]``.
 
 The factor tables are keyed ``"<from>_to_<to>"``:
 - ``cooked_to_dry``: cereals/legumes lose ~55-60% mass when uncooked
@@ -19,6 +19,11 @@ The factor tables are keyed ``"<from>_to_<to>"``:
   100g ≈ 40g dry).
 - ``cooked_to_fresh``: meat *gains* mass-density when raw (raw meat 100g
   is ~70g cooked; equivalently cooked 100g ≈ 143g raw retail).
+- ``carcass_to_fresh``: meat carcass weight → boneless retail weight
+  (OECD-FAO Outlook 2023 Box 6.1). Shared with the animal-product
+  pipeline so FAOSTAT-QCL carcass production, FBS-supply-anchored intake
+  (FBS override path), implicit FLW deductions, and feed-to-ME
+  requirements all use one canonical conversion table.
 
 For groups whose physical conversion is well-approximated by 1.0 (fresh
 vegetables / fruits cooked vs. fresh: density barely changes), the table

@@ -498,8 +498,8 @@ multipliers, so the diet mass-balances against the food bus.
       L1 penalties.
 
    3. **Same FAOSTAT backbone as production.** Baseline animal
-      production is built from QCL element 5510 with
-      ``carcass_to_retail_meat`` applied. FBS aggregates the same QCL
+      production is built from QCL element 5510 with the shared
+      ``weight_conversion.carcass_to_fresh`` table applied. FBS aggregates the same QCL
       primary commodities at carcass-weight balance level. Anchoring
       both sides to FAOSTAT removes a class of unit/source mismatches
       that otherwise surfaces as residual slack after solve.

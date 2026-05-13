@@ -38,6 +38,7 @@ required:
   - fodder_decomposition
   - grazing
   - food_groups
+  - weight_conversion
   - diet
   - biomass
   - trade
@@ -789,7 +790,6 @@ properties:
       - gleam3_system_product_map
       - me_scaling_clamp_factor
       - net_to_metabolizable_energy_conversion
-      - carcass_to_retail_meat
       - rendered_fat_yield_per_retail
       - faostat_items
       - residue_crops
@@ -845,21 +845,6 @@ properties:
             minimum: 0
             maximum: 1
             description: "Lactation efficiency (dairy)"
-      carcass_to_retail_meat:
-        type: object
-        required:
-          - meat-cattle
-          - meat-pig
-          - meat-chicken
-          - eggs
-          - dairy
-        additionalProperties: false
-        patternProperties:
-          "^[a-z0-9-]+$":
-            type: number
-            minimum: 0
-            maximum: 1
-            description: "kg retail product per kg carcass/raw product"
       rendered_fat_yield_per_retail:
         type: object
         additionalProperties: false
@@ -1034,12 +1019,20 @@ properties:
             type: boolean
             description: "Whether to fix within-group food ratios from baseline data"
 
+  weight_conversion:
+    type: object
+    description: "Mass-basis conversion factor tables keyed '<from>_to_<to>'. Each table maps a food (or food-group) name to a multiplicative factor; entries not listed default to 1.0. Consumed by the diet pipeline and by the animal-product pipeline (carcass→retail mass and ME-per-retail conversions)."
+    additionalProperties:
+      type: object
+      additionalProperties:
+        type: number
+        exclusiveMinimum: 0.0
+
   diet:
     type: object
     required:
       - baseline_age
       - source_basis
-      - weight_conversion
       - gdd_ia
     additionalProperties: false
     properties:
@@ -1071,20 +1064,12 @@ properties:
         description: "NHANES / FPED override source for US food-group intake"
       source_basis:
         type: object
-        description: "Per-source declaration of the native mass basis ('dry', 'fresh', or 'cooked') in which each food-group's intake values are reported. Compared at conversion time to each food's basis (data/curated/food_basis.csv) to decide whether to scale by a weight_conversion factor."
+        description: "Per-source declaration of the native mass basis (one of 'dry', 'fresh', 'cooked', 'carcass', 'brewed') in which each food-group's or food's intake/supply values are reported. Compared at conversion time to each food's basis (data/curated/food_basis.csv) to decide whether to scale by a weight_conversion factor (top-level config.weight_conversion)."
         additionalProperties:
           type: object
           additionalProperties:
             type: string
-            enum: ["dry", "fresh", "cooked", "brewed"]
-      weight_conversion:
-        type: object
-        description: "Mass-conversion factor tables keyed '<from>_to_<to>'. Each table maps food-group (or food) name to a multiplicative factor. Foods/groups not listed default to 1.0."
-        additionalProperties:
-          type: object
-          additionalProperties:
-            type: number
-            exclusiveMinimum: 0.0
+            enum: ["dry", "fresh", "cooked", "carcass", "brewed"]
       gdd_ia:
         type: object
         required: [cooked_to_raw]

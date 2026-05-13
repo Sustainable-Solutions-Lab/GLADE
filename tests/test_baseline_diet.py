@@ -359,7 +359,7 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["vegetables"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
 
         by_food = shares.set_index("food")["share"]
@@ -416,7 +416,7 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["starchy_vegetable"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
 
         by_food = shares.set_index("food")["share"]
@@ -479,7 +479,7 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["nuts_seeds"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
 
         by_food = shares.set_index("food")["share"]
@@ -528,7 +528,7 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["fruits"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
 
         banana = shares[(shares["country"] == "USA") & (shares["food"] == "banana")]
@@ -555,7 +555,7 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["grain", "vegetables"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
         # grain group: flour-white (FBS 2511, supply=100) + rice-white (FBS 2807, supply=50)
         # flour-white share = 100/150, rice-white share = 50/150
@@ -597,7 +597,7 @@ class TestBuildWithinGroupShares:
                 "vegetables",
             ],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
         for country in ["USA", "IND"]:
             for fg in ["legumes", "dairy", "whole_grains", "grain", "vegetables"]:
@@ -628,7 +628,7 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["grain"],
             byproducts=["flour-white"],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
         assert "flour-white" not in shares["food"].values
 
@@ -651,7 +651,7 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["dairy"],
             byproducts=[],
-            carcass_to_retail_meat={},
+            weight_conversion={},
         )
         ind_dairy = shares[(shares["country"] == "IND") & (shares["food"] == "dairy")][
             "share"

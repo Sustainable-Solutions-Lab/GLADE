@@ -80,20 +80,22 @@ matters:
      - Source
    * - ``faostat_animal_production.csv:production_mt_fresh_retail``
      - retail
-     - QCL element 5510 × ``carcass_to_retail_meat`` (raw fresh weight
-       for milk and eggs).
+     - QCL element 5510 × ``weight_conversion.carcass_to_fresh`` (raw
+       fresh weight for milk and eggs).
    * - ``baseline_diet.csv:consumption_g_per_day_intake``
      - intake
      - GDD/GBD/FAOSTAT/NHANES intake surveys, or for FBS-overridden
-       foods, ``FBS_supply × within_FBS_share × carcass_to_retail
-       × (1 − loss) × (1 − waste)``.
+       foods, ``FBS_supply × within_FBS_share × basis_factor
+       × (1 − loss) × (1 − waste)``, where ``basis_factor`` resolves
+       to ``weight_conversion.carcass_to_fresh`` for meats and
+       ``weight_conversion.fresh_to_dry`` for tea-dried.
    * - ``faostat_fbs_items.csv:supply_kg_per_capita_year``
      - CWE for meat;
        fresh for milk/eggs/crops
      - FAOSTAT FBS element 645 (`Food supply quantity, kg/capita/yr`).
        Mixed-unit file: meat items are CWE per FAOSTAT convention;
-       crops are fresh weight. Convert to retail by multiplying with
-       ``carcass_to_retail_meat`` for meat items.
+       crops are fresh weight. Convert to retail via the shared
+       ``weight_conversion.carcass_to_fresh`` table for meat items.
    * - ``feed_baseline.csv:feed_use_mt_dm``
      - dry matter
      - GLEAM 3.0 (already explicit).

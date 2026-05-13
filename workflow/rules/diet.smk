@@ -201,7 +201,7 @@ rule prepare_food_loss_waste:
         food_groups=config["food_groups"]["included"],
         baseline_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
-        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+        weight_conversion=config["weight_conversion"],
         waste_calibration_food_groups=config["food_loss_waste_calibration"][
             "food_groups"
         ],
@@ -301,10 +301,9 @@ rule estimate_baseline_diet:
         food_groups_included=config["food_groups"]["included"],
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
-        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
         gbd_anchored_groups=config["health"]["risk_factors"],
         source_basis=config["diet"]["source_basis"],
-        weight_conversion=config["diet"]["weight_conversion"],
+        weight_conversion=config["weight_conversion"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
@@ -369,7 +368,7 @@ rule compare_baseline_diet_to_gbd:
         countries=config["countries"],
         risk_factors=config["health"]["risk_factors"],
         source_basis=config["diet"]["source_basis"],
-        weight_conversion=config["diet"]["weight_conversion"],
+        weight_conversion=config["weight_conversion"],
     output:
         report="<processing>/{name}/baseline_diet_risk_comparison.csv",
     group:

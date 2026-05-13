@@ -17,7 +17,7 @@ rule prepare_faostat_animal_production:
     params:
         production_year=config["baseline_year"],
         countries=config["countries"],
-        carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+        weight_conversion=config["weight_conversion"],
         qcl_element_code=config["data"]["faostat"]["qcl_production_element_code"],
         faostat_items=config["animal_products"]["faostat_items"],
     output:
@@ -139,7 +139,7 @@ rule build_feed_to_animal_products:
     output:
         "<processing>/{name}/feed_to_animal_products.csv",
     params:
-        carcass_to_retail=config["animal_products"]["carcass_to_retail_meat"],
+        weight_conversion=config["weight_conversion"],
     group:
         "prep"
     resources:

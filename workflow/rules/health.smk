@@ -44,7 +44,7 @@ rule prepare_relative_risks:
         ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
         alternative_rr=config["health"]["alternative_rr"],
         source_basis=config["diet"]["source_basis"],
-        weight_conversion=config["diet"]["weight_conversion"],
+        weight_conversion=config["weight_conversion"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",
     group:

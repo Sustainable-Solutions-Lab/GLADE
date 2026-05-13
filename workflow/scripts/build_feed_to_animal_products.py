@@ -31,6 +31,7 @@ import logging
 
 import pandas as pd
 
+from workflow.scripts.diet.basis import conversion_factor
 from workflow.scripts.logging_config import setup_script_logging
 
 # Logger will be configured in __main__ block
@@ -82,7 +83,7 @@ def build_feed_to_animal_products(
     ruminant_categories_file: str,
     monogastric_categories_file: str,
     output_file: str,
-    carcass_to_retail: dict[str, float],
+    weight_conversion: dict[str, dict[str, float]],
 ) -> None:
     """
     Generate feed-to-animal-product conversion table from GLEAM3 ME requirements.
@@ -97,8 +98,11 @@ def build_feed_to_animal_products(
         Path to monogastric feed categories CSV
     output_file : str
         Path to output feed_to_animal_products.csv
-    carcass_to_retail : dict[str, float]
-        Carcass-to-retail conversion factors by product
+    weight_conversion : dict[str, dict[str, float]]
+        Shared mass-basis conversion tables. Meat products use the
+        ``carcass_to_fresh`` table to land per-kg ME requirements on the
+        retail/fresh basis the food bus uses; non-meat products
+        (eggs, dairy, dairy-buffalo) pass through with factor 1.0.
     """
     # Load data
     me_reqs = pd.read_csv(me_requirements_file, comment="#")
@@ -109,10 +113,14 @@ def build_feed_to_animal_products(
     logger.info("Loaded ruminant categories: %d", len(ruminant_cats))
     logger.info("Loaded monogastric categories: %d", len(monogastric_cats))
 
-    # Apply carcass-to-retail conversion: ME_retail = ME_carcass / factor
+    # Apply carcass-to-retail conversion: ME_retail = ME_carcass / factor.
+    # conversion_factor returns 1.0 for products not in carcass_to_fresh
+    # (eggs, dairy, dairy-buffalo are already on retail/fresh basis).
     me_reqs["ME_MJ_per_kg"] = me_reqs.apply(
         lambda row: row["ME_MJ_per_kg"]
-        / carcass_to_retail.get(row["animal_product"], 1.0),
+        / conversion_factor(
+            "carcass", "fresh", row["animal_product"], weight_conversion
+        ),
         axis=1,
     )
     invalid_me = ~me_reqs["ME_MJ_per_kg"].gt(0) | ~me_reqs["ME_MJ_per_kg"].notna()
@@ -124,9 +132,11 @@ def build_feed_to_animal_products(
             "Feed conversion requires strictly positive ME requirements; "
             f"found invalid rows:\n{invalid_rows.to_string(index=False)}"
         )
-    logger.info("Carcass-to-retail conversion factors:")
-    for product, factor in carcass_to_retail.items():
-        logger.info("  %s: %.2f", product, factor)
+    carcass_to_fresh = weight_conversion.get("carcass_to_fresh", {})
+    if carcass_to_fresh:
+        logger.info("Carcass-to-retail conversion factors:")
+        for product, factor in carcass_to_fresh.items():
+            logger.info("  %s: %.2f", product, factor)
 
     # Split ME requirements by animal type for feed category matching
     ruminant_products = {"dairy", "dairy-buffalo", "meat-cattle", "meat-sheep"}
@@ -171,5 +181,5 @@ if __name__ == "__main__":
         ruminant_categories_file=snakemake.input.ruminant_categories,
         monogastric_categories_file=snakemake.input.monogastric_categories,
         output_file=snakemake.output[0],
-        carcass_to_retail=snakemake.params.carcass_to_retail,
+        weight_conversion=dict(snakemake.params.weight_conversion),
     )

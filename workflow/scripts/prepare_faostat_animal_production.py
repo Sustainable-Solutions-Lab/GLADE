@@ -18,8 +18,9 @@ Output weight basis
 - Meats (``meat-cattle``, ``meat-pig``, ``meat-chicken``, ``meat-sheep``):
   fresh retail weight (boneless, trimmed). FAOSTAT QCL reports primary
   meat in carcass weight equivalent ("with the bone, fresh or chilled");
-  this script multiplies by ``carcass_to_retail_meat`` from config to
-  convert to retail mass.
+  this script multiplies by the shared
+  ``weight_conversion.carcass_to_fresh`` factors to convert to retail
+  mass.
 - Dairy (``dairy``, ``dairy-buffalo``): raw whole milk mass (fresh).
 - Eggs: whole eggs in shell (fresh).
 
@@ -35,6 +36,7 @@ from pathlib import Path
 import pandas as pd
 
 from workflow.scripts.animal_utils import load_faostat_qcl
+from workflow.scripts.diet.basis import conversion_factor
 from workflow.scripts.faostat_bulk import filter_bulk
 from workflow.scripts.logging_config import setup_script_logging
 
@@ -48,9 +50,10 @@ def main() -> None:
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     production_year = int(snakemake.params.production_year)  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
-    carcass_to_retail = dict(  # type: ignore[name-defined]
-        snakemake.params.carcass_to_retail_meat
-    )
+    weight_conversion: dict[str, dict[str, float]] = {  # type: ignore[name-defined]
+        str(table): {str(k): float(v) for k, v in entries.items()}
+        for table, entries in dict(snakemake.params.weight_conversion).items()
+    }
     faostat_items: dict[str, list[str]] = dict(snakemake.params.faostat_items)  # type: ignore[name-defined]
 
     # Load bulk CSV, extract metadata, and add ISO3 column
@@ -185,20 +188,14 @@ def main() -> None:
     result["production_mt_fresh_retail"] = result["production_tonnes"] * 1e-6
     result = result.drop(columns=["production_tonnes"])
 
-    # Convert carcass-weight meat production to retail-weight using config factors
+    # Convert carcass-weight meat production to retail-weight using the
+    # shared weight_conversion.carcass_to_fresh table. Foods not listed
+    # there pass through with factor 1.0.
     meat_mask = result["product"].astype(str).str.startswith("meat-")
     if meat_mask.any():
-        result["carcass_to_retail"] = (
-            result["product"].map(carcass_to_retail).astype(float)
+        result["carcass_to_retail"] = result["product"].map(
+            lambda p: conversion_factor("carcass", "fresh", p, weight_conversion)
         )
-        missing = meat_mask & result["carcass_to_retail"].isna()
-        if missing.any():
-            missing_products = sorted(result.loc[missing, "product"].unique())
-            logger.warning(
-                "Missing carcass-to-retail factors for meat products: %s",
-                ", ".join(missing_products),
-            )
-            result.loc[missing, "carcass_to_retail"] = 1.0
         result.loc[meat_mask, "production_mt_fresh_retail"] = (
             result.loc[meat_mask, "production_mt_fresh_retail"]
             * result.loc[meat_mask, "carcass_to_retail"]
