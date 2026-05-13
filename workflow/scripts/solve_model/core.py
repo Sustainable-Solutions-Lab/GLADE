@@ -1102,6 +1102,76 @@ def _apply_forage_calibration(
             )
 
 
+def _apply_protein_feed_calibration(
+    n: pypsa.Network,
+    smk,
+    enforce_baseline_feed: bool,
+) -> None:
+    """Inject per-country exogenous monogastric/ruminant protein supply.
+
+    Reads ``smk.input.exogenous_protein`` and adds free generators on the
+    matching ``feed:{monogastric,ruminant}_protein:{country}`` buses up to
+    the listed ceiling. In validation/enforce_baseline_feed mode the
+    generators are forced to dispatch at the listed amount.
+    """
+    read_csv = functools.partial(pd.read_csv, comment="#")
+    df = read_csv(smk.input.exogenous_protein)
+
+    categories = ("monogastric_protein", "ruminant_protein")
+    for category in categories:
+        col = f"{category}_mt_dm"
+        if col not in df.columns:
+            continue
+        exog = df[["country", col]].copy()
+        exog = exog[exog[col] > 0]
+        if exog.empty:
+            continue
+        exog_buses = "feed:" + category + ":" + exog["country"]
+        bus_exists = exog_buses.isin(n.buses.static.index)
+        exog = exog[bus_exists.values]
+        exog_buses = exog_buses[bus_exists.values]
+        if exog.empty:
+            continue
+
+        carrier = "exogenous_protein_cal"
+        if carrier not in n.carriers.static.index:
+            n.carriers.add(carrier, unit="Mt")
+
+        gen_names = pd.Index(
+            "supply:exogenous_" + category + ":" + exog["country"].values,
+            dtype="object",
+        )
+        if enforce_baseline_feed:
+            n.generators.add(
+                gen_names,
+                bus=exog_buses.values,
+                carrier=carrier,
+                p_nom=exog[col].values,
+                p_nom_extendable=False,
+                p_min_pu=1.0,
+                p_max_pu=1.0,
+                country=exog["country"].values,
+                feed_category=category,
+            )
+        else:
+            n.generators.add(
+                gen_names,
+                bus=exog_buses.values,
+                carrier=carrier,
+                p_nom_extendable=True,
+                p_nom_max=exog[col].values,
+                marginal_cost=0.0,
+                country=exog["country"].values,
+                feed_category=category,
+            )
+        logger.info(
+            "Added %d exogenous %s generators (%.1f Mt DM total)",
+            len(gen_names),
+            category,
+            exog[col].sum(),
+        )
+
+
 def run_solve(smk, _logger) -> pypsa.Network | None:
     """Core solve logic returning the solved network.
 
@@ -1138,6 +1208,16 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
             n,
             smk,
             forage_overlap_crops=smk.params.forage_overlap_crops,
+            enforce_baseline_feed=smk.params.enforce_baseline_feed,
+        )
+
+    # Apply protein-feed calibration (exogenous mono/ruminant protein
+    # supply) if enabled for this scenario.
+    if smk.params.protein_feed_calibration_enabled:
+        logger.info("Applying protein-feed calibration...")
+        _apply_protein_feed_calibration(
+            n,
+            smk,
             enforce_baseline_feed=smk.params.enforce_baseline_feed,
         )
 

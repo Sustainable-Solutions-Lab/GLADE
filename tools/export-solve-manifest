@@ -192,6 +192,10 @@ def build_scenario_entry(
         inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
         inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
 
+    protein_cal_cfg = eff["feed_protein_calibration"]
+    if protein_cal_cfg["enabled"]:
+        inputs["exogenous_protein"] = protein_cal_cfg["exogenous_protein"]
+
     ps_cal_cfg = eff["prod_stability_calibration"]
     if ps_cal_cfg["enabled"]:
         stab = eff["validation"]["production_stability"]
@@ -230,6 +234,7 @@ def build_scenario_entry(
         "sensitivity": eff.get("sensitivity", {}),
         "forage_calibration_enabled": cal_cfg["enabled"],
         "forage_overlap_crops": eff["grazing"]["forage_overlap_crops"],
+        "protein_feed_calibration_enabled": protein_cal_cfg["enabled"],
         "enforce_baseline_feed": eff["validation"]["enforce_baseline_feed"],
         # New params (formerly smk.config accesses)
         "regional_limit": eff["land"]["regional_limit"],

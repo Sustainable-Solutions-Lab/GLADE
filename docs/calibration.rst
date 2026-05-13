@@ -7,10 +7,10 @@
 Calibration
 ===========
 
-The default workflow relies on three separate calibrations that each
+The default workflow relies on several separate calibrations that each
 transform outputs of a dedicated solve into a git-tracked input consumed
-by every subsequent solve. Running ``tools/calibrate`` regenerates all
-three in the right dependency order; individual steps can also be run
+by every subsequent solve. Running ``tools/calibrate`` regenerates them
+all in the right dependency order; individual steps can also be run
 directly.
 
 The calibration artefacts live under ``data/curated/calibration/`` and
@@ -25,13 +25,21 @@ anything.
      - Config
      - Produces
      - Purpose
-   * - :ref:`grassland <grassland-calibration>`
-     - ``config/calibration/grassland.yaml``
+   * - :ref:`feed <feed-calibration>`
+     - ``config/calibration/feed.yaml``
      - ``grassland_yield.csv``,
        ``fodder_conversion.csv``,
-       ``exogenous_forage.csv``
-     - Per-country corrections that balance grassland / fodder supply
-       against ruminant-forage demand.
+       ``exogenous_forage.csv``,
+       ``exogenous_protein.csv``
+     - Per-country corrections that balance ruminant-forage and
+       monogastric/ruminant-protein supply against the GLEAM3-derived
+       baseline demand.
+   * - :ref:`food_waste <food-waste-calibration>`
+     - ``config/calibration/food_waste.yaml``
+     - ``food_waste.yaml``
+     - Per-food-group multiplier on the consumer-side waste fraction
+       that absorbs systematic food-bus surpluses/shortages relative to
+       the GDD-IA intake baseline.
    * - :ref:`cost <cost-calibration>`
      - ``config/calibration/cost.yaml``
      - ``crop_cost.csv``,
@@ -50,13 +58,17 @@ Dependency order
 
 When upstream data or build logic changes, rerun in this order:
 
-#. :ref:`grassland <grassland-calibration>` — other calibrations solve
-   against a model that already has the grassland corrections applied.
+#. :ref:`feed <feed-calibration>` — other calibrations solve against a
+   model whose feed slack is already closed by the forage and protein
+   corrections.
+#. :ref:`food_waste <food-waste-calibration>` — uses the calibrated
+   feed behaviour so that food-bus slack is not contaminated by
+   feed-side mismatches.
 #. :ref:`cost <cost-calibration>` — the cost-calibration solve uses the
-   calibrated grassland behaviour to extract duals that make economic
-   sense.
+   calibrated feed and waste behaviour to extract duals that make
+   economic sense.
 #. :ref:`stability <prod-stability-calibration>` — the L1 grid sweep
-   uses both previous corrections so that the observed 5 % contours
+   uses all previous corrections so that the observed 5 % contours
    reflect the fully-calibrated baseline.
 
 Running the calibrations
@@ -66,8 +78,9 @@ Everything is wrapped by ``tools/calibrate``:
 
 .. code-block:: bash
 
-   tools/calibrate              # all three, in dependency order
-   tools/calibrate grassland    # one step
+   tools/calibrate              # all, in dependency order
+   tools/calibrate feed         # one step (forage + protein feed slack)
+   tools/calibrate food_waste
    tools/calibrate cost
    tools/calibrate stability
    tools/calibrate --check      # per-step staleness, no execution
@@ -83,11 +96,16 @@ Solves for the stability step can be offloaded to the HPC cluster via
 Consuming the calibrated values
 -------------------------------
 
-All three outputs are consumed automatically by the default workflow
-when their configuration blocks are enabled (the default):
+All calibration outputs are consumed automatically by the default
+workflow when their configuration blocks are enabled (the default):
 
-* ``grazing.grassland_forage_calibration.enabled: true`` loads the three
-  grassland CSVs at solve time (see :ref:`grassland-forage-calibration`).
+* ``grazing.grassland_forage_calibration.enabled: true`` loads the
+  three forage-side CSVs at solve time (see
+  :ref:`grassland-forage-calibration`).
+* ``feed_protein_calibration.enabled: true`` loads
+  ``exogenous_protein.csv`` and injects free per-country generators on
+  the monogastric/ruminant protein feed buses (see
+  :ref:`exogenous-protein-feed`).
 * ``cost_calibration.enabled: true`` loads the three cost-correction
   CSVs at build time (see :ref:`cost-calibration-correction`).
 * ``prod_stability_calibration.enabled: true`` resolves the sentinel
@@ -99,16 +117,44 @@ when their configuration blocks are enabled (the default):
   Scenarios that want an explicit numeric value simply override the
   sentinel with a number.
 
-.. _grassland-calibration:
+.. _feed-calibration:
 
-Grassland calibration
----------------------
+Feed calibration
+----------------
 
-See :ref:`grassland-forage-calibration` in the livestock chapter for the
-algorithm. The relevant rule is ``compute_grassland_calibration`` in
-``workflow/rules/animals.smk``; ``generate: true`` lives in
-``config/calibration/grassland.yaml`` and is ``false`` everywhere else,
+The feed step generates two parallel sets of corrections from a single
+validation solve:
+
+* **Forage corrections** (surplus + deficit on
+  ``feed:ruminant_forage:*``). Surplus countries get a per-country
+  multiplier on grassland yield and fodder-conversion efficiency;
+  deficit countries get an exogenous-forage supply written to
+  ``data/curated/calibration/exogenous_forage.csv``. See
+  :ref:`grassland-forage-calibration` in the livestock chapter for the
+  algorithm.
+* **Protein corrections** (deficit side only, on
+  ``feed:monogastric_protein:*`` and ``feed:ruminant_protein:*``). The
+  positive slack on each protein feed bus is written to
+  ``data/curated/calibration/exogenous_protein.csv``. See
+  :ref:`exogenous-protein-feed` for what real-world sources it stands
+  in for.
+
+Both rules read the same solved validation network. The relevant
+Snakemake rules are ``compute_grassland_calibration`` (forage) and
+``compute_protein_feed_calibration`` (protein), both in
+``workflow/rules/animals.smk``. ``generate: true`` lives in
+``config/calibration/feed.yaml`` and is ``false`` everywhere else,
 which breaks the otherwise circular dependency.
+
+.. _food-waste-calibration:
+
+Food-waste calibration
+----------------------
+
+See :ref:`food-loss-and-waste` in the food chapter for the algorithm.
+Rule: ``compute_food_waste_calibration`` in
+``workflow/rules/food.smk``; ``generate: true`` lives in
+``config/calibration/food_waste.yaml``.
 
 .. _cost-calibration:
 

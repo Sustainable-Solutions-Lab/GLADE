@@ -234,6 +234,27 @@ if _grassland_cal_cfg["generate"]:
             "../scripts/compute_grassland_calibration.py"
 
 
+_protein_cal_cfg = config["feed_protein_calibration"]
+
+if _protein_cal_cfg["generate"]:
+    _protein_cal_scenario = _protein_cal_cfg["scenario"]
+
+    rule compute_protein_feed_calibration:
+        input:
+            network=f"<results>/{name}/solved/model_scen-{_protein_cal_scenario}.nc",
+        output:
+            exogenous_protein=_protein_cal_cfg["exogenous_protein"],
+        resources:
+            runtime="2m",
+            mem_mb=4000,
+        log:
+            f"<logs>/{name}/compute_protein_feed_calibration_scen-{_protein_cal_scenario}.log",
+        benchmark:
+            f"<benchmarks>/{name}/compute_protein_feed_calibration_scen-{_protein_cal_scenario}.tsv"
+        script:
+            "../scripts/compute_protein_feed_calibration.py"
+
+
 _prod_stability_cal_cfg = config["prod_stability_calibration"]
 
 if _prod_stability_cal_cfg["generate"]:

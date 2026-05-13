@@ -65,7 +65,8 @@ SOURCES+=("data/curated/M49-codes.csv")
 SOURCES+=("data/curated/food_groups.csv")
 SOURCES+=("data/curated/nutrition.csv")
 
-# Grassland forage calibration files (used when grazing.grassland_forage_calibration.enabled).
+# Feed calibration files (forage + protein), used when the corresponding
+# *_calibration.enabled flag is true.
 if [[ -d "data/curated/calibration" ]]; then
     SOURCES+=("data/curated/calibration/")
 fi

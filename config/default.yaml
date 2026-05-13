@@ -547,6 +547,21 @@ grazing:
     exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
     scenario: "default"
 
+# Protein-feed calibration: per-country exogenous monogastric/ruminant
+# protein supply (Mt DM) derived from positive feed-bus slack on an
+# uncalibrated validation solve. Stands in for protein sources the model
+# does not produce endogenously: fishmeal, synthetic amino acids, and
+# animal by-products (meat & bone meal, blood, feather meal). When a
+# scenario has ``enabled: true`` the CSV is read at solve time and free
+# generators up to the listed cap are added to each country's protein
+# feed bus (in validation/enforce_baseline_feed mode dispatch is forced).
+# See docs/calibration.rst for the full discussion.
+feed_protein_calibration:
+  enabled: true
+  generate: false
+  exogenous_protein: "data/curated/calibration/exogenous_protein.csv"
+  scenario: "default"
+
 # Food waste calibration: a per-food-group multiplier on (1 - waste_fraction)
 # applied uniformly across countries in prepare_food_loss_waste.py. Derived
 # from food-bus slack on an uncalibrated validation solve (see

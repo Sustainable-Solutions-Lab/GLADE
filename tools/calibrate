@@ -6,14 +6,14 @@
 # Orchestrator for the calibrations that feed the default workflow.
 #
 # Dependency order (upstream data changed → rerun in this order):
-#   1. grassland  → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage}.csv
+#   1. feed       → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_protein}.csv
 #   2. food_waste → data/curated/calibration/food_waste.yaml
 #   3. cost       → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
 #   4. stability  → data/curated/calibration/prod_stability_l1.yaml
 #
 # Usage:
 #   tools/calibrate                # run all in order
-#   tools/calibrate grassland      # one step
+#   tools/calibrate feed           # one step (forage + protein feed slack)
 #   tools/calibrate food_waste
 #   tools/calibrate cost
 #   tools/calibrate stability
@@ -32,10 +32,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-GRASSLAND_TARGETS=(
+FEED_TARGETS=(
   data/curated/calibration/grassland_yield.csv
   data/curated/calibration/fodder_conversion.csv
   data/curated/calibration/exogenous_forage.csv
+  data/curated/calibration/exogenous_protein.csv
 )
 FOOD_WASTE_TARGETS=(
   data/curated/calibration/food_waste.yaml
@@ -125,20 +126,20 @@ case "$cmd" in
   --check|check)
     echo "[calibrate] Checking staleness (no execution) ..."
     rc=0
-    check_step grassland  config/calibration/grassland.yaml  "${GRASSLAND_TARGETS[@]}"  -- "$@" || rc=$?
+    check_step feed       config/calibration/feed.yaml       "${FEED_TARGETS[@]}"       -- "$@" || rc=$?
     check_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@" || rc=$?
     check_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@" || rc=$?
     check_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@" || rc=$?
     exit "$rc"
     ;;
   all)
-    run_step grassland  config/calibration/grassland.yaml  "${GRASSLAND_TARGETS[@]}"  -- "$@"
+    run_step feed       config/calibration/feed.yaml       "${FEED_TARGETS[@]}"       -- "$@"
     run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
     run_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@"
     run_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@"
     ;;
-  grassland)
-    run_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@"
+  feed)
+    run_step feed config/calibration/feed.yaml "${FEED_TARGETS[@]}" -- "$@"
     ;;
   food_waste)
     run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
@@ -151,7 +152,7 @@ case "$cmd" in
     ;;
   *)
     echo "[calibrate] Unknown subcommand: $cmd" >&2
-    echo "Usage: tools/calibrate [all|grassland|food_waste|cost|stability|--check]" >&2
+    echo "Usage: tools/calibrate [all|feed|food_waste|cost|stability|--check]" >&2
     exit 2
     ;;
 esac

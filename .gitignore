@@ -12,6 +12,9 @@ notebooks/*
 logs
 benchmarks
 data/downloads/*
+# Also ignore data/downloads itself when it is a worktree symlink to
+# the main worktree's data/downloads directory.
+data/downloads
 **/__pycache__
 *.egg-info/
 gurobi.log

@@ -261,6 +261,12 @@ def solve_model_inputs(w):
         inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
         inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
 
+    # Protein-feed calibration: per-country exogenous protein supply CSV.
+    # Same gating pattern as the forage calibration.
+    pcal_cfg = eff_cfg["feed_protein_calibration"]
+    if pcal_cfg["enabled"]:
+        inputs["exogenous_protein"] = pcal_cfg["exogenous_protein"]
+
     # Production-stability L1 calibration: include the calibrated-L1 YAML
     # when the scenario's stability config contains the "calibrated" sentinel
     # on either l1 cost key. Resolution happens in
@@ -386,6 +392,9 @@ rule solve_model:
             "grazing"
         ]["grassland_forage_calibration"]["enabled"],
         forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
+        protein_feed_calibration_enabled=lambda w: get_effective_config(w.scenario)[
+            "feed_protein_calibration"
+        ]["enabled"],
         enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
         regional_limit=lambda w: get_effective_config(w.scenario)["land"][
             "regional_limit"

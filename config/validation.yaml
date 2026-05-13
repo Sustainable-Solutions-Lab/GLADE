@@ -7,7 +7,7 @@
 # Runs the model in validation mode (actual yields, enforced baseline diet
 # and feed) to compare model behaviour against observed 2020 outcomes.
 # This config does *not* regenerate the grassland forage calibration; use
-# ``config/calibration/grassland.yaml`` (or ``tools/calibrate grassland``)
+# ``config/calibration/feed.yaml`` (or ``tools/calibrate feed``)
 # for that.
 
 name: "validation"

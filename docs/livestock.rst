@@ -708,6 +708,136 @@ so they can be reused across configurations without re-running the validation
 solve.  Set ``generate: true`` in the relevant configuration block to
 re-generate them (requires a full validation solve).
 
+.. _exogenous-protein-feed:
+
+Exogenous Protein Feed
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The model's *protein feed* category aggregates dry-matter inflows to two
+buses, ``feed:monogastric_protein:{country}`` and
+``feed:ruminant_protein:{country}``. Membership is set in
+``workflow/scripts/categorize_feeds.py`` and is driven purely by
+nitrogen content: feeds with N > 35 g/kg DM go into monogastric
+protein, feeds with N > 50 g/kg DM (or digestibility ≥ 0.90 after
+excluding grassland and crop residues) go into ruminant protein.
+Modelled supply routes are essentially:
+
+* Oilseed meals from crop-to-food processing pathways
+  (soybean → oilseed-meal, rapeseed → rapeseed-meal, sunflower /
+  groundnut / sesame / cotton → oilseed-meal, etc.).
+* Direct legume grains for monogastric protein (soybean, dry-pea,
+  chickpea, cowpea, gram, phaseolus-bean, pigeonpea, groundnut).
+* Alfalfa and a 30 % share of DDGS (corn ethanol byproduct, via a
+  multi-category override in ``feed_category_overrides.csv``).
+
+Globally these routes do not cover the GLEAM3 [#gleam_protein]_
+baseline. The shortfall maps cleanly onto specific real-world feed
+sources that the model does not produce endogenously:
+
+.. list-table:: Approximate global protein-feed sources outside the
+   modelled crop-to-food pathways
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Source
+     - Mt DM
+     - Notes
+   * - Fishmeal
+     - ~5
+     - Byproduct of the fish-processing industry; seafood is not
+       modelled. Global production has been stable at roughly 5 Mt for
+       the last decade, mostly fed to aquaculture, with a non-trivial
+       share to monogastric livestock (pigs, poultry).
+       [#fishmeal_iffo]_
+   * - Synthetic amino acids
+     - ~5
+     - Industrial-fermentation L-lysine, DL-methionine, L-threonine,
+       L-tryptophan and others added to monogastric rations. The
+       feed-grade share of the global amino-acids market was about
+       6 Mt in 2025 (52 % of a 12 Mt total). [#aa_market]_
+   * - Rendered animal byproducts
+     - ~8
+     - Meat-and-bone meal, blood meal, feather meal, hydrolysed
+       feathers, etc., fed primarily to monogastrics and pet food.
+       The world's renderers process ~60 Mt/yr of raw animal
+       byproducts, yielding ~8 Mt of rendered animal protein (plus
+       ~8 Mt of fats). [#fao_rendering]_ GLEAM3 does not separately
+       book these flows because they are an internal livestock
+       recycling loop.
+   * - Palm kernel cake (PKEXP)
+     - ~10
+     - Modelled separately via the ``palm_kernel_oil`` pathway when
+       active; see :ref:`palm-kernel-pathway`.
+   * - Maize gluten meal / feed (MZGLTM, MZGLTF)
+     - ~5 + ~10
+     - Modelled separately via the ``maize_wetmill`` pathway when
+       active; see :ref:`maize-wetmill-pathway`.
+
+For the genuinely unmodellable sources (fishmeal, synthetic AAs,
+animal byproducts), the workflow adds a calibration-derived exogenous
+supply that mirrors the existing
+:ref:`grassland forage calibration <grassland-forage-calibration>`:
+
+1. Solve the model in validation mode with both feed calibrations
+   *disabled*. Positive slack on each
+   ``feed:{monogastric,ruminant}_protein:{country}`` bus reveals the
+   per-country gap.
+2. ``compute_protein_feed_calibration`` writes those positive slacks
+   to ``data/curated/calibration/exogenous_protein.csv``.
+3. At solve time, ``_apply_protein_feed_calibration`` reads the CSV
+   and adds free per-country generators on the matching protein feed
+   buses. In validation / ``enforce_baseline_feed: true`` mode the
+   generators are forced to dispatch at the listed amount (so the
+   exogenous supply enters the mass balance unconditionally); in
+   optimisation mode they are extendable up to the listed cap at zero
+   marginal cost (the optimiser uses them if beneficial).
+
+The calibration carrier is ``exogenous_protein_cal`` and the
+generators are named ``supply:exogenous_{category}:{country}``.
+
+**Configuration**:
+
+.. code-block:: yaml
+
+   feed_protein_calibration:
+     enabled: true
+     generate: false
+     exogenous_protein: "data/curated/calibration/exogenous_protein.csv"
+     scenario: "default"
+
+When upstream feed or crop data changes, re-run
+
+.. code-block:: bash
+
+   tools/calibrate feed
+
+to regenerate both the forage and protein calibration CSVs from a
+fresh validation solve.
+
+.. [#gleam_protein] FAO (2022), *GLEAM 3.0 Model Documentation*,
+   Tables 3.1 / 3.5 list the protein feed categories
+   (``MLSOY``, ``MLRAPE``, ``MLCTTN``, ``PKEXP``, ``MLOILSDS``,
+   ``MZGLTM``, ``MZGLTF``, ``FISHMEAL``, ``SYNTHETIC``).
+   `<https://www.fao.org/gleam/en/>`_
+
+.. [#fishmeal_iffo] IFFO — The Marine Ingredients Organisation,
+   *Key Facts*, reports global fishmeal production at roughly 5 Mt/yr
+   over 1980–2020.
+   `<https://www.iffo.com/key-facts>`_
+
+.. [#aa_market] Industry-Experts and Fortune Business Insights value
+   the 2025 global amino-acids market at ~12 Mt with animal feed
+   accounting for 52 % of the volume, i.e. ~6 Mt of feed-grade amino
+   acids; major drivers are L-lysine (fermentation) and DL-methionine
+   (chemical synthesis).
+   `<https://industry-experts.com/verticals/food-and-beverage/feed-amino-acids-a-global-market-overview>`_
+
+.. [#fao_rendering] FAO (2004), *Protein Sources for the Animal Feed
+   Industry* (Y5019E), reports that global rendering processes ~60 Mt
+   of animal byproducts per year, yielding ~8 Mt of rendered animal
+   proteins and ~8 Mt of rendered fats.
+   `<http://www.fao.org/docrep/007/y5019e/y5019e0g.htm>`_
+
 Model Implementation
 --------------------
 

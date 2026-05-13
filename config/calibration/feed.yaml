@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Feed Calibration
+# ----------------
+# Generates the per-country feed-side calibration CSVs under
+# ``data/curated/calibration/``:
+#
+#   * Grassland yield and fodder conversion corrections (surplus side)
+#     and exogenous forage supply (deficit side), all derived from the
+#     ``feed:ruminant_forage:*`` bus slack.
+#   * Exogenous monogastric/ruminant protein supply (deficit side)
+#     derived from the ``feed:{mono,ruminant}_protein:*`` bus slack —
+#     standing in for fishmeal, synthetic amino acids, and animal
+#     by-products that the model does not produce endogenously.
+#
+# The calibration scenario is solved in validation mode with both feed
+# calibrations *disabled* so that bus slack reveals the per-country
+# supply/demand gaps. The downstream rules then write the corrections
+# back to the curated calibration CSVs that the regular workflow reads.
+#
+# Usage:
+#   tools/calibrate feed
+#
+# Or equivalently (tools/calibrate is just a thin wrapper):
+#   tools/smk --configfile config/calibration/feed.yaml -- \
+#     data/curated/calibration/grassland_yield.csv \
+#     data/curated/calibration/fodder_conversion.csv \
+#     data/curated/calibration/exogenous_forage.csv \
+#     data/curated/calibration/exogenous_protein.csv
+
+name: "feed_calibration"
+
+scenarios:
+  uncalibrated:
+    grazing:
+      grassland_forage_calibration:
+        enabled: false
+    feed_protein_calibration:
+      enabled: false
+
+planning_horizon: 2020
+
+validation:
+  use_actual_yields: true
+  use_actual_production: true
+  enforce_baseline_diet: true
+  enforce_baseline_feed: true
+  disable_spared_cropland: true
+  disable_spared_grassland: true
+  slack_marginal_cost: 10
+
+cost_calibration:
+  enabled: false
+
+grazing:
+  grassland_forage_calibration:
+    generate: true
+    scenario: uncalibrated
+
+feed_protein_calibration:
+  generate: true
+  scenario: uncalibrated
+
+health:
+  value_per_yll: 0
+
+emissions:
+  ghg_pricing_enabled: false
+
+solving:
+  io_api: "direct"
+  solver: "gurobi"
+  threads: 2
