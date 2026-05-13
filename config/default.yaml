@@ -745,6 +745,16 @@ diet:
       vegetables: fresh
       nuts_seeds: dry
       milk: fresh
+    # FBS Food-supply "primary equivalents" each carry their own basis
+    # (cocoa beans, green coffee, milk-equiv, etc.). For most foods the
+    # FBS basis happens to match the model's food_basis after the
+    # carcass_to_retail_meat conversion for meats, so no entry is needed
+    # and the override pipeline applies factor 1.0. Tea is the exception:
+    # FBS item 2635 ("Tea incl. mate") supply is reported as green leaf,
+    # while food_basis declares tea-dried as dry — convert via
+    # weight_conversion.fresh_to_dry below.
+    faostat_fbs_supply:
+      tea-dried: fresh
     # NHANES is intentionally absent: FPED ounce-equivalents are a
     # hybrid basis (flour-content for breads, cooked weight for rice)
     # that doesn't admit a single conversion factor, so the helper
@@ -775,6 +785,14 @@ diet:
     cooked_to_fresh:
       red_meat: 1.43
       poultry: 1.0
+    # Green-tea-leaf → made (dry) tea: FAO uses 0.22 as the
+    # standard processing yield (1 kg of green leaf yields ~0.22 kg of
+    # dry made tea). Applied in the FBS override so the supply-side
+    # GAEZ tea yields (made-tea basis) and the demand-side baseline
+    # consumption (derived from FBS green-leaf supply) end up in the
+    # same basis.
+    fresh_to_dry:
+      tea-dried: 0.22
   # GDD-IA pipeline configuration.
   gdd_ia:
     # GDD-IA reports meat in cooked weight (implied kcal/g for beef

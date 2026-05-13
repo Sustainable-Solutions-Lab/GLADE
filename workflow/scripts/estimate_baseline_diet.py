@@ -42,6 +42,7 @@ import pandas as pd
 
 from workflow.scripts.diet.basis import (
     build_group_basis,
+    conversion_factor,
     convert_intake,
     load_food_basis,
     load_source_basis_country_overrides,
@@ -1154,6 +1155,9 @@ def _apply_fbs_overrides(
     animal_production_df: pd.DataFrame,
     override_foods: list[str],
     carcass_to_retail: dict[str, float],
+    food_basis: dict[str, str],
+    fbs_source_basis: dict[str, str],
+    weight_conversion: dict[str, dict[str, float]],
 ) -> pd.DataFrame:
     """Override per-food consumption with FBS-supply-anchored intake.
 
@@ -1162,6 +1166,7 @@ def _apply_fbs_overrides(
         intake_g_day = FBS_supply_kg_per_capita_year
                        * within_FBS_item_share
                        * carcass_to_retail
+                       * basis_factor
                        * (1 - waste_fraction)
                        * 1000 / 365
 
@@ -1170,6 +1175,10 @@ def _apply_fbs_overrides(
     - losses = food); only consumer-level waste needs to be deducted to
     land at consumer-eaten intake. Carcass_to_retail converts FBS meat
     supply (carcass weight) to retail mass; non-meat foods use 1.0.
+    ``basis_factor`` converts between the FBS item's native mass basis
+    and the model's food basis when they differ (e.g. FBS Tea is in
+    green-leaf basis but tea-dried is dry); foods whose FBS basis is not
+    declared in ``fbs_source_basis`` pass through unchanged.
 
     When several override foods share a single FBS item code (e.g.
     dairy/dairy-buffalo both map to 2848 "Milk - Excluding Butter"), the
@@ -1224,6 +1233,14 @@ def _apply_fbs_overrides(
 
         food_group = result.loc[food_mask, "food_group"].iloc[0]
         c2r = float(carcass_to_retail.get(food, 1.0))
+        src_basis = fbs_source_basis.get(food)
+        tgt_basis = food_basis.get(food)
+        if src_basis is None or tgt_basis is None or src_basis == tgt_basis:
+            basis_factor = 1.0
+        else:
+            basis_factor = conversion_factor(
+                src_basis, tgt_basis, food, weight_conversion
+            )
         before_total = result.loc[food_mask, "consumption_g_per_day"].sum()
 
         countries = result.loc[food_mask, "country"].tolist()
@@ -1248,7 +1265,9 @@ def _apply_fbs_overrides(
 
             # FBS supply is already post-loss; only deduct consumer waste.
             waste_frac = float(flw_lookup.get((country, food_group), 0.0))
-            intake_g_day = supply_kg * c2r * (1.0 - waste_frac) * 1000.0 / 365.0
+            intake_g_day = (
+                supply_kg * c2r * basis_factor * (1.0 - waste_frac) * 1000.0 / 365.0
+            )
             new_intake.append(intake_g_day)
 
         result.loc[food_mask, "consumption_g_per_day"] = new_intake
@@ -1256,11 +1275,14 @@ def _apply_fbs_overrides(
         after_total = result.loc[food_mask, "consumption_g_per_day"].sum()
         logger.info(
             "FBS override: %s — before=%.0f g/day total, after=%.0f g/day total "
-            "(c2r=%.2f, %d countries)",
+            "(c2r=%.2f, basis=%s→%s factor=%.3f, %d countries)",
             food,
             before_total,
             after_total,
             c2r,
+            src_basis or "—",
+            tgt_basis or "—",
+            basis_factor,
             int(food_mask.sum()),
         )
 
@@ -1533,6 +1555,9 @@ def main():
             animal_production_df,
             fbs_override_foods,
             carcass_to_retail_meat,
+            food_basis,
+            source_basis.get("faostat_fbs_supply", {}),
+            weight_conversion,
         )
 
     # Ensure output directory exists
