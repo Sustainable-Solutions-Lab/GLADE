@@ -32,6 +32,10 @@
 # - GLEAM_TABLE_3_3: data/bundled/gleam3/ruminants_feed_yield_fractions.csv
 # - NCC_COTTONSEED: https://www.cotton.org/pubs/cottoncounts/fieldtofabric/cottonseed.cfm
 # - FEEDIPEDIA_COPRA: https://www.feedipedia.org/node/46
+# - FEEDIPEDIA_BEETPULP: https://www.feedipedia.org/node/710
+#                         (Sugar beet pulp; Legrand 2015 cited there gives
+#                          1 t fresh beet → 0.5 t wet pulp ≈ 50 kg of the
+#                          dehydrated form, used as the dry-basis factor here.)
 #
 # Per-crop "food_conversion" handling (inverse_moisture vs identity) lives in
 # data/curated/crop_moisture_content.csv -- see that file for semantics.
@@ -117,6 +121,7 @@ cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing mode
 coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled),
 tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled),
 sugarbeet_sugar,sugarbeet,sugar,0.1,Sucrose extraction retained from GAEZ v5 yield convention,FAO_GAEZ
+sugarbeet_sugar,sugarbeet,beet-pulp,0.05,"Beet pulp (BPULP) byproduct of sugar extraction: ~50 kg of dehydrated pulp (~90 % DM) per t fresh beet (Feedipedia citing Legrand 2015).",FEEDIPEDIA_BEETPULP
 cotton_ginning,cotton,cotton-lint,0.38,Cotton lint from ginning; National Cotton Council reports 100 lb lint with about 162 lb cottonseed,NCC_COTTONSEED
 cotton_ginning,cotton,cottonseed-oil,0.107,Cottonseed oil from seed-cotton seed fraction and FAO cottonseed oil extraction rate,"NCC_COTTONSEED;FAO_TCF"
 cotton_ginning,cotton,oilseed-meal,0.296,Cottonseed meal from seed-cotton seed fraction and FAO cottonseed cake extraction rate,"NCC_COTTONSEED;FAO_TCF"

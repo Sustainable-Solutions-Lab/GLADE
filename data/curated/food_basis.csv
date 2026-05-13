@@ -84,6 +84,7 @@ rendered-fat,dry
 # Processing byproducts routed to feed, fiber, or biofuel rather than
 # human consumption. These never enter the diet/health pipeline, but
 # every food bus must carry a basis annotation. All are dry materials.
+beet-pulp,dry
 wheat-bran,dry
 wheat-germ,dry
 rice-bran,dry

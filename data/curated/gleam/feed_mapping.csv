@@ -63,7 +63,7 @@ GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat
 GRNBYWET,ddgs,food,both,DDGS from grain ethanol production (wet grain byproducts)
 MZGLTM,maize-gluten-meal,food,ruminant,"Corn gluten meal byproduct of wet-milling, ~60 % CP. Produced by the maize_wetmill pathway."
 MZGLTF,maize-gluten-feed,food,ruminant,"Corn gluten feed byproduct of wet-milling, ~21 % CP. Produced by the maize_wetmill pathway."
-BPULP,,food,ruminant,Sugar beet pulp - not in model
+BPULP,beet-pulp,food,ruminant,"Sugar beet pulp byproduct of sucrose extraction (~8 % CP, high fibre). Produced by the sugarbeet_sugar pathway at 0.05 t dry pulp per t fresh beet."
 MOLASSES,molasses,food,both,Sugarcane molasses from ethanol production
 RAPESEED,rapeseed,crop,monogastric,Rapeseed whole seeds
 SOYOIL,soybean-oil,food,monogastric,Soybean oil (processed)

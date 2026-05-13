@@ -373,6 +373,7 @@ sensitivity: {}
 # --- section: byproducts ---
 # Foods that are not for direct human consumption (excluded from food group tracking)
 byproducts:
+- beet-pulp
 - wheat-bran
 - wheat-germ
 - rice-bran

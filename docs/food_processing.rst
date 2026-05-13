@@ -44,6 +44,10 @@ The two files below, created and distributed for internal ``food-opt`` use, defi
 
   **Cotton ginning**: Cotton is processed via the ``cotton_ginning`` pathway, which produces three outputs from seed cotton: cotton lint (0.38), cottonseed oil (0.083), and oilseed meal (0.275). Cotton lint is a non-food byproduct routed to per-country fiber demand stores (see :doc:`configuration`); cottonseed oil enters the food system as an edible oil; oilseed meal enters the generic oilcake pool available as animal feed.
 
+  .. _sugarbeet-pulp-pathway:
+
+  **Sugar beet pulp**: The ``sugarbeet_sugar`` pathway emits beet-pulp (BPULP) as a coproduct of sucrose extraction at 0.05 t dry pulp per t fresh beet, consistent with Feedipedia (Legrand 2015): 1 t fresh beet yields ~0.5 t wet pulp (≈ 10–12 % DM), commonly dried to ~0.05 t at 90 % DM. The pulp is low in protein (~8 % CP) and high in pectin and digestible fibre, so it categorises as a ruminant *grain* feed rather than a protein feed (the model still gains a defensible supply route for the BPULP share of the GLEAM3 "By-products" intake bucket).
+
   .. _maize-wetmill-pathway:
 
   **Maize wet-milling**: An alternative to the existing ``maize_grain`` and ``maize_ethanol`` pathways, ``maize_wetmill`` represents the corn-refining route that produces starch (the dominant industrial product, much of it converted to HFCS) plus the two gluten coproducts that the GLEAM3 baseline labels MZGLTM (gluten meal, ~60 % CP) and MZGLTF (gluten feed, ~21 % CP). Per the Corn Refiners Association feed handbook, one 56-lb bushel of corn yields about 32 lb starch, 11.4 lb gluten feed, and 3 lb gluten meal — translating to 0.571, 0.204, and 0.054 t per t maize. Corn germ oil (~0.029) and steepwater are not separately tracked. Maize starch is a byproduct entity with no human-food sink in this model and is routed to biomass disposal. Gluten meal categorises naturally as a *protein* ruminant feed (N ≈ 106 g/kg DM) and gluten feed as a *grain* ruminant feed (N ≈ 39 g/kg DM); both have GLEAM3 entries only on the ruminant side.
