@@ -280,10 +280,9 @@ def _per_country_yield(
     )
 
     # Per-country yield (kg/ha fresh): tonnes_to_kg * tonnes / ha
-    with pd.option_context("mode.use_inf_as_na", True):
-        yld = (1000.0 * prod_total / area_total).replace(
-            [float("inf"), -float("inf")], pd.NA
-        )
+    yld = (1000.0 * prod_total / area_total).replace(
+        [float("inf"), -float("inf")], pd.NA
+    )
     yld = yld.where(area_total > 0)
     return yld, global_yield_kg_per_ha
 

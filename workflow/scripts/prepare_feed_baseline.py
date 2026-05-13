@@ -326,7 +326,7 @@ def _compute_all_product_shares(
         right_on=["ISO3", "Animal", "LPS", "Item"],
         how="left",
     )
-    cross["gleam3_prod_val"] = cross["gleam3_prod_val"].fillna(0.0)
+    cross["gleam3_prod_val"] = cross["gleam3_prod_val"].astype(float).fillna(0.0)
 
     # Map FCR values
     cross["fcr"] = [
@@ -361,7 +361,7 @@ def _compute_all_product_shares(
             right_on=["country", "product"],
             how="left",
         )
-        fb["production_tonnes"] = fb["production_tonnes"].fillna(0.0)
+        fb["production_tonnes"] = fb["production_tonnes"].astype(float).fillna(0.0)
         fb["fcr"] = [
             fcr_lookup.get((p, c), 0.0) for p, c in zip(fb["product"], fb["ISO3"])
         ]
