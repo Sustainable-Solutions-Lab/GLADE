@@ -25,7 +25,7 @@ anything.
      - Config
      - Produces
      - Purpose
-   * - :ref:`feed <feed-calibration>`
+   * - :ref:`feed <calibration-feed-step>`
      - ``config/calibration/feed.yaml``
      - ``grassland_yield.csv``,
        ``fodder_conversion.csv``,
@@ -58,7 +58,7 @@ Dependency order
 
 When upstream data or build logic changes, rerun in this order:
 
-#. :ref:`feed <feed-calibration>` — other calibrations solve against a
+#. :ref:`feed <calibration-feed-step>` — other calibrations solve against a
    model whose feed slack is already closed by the forage and protein
    corrections.
 #. :ref:`food_waste <food-waste-calibration>` — uses the calibrated
@@ -117,7 +117,7 @@ workflow when their configuration blocks are enabled (the default):
   Scenarios that want an explicit numeric value simply override the
   sentinel with a number.
 
-.. _feed-calibration:
+.. _calibration-feed-step:
 
 Feed calibration
 ----------------
