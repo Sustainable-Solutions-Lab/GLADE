@@ -151,10 +151,10 @@ which breaks the otherwise circular dependency.
 Food-waste calibration
 ----------------------
 
-See :ref:`food-loss-and-waste` in the food chapter for the algorithm.
-Rule: ``compute_food_waste_calibration`` in
-``workflow/rules/food.smk``; ``generate: true`` lives in
-``config/calibration/food_waste.yaml``.
+See the food-loss-and-waste discussion in :doc:`food_processing` for
+the underlying SDG 12.3 derivation. Rule:
+``compute_food_waste_calibration`` in ``workflow/rules/diet.smk``;
+``generate: true`` lives in ``config/calibration/food_waste.yaml``.
 
 .. _cost-calibration:
 
