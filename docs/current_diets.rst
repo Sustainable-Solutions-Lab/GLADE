@@ -81,10 +81,10 @@ Data Sources
   * **Role**: Item-level supply (FBS) drives **within-group**
     disaggregation of food-group totals into per-food consumption.
     Production statistics (QCL) resolve shared FBS items (e.g. several
-    millet species under one FBS code) and weight residual-bucket
-    projections. FBS supply also serves as the **anchor source** for the
-    foods in ``diet.fbs_override_foods`` (meats, eggs, yam, coffee,
-    cocoa).
+    millet species under one FBS code) and weight module-pool
+    projections (see :ref:`current-diets-step2`). FBS supply also serves
+    as the **anchor source** for the foods in
+    ``diet.fbs_override_foods`` (meats, eggs, yam, coffee, cocoa).
 
 Weight Conventions
 ~~~~~~~~~~~~~~~~~~
@@ -310,6 +310,8 @@ and the refined-grain residual from Step 1b are held fixed. The factor
 is clipped to ``[0.1, 5.0]`` to guard against pathological values;
 the mean, std, and range of the factor across countries are logged.
 
+.. _current-diets-step2:
+
 Step 2: Within-group food shares
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -333,45 +335,73 @@ within-bucket overrides:
 * ``dairy`` / ``dairy-buffalo`` (both FBS 2848): QCL items 882 and 951
   resolve the cow / buffalo split.
 
-**Residual catch-all projection.** FBS lumps minor commodities into
-"Other"-style residual items. Each residual is distributed across the
-modelled foods that have no own FBS item using **blended production
-shares** :math:`s_{c,f} = w \cdot s_{c,f}^{\mathrm{country}} + (1-w) \cdot s_f^{\mathrm{global}}`
-with a country/global blend weight (currently :math:`w=0.7` for all
-residuals):
+**Module-pool projection.** For food groups whose modelled foods share
+a GAEZ RES06 supply-side module, the demand-side attribution pools all
+module-aligned FBS codes (both explicit and "Other"-style residuals) and
+splits the pool across the modelled foods. Pooling matches the
+supply-side attribution by construction: each modelled food's supply
+comes from FAOSTAT direct area plus a share of the module's residual
+raster area, so routing the explicit FBS supply (e.g. onion FBS 2602) to
+one food on the demand side while supply spreads it across the module
+would produce systematic within-group slack.
+
+Each pool sub-projection carries a ``share_method`` that decides how to
+allocate the pool across its modelled foods:
+
+* ``"blend"`` — country/global production-share blend
+  :math:`s_{c,f} = w \cdot s_{c,f}^{\mathrm{country}}
+  + (1-w) \cdot s_f^{\mathrm{global}}` over FAOSTAT crop production
+  (currently :math:`w=0.7` for all pools using this method).
+* ``"frt_attribution"`` — per-(country, crop) shares read directly from
+  the supply-side ``frt_area_attribution.csv``
+  (``target_production_tonnes`` column), so the demand-side within-pool
+  split mirrors the supply-side FRT attribution exactly. Used for the
+  fruits FRT pool, where the supply side intentionally uses area-share
+  (not production-share) weighting to avoid over-attributing residual
+  area to high-yield fruits; the blend method on the demand side would
+  drift from that choice.
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 22 56
+   :widths: 18 18 40 24
 
    * - Food group
-     - Residual FBS items
+     - Pooled FBS items
      - Projection foods
+     - Share method
    * - ``vegetables``
-     - 2605 "Vegetables, Other"
+     - 2602 "Onions", 2605 "Vegetables, Other"
      - ``onion``, ``cabbage``, ``carrot``
+     - ``blend``
    * - ``starchy_vegetable``
      - 2534 "Roots, Other"
      - ``potato``, ``sweet-potato``, ``yam``, ``cassava``
+     - ``blend``
    * - ``nuts_seeds``
      - 2551 "Nuts and products"
      - ``groundnut``, ``sesame-seed``, ``coconut``, ``sunflower-seed``
+     - ``blend``
    * - ``fruits`` (BAN sub-projection)
      - 2616 "Plantains"
      - ``banana`` only
+     - ``blend``
    * - ``fruits`` (FRT sub-projection)
-     - 2618 "Pineapples", 2619 "Dates", 2625 "Fruits, other"
+     - 2611–2614 (citrus), 2617 "Apples", 2618 "Pineapples",
+       2619 "Dates", 2625 "Fruits, other"
      - ``citrus``, ``mango``, ``watermelon``, ``apple``
+     - ``frt_attribution``
 
 For fruits the projection is split into two sub-projections so that the
 demand-side attribution mirrors the GAEZ RES06 module split on the
 supply side: banana and plantain share the GAEZ BAN raster (plantain
 supply is therefore projected onto banana exclusively), while citrus /
-mango / watermelon / apple jointly absorb the unmodeled fruit basket.
+mango / watermelon / apple jointly absorb the FRT raster plus
+CROPGRIDS-backed apple.
 
-Tomato (2601), apple (2617), onion (2602), and individually-itemized
-starchy vegetables retain their explicit FBS supply in addition to any
-residual share they receive.
+Tomato (FBS 2601) and individually-itemised starchy vegetables and nuts
+retain their explicit FBS supply in addition to any pool share they
+receive: each has its own GAEZ raster on the supply side and its own
+FBS item, so the explicit-route is already symmetric.
 
 **Equal split fallback.** Where total FBS supply for a food group is
 zero in a country, foods within the group are assigned equal shares.
