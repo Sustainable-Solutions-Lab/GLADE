@@ -158,12 +158,16 @@ rule compute_gleam3_feed_fractions:
         feed_items_categories="data/bundled/gleam3/feed_items_categories.xlsx",
         gleam_feed_mapping="data/curated/gleam/feed_mapping.csv",
         faostat_crop_production="<processing>/{name}/faostat_crop_production.csv",
+        foods="data/curated/foods.csv",
         ruminant_feed_mapping="<processing>/{name}/ruminant_feed_mapping.csv",
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
     output:
         "<processing>/{name}/gleam3_feed_fractions.csv",
     params:
         countries=config["countries"],
+        pathway_dispatch_shares=config["gleam3_feed_attribution"][
+            "pathway_dispatch_shares"
+        ],
     group:
         "prep"
     resources:

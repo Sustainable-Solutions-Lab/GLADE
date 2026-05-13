@@ -33,6 +33,7 @@ required:
   - multiple_cropping
   - macronutrients
   - byproducts
+  - gleam3_feed_attribution
   - animal_products
   - fodder_decomposition
   - grazing
@@ -766,6 +767,20 @@ properties:
       type: string
       pattern: "^[a-z0-9-]+$"
     description: "Foods not for direct human consumption (excluded from food group tracking)"
+
+  gleam3_feed_attribution:
+    type: object
+    required: [pathway_dispatch_shares]
+    additionalProperties: false
+    description: "Per-pathway dispatch shares used to weight food-entity contributions when compute_gleam3_feed_fractions distributes a GLEAM3 intake bucket across model feed categories."
+    properties:
+      pathway_dispatch_shares:
+        type: object
+        additionalProperties:
+          type: number
+          minimum: 0
+          maximum: 1
+        description: "Map of foods.csv pathway names to the global fraction of the source crop that flows through that pathway. Pathways not listed default to 1.0."
 
   animal_products:
     type: object

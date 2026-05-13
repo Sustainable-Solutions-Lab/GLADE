@@ -9,9 +9,13 @@ import pytest
 
 from workflow.scripts.compute_gleam3_feed_fractions import (
     _build_item_table,
+    _compute_food_production,
     _compute_fractions,
     _normalize_code,
 )
+
+
+_EMPTY_FOOD_PROD = pd.DataFrame(columns=["country", "food", "production_tonnes"])
 
 
 @pytest.fixture
@@ -153,7 +157,7 @@ def test_fractions_sum_to_one(
         }
     )
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
-    result = _compute_fractions(table, crop_production, ["USA", "GUF"])
+    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"])
 
     for _, grp in result.groupby(["gleam3_category", "animal_type", "country"]):
         assert grp["fraction"].sum() == pytest.approx(1.0)
@@ -182,7 +186,7 @@ def test_zero_volume_country_uses_global_fallback(
         }
     )
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
-    result = _compute_fractions(table, crop_production, ["USA", "GUF"])
+    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"])
 
     # GUF has no crop data → falls back to global fractions
     guf = result[result["country"] == "GUF"]
@@ -205,9 +209,93 @@ def test_fully_exogenous_group(
         }
     )
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
-    result = _compute_fractions(table, crop_production, ["USA"])
+    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA"])
 
     assert len(result) == 1
     assert result.iloc[0]["exogenous"] == True  # noqa: E712
     assert result.iloc[0]["fraction"] == 1.0
     assert result.iloc[0]["country"] == "_global"
+
+
+def test_compute_food_production_sums_pathways() -> None:
+    """A food entity produced by multiple pathways gets the per-country sum."""
+    foods = pd.DataFrame(
+        {
+            "pathway": ["soybean_oil", "groundnut_oil", "maize_wetmill"],
+            "crop": ["soybean", "groundnut", "maize"],
+            "food": ["oilseed-meal", "oilseed-meal", "maize-gluten-meal"],
+            "factor": [0.78, 0.54, 0.054],
+        }
+    )
+    crop_production = pd.DataFrame(
+        {
+            "country": ["USA", "USA", "USA", "BRA"],
+            "crop": ["soybean", "groundnut", "maize", "soybean"],
+            "production_tonnes": [100.0, 50.0, 200.0, 80.0],
+        }
+    )
+    # Dispatch shares: maize_wetmill is rare (~7 %), others assumed 1.0.
+    result = _compute_food_production(
+        foods, crop_production, {"maize_wetmill": 0.07}
+    )
+    lookup = result.set_index(["country", "food"])["production_tonnes"].to_dict()
+
+    # USA oilseed-meal = 100 × 0.78 + 50 × 0.54 = 78 + 27 = 105
+    assert lookup[("USA", "oilseed-meal")] == pytest.approx(105.0)
+    # USA maize-gluten-meal = 200 × 0.054 × 0.07 ≈ 0.756
+    assert lookup[("USA", "maize-gluten-meal")] == pytest.approx(0.756)
+    # BRA oilseed-meal = 80 × 0.78 = 62.4
+    assert lookup[("BRA", "oilseed-meal")] == pytest.approx(62.4)
+    # BRA maize-gluten-meal: no maize production → no row
+    assert ("BRA", "maize-gluten-meal") not in lookup
+
+
+def test_food_production_changes_fraction_weights(
+    gleam_mapping: pd.DataFrame,
+    rum_mapping: pd.DataFrame,
+    mono_mapping: pd.DataFrame,
+    crop_production: pd.DataFrame,
+) -> None:
+    """When food-entity production is supplied, fractions follow real volumes
+    rather than entity count.
+
+    Two ruminant by-products entities (wheat-bran → grain, ddgs → forage
+    per the rum_mapping fixture). With empty food_production both fall
+    back to mean_tracked → equal shares of 0.5 / 0.5. With explicit
+    food_production showing ddgs is 10x bigger than wheat-bran, the
+    forage share should dominate.
+    """
+    xlsx_items = pd.DataFrame(
+        {
+            "animal_type": ["ruminant", "ruminant"],
+            "raw_code": ["GRNBYDRY", "GRNBYWET"],
+            "gleam3_category": ["By-products", "By-products"],
+        }
+    )
+    table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
+
+    # Without food_production: equal weighting (both fall back to mean_tracked).
+    flat = _compute_fractions(
+        table, crop_production, _EMPTY_FOOD_PROD, ["USA"]
+    )
+    flat_usa = flat[flat["country"] == "USA"].set_index("model_feed_category")[
+        "fraction"
+    ]
+    assert flat_usa["ruminant_forage"] == pytest.approx(0.5)
+    assert flat_usa["ruminant_grain"] == pytest.approx(0.5)
+
+    # With food_production showing ddgs (→ forage) dominates wheat-bran
+    # (→ grain) 10:1 in USA, the forage share should dominate.
+    food_prod = pd.DataFrame(
+        {
+            "country": ["USA", "USA"],
+            "food": ["wheat-bran", "ddgs"],
+            "production_tonnes": [1.0, 10.0],
+        }
+    )
+    weighted = _compute_fractions(table, crop_production, food_prod, ["USA"])
+    weighted_usa = weighted[weighted["country"] == "USA"].set_index(
+        "model_feed_category"
+    )["fraction"]
+    assert weighted_usa["ruminant_forage"] == pytest.approx(10 / 11)
+    assert weighted_usa["ruminant_grain"] == pytest.approx(1 / 11)

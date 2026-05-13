@@ -802,6 +802,24 @@ supply that mirrors the existing
 The calibration carrier is ``exogenous_protein_cal`` and the
 generators are named ``supply:exogenous_{category}:{country}``.
 
+.. note::
+
+   The per-country attribution of a GLEAM3 intake bucket
+   (e.g. "By-products" = ~200 Mt/yr ruminant DM intake) across model
+   feed categories is weighted by the per-(country, entity)
+   production potential rather than by entity count. For each food
+   entity in the bucket, the potential is derived from foods.csv:
+   :math:`\sum_{\text{pathways}}\,\text{crop\_production} \times
+   \text{factor} \times \text{dispatch\_share}`. The dispatch shares
+   live in ``config.gleam3_feed_attribution.pathway_dispatch_shares``
+   and default to 1.0; explicit overrides are needed only for
+   pathways whose realised share of the source crop is well below 1
+   globally (``maize_wetmill``, ``maize_ethanol``,
+   ``sugarcane_ethanol``). Without this correction, adding a new
+   model entity (e.g. maize-gluten-meal) to a bucket would have
+   shifted ~1/N of the bucket's demand to its category purely on
+   entity count — a known source of spurious demand inflation.
+
 **Configuration**:
 
 .. code-block:: yaml

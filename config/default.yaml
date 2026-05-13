@@ -392,6 +392,31 @@ byproducts:
 - sugarcane-ethanol
 - cotton-lint
 
+# --- section: gleam3_feed_attribution ---
+# When distributing a GLEAM3 intake bucket (e.g. "By-products" =
+# ~200 Mt/yr ruminant DM intake globally) across model feed categories,
+# ``compute_gleam3_feed_fractions`` weights each contained model entity
+# by its per-country production potential, derived from FAOSTAT crop
+# production × the foods.csv pathway factor that produces it. For
+# pathways where the realised share of the source crop is materially
+# below 1.0 (so the unmodified potential over-states the entity's true
+# share of intake), supply a dispatch-share override here. Pathways
+# not listed default to 1.0.
+gleam3_feed_attribution:
+  pathway_dispatch_shares:
+    # Wet-milled corn (HFCS / starch / corn-oil / gluten meal+feed):
+    # ~15-20 % of US corn × US share of global maize production (~30 %)
+    # ⇒ roughly 5-8 % of global maize. USDA ERS, Corn and Other Feed
+    # Grains: https://www.ers.usda.gov/topics/crops/corn-and-other-feed-grains/
+    maize_wetmill: 0.07
+    # Dry-milled corn fuel ethanol: ~40 % of US corn × US ~30 % share
+    # ⇒ ~12 % of global maize. USDA ERS Feed Grains Sector at a Glance.
+    maize_ethanol: 0.12
+    # Sugarcane ethanol: Brazil ~50 % of cane to ethanol vs sugar, India
+    # and most other producers mostly sugar; ~25 % global average. F.O.
+    # Licht / OECD-FAO Agricultural Outlook 2023-2032 oilseeds chapter.
+    sugarcane_ethanol: 0.25
+
 # --- section: animal_products ---
 animal_products:
   include:

@@ -11,8 +11,16 @@ Chain: xlsx (item → GLEAM3 category) → gleam_feed_mapping.csv (item → mode
 entity) → {rum,mono}_feed_mapping.csv (entity → model category).
 
 For GLEAM3 categories that contain multiple model feed categories, fractions
-are computed using FAOSTAT crop production volumes as weights (per country).
-Non-crop items receive equal weight.
+are computed using per-(country, entity) production volumes as weights:
+
+  * Crop entities → FAOSTAT QCL crop production directly.
+  * Food entities → potential production derived from foods.csv pathways
+    (Σ_pathways  crop_production × pathway_factor × dispatch_share). The
+    optional dispatch_share lives in ``config.gleam3_feed_attribution.
+    pathway_dispatch_shares`` and corrects for pathways whose realised
+    share of the source crop is well below 1.0 globally (e.g. corn
+    wet-milling at ~7 %). Pathways without an explicit share use 1.0,
+    which gives a defensible upper bound on potential supply.
 
 Output: CSV with columns (gleam3_category, animal_type, country,
 model_feed_category, fraction, exogenous).
@@ -169,31 +177,112 @@ def _build_item_table(
     return joined
 
 
+def _compute_food_production(
+    foods: pd.DataFrame,
+    crop_production: pd.DataFrame,
+    pathway_dispatch_shares: dict[str, float],
+) -> pd.DataFrame:
+    """Compute per-(country, food) production potential from foods.csv pathways.
+
+    For each food entity, sum across the pathways that produce it:
+
+        potential[country, food] = Σ_pathways
+            crop_production[country, crop] × pathway_factor × dispatch_share
+
+    where ``dispatch_share`` is the global fraction of the source crop that
+    flows through this pathway in reality (defaulting to 1.0 when the
+    pathway is not listed in ``pathway_dispatch_shares``). The dispatch-
+    share correction matters for pathways like ``maize_wetmill`` whose
+    pathway factor would otherwise treat 100 % of maize as available for
+    gluten-meal production, over-stating the entity's true share of an
+    intake bucket. See ``config.gleam3_feed_attribution`` for the
+    documented values.
+
+    Returns a DataFrame with columns ``country, food, production_tonnes``
+    (rows omitted when the country produces none of the source crops).
+    """
+    crop_prod_index = crop_production.set_index(["country", "crop"])[
+        "production_tonnes"
+    ].to_dict()
+
+    records: dict[tuple[str, str], float] = {}
+    for row in foods.itertuples(index=False):
+        pathway = str(row.pathway)
+        crop = str(row.crop)
+        food = str(row.food)
+        factor = float(row.factor)
+        share = float(pathway_dispatch_shares.get(pathway, 1.0))
+        effective_factor = factor * share
+        if effective_factor <= 0:
+            continue
+        for (country, c), prod in crop_prod_index.items():
+            if c != crop:
+                continue
+            key = (country, food)
+            records[key] = records.get(key, 0.0) + prod * effective_factor
+
+    if not records:
+        return pd.DataFrame(columns=["country", "food", "production_tonnes"])
+    return pd.DataFrame(
+        [
+            {"country": country, "food": food, "production_tonnes": p}
+            for (country, food), p in records.items()
+        ]
+    )
+
+
 def _compute_volume_weighted_fractions(
     entities: pd.DataFrame,
     crop_production: pd.DataFrame,
+    food_production: pd.DataFrame,
     countries: list[str],
     g3cat: str,
     animal: str,
 ) -> pd.DataFrame:
     """Compute per-country volume-weighted fractions for a group that spans
     multiple model feed categories."""
-    # Identify which crop entities have FAOSTAT production data at all.
-    # Crops absent from the data (e.g. silage-maize) receive the per-country
-    # mean volume of tracked crops in this group, so scales remain comparable.
+    # Per-(country, entity) lookups for crops (FAOSTAT QCL) and foods
+    # (pathway-derived potential from foods.csv).
     crops_in_data = set(crop_production["crop"].unique())
-    tracked_crop_mask = (entities["entity_type"] == "crop") & (
-        entities["model_entity"].isin(crops_in_data)
+    foods_in_data = set(food_production["food"].unique())
+    crop_prod_lookup = crop_production.set_index(["country", "crop"])[
+        "production_tonnes"
+    ].to_dict()
+    food_prod_lookup = food_production.set_index(["country", "food"])[
+        "production_tonnes"
+    ].to_dict()
+
+    # Tracked entities used as the fallback baseline: an entity that has
+    # no production-data backing (e.g. silage-maize, or a food without a
+    # foods.csv pathway) is given the per-country mean of tracked
+    # entities in this group, so scales remain comparable.
+    tracked_entities = set(
+        entities.loc[
+            (
+                (entities["entity_type"] == "crop")
+                & (entities["model_entity"].isin(crops_in_data))
+            )
+            | (
+                (entities["entity_type"] == "food")
+                & (entities["model_entity"].isin(foods_in_data))
+            ),
+            "model_entity",
+        ]
     )
-    tracked_crop_entities = set(entities.loc[tracked_crop_mask, "model_entity"])
+    tracked_keys = [
+        (e, "crop" if e in crops_in_data else "food") for e in tracked_entities
+    ]
 
     records = []
     for country in countries:
-        country_prod = crop_production[crop_production["country"] == country]
-        prod_lookup = dict(zip(country_prod["crop"], country_prod["production_tonnes"]))
-
-        # Compute mean volume of tracked crops in this group for this country
-        tracked_vols = [prod_lookup.get(e, 0.0) for e in tracked_crop_entities]
+        tracked_vols = [
+            (
+                crop_prod_lookup.get((country, e), 0.0)
+                if t == "crop"
+                else food_prod_lookup.get((country, e), 0.0)
+            )
+            for (e, t) in tracked_keys
+        ]
         mean_tracked = sum(tracked_vols) / len(tracked_vols) if tracked_vols else 1.0
 
         cat_volumes: dict[str, float] = {}
@@ -202,11 +291,14 @@ def _compute_volume_weighted_fractions(
             entity = row["model_entity"]
             share = float(row["share"]) if "share" in row else 1.0
             if row["entity_type"] == "crop" and entity in crops_in_data:
-                vol = prod_lookup.get(entity, 0.0)
+                vol = crop_prod_lookup.get((country, entity), 0.0)
+            elif row["entity_type"] == "food" and entity in foods_in_data:
+                vol = food_prod_lookup.get((country, entity), 0.0)
             else:
-                # Non-crop items and untracked crops use the mean volume
-                # of tracked crops to keep scales comparable; falls back
-                # to 1.0 when no tracked crops exist in the group.
+                # Untracked entity (no production-data backing): use the
+                # mean of tracked entities in this group as a placeholder,
+                # so the entity gets a small non-zero weight rather than
+                # being dropped entirely.
                 vol = mean_tracked
             # Multi-category items contribute volume * share to each
             # category (mass balance: shares sum to 1 per entity).
@@ -256,6 +348,7 @@ def _compute_volume_weighted_fractions(
 def _compute_fractions(
     item_table: pd.DataFrame,
     crop_production: pd.DataFrame,
+    food_production: pd.DataFrame,
     countries: list[str],
 ) -> pd.DataFrame:
     """Compute fractions for every (gleam3_category, animal_type) group."""
@@ -319,7 +412,7 @@ def _compute_fractions(
             len(unique_cats),
         )
         fracs = _compute_volume_weighted_fractions(
-            endogenous, crop_production, countries, g3cat, animal
+            endogenous, crop_production, food_production, countries, g3cat, animal
         )
         results.append(fracs)
 
@@ -330,15 +423,18 @@ def main() -> None:
     xlsx_path = snakemake.input.feed_items_categories  # type: ignore[name-defined]
     gleam_mapping_path = snakemake.input.gleam_feed_mapping  # type: ignore[name-defined]
     crop_production_path = snakemake.input.faostat_crop_production  # type: ignore[name-defined]
+    foods_path = snakemake.input.foods  # type: ignore[name-defined]
     ruminant_mapping_path = snakemake.input.ruminant_feed_mapping  # type: ignore[name-defined]
     monogastric_mapping_path = snakemake.input.monogastric_feed_mapping  # type: ignore[name-defined]
     countries = list(snakemake.params.countries)  # type: ignore[name-defined]
+    pathway_dispatch_shares = dict(snakemake.params.pathway_dispatch_shares)  # type: ignore[name-defined]
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
 
     # Load inputs
     xlsx_items = _parse_feed_items_xlsx(xlsx_path)
     gleam_mapping = pd.read_csv(gleam_mapping_path, comment="#")
     crop_production = pd.read_csv(crop_production_path, comment="#")
+    foods = pd.read_csv(foods_path, comment="#")
     rum_mapping = pd.read_csv(ruminant_mapping_path, comment="#")
     mono_mapping = pd.read_csv(monogastric_mapping_path, comment="#")
 
@@ -351,8 +447,23 @@ def main() -> None:
         "Item table: %d endogenous entries, %d exogenous entries", n_endo, n_exo
     )
 
+    # Derive per-(country, food) production potential from foods.csv
+    # pathways × FAOSTAT crop production, scaled by the configured
+    # dispatch shares.
+    food_production = _compute_food_production(
+        foods, crop_production, pathway_dispatch_shares
+    )
+    logger.info(
+        "Computed production potential for %d (country, food) pairs "
+        "covering %d distinct foods",
+        len(food_production),
+        food_production["food"].nunique() if not food_production.empty else 0,
+    )
+
     # Compute fractions
-    result = _compute_fractions(item_table, crop_production, countries)
+    result = _compute_fractions(
+        item_table, crop_production, food_production, countries
+    )
 
     # Validation
     duplicate_mask = result.duplicated(
