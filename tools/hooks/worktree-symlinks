@@ -14,6 +14,12 @@
 # made. Symlinking the entire data/ directory was the historical pattern
 # but caused split-checkout problems: edits landed in the main worktree's
 # files instead of the active branch's working tree.
+#
+# data/manually_downloaded/ is a special case: the directory itself is
+# tracked (it contains README and license files) but its contents are
+# almost entirely gitignored datasets. We keep the directory as a normal
+# checkout and symlink each gitignored entry from the main worktree
+# individually so the heavy datasets are shared.
 
 set -euo pipefail
 
@@ -30,12 +36,18 @@ MAIN_WORKTREE=$(cd "$COMMON_DIR/.." && pwd)
 WORKTREE_ROOT=$(git rev-parse --show-toplevel)
 
 # Gitignored directories that are heavy or slow to recreate. Symlinked
-# from the main worktree so worktrees share them instead of downloading
-# / recomputing per-branch.
+# wholesale from the main worktree (no tracked content inside).
 SHARED_DIRS=(
     data/downloads
-    data/manually_downloaded
     processing
+)
+
+# Directories whose contents are partially tracked: the directory itself
+# and its tracked files stay as a normal git checkout, but every entry
+# present in the main worktree that doesn't already exist locally gets a
+# symlink (i.e. the gitignored datasets are shared).
+SHARED_DIR_CONTENTS=(
+    data/manually_downloaded
 )
 
 # Gitignored files to symlink.
@@ -50,6 +62,32 @@ for dir in "${SHARED_DIRS[@]}"; do
         mkdir -p "$(dirname "$link")"
         ln -s "$target" "$link"
         echo "Worktree: symlinked $dir"
+    fi
+done
+
+for dir in "${SHARED_DIR_CONTENTS[@]}"; do
+    target_dir="$MAIN_WORKTREE/$dir"
+    local_dir="$WORKTREE_ROOT/$dir"
+    if [[ ! -d "$target_dir" ]] || [[ ! -d "$local_dir" ]]; then
+        continue
+    fi
+    n=0
+    shopt -s nullglob dotglob
+    for target in "$target_dir"/*; do
+        [[ -e "$target" ]] || continue
+        name=$(basename "$target")
+        link="$local_dir/$name"
+        # Skip if anything is already at that path (tracked checkout or
+        # an existing symlink).
+        if [[ -e "$link" ]] || [[ -L "$link" ]]; then
+            continue
+        fi
+        ln -s "$target" "$link"
+        n=$((n + 1))
+    done
+    shopt -u nullglob dotglob
+    if [[ $n -gt 0 ]]; then
+        echo "Worktree: symlinked $n entries into $dir"
     fi
 done
 
