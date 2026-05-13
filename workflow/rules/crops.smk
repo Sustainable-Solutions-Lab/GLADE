@@ -361,7 +361,7 @@ rule build_fodder_yield_corrections:
 # yield-weighted cell distribution (instead of GAEZ-FRT-raster scaling).
 # Apple goes via CROPGRIDS; banana absorbs FRT residual on top of its BAN
 # raster output. These four constants are mirrored on the demand side by
-# FRUITS_FRT_PROJECTION_FOODS in vegetable_projection.py.
+# FRUITS_FRT_PROJECTION_FOODS in diet/food_group_projection.py.
 _FRT_YIELD_WEIGHTED_TRIO = ("citrus", "mango", "watermelon")
 
 

@@ -1,4 +1,12 @@
-"""
+"""Within-group pooled-projection helpers for baseline-diet attribution.
+
+Defines the per-(food_group, GAEZ-module) pools of FAOSTAT FBS item
+codes that ``estimate_baseline_diet`` redistributes across the modelled
+foods in each pool, weighted by a per-country/global blended crop-
+production share. The same blend is used on the supply side by
+``harvested_area_shares`` so demand and supply within-group splits stay
+symmetric (see comment block below for the full rationale).
+
 SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later
@@ -9,65 +17,84 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
+# Demand-side projections that mirror the supply-side GAEZ-RES06 module
+# attribution. Each (food_group, module) pool collects all FBS item codes
+# whose food maps onto the module, and splits the pooled supply across the
+# module's modelled foods by per-country/global crop-production share.
+#
+# Pooling explicit FBS codes alongside any FBS "Other" residual is what
+# makes the demand split symmetric with the supply split. On the supply
+# side, each modelled food in a module receives both its FAOSTAT direct
+# area and a share of the module's residual raster area. If demand
+# instead routed an explicit FBS supply (e.g. onion FBS 2602) entirely to
+# one food, the within-module shares would diverge from supply: one food
+# absorbs all explicit demand while supply spreads across the module,
+# producing systematic per-food slack even when the group balances.
+#
+# Examples:
+#   * OVG (vegetables): onion FBS 2602 + "Vegetables, other" FBS 2605
+#     are pooled and split across {onion, cabbage, carrot} (cabbage and
+#     carrot have no explicit FBS code; FAOSTAT lumps them under 2605).
+#     Tomato is excluded — it has its own TOM raster and its own
+#     FBS 2601, so its demand routes via the explicit-supply path.
+#   * BAN (fruits): plantain FBS 2616 projects onto banana, matching
+#     supply where banana's BAN raster already absorbs plantain area.
+#     Banana FBS 2615 stays explicit because banana has its own raster
+#     and own FBS code (same shape as tomato).
+#   * FRT (fruits): citrus codes (2611-2614), apple FBS 2617, plus the
+#     unmodelled-fruit residuals (FBS 2618 pineapples, 2619 dates, 2625
+#     "Fruits, other") are pooled and split across {citrus, mango,
+#     watermelon, apple}. Mango and watermelon have no explicit FBS
+#     code; FAOSTAT lumps them under 2625.
+#
+# Grapes (FBS 2620) are intentionally excluded: although the FBS "Food"
+# element is in principle net of wine processing, most of the world's
+# grape harvest enters the alcohol industry which the model does not
+# treat as fruit consumption and which GBD's fruits risk factor excludes.
+
 OVG_CROPS: tuple[str, ...] = ("onion", "cabbage", "carrot")
-VEGETABLE_RESIDUAL_ITEM_CODE = 2605
+OVG_POOL_ITEM_CODES: tuple[int, ...] = (
+    2602,  # Onions (explicit; pooled so onion does not absorb 100% of demand)
+    2605,  # Vegetables, Other (residual covering cabbage, carrot, etc.)
+)
 OVG_COUNTRY_SHARE_BLEND = 0.7
+
 STARCHY_PROJECTION_FOODS: tuple[str, ...] = (
     "potato",
     "sweet-potato",
     "yam",
     "cassava",
 )
-STARCHY_RESIDUAL_ITEM_CODE = 2534
+STARCHY_POOL_ITEM_CODES: tuple[int, ...] = (2534,)  # Roots, Other
 STARCHY_COUNTRY_SHARE_BLEND = 0.7
+
 NUTS_PROJECTION_FOODS: tuple[str, ...] = (
     "groundnut",
     "sesame-seed",
     "coconut",
     "sunflower-seed",
 )
-NUTS_RESIDUAL_ITEM_CODE = 2551
+NUTS_POOL_ITEM_CODES: tuple[int, ...] = (2551,)  # Nuts, Other
 NUTS_COUNTRY_SHARE_BLEND = 0.7
 
-# Modeled fruits absorb FBS supply from unmodeled fruit items so the
-# GBD-anchored fruits group total stays consistent with the model. The
-# projection is split along GAEZ RES06 module boundaries so that supply
-# (which is allocated per module) and demand (this projection) attribute
-# the same unmodeled fruits in parallel, avoiding the "banana competes
-# with apples on the demand side but not on the supply side" asymmetry:
-#
-#  * BAN module — banana and plantain share the same GAEZ raster. Map
-#    plantain FBS supply (FBS 2616) exclusively onto banana, matching
-#    the supply side where banana's area already absorbs plantain area.
-#  * FRT module — citrus, mango, watermelon share the GAEZ FRT raster,
-#    and apple has its own CROPGRIDS-based supply. They jointly absorb
-#    the unmodeled fruit basket (pineapples, dates, the FBS 2625
-#    "Fruits, other" residual): pool those FBS items and project across
-#    the four FRT-/CROPGRIDS-modeled crops by per-country / global
-#    crop-production share.
-#
-# Apples (FBS 2617) used to be a residual member, but with apple a
-# directly-modeled crop (via CROPGRIDS) it now has an explicit
-# faostat_food_item_map row (food → 2617) and so is consumed via the
-# normal explicit-supply path, not via the residual pool.
-#
-# Grapes (FBS 2620) are intentionally excluded: although the FBS "Food"
-# element is in principle net of wine processing, most of the world's
-# grape harvest enters the alcohol industry which the model does not
-# treat as fruit consumption and which GBD's fruits risk factor
-# excludes.
 FRUITS_BAN_PROJECTION_FOODS: tuple[str, ...] = ("banana",)
-FRUITS_BAN_RESIDUAL_ITEM_CODES: tuple[int, ...] = (2616,)  # Plantains
+FRUITS_BAN_POOL_ITEM_CODES: tuple[int, ...] = (2616,)  # Plantains
+
 FRUITS_FRT_PROJECTION_FOODS: tuple[str, ...] = (
     "citrus",
     "mango",
     "watermelon",
     "apple",
 )
-FRUITS_FRT_RESIDUAL_ITEM_CODES: tuple[int, ...] = (
-    2618,  # Pineapples
-    2619,  # Dates
-    2625,  # Fruits, other
+FRUITS_FRT_POOL_ITEM_CODES: tuple[int, ...] = (
+    2611,  # Oranges, Mandarines (explicit; previously routed to citrus only)
+    2612,  # Lemons, Limes (explicit; previously routed to citrus only)
+    2613,  # Grapefruit (explicit; previously routed to citrus only)
+    2614,  # Citrus, Other (explicit; previously routed to citrus only)
+    2617,  # Apples (explicit; previously routed to apple only)
+    2618,  # Pineapples (residual)
+    2619,  # Dates (residual)
+    2625,  # Fruits, Other (residual covering mango, watermelon, etc.)
 )
 FRUITS_COUNTRY_SHARE_BLEND = 0.7
 

@@ -46,24 +46,24 @@ from workflow.scripts.diet.basis import (
     load_food_basis,
     load_source_basis_country_overrides,
 )
-from workflow.scripts.logging_config import setup_script_logging
-from workflow.scripts.vegetable_projection import (
+from workflow.scripts.diet.food_group_projection import (
+    FRUITS_BAN_POOL_ITEM_CODES,
     FRUITS_BAN_PROJECTION_FOODS,
-    FRUITS_BAN_RESIDUAL_ITEM_CODES,
     FRUITS_COUNTRY_SHARE_BLEND,
+    FRUITS_FRT_POOL_ITEM_CODES,
     FRUITS_FRT_PROJECTION_FOODS,
-    FRUITS_FRT_RESIDUAL_ITEM_CODES,
     NUTS_COUNTRY_SHARE_BLEND,
+    NUTS_POOL_ITEM_CODES,
     NUTS_PROJECTION_FOODS,
-    NUTS_RESIDUAL_ITEM_CODE,
     OVG_COUNTRY_SHARE_BLEND,
     OVG_CROPS,
+    OVG_POOL_ITEM_CODES,
     STARCHY_COUNTRY_SHARE_BLEND,
+    STARCHY_POOL_ITEM_CODES,
     STARCHY_PROJECTION_FOODS,
-    STARCHY_RESIDUAL_ITEM_CODE,
-    VEGETABLE_RESIDUAL_ITEM_CODE,
     build_blended_crop_shares,
 )
+from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
@@ -80,48 +80,55 @@ WITHIN_QCL_FOOD_SPLITS: dict[str, float] = {
 }
 
 
-# Per-food-group projection table used by _project_residual_supply.
-# Each entry says: when FBS supply lives in one or more "residual" items
-# (e.g. 2605 "Vegetables, Other", or the union of 2616-2625 unmodeled
-# fruit items), distribute that supply across the listed
-# projection_foods using a country/global blended crop-production share.
-# crop_to_food maps FAOSTAT crop names (as they appear in
-# faostat_crop_production.csv) to the modeled food names so the
-# crop-share table is keyed consistently with the projection_foods.
+# Per-food-group pooled-projection table used by _project_pooled_supply.
+#
+# Each entry rebuilds the within-group FBS supply weights for a food
+# group as follows. The entry defines one or more sub-projections; each
+# sub-projection pools several FBS item codes (``pool_codes``) and
+# distributes the pooled supply across a set of modelled foods
+# (``projection_foods``) by a per-country/global blended crop-production
+# share. ``crop_to_food`` maps FAOSTAT crop names (as they appear in
+# faostat_crop_production.csv) to the modelled food names so the
+# crop-share table is keyed consistently with ``projection_foods``.
+#
+# The split is symmetric with the supply-side GAEZ-RES06 attribution:
+# each modelled food's supply comes from FAOSTAT direct area plus a share
+# of the module's residual raster area; pooling explicit FBS codes
+# alongside the residual FBS code makes the demand-side within-module
+# split use the same production-share blend.
 #
 # Spec shape per entry:
 #   - ``food_group``: name of the model food group to rebuild.
-#   - ``projections``: a list of sub-projections, each with
-#     ``residual_codes`` (tuple of FBS item codes whose supplies are
-#     pooled), ``projection_foods`` (the modeled foods that absorb the
-#     pool), ``blend_weight`` (country/global crop-share blend), and
+#   - ``projections``: list of sub-projections, each with
+#     ``pool_codes`` (tuple of FBS item codes whose supplies are pooled),
+#     ``projection_foods`` (modelled foods that absorb the pool),
+#     ``blend_weight`` (country/global crop-share blend), and
 #     ``crop_to_food`` (optional FAOSTAT-name -> model-food rename).
-#   For the common single-projection case, a thin top-level shorthand
-#   (``residual_code``/``residual_codes`` + ``projection_foods`` +
-#   ``blend_weight`` + ``crop_to_food``) is auto-converted to a one-
-#   element ``projections`` list at runtime.
+#   For the common single-projection case, a top-level shorthand
+#   (``pool_codes`` + ``projection_foods`` + ``blend_weight`` +
+#   ``crop_to_food``) is auto-converted to a one-element ``projections``
+#   list at runtime.
 #
-# Fruits uses two sub-projections (one per GAEZ RES06 module / data
-# source) so demand attribution mirrors the module-aligned supply
-# attribution:
-#   * BAN module: plantain FBS 2616 -> banana exclusively (they share
-#     the GAEZ BAN raster on the supply side).
-#   * FRT module + CROPGRIDS apple: pineapples 2618 + dates 2619 +
-#     fruits-other 2625 pooled and split across citrus/mango/watermelon
-#     (GAEZ FRT) and apple (CROPGRIDS). Apples (FBS 2617) are not in
-#     the residual pool — apple has a direct faostat_food_item_map row.
-# Grapes (FBS 2620) are intentionally excluded; see vegetable_projection.py.
-RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
+# Fruits uses two sub-projections (one per GAEZ-RES06 module / data
+# source) so demand attribution mirrors the module-aligned supply:
+#   * BAN module: plantain FBS 2616 -> banana exclusively. Banana
+#     FBS 2615 stays explicit (banana has its own BAN raster).
+#   * FRT module + CROPGRIDS apple: all citrus FBS codes, apple FBS
+#     2617, plus the unmodelled-fruit residual FBS codes (pineapples,
+#     dates, "Fruits, other") are pooled and split across citrus, mango,
+#     watermelon, and apple.
+# Grapes (FBS 2620) are intentionally excluded; see diet/food_group_projection.py.
+POOL_PROJECTIONS: list[dict[str, object]] = [
     {
         "food_group": "vegetables",
-        "residual_code": VEGETABLE_RESIDUAL_ITEM_CODE,
+        "pool_codes": OVG_POOL_ITEM_CODES,
         "projection_foods": OVG_CROPS,
         "blend_weight": OVG_COUNTRY_SHARE_BLEND,
         "crop_to_food": None,  # FAOSTAT crop names already match foods
     },
     {
         "food_group": "nuts_seeds",
-        "residual_code": NUTS_RESIDUAL_ITEM_CODE,
+        "pool_codes": NUTS_POOL_ITEM_CODES,
         "projection_foods": NUTS_PROJECTION_FOODS,
         "blend_weight": NUTS_COUNTRY_SHARE_BLEND,
         "crop_to_food": {
@@ -133,7 +140,7 @@ RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
     },
     {
         "food_group": "starchy_vegetable",
-        "residual_code": STARCHY_RESIDUAL_ITEM_CODE,
+        "pool_codes": STARCHY_POOL_ITEM_CODES,
         "projection_foods": STARCHY_PROJECTION_FOODS,
         "blend_weight": STARCHY_COUNTRY_SHARE_BLEND,
         "crop_to_food": {
@@ -147,13 +154,13 @@ RESIDUAL_PROJECTIONS: list[dict[str, object]] = [
         "food_group": "fruits",
         "projections": [
             {
-                "residual_codes": FRUITS_BAN_RESIDUAL_ITEM_CODES,
+                "pool_codes": FRUITS_BAN_POOL_ITEM_CODES,
                 "projection_foods": FRUITS_BAN_PROJECTION_FOODS,
                 "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
                 "crop_to_food": None,
             },
             {
-                "residual_codes": FRUITS_FRT_RESIDUAL_ITEM_CODES,
+                "pool_codes": FRUITS_FRT_POOL_ITEM_CODES,
                 "projection_foods": FRUITS_FRT_PROJECTION_FOODS,
                 "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
                 "crop_to_food": None,
@@ -523,24 +530,24 @@ def build_within_group_shares(
         "supply_kg_per_capita_year"
     ].to_dict()
 
-    # Fail fast if any residual projection references an FBS code that the
+    # Fail fast if any pooled projection references an FBS code that the
     # FBS fetch never pulled. This catches silent drift between
-    # ``RESIDUAL_PROJECTIONS`` here and the fetch list in
+    # ``POOL_PROJECTIONS`` here and the fetch list in
     # ``prepare_faostat_fbs_items.py`` (which historically defaulted such
-    # codes to 0 supply and made entire residuals — plantain, apples,
+    # codes to 0 supply and made entire pools — plantain, apples,
     # pineapples, dates — silently vanish from the projection).
     fetched_codes = {int(code) for (_, code) in fbs_supply}
     referenced_codes: set[int] = set()
-    for spec in RESIDUAL_PROJECTIONS:
+    for spec in POOL_PROJECTIONS:
         for sub in _normalise_projection_spec(spec):
-            referenced_codes.update(int(c) for c in sub["residual_codes"])
+            referenced_codes.update(int(c) for c in sub["pool_codes"])
     missing_codes = referenced_codes - fetched_codes
     if missing_codes:
         raise ValueError(
-            "RESIDUAL_PROJECTIONS reference FBS codes that were not fetched "
+            "POOL_PROJECTIONS reference FBS codes that were not fetched "
             f"by prepare_faostat_fbs_items: {sorted(missing_codes)}. "
             "Either add them to data/curated/faostat_food_item_map.csv or to "
-            "RESIDUAL_FETCH_CODES in prepare_faostat_fbs_items.py."
+            "POOL_FETCH_CODES in prepare_faostat_fbs_items.py."
         )
 
     # Build QCL production lookups
@@ -643,9 +650,9 @@ def build_within_group_shares(
         .sum()
         .copy()
     )
-    for spec in RESIDUAL_PROJECTIONS:
+    for spec in POOL_PROJECTIONS:
         sub_specs = _normalise_projection_spec(spec)
-        shares_df = _project_residual_supply(
+        shares_df = _project_pooled_supply(
             shares_df,
             food_group=spec["food_group"],
             sub_specs=sub_specs,
@@ -674,25 +681,18 @@ def build_within_group_shares(
 
 
 def _normalise_projection_spec(spec: dict) -> list[dict]:
-    """Return the list of sub-projections for a RESIDUAL_PROJECTIONS entry.
+    """Return the list of sub-projections for a POOL_PROJECTIONS entry.
 
-    Accepts either the long-form ``projections`` list (for groups whose
-    unmodelled residual splits along module boundaries — currently
-    fruits) or the short-form single-projection layout (one
-    ``residual_code`` or ``residual_codes`` plus ``projection_foods``,
-    ``blend_weight``, ``crop_to_food``). The short form is auto-converted
-    to a one-element list so the rebuild logic only needs to handle one
-    shape.
+    Accepts the long form (``projections`` is a list of sub-projection
+    dicts) or the short form (a single sub-projection inlined at the top
+    level). The short form is wrapped in a one-element list so callers
+    can iterate uniformly.
     """
     if "projections" in spec:
         return list(spec["projections"])
-    if "residual_codes" in spec:
-        codes: tuple[int, ...] = tuple(int(c) for c in spec["residual_codes"])
-    else:
-        codes = (int(spec["residual_code"]),)
     return [
         {
-            "residual_codes": codes,
+            "pool_codes": tuple(int(c) for c in spec["pool_codes"]),
             "projection_foods": spec["projection_foods"],
             "blend_weight": spec["blend_weight"],
             "crop_to_food": spec["crop_to_food"],
@@ -700,7 +700,7 @@ def _normalise_projection_spec(spec: dict) -> list[dict]:
     ]
 
 
-def _project_residual_supply(
+def _project_pooled_supply(
     shares_df: pd.DataFrame,
     *,
     food_group: str,
@@ -712,31 +712,28 @@ def _project_residual_supply(
     countries: list[str],
     crop_production_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Distribute FAOSTAT residual-bucket supply across modelled foods.
+    """Rebuild within-group supply weights via pooled FBS projection.
 
-    FAOSTAT FBS lumps minor commodities into "Other"-style residual items
-    (e.g. 2605 "Vegetables, Other"). For each food group in
-    RESIDUAL_PROJECTIONS this function rebuilds every food's
-    ``supply_weight`` as the sum of:
+    For each food in ``food_group``, ``supply_weight`` becomes the sum of:
 
-      * **Explicit FBS supply** — its own FBS-item supplies, excluding
-        any FBS items that appear in any sub-spec's ``residual_codes``
-        (so a food that maps directly to a residual item does not
-        double-count).
-      * **One or more projected residual contributions** — for each
-        sub-spec, the food gets a share of that sub-spec's pooled
-        residual supply if it is in ``projection_foods`` for that
-        sub-spec, weighted by per-country/global crop-production share
-        of the sub-spec's projection_foods.
+      * **Explicit FBS supply** — supplies of the food's FBS codes that
+        are *not* part of any sub-spec's pool. Foods whose codes all
+        appear in a pool contribute zero here; their entire demand
+        flows through the pool.
+      * **One projected contribution per sub-spec** — for each sub-spec
+        whose ``projection_foods`` includes this food, a share of the
+        pooled FBS supply (sum of ``pool_codes`` supplies), weighted by
+        the per-country/global blended crop-production share of the
+        sub-spec's projection_foods.
 
-    Splitting a group's residuals across several sub-specs lets demand
-    attribution mirror GAEZ-module-aligned supply attribution: for
-    fruits we project plantain (FBS 2616) only onto banana and the
-    apple/pineapple/dates/fruits-other pool only onto citrus/mango/
-    watermelon, matching the BAN vs FRT raster split on the supply side.
+    Splitting a group's pool across several sub-specs lets demand
+    attribution mirror GAEZ-module-aligned supply attribution. For
+    fruits we project plantain (FBS 2616) only onto banana (BAN raster)
+    and the citrus / apple / pineapple / dates / fruits-other pool onto
+    citrus, mango, watermelon, and apple (FRT raster + CROPGRIDS apple).
 
     Each sub-spec carries:
-      - ``residual_codes`` (tuple[int]): FBS items pooled by summing.
+      - ``pool_codes`` (tuple[int]): FBS items whose supplies are pooled.
       - ``projection_foods`` (sequence[str]): modelled foods that absorb
         the pool.
       - ``blend_weight`` (float): country/global crop-share blend.
@@ -747,24 +744,22 @@ def _project_residual_supply(
     if not group_foods:
         return shares_df
 
-    # Pre-compute per-sub-spec shares and pooled supplies; build the
-    # union of residual codes to filter from explicit FBS supply.
+    # Pre-resolve each sub-spec: production-share lookups and the
+    # set-union of pool codes (used to filter the explicit-supply path
+    # so a food whose FBS code lives in the pool doesn't double-count).
     sub_resolved: list[dict] = []
-    all_residual_codes: set[int] = set()
+    all_pool_codes: set[int] = set()
     for sub in sub_specs:
-        codes = tuple(int(c) for c in sub["residual_codes"])
-        projection_foods = list(sub["projection_foods"])
-        blend_weight = float(sub["blend_weight"])
-        crop_to_food = sub.get("crop_to_food")
-
-        active_projection = [f for f in projection_foods if f in group_foods]
-        all_residual_codes.update(codes)
-        if not active_projection:
+        codes = tuple(int(c) for c in sub["pool_codes"])
+        all_pool_codes.update(codes)
+        active = [f for f in sub["projection_foods"] if f in group_foods]
+        if not active:
             sub_resolved.append(
                 {"codes": codes, "active": [], "share": {}, "global": {}}
             )
             continue
 
+        crop_to_food = sub.get("crop_to_food")
         if crop_to_food is None:
             prod_for_shares = crop_production_df
         else:
@@ -776,13 +771,13 @@ def _project_residual_supply(
 
         share_lookup, global_share = build_blended_crop_shares(
             prod_for_shares,
-            active_projection,
-            blend_weight=blend_weight,
+            active,
+            blend_weight=float(sub["blend_weight"]),
         )
         sub_resolved.append(
             {
                 "codes": codes,
-                "active": active_projection,
+                "active": active,
                 "share": share_lookup,
                 "global": global_share,
             }
@@ -797,21 +792,21 @@ def _project_residual_supply(
             explicit_codes = [
                 int(code)
                 for code in fbs_codes_by_food.get(food, [])
-                if int(code) not in all_residual_codes
+                if int(code) not in all_pool_codes
             ]
-            explicit_supply = float(
-                sum(fbs_supply.get((country, code), 0.0) for code in explicit_codes)
+            explicit_supply = sum(
+                fbs_supply.get((country, code), 0.0) for code in explicit_codes
             )
             projected_supply = 0.0
             for sub in sub_resolved:
                 if food not in sub["active"]:
                     continue
-                residual_supply = float(
-                    sum(fbs_supply.get((country, code), 0.0) for code in sub["codes"])
+                pool_supply = sum(
+                    fbs_supply.get((country, code), 0.0) for code in sub["codes"]
                 )
-                if residual_supply <= 0.0:
+                if pool_supply <= 0.0:
                     continue
-                projected_supply += residual_supply * sub["share"].get(
+                projected_supply += pool_supply * sub["share"].get(
                     (country, food), sub["global"].get(food, 0.0)
                 )
             rebuilt_rows.append(
@@ -819,7 +814,7 @@ def _project_residual_supply(
                     "country": country,
                     "food_group": food_group,
                     "food": food,
-                    "supply_weight": explicit_supply + projected_supply,
+                    "supply_weight": float(explicit_supply + projected_supply),
                 }
             )
 

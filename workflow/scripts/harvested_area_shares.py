@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from workflow.scripts.vegetable_projection import (
+from workflow.scripts.diet.food_group_projection import (
     OVG_COUNTRY_SHARE_BLEND,
     build_blended_crop_shares,
 )

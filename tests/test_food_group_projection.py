@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Unit tests for build_blended_crop_shares from vegetable_projection."""
+"""Unit tests for build_blended_crop_shares from diet.food_group_projection."""
 
 import pandas as pd
 import pytest
 
-from workflow.scripts.vegetable_projection import build_blended_crop_shares
+from workflow.scripts.diet.food_group_projection import build_blended_crop_shares
 
 
 class TestBuildBlendedCropShares:

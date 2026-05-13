@@ -610,7 +610,7 @@ Workflow Integration
 * ``workflow/scripts/merge_dietary_sources.py``
 * ``workflow/scripts/prepare_gbd_food_group_intake.py``
 * ``workflow/scripts/estimate_baseline_diet.py``
-* ``workflow/scripts/vegetable_projection.py`` — residual projection
-  helpers.
+* ``workflow/scripts/diet/food_group_projection.py`` — within-group
+  pooled-projection helpers (FBS-code pools, production-share blends).
 
 .. Reference [Brauer2024] is defined in health.rst (Sphinx citations are global).
