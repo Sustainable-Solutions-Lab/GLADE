@@ -3,16 +3,18 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Orchestrator for the three calibrations that feed the default workflow.
+# Orchestrator for the calibrations that feed the default workflow.
 #
 # Dependency order (upstream data changed → rerun in this order):
 #   1. grassland  → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage}.csv
-#   2. cost       → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
-#   3. stability  → data/curated/calibration/prod_stability_l1.yaml
+#   2. food_waste → data/curated/calibration/food_waste.yaml
+#   3. cost       → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
+#   4. stability  → data/curated/calibration/prod_stability_l1.yaml
 #
 # Usage:
-#   tools/calibrate                # run all three in order
+#   tools/calibrate                # run all in order
 #   tools/calibrate grassland      # one step
+#   tools/calibrate food_waste
 #   tools/calibrate cost
 #   tools/calibrate stability
 #   tools/calibrate --check        # report which calibrations are stale (no execution)
@@ -20,9 +22,9 @@
 # All steps invoke ``tools/smk`` under the hood; any extra flags after the
 # subcommand are passed through.
 #
-# The pixi env defaults to ``gurobi`` since all three calibration configs
-# use the Gurobi solver. Override with ``CALIBRATE_PIXI_ENV=<name>`` or by
-# passing ``-e <name>`` explicitly.
+# The pixi env defaults to ``gurobi`` since all calibration configs use the
+# Gurobi solver. Override with ``CALIBRATE_PIXI_ENV=<name>`` or by passing
+# ``-e <name>`` explicitly.
 
 set -euo pipefail
 
@@ -34,6 +36,9 @@ GRASSLAND_TARGETS=(
   data/curated/calibration/grassland_yield.csv
   data/curated/calibration/fodder_conversion.csv
   data/curated/calibration/exogenous_forage.csv
+)
+FOOD_WASTE_TARGETS=(
+  data/curated/calibration/food_waste.yaml
 )
 COST_TARGETS=(
   data/curated/calibration/crop_cost.csv
@@ -120,18 +125,23 @@ case "$cmd" in
   --check|check)
     echo "[calibrate] Checking staleness (no execution) ..."
     rc=0
-    check_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@" || rc=$?
-    check_step cost      config/calibration/cost.yaml      "${COST_TARGETS[@]}"      -- "$@" || rc=$?
-    check_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@" || rc=$?
+    check_step grassland  config/calibration/grassland.yaml  "${GRASSLAND_TARGETS[@]}"  -- "$@" || rc=$?
+    check_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@" || rc=$?
+    check_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@" || rc=$?
+    check_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@" || rc=$?
     exit "$rc"
     ;;
   all)
-    run_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@"
-    run_step cost      config/calibration/cost.yaml      "${COST_TARGETS[@]}"      -- "$@"
-    run_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@"
+    run_step grassland  config/calibration/grassland.yaml  "${GRASSLAND_TARGETS[@]}"  -- "$@"
+    run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
+    run_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@"
+    run_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@"
     ;;
   grassland)
     run_step grassland config/calibration/grassland.yaml "${GRASSLAND_TARGETS[@]}" -- "$@"
+    ;;
+  food_waste)
+    run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
     ;;
   cost)
     run_step cost config/calibration/cost.yaml "${COST_TARGETS[@]}" -- "$@"
@@ -141,7 +151,7 @@ case "$cmd" in
     ;;
   *)
     echo "[calibrate] Unknown subcommand: $cmd" >&2
-    echo "Usage: tools/calibrate [all|grassland|cost|stability|--check]" >&2
+    echo "Usage: tools/calibrate [all|grassland|food_waste|cost|stability|--check]" >&2
     exit 2
     ;;
 esac

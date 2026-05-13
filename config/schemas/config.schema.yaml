@@ -49,6 +49,7 @@ required:
   - animal_costs
   - crop_costs
   - cost_calibration
+  - food_loss_waste_calibration
   - prod_stability_calibration
   - solving
   - remote_solve
@@ -1670,6 +1671,30 @@ properties:
       animal_correction_csv:
         type: string
         description: "Path to animal cost calibration correction CSV"
+
+  food_loss_waste_calibration:
+    type: object
+    required: [enabled, generate, calibration_file, food_groups, scenario]
+    additionalProperties: false
+    description: "Per-food-group multiplier on (1 - waste_fraction) applied uniformly across countries, derived from food-bus slack on an uncalibrated validation solve."
+    properties:
+      enabled:
+        type: boolean
+        description: "Apply the calibrated waste multipliers in prepare_food_loss_waste.py"
+      generate:
+        type: boolean
+        description: "Generate calibration from a solved model (breaks DAG cycle when true)"
+      calibration_file:
+        type: string
+        description: "Path to YAML holding per-food-group waste-retention multipliers"
+      food_groups:
+        type: array
+        items:
+          type: string
+        description: "Food groups to calibrate; other groups keep their FBS/SDG-derived waste fractions"
+      scenario:
+        type: string
+        description: "Scenario name whose solved model is used to generate calibration"
 
   prod_stability_calibration:
     type: object

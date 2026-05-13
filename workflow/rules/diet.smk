@@ -178,6 +178,13 @@ rule merge_dietary_sources:
         "../scripts/merge_dietary_sources.py"
 
 
+def _food_waste_calibration_input(_w):
+    cfg = config["food_loss_waste_calibration"]
+    if cfg["enabled"] and not cfg["generate"]:
+        return cfg["calibration_file"]
+    return []
+
+
 rule prepare_food_loss_waste:
     input:
         m49="data/curated/M49-codes.csv",
@@ -188,12 +195,16 @@ rule prepare_food_loss_waste:
         fbs_csv="data/downloads/faostat/FBS.parquet",
         sdg_csv="data/downloads/unsd/SDG_12_3_1.csv",
         overrides="data/curated/food_loss_waste_overrides.csv",
+        waste_calibration=_food_waste_calibration_input,
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         baseline_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
         carcass_to_retail_meat=config["animal_products"]["carcass_to_retail_meat"],
+        waste_calibration_food_groups=config["food_loss_waste_calibration"][
+            "food_groups"
+        ],
     output:
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
     group:
@@ -207,6 +218,29 @@ rule prepare_food_loss_waste:
         "<benchmarks>/{name}/prepare_food_loss_waste.tsv"
     script:
         "../scripts/prepare_food_loss_waste.py"
+
+
+_food_waste_cal_cfg = config["food_loss_waste_calibration"]
+
+if _food_waste_cal_cfg["generate"]:
+    _food_waste_cal_scenario = _food_waste_cal_cfg["scenario"]
+
+    rule compute_food_waste_calibration:
+        input:
+            network=f"<results>/{name}/solved/model_scen-{_food_waste_cal_scenario}.nc",
+        params:
+            food_groups=_food_waste_cal_cfg["food_groups"],
+        output:
+            calibration_file=_food_waste_cal_cfg["calibration_file"],
+        resources:
+            runtime="2m",
+            mem_mb=2000,
+        log:
+            f"<logs>/{name}/compute_food_waste_calibration_scen-{_food_waste_cal_scenario}.log",
+        benchmark:
+            f"<benchmarks>/{name}/compute_food_waste_calibration_scen-{_food_waste_cal_scenario}.tsv"
+        script:
+            "../scripts/compute_food_waste_calibration.py"
 
 
 rule prepare_gbd_food_group_intake:

@@ -547,6 +547,21 @@ grazing:
     exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
     scenario: "default"
 
+# Food waste calibration: a per-food-group multiplier on (1 - waste_fraction)
+# applied uniformly across countries in prepare_food_loss_waste.py. Derived
+# from food-bus slack on an uncalibrated validation solve (see
+# config/calibration/food_waste.yaml and tools/calibrate food_waste). Only
+# the consumer-side waste fraction is adjusted; the producer-side loss
+# fraction is left to its FBS/SDG default.
+food_loss_waste_calibration:
+  enabled: true
+  generate: false
+  calibration_file: "data/curated/calibration/food_waste.yaml"
+  food_groups:
+  - vegetables
+  - fruits
+  scenario: "default"
+
 # --- section: food_groups ---
 food_groups:
   included:

@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Food Waste Calibration
+# ----------------------
+# Generates ``data/curated/calibration/food_waste.yaml`` — a per-food-group
+# multiplier on ``(1 - waste_fraction)`` that is applied uniformly across
+# countries by ``prepare_food_loss_waste.py``. The multiplier is derived
+# from a validation-mode solve of an *uncalibrated* scenario (the food
+# waste calibration is turned off) whose food-bus slack reveals how much
+# the SDG/FBS-derived consumer-side waste underestimates (or overestimates)
+# the gap between FBS supply and GDD-IA intake for the listed food groups.
+#
+# Only the consumer-side ``waste_fraction`` is adjusted; the producer-side
+# ``loss_fraction`` is left to its FBS/SDG defaults. Applying calibration
+# at consumption avoids perturbing non-food uses of the crop bus (feed,
+# biofuel, seed) and keeps the LP arbitrage immunity introduced by moving
+# loss to crop_production.
+#
+# Usage:
+#   tools/calibrate food_waste
+#
+# Or equivalently:
+#   tools/smk --configfile config/calibration/food_waste.yaml -- \
+#     data/curated/calibration/food_waste.yaml
+
+name: "food_waste_calibration"
+
+scenarios:
+  # No scenario-level overrides needed: with food_loss_waste_calibration.generate
+  # set true at the base level, prepare_food_loss_waste skips reading the
+  # calibration file (the rule's input function makes it conditional on
+  # `enabled and not generate`). The resulting food_loss_waste.csv therefore
+  # carries only the SDG/FBS defaults plus curated overrides, and the
+  # solved scenario's food-bus slack reveals the GDD-vs-supply gap.
+  uncalibrated: {}
+
+planning_horizon: 2020
+
+# Mirrors validation.yaml: production and consumption are pinned to
+# baseline so slack on food buses reflects supply/demand mismatch only.
+validation:
+  use_actual_yields: true
+  use_actual_production: true
+  enforce_baseline_diet: true
+  enforce_baseline_feed: true
+  disable_spared_cropland: true
+  disable_spared_grassland: true
+  slack_marginal_cost: 10
+
+# Skip downstream calibrations so this step is order-independent.
+cost_calibration:
+  enabled: false
+
+food_loss_waste_calibration:
+  generate: true
+  scenario: "uncalibrated"
+
+health:
+  value_per_yll: 0
+
+emissions:
+  ghg_pricing_enabled: false
+
+solving:
+  io_api: "direct"
+  solver: "gurobi"
+  threads: 2
