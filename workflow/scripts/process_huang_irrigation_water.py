@@ -21,12 +21,17 @@ Reference:
 from collections.abc import Iterable
 from pathlib import Path
 
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
-import numpy as np
-import pandas as pd
-import xarray as xr
+from osgeo import gdal, osr
+
+gdal.UseExceptions()
+osr.UseExceptions()
+
+from exactextract import exact_extract  # noqa: E402
+from exactextract.raster import NumPyRasterSource  # noqa: E402
+import geopandas as gpd  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import xarray as xr  # noqa: E402
 
 # Conversion factors
 KM3_TO_M3 = 1e9  # 1 km³ = 1e9 m³

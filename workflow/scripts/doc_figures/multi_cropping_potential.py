@@ -7,18 +7,23 @@
 
 from collections.abc import Sequence
 
-import cartopy.crs as ccrs
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
-import numpy as np
-from pyproj import Geod
-import rasterio
-import rasterio.enums
+from osgeo import gdal, osr
 
-from workflow.scripts.doc_figures_config import (
+gdal.UseExceptions()
+osr.UseExceptions()
+
+import cartopy.crs as ccrs  # noqa: E402
+from exactextract import exact_extract  # noqa: E402
+from exactextract.raster import NumPyRasterSource  # noqa: E402
+import geopandas as gpd  # noqa: E402
+import matplotlib.colors as mcolors  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from pyproj import Geod  # noqa: E402
+import rasterio  # noqa: E402
+import rasterio.enums  # noqa: E402
+
+from workflow.scripts.doc_figures_config import (  # noqa: E402
     FIGURE_WIDTH,
     FONT_SIZES,
     apply_doc_style,

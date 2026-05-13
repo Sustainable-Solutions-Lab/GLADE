@@ -25,18 +25,23 @@ Notes:
 import logging
 from pathlib import Path
 
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
-import numpy as np
-import pandas as pd
-import rasterio
-from rasterio.crs import CRS
-from rasterio.enums import Resampling
-from rasterio.transform import Affine
-from rasterio.warp import reproject
+from osgeo import gdal, osr
 
-from workflow.scripts.logging_config import setup_script_logging
+gdal.UseExceptions()
+osr.UseExceptions()
+
+from exactextract import exact_extract  # noqa: E402
+from exactextract.raster import NumPyRasterSource  # noqa: E402
+import geopandas as gpd  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import rasterio  # noqa: E402
+from rasterio.crs import CRS  # noqa: E402
+from rasterio.enums import Resampling  # noqa: E402
+from rasterio.transform import Affine  # noqa: E402
+from rasterio.warp import reproject  # noqa: E402
+
+from workflow.scripts.logging_config import setup_script_logging  # noqa: E402
 
 # Logger will be configured in __main__ block
 logger = logging.getLogger(__name__)
