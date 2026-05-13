@@ -100,14 +100,26 @@ FRUITS_COUNTRY_SHARE_BLEND = 0.7
 
 
 def build_blended_crop_shares(
-    crop_production_df: pd.DataFrame,
+    df: pd.DataFrame,
     crops: Sequence[str],
     blend_weight: float = OVG_COUNTRY_SHARE_BLEND,
+    *,
+    value_column: str = "production_tonnes",
 ) -> tuple[dict[tuple[str, str], float], dict[str, float]]:
     """Build country-level blended shares for a set of crops.
 
-    Shares blend country-specific production shares with global shares:
-    share = blend_weight * country_share + (1 - blend_weight) * global_share
+    Operates on a long-form ``(country, crop, value)`` table and returns
+    per-country and global share lookups for the requested ``crops``. The
+    per-country shares blend country-specific shares with the global share:
+
+        share = blend_weight * country_share + (1 - blend_weight) * global_share
+
+    ``value_column`` selects which numeric column drives the weighting —
+    the default ``"production_tonnes"`` matches ``faostat_crop_production``,
+    but any per-(country, crop) weight table works (e.g. the supply-side
+    target_production_tonnes from ``build_frt_area_attribution``). Pass
+    ``blend_weight=1.0`` for a pure-country share with global fallback
+    when a country has no data.
     """
     if not 0.0 <= blend_weight <= 1.0:
         raise ValueError(f"blend_weight must be in [0, 1], got {blend_weight}")
@@ -117,16 +129,14 @@ def build_blended_crop_shares(
         raise ValueError("crops cannot be empty")
     crop_set = set(crops)
 
-    df = crop_production_df.copy()
+    df = df.copy()
     if df.empty:
         uniform = 1.0 / len(crops)
         return {}, dict.fromkeys(crops, uniform)
 
     df["country"] = df["country"].astype(str).str.upper().str.strip()
     df["crop"] = df["crop"].astype(str).str.strip()
-    df["production_tonnes"] = pd.to_numeric(
-        df["production_tonnes"], errors="coerce"
-    ).fillna(0.0)
+    df[value_column] = pd.to_numeric(df[value_column], errors="coerce").fillna(0.0)
     df = df[df["crop"].isin(crop_set)]
 
     if df.empty:
@@ -134,14 +144,10 @@ def build_blended_crop_shares(
         return {}, dict.fromkeys(crops, uniform)
 
     by_country_crop = (
-        df.groupby(["country", "crop"], as_index=False)["production_tonnes"]
-        .sum()
-        .copy()
+        df.groupby(["country", "crop"], as_index=False)[value_column].sum().copy()
     )
     pivot = (
-        by_country_crop.pivot(
-            index="country", columns="crop", values="production_tonnes"
-        )
+        by_country_crop.pivot(index="country", columns="crop", values=value_column)
         .fillna(0.0)
         .reindex(columns=list(crops), fill_value=0.0)
     )

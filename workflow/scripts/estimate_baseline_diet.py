@@ -86,43 +86,50 @@ WITHIN_QCL_FOOD_SPLITS: dict[str, float] = {
 # group as follows. The entry defines one or more sub-projections; each
 # sub-projection pools several FBS item codes (``pool_codes``) and
 # distributes the pooled supply across a set of modelled foods
-# (``projection_foods``) by a per-country/global blended crop-production
-# share. ``crop_to_food`` maps FAOSTAT crop names (as they appear in
-# faostat_crop_production.csv) to the modelled food names so the
-# crop-share table is keyed consistently with ``projection_foods``.
+# (``projection_foods``) by a per-(country, food) share whose source is
+# named by ``share_method`` (see ``_resolve_sub_spec_shares``):
+#
+#   * ``"blend"`` (default): country/global production-share blend built
+#     from FAOSTAT crop production. ``blend_weight`` sets the country
+#     weight; ``crop_to_food`` maps FAOSTAT crop names to model food
+#     names where they differ.
+#   * ``"frt_attribution"``: per-(country, crop) target_production_tonnes
+#     read from the supply-side build_frt_area_attribution table, so the
+#     demand-side within-pool split mirrors the supply-side attribution
+#     exactly.
 #
 # The split is symmetric with the supply-side GAEZ-RES06 attribution:
 # each modelled food's supply comes from FAOSTAT direct area plus a share
 # of the module's residual raster area; pooling explicit FBS codes
 # alongside the residual FBS code makes the demand-side within-module
-# split use the same production-share blend.
+# split match the supply-side split.
 #
 # Spec shape per entry:
 #   - ``food_group``: name of the model food group to rebuild.
-#   - ``projections``: list of sub-projections, each with
-#     ``pool_codes`` (tuple of FBS item codes whose supplies are pooled),
-#     ``projection_foods`` (modelled foods that absorb the pool),
-#     ``blend_weight`` (country/global crop-share blend), and
-#     ``crop_to_food`` (optional FAOSTAT-name -> model-food rename).
-#   For the common single-projection case, a top-level shorthand
-#   (``pool_codes`` + ``projection_foods`` + ``blend_weight`` +
-#   ``crop_to_food``) is auto-converted to a one-element ``projections``
-#   list at runtime.
+#   - ``projections``: list of sub-projections, each with the keys named
+#     above plus ``share_method`` and its method-specific arguments.
+#   For the common single-projection case, the sub-spec fields can be
+#   inlined at the top level; ``_normalise_projection_spec`` wraps it
+#   into a one-element ``projections`` list at runtime.
 #
-# Fruits uses two sub-projections (one per GAEZ-RES06 module / data
-# source) so demand attribution mirrors the module-aligned supply:
-#   * BAN module: plantain FBS 2616 -> banana exclusively. Banana
-#     FBS 2615 stays explicit (banana has its own BAN raster).
-#   * FRT module + CROPGRIDS apple: all citrus FBS codes, apple FBS
-#     2617, plus the unmodelled-fruit residual FBS codes (pineapples,
-#     dates, "Fruits, other") are pooled and split across citrus, mango,
-#     watermelon, and apple.
+# Fruits uses two sub-projections so demand attribution mirrors the
+# module-aligned supply:
+#   * BAN module (blend): plantain FBS 2616 -> banana exclusively.
+#     Banana FBS 2615 stays explicit (banana has its own BAN raster).
+#   * FRT module + CROPGRIDS apple (frt_attribution): all citrus FBS
+#     codes, apple FBS 2617, plus the unmodelled-fruit residual FBS
+#     codes (pineapples, dates, "Fruits, other") are pooled and split
+#     across citrus, mango, watermelon, and apple using the supply-side
+#     target_production_tonnes. This closes the area-vs-production-share
+#     asymmetry between FRT supply attribution and the blend-based
+#     demand split that would otherwise leave per-fruit slack.
 # Grapes (FBS 2620) are intentionally excluded; see diet/food_group_projection.py.
 POOL_PROJECTIONS: list[dict[str, object]] = [
     {
         "food_group": "vegetables",
         "pool_codes": OVG_POOL_ITEM_CODES,
         "projection_foods": OVG_CROPS,
+        "share_method": "blend",
         "blend_weight": OVG_COUNTRY_SHARE_BLEND,
         "crop_to_food": None,  # FAOSTAT crop names already match foods
     },
@@ -130,6 +137,7 @@ POOL_PROJECTIONS: list[dict[str, object]] = [
         "food_group": "nuts_seeds",
         "pool_codes": NUTS_POOL_ITEM_CODES,
         "projection_foods": NUTS_PROJECTION_FOODS,
+        "share_method": "blend",
         "blend_weight": NUTS_COUNTRY_SHARE_BLEND,
         "crop_to_food": {
             "groundnut": "groundnut",
@@ -142,6 +150,7 @@ POOL_PROJECTIONS: list[dict[str, object]] = [
         "food_group": "starchy_vegetable",
         "pool_codes": STARCHY_POOL_ITEM_CODES,
         "projection_foods": STARCHY_PROJECTION_FOODS,
+        "share_method": "blend",
         "blend_weight": STARCHY_COUNTRY_SHARE_BLEND,
         "crop_to_food": {
             "white-potato": "potato",
@@ -156,14 +165,14 @@ POOL_PROJECTIONS: list[dict[str, object]] = [
             {
                 "pool_codes": FRUITS_BAN_POOL_ITEM_CODES,
                 "projection_foods": FRUITS_BAN_PROJECTION_FOODS,
+                "share_method": "blend",
                 "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
                 "crop_to_food": None,
             },
             {
                 "pool_codes": FRUITS_FRT_POOL_ITEM_CODES,
                 "projection_foods": FRUITS_FRT_PROJECTION_FOODS,
-                "blend_weight": FRUITS_COUNTRY_SHARE_BLEND,
-                "crop_to_food": None,
+                "share_method": "frt_attribution",
             },
         ],
     },
@@ -494,8 +503,14 @@ def build_within_group_shares(
     food_groups_included: list[str],
     byproducts: list[str],
     carcass_to_retail_meat: dict[str, float],
+    frt_attribution_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Build within-group food shares per country from FAOSTAT data.
+
+    ``frt_attribution_df`` carries the supply-side per-(country, crop)
+    FRT target_production_tonnes table from ``build_frt_area_attribution``;
+    it is consumed by the fruits FRT sub-projection so demand attribution
+    mirrors supply attribution exactly (see ``_project_pooled_supply``).
 
     Returns DataFrame with columns: country, food, food_group, share
     """
@@ -662,6 +677,7 @@ def build_within_group_shares(
             fbs_supply=fbs_supply,
             countries=countries,
             crop_production_df=crop_production_df,
+            frt_attribution_df=frt_attribution_df,
         )
     group_total_weight = shares_df.groupby(["country", "food_group"])[
         "supply_weight"
@@ -690,14 +706,52 @@ def _normalise_projection_spec(spec: dict) -> list[dict]:
     """
     if "projections" in spec:
         return list(spec["projections"])
-    return [
-        {
-            "pool_codes": tuple(int(c) for c in spec["pool_codes"]),
-            "projection_foods": spec["projection_foods"],
-            "blend_weight": spec["blend_weight"],
-            "crop_to_food": spec["crop_to_food"],
-        }
-    ]
+    sub = {k: v for k, v in spec.items() if k != "food_group"}
+    sub["pool_codes"] = tuple(int(c) for c in sub["pool_codes"])
+    return [sub]
+
+
+def _resolve_sub_spec_shares(
+    sub: dict,
+    active: list[str],
+    crop_production_df: pd.DataFrame,
+    frt_attribution_df: pd.DataFrame,
+) -> tuple[dict[tuple[str, str], float], dict[str, float]]:
+    """Dispatch to the share-source named by ``sub["share_method"]``.
+
+    Returns ``(per_country_share_lookup, global_share)`` in the shape
+    used by ``_project_pooled_supply``. The default method "blend"
+    computes a country/global production-share blend from FAOSTAT crop
+    production. "frt_attribution" instead reads the supply-side
+    target_production_tonnes table emitted by build_frt_area_attribution,
+    so that the demand-side within-pool split exactly mirrors the
+    supply-side attribution. Pass blend_weight=1.0 inside the attribution
+    branch to keep per-country shares pure (global fallback only when a
+    country reports no FRT target).
+    """
+    method = sub.get("share_method", "blend")
+    if method == "blend":
+        crop_to_food = sub.get("crop_to_food")
+        if crop_to_food is None:
+            df = crop_production_df
+        else:
+            df = crop_production_df.copy()
+            df["crop"] = df["crop"].astype(str).str.strip().map(crop_to_food)
+            df = df[df["crop"].notna()]
+        return build_blended_crop_shares(
+            df, active, blend_weight=float(sub["blend_weight"])
+        )
+    if method == "frt_attribution":
+        return build_blended_crop_shares(
+            frt_attribution_df,
+            active,
+            blend_weight=1.0,
+            value_column="target_production_tonnes",
+        )
+    raise ValueError(
+        f"Unknown share_method {method!r} in POOL_PROJECTIONS sub-spec; "
+        "expected 'blend' or 'frt_attribution'."
+    )
 
 
 def _project_pooled_supply(
@@ -711,6 +765,7 @@ def _project_pooled_supply(
     fbs_supply: dict[tuple[str, int], float],
     countries: list[str],
     crop_production_df: pd.DataFrame,
+    frt_attribution_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Rebuild within-group supply weights via pooled FBS projection.
 
@@ -723,8 +778,8 @@ def _project_pooled_supply(
       * **One projected contribution per sub-spec** — for each sub-spec
         whose ``projection_foods`` includes this food, a share of the
         pooled FBS supply (sum of ``pool_codes`` supplies), weighted by
-        the per-country/global blended crop-production share of the
-        sub-spec's projection_foods.
+        the per-(country, food) share computed by the sub-spec's
+        ``share_method``.
 
     Splitting a group's pool across several sub-specs lets demand
     attribution mirror GAEZ-module-aligned supply attribution. For
@@ -736,17 +791,24 @@ def _project_pooled_supply(
       - ``pool_codes`` (tuple[int]): FBS items whose supplies are pooled.
       - ``projection_foods`` (sequence[str]): modelled foods that absorb
         the pool.
-      - ``blend_weight`` (float): country/global crop-share blend.
-      - ``crop_to_food`` (dict|None): FAOSTAT-crop-name -> model-food
-        rename (None when names already match).
+      - ``share_method`` (str): "blend" (default) computes a
+        country/global production-share blend from
+        ``crop_production_df``; "frt_attribution" reads the supply-side
+        target_production_tonnes from ``frt_attribution_df`` so demand
+        attribution mirrors the supply attribution exactly.
+      - ``blend_weight`` (float, ``share_method="blend"`` only):
+        country/global blend weight.
+      - ``crop_to_food`` (dict|None, ``share_method="blend"`` only):
+        FAOSTAT-crop-name -> model-food rename (None when names match).
     """
     group_foods = [food for food in included_foods if fg_map.get(food) == food_group]
     if not group_foods:
         return shares_df
 
-    # Pre-resolve each sub-spec: production-share lookups and the
-    # set-union of pool codes (used to filter the explicit-supply path
-    # so a food whose FBS code lives in the pool doesn't double-count).
+    # Pre-resolve each sub-spec: per-(country, food) share lookups and
+    # the set-union of pool codes (used to filter the explicit-supply
+    # path so a food whose FBS code lives in the pool doesn't
+    # double-count).
     sub_resolved: list[dict] = []
     all_pool_codes: set[int] = set()
     for sub in sub_specs:
@@ -759,20 +821,8 @@ def _project_pooled_supply(
             )
             continue
 
-        crop_to_food = sub.get("crop_to_food")
-        if crop_to_food is None:
-            prod_for_shares = crop_production_df
-        else:
-            prod_for_shares = crop_production_df.copy()
-            prod_for_shares["crop"] = (
-                prod_for_shares["crop"].astype(str).str.strip().map(crop_to_food)
-            )
-            prod_for_shares = prod_for_shares[prod_for_shares["crop"].notna()]
-
-        share_lookup, global_share = build_blended_crop_shares(
-            prod_for_shares,
-            active,
-            blend_weight=float(sub["blend_weight"]),
+        share_lookup, global_share = _resolve_sub_spec_shares(
+            sub, active, crop_production_df, frt_attribution_df
         )
         sub_resolved.append(
             {
@@ -1178,6 +1228,7 @@ def main():
     nutrition_path = snakemake.input.nutrition
     crop_production_path = snakemake.input.crop_production
     animal_production_path = snakemake.input.animal_production
+    frt_attribution_path = snakemake.input.frt_attribution
     food_item_map_path = snakemake.input.food_item_map
     qcl_resolution_path = snakemake.input.qcl_resolution
     food_groups_path = snakemake.input.food_groups
@@ -1223,6 +1274,7 @@ def main():
     qcl_resolution_df = pd.read_csv(qcl_resolution_path, comment="#")
     crop_production_df = pd.read_csv(crop_production_path)
     animal_production_df = pd.read_csv(animal_production_path)
+    frt_attribution_df = pd.read_csv(frt_attribution_path)
     flw_df = pd.read_csv(food_loss_waste_path)
 
     # Build group-basis mapping from food_basis + food_groups
@@ -1290,6 +1342,7 @@ def main():
         food_groups_included,
         byproducts,
         carcass_to_retail_meat,
+        frt_attribution_df,
     )
     # Exclude direct foods from shares — they don't participate in the
     # group_total x share disaggregation.

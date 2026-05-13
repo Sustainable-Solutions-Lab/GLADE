@@ -244,3 +244,30 @@ class TestBuildBlendedCropShares:
         for country in ["A", "B"]:
             total = sum(lookup[(country, c)] for c in crops)
             assert total == pytest.approx(1.0)
+
+    # -----------------------------------------------------------------------
+    # 9. Custom value_column (e.g. FRT supply-side target_production_tonnes)
+    # -----------------------------------------------------------------------
+
+    def test_custom_value_column(self):
+        """``value_column`` lets the same blending operate on any per-(country,
+        crop) weight table, e.g. supply-side target_production_tonnes."""
+        df = pd.DataFrame(
+            {
+                "country": ["A", "A", "B", "B"],
+                "crop": ["apple", "citrus", "apple", "citrus"],
+                "target_production_tonnes": [40.0, 60.0, 50.0, 50.0],
+            }
+        )
+        lookup, global_shares = build_blended_crop_shares(
+            df,
+            ["apple", "citrus"],
+            blend_weight=1.0,
+            value_column="target_production_tonnes",
+        )
+        # Pure country shares (blend_weight=1.0): A → apple 0.4 / citrus 0.6.
+        assert lookup[("A", "apple")] == pytest.approx(0.4)
+        assert lookup[("A", "citrus")] == pytest.approx(0.6)
+        # Global totals 90 / 110: apple 90/200=0.45, citrus 110/200=0.55.
+        assert global_shares["apple"] == pytest.approx(90.0 / 200.0)
+        assert global_shares["citrus"] == pytest.approx(110.0 / 200.0)

@@ -282,6 +282,10 @@ rule estimate_baseline_diet:
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
         crop_production="<processing>/{name}/faostat_crop_production.csv",
         animal_production="<processing>/{name}/faostat_animal_production.csv",
+        # Supply-side per-(country, crop) FRT target_production_tonnes;
+        # consumed by the fruits FRT sub-projection so demand attribution
+        # mirrors supply within the FRT pool (citrus/mango/watermelon/apple).
+        frt_attribution="<processing>/{name}/frt_area_attribution.csv",
         food_item_map="data/curated/faostat_food_item_map.csv",
         qcl_resolution="data/curated/faostat_food_qcl_resolution.csv",
         food_groups="data/curated/food_groups.csv",
