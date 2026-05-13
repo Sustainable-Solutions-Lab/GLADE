@@ -333,7 +333,14 @@ within-bucket overrides:
 * ``pearl-millet`` / ``foxtail-millet`` (both QCL "Millet"): a fixed
   80 / 20 global split based on literature production shares.
 * ``dairy`` / ``dairy-buffalo`` (both FBS 2848): QCL items 882 and 951
-  resolve the cow / buffalo split.
+  resolve the cow / buffalo split. The split is then post-processed by
+  ``cap_buffalo_share_at_production`` to cap each country's buffalo
+  share at its domestic buffalo production (buffalo milk has very
+  limited international trade), with any excess share reassigned to
+  cow dairy. Without the cap, GBD-anchored dairy intake exceeds
+  domestic milk production in buffalo-heavy importers (PAK is the
+  textbook case) and the production-share split over-allocates buffalo
+  demand, surfacing as unrelievable buffalo shortage at solve.
 
 **Module-pool projection.** For food groups whose modelled foods share
 a GAEZ RES06 supply-side module, the demand-side attribution pools all

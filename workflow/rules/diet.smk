@@ -286,6 +286,9 @@ rule estimate_baseline_diet:
         # consumed by the fruits FRT sub-projection so demand attribution
         # mirrors supply within the FRT pool (citrus/mango/watermelon/apple).
         frt_attribution="<processing>/{name}/frt_area_attribution.csv",
+        # Population by country for the dairy-buffalo cap (converts per-
+        # capita intake to mass for comparison against domestic production).
+        population="<processing>/{name}/population.csv",
         food_item_map="data/curated/faostat_food_item_map.csv",
         qcl_resolution="data/curated/faostat_food_qcl_resolution.csv",
         food_groups="data/curated/food_groups.csv",

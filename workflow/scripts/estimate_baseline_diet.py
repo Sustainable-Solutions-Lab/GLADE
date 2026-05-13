@@ -493,6 +493,104 @@ def log_gdd_gbd_agreement(
         )
 
 
+def cap_buffalo_share_at_production(
+    shares_df: pd.DataFrame,
+    group_totals: pd.DataFrame,
+    animal_production_df: pd.DataFrame,
+    population_df: pd.DataFrame,
+    flw_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Cap dairy-buffalo within-group share at country's domestic buffalo production.
+
+    Buffalo milk has very limited international trade — production is
+    concentrated in South Asia and most output is consumed within the
+    producing country. The default within-group split allocates a country's
+    GBD-anchored dairy intake to cow vs buffalo by QCL production share,
+    which over-allocates buffalo demand wherever total dairy intake exceeds
+    domestic milk production (PAK is the textbook case): the gap shows up
+    as buffalo shortage at solve, with no global buffalo to import.
+
+    The fix is to assume that internationally-tradeable cow milk fills any
+    marginal demand a country cannot meet from local buffalo. For each
+    country, when the buffalo food-bus demand
+    ``buffalo_share * dairy_intake / (1 - dairy_waste)`` exceeds domestic
+    buffalo production, the buffalo share is capped so the food-bus
+    demand exactly matches production, and the freed share is reassigned
+    to dairy (cow). Countries whose buffalo demand already fits within
+    production are untouched.
+
+    The cap is conservative — it ignores the small (~few Mt globally)
+    buffalo trade out of India / Nepal / Egypt — but the rounding error is
+    much smaller than the shortage it closes.
+    """
+    pop_lookup = population_df.set_index("iso3")["population"].to_dict()
+    ap = animal_production_df[animal_production_df["product"] == "dairy-buffalo"]
+    buffalo_prod = ap.set_index("country")["production_mt_fresh_retail"].to_dict()
+    group_total_lookup = (
+        group_totals[group_totals["food_group"] == "dairy"]
+        .set_index("country")["group_total_g_per_day"]
+        .to_dict()
+    )
+    waste_lookup = (
+        flw_df[flw_df["food_group"] == "dairy"]
+        .set_index("country")["waste_fraction"]
+        .to_dict()
+    )
+
+    out = shares_df.copy()
+    log_rows: list[tuple] = []
+    for country, group_total_g_per_day in group_total_lookup.items():
+        mask_buf = (out["country"] == country) & (out["food"] == "dairy-buffalo")
+        if not mask_buf.any():
+            continue
+        share_buf = float(out.loc[mask_buf, "share"].iloc[0])
+        if share_buf <= 0.0:
+            continue
+        pop = float(pop_lookup.get(country, 0.0))
+        if pop <= 0.0 or group_total_g_per_day <= 0:
+            continue
+        # Intake mass in Mt/year (g/day * persons * 365 / 1e12).
+        intake_total_mt = group_total_g_per_day * pop * 365.0 / 1e12
+        # Translate to food-bus demand (consume.p_set in the model):
+        # the build step inflates intake by 1/(1-waste) so the
+        # consumer-eaten share lands at the GBD-anchored intake.
+        waste = float(waste_lookup.get(country, 0.0))
+        if not 0.0 <= waste < 1.0:
+            waste = 0.0
+        demand_buf_mt = share_buf * intake_total_mt / (1.0 - waste)
+        supply_buf_mt = float(buffalo_prod.get(country, 0.0))
+        if demand_buf_mt <= supply_buf_mt:
+            continue
+        max_share_buf = supply_buf_mt * (1.0 - waste) / intake_total_mt
+        shift = share_buf - max_share_buf
+        out.loc[mask_buf, "share"] = max_share_buf
+        mask_cow = (out["country"] == country) & (out["food"] == "dairy")
+        if mask_cow.any():
+            out.loc[mask_cow, "share"] += shift
+        log_rows.append(
+            (country, share_buf, max_share_buf, demand_buf_mt, supply_buf_mt)
+        )
+
+    if log_rows:
+        logger.info(
+            "Buffalo share capped in %d countries (food-bus demand > production); "
+            "excess reassigned to dairy (cow). Top by absolute shift:",
+            len(log_rows),
+        )
+        for c, old, new, d, s in sorted(
+            log_rows, key=lambda r: r[3] - r[4], reverse=True
+        )[:8]:
+            logger.info(
+                "  %s: %.2f→%.2f (food-bus demand %.1f Mt > buffalo prod %.1f Mt)",
+                c,
+                old,
+                new,
+                d,
+                s,
+            )
+    return out
+
+
 def build_within_group_shares(
     food_groups_df: pd.DataFrame,
     food_item_map_df: pd.DataFrame,
@@ -1229,6 +1327,7 @@ def main():
     crop_production_path = snakemake.input.crop_production
     animal_production_path = snakemake.input.animal_production
     frt_attribution_path = snakemake.input.frt_attribution
+    population_path = snakemake.input.population
     food_item_map_path = snakemake.input.food_item_map
     qcl_resolution_path = snakemake.input.qcl_resolution
     food_groups_path = snakemake.input.food_groups
@@ -1275,6 +1374,7 @@ def main():
     crop_production_df = pd.read_csv(crop_production_path)
     animal_production_df = pd.read_csv(animal_production_path)
     frt_attribution_df = pd.read_csv(frt_attribution_path)
+    population_df = pd.read_csv(population_path)
     flw_df = pd.read_csv(food_loss_waste_path)
 
     # Build group-basis mapping from food_basis + food_groups
@@ -1344,6 +1444,13 @@ def main():
         carcass_to_retail_meat,
         frt_attribution_df,
     )
+    # Cap dairy-buffalo shares at domestic production so countries
+    # whose total milk intake exceeds production (PAK is the headline
+    # case) don't accumulate unrelievable buffalo shortage at solve.
+    shares = cap_buffalo_share_at_production(
+        shares, group_totals, animal_production_df, population_df, flw_df
+    )
+
     # Exclude direct foods from shares — they don't participate in the
     # group_total x share disaggregation.
     if direct_food_names:
