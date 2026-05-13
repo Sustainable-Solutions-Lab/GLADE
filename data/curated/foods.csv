@@ -25,6 +25,10 @@
 #                         (Module VI OOC group reports yield in oil-equivalent t/ha;
 #                          v4 Model Documentation Table 9-2 documents the same convention.)
 # - USDA_ARS_DDGS: https://www.ars.usda.gov/research/publications/publication/?seqNo115=243737
+# - CRA_WET_MILL: https://corn.org/wp-content/uploads/2018/10/Feed2006.pdf
+#                         (Corn Refiners Association "Corn Wet Milled Feed Products"; per
+#                          56-lb bushel of corn: 32 lb starch, 11.4 lb gluten feed, 3 lb
+#                          gluten meal, 1.6 lb corn oil.)
 # - GLEAM_TABLE_3_3: data/bundled/gleam3/ruminants_feed_yield_fractions.csv
 # - NCC_COTTONSEED: https://www.cotton.org/pubs/cottoncounts/fieldtofabric/cottonseed.cfm
 # - FEEDIPEDIA_COPRA: https://www.feedipedia.org/node/46
@@ -106,6 +110,9 @@ sugarcane_ethanol,sugarcane,sugarcane-ethanol,0.87,Fuel-equivalent DM fraction r
 sugarcane_ethanol,sugarcane,molasses,0.13,Molasses byproduct from sugarcane ethanol (GLEAM Table 3.3),GLEAM_TABLE_3_3
 maize_ethanol,maize,maize-ethanol,0.68,Fuel-equivalent DM fraction retained as complement to DDGS fraction,USDA_ARS_DDGS
 maize_ethanol,maize,ddgs,0.32,DDGS byproduct from corn ethanol (USDA ARS reports about 18 lb DDGS per 56 lb corn bushel),USDA_ARS_DDGS
+maize_wetmill,maize,maize-starch,0.571,"Maize starch from wet milling (Corn Refiners Association: 32 lb starch per 56 lb corn bushel). Bulk product used industrially or converted to HFCS/glucose; no human-food sink in the model, routed to byproducts.",CRA_WET_MILL
+maize_wetmill,maize,maize-gluten-feed,0.204,"Corn gluten feed (MZGLTF) byproduct of corn wet milling (CRA: 11.4 lb per 56 lb bushel). ~21 % crude protein.",CRA_WET_MILL
+maize_wetmill,maize,maize-gluten-meal,0.054,"Corn gluten meal (MZGLTM) byproduct of corn wet milling (CRA: 3 lb per 56 lb bushel). ~60 % crude protein.",CRA_WET_MILL
 cocoa_beans,cocoa,cocoa-powder,1.0,Dried cocoa beans (no further processing modeled),
 coffee_green_beans,coffee,coffee-green,1.0,Green coffee beans (no further processing modeled),
 tea_dried_leaves,tea,tea-dried,1.0,Dried tea leaves (no further processing modeled),

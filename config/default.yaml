@@ -385,6 +385,9 @@ byproducts:
 - ddgs
 - molasses
 - maize-ethanol
+- maize-gluten-feed
+- maize-gluten-meal
+- maize-starch
 - sugarcane-ethanol
 - cotton-lint
 

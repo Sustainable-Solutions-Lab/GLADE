@@ -41,6 +41,8 @@ sugarbeet,10.6,"Fodder beet, raw",Sugar beet roots (on DM basis)
 sugarcane-tops,6.6,Wheat straw,No sugarcane tops - using wheat straw as general plant residue proxy
 oilseed-meal,7.2,"Sunflower meal, oil < 5%, dehulled",Generic oilseed meal (using sunflower meal as representative)
 palm-kernel-meal,4.8,"Palm kernel meal, oil 5-20%",Palm kernel cake from mechanical extraction (Feedipedia)
+maize-gluten-meal,1.5,Corn gluten meal,High-protein wet-milling byproduct (Feedipedia: 1–2 % DM)
+maize-gluten-feed,7.0,Corn gluten feed,Lower-protein wet-milling byproduct (Feedipedia)
 wetland-rice,1.0,"Rice, polished, broken",Polished rice grain
 wheat,1.8,"Wheat, soft",Wheat grain
 wheat-bran,5.6,Wheat bran,Wheat bran

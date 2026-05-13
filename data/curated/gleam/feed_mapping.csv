@@ -61,8 +61,8 @@ MLOILSDS,oilseed-meal,food,monogastric,Other oilseed meals → oilseed meal
 PKEXP,palm-kernel-meal,food,both,"Palm kernel cake — byproduct of palm kernel oil extraction (Feedipedia: ~17 % CP, ~5–12 % residual oil, high fibre). Modelled via the palm_oil pathway in foods.csv at 0.022 t PKM per t FFB."
 GRNBYDRY,wheat-bran,food,both,"Dry grain byproducts (brans, middlings) → wheat bran"
 GRNBYWET,ddgs,food,both,DDGS from grain ethanol production (wet grain byproducts)
-MZGLTM,,food,ruminant,Maize gluten meal (high protein) - not in model
-MZGLTF,,food,ruminant,Maize gluten feed (lower protein) - not in model
+MZGLTM,maize-gluten-meal,food,ruminant,"Corn gluten meal byproduct of wet-milling, ~60 % CP. Produced by the maize_wetmill pathway."
+MZGLTF,maize-gluten-feed,food,ruminant,"Corn gluten feed byproduct of wet-milling, ~21 % CP. Produced by the maize_wetmill pathway."
 BPULP,,food,ruminant,Sugar beet pulp - not in model
 MOLASSES,molasses,food,both,Sugarcane molasses from ethanol production
 RAPESEED,rapeseed,crop,monogastric,Rapeseed whole seeds
