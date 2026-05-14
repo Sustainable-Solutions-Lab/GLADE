@@ -56,7 +56,7 @@ Code Organization
 - Stage 1 (Intake → log(RR)):
     - _build_store_to_cluster_map: Map stores to clusters with per-capita coefficients
     - _build_intake_breakpoints: Build breakpoint grids per risk factor
-    - _group_cluster_risk_pairs: Group pairs by shared breakpoints for efficiency
+    - _group_cluster_risk_pairs: Group pairs by risk_factor for efficient batching
     - _add_stage1_constraints: Main Stage 1 logic
     - _add_stage1_delta: δ variables + segment indicators
 - Stage 2 (log(RR) → YLL):
@@ -287,35 +287,34 @@ def _build_intake_breakpoints(risk_breakpoints: pd.DataFrame) -> dict:
 
 def _group_cluster_risk_pairs(
     store_map: pd.DataFrame, intake_data: dict
-) -> dict[tuple[float, ...], list[tuple[int, str]]]:
-    """Group (cluster, risk) pairs by shared intake coordinate patterns.
+) -> dict[str, list[tuple[int, str]]]:
+    """Group (cluster, risk) pairs by risk_factor.
 
-    Pairs with identical breakpoint grids share a single SOS2 variable set,
-    improving solver efficiency. The intake grid (x values) is typically shared
-    across clusters for the same risk factor, so clusters still batch together
-    even though log_rr values differ per cluster.
+    All clusters share the same intake grid for a given risk (the grid is
+    built once per risk in prepare_health_costs), and risk_cause_map keys
+    the cause set by risk, so grouping by risk_factor lets a single SOS2 /
+    delta variable array span all clusters for that risk while keeping
+    cause columns aligned.
     """
     unique_pairs = store_map[["cluster", "risk_factor"]].drop_duplicates()
 
-    intake_groups: dict[tuple[float, ...], list[tuple[int, str]]] = defaultdict(list)
+    risk_groups: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for _, row in unique_pairs.iterrows():
         cluster = int(row["cluster"])
         risk = row["risk_factor"]
 
-        risk_table = intake_data.get((cluster, risk))
-        if risk_table is None:
+        if (cluster, risk) not in intake_data:
             continue
 
-        coords_key = tuple(risk_table["intake_values"].values)
-        intake_groups[coords_key].append((cluster, risk))
+        risk_groups[risk].append((cluster, risk))
 
-    return intake_groups
+    return risk_groups
 
 
 def _add_stage1_constraints(
     m: linopy.Model,
     store_map: pd.DataFrame,
-    intake_groups: dict[tuple[float, ...], list[tuple[int, str]]],
+    intake_groups: dict[str, list[tuple[int, str]]],
     intake_data: dict,
     store_level_var: xr.DataArray,
     baseline_intakes: dict[tuple[int, str], float],
@@ -339,7 +338,7 @@ def _add_stage1_constraints(
     store_map
         Store mapping from _build_store_to_cluster_map.
     intake_groups
-        (cluster, risk) pairs grouped by intake coordinates.
+        (cluster, risk) pairs grouped by risk_factor.
     intake_data
         Breakpoint data from _build_intake_breakpoints.
     store_level_var
@@ -357,13 +356,12 @@ def _add_stage1_constraints(
     log_rr_totals: dict[tuple[int, str], linopy.LinearExpression] = {}
     start_entries: dict[int, float] = {}
 
-    # Process (cluster, risk) pairs in groups that share the same intake breakpoints.
-    # This batches constraint creation for efficiency - pairs with identical
-    # breakpoint grids can share a single variable array.
-    for _intake_grid, cluster_risk_pairs in intake_groups.items():
-        # Get intake grid for this group (all pairs share same x breakpoints)
-        first_cluster, first_risk = cluster_risk_pairs[0]
-        risk_table = intake_data[(first_cluster, first_risk)]
+    # Process (cluster, risk) pairs grouped by risk_factor. All clusters within
+    # one risk share the same intake breakpoints and cause set, so a single
+    # variable array can span every (cluster, risk) pair in the group.
+    for risk_name, cluster_risk_pairs in intake_groups.items():
+        first_cluster, _ = cluster_risk_pairs[0]
+        risk_table = intake_data[(first_cluster, risk_name)]
         intake_values = risk_table["intake_values"]
 
         # Build labels and dataframes for this group
@@ -422,17 +420,14 @@ def _add_stage1_constraints(
         if not log_rr_frames:
             continue
 
-        # Concat along cluster_risk dimension. When an intake group bundles
-        # several risk factors that share an intake grid but cover different
-        # causes (e.g. fruits = [CHD, Stroke, T2DM] vs vegetables = [CHD,
-        # Stroke]), the union of cause columns introduces structural NaNs
-        # for risk_factors that don't act on the missing cause. Those slots
-        # contribute zero to log(RR) for that cause, so fill them with 0.0.
+        # Concat along cluster_risk dimension. All frames in the group share
+        # the same risk_factor (hence the same cause columns), so the column
+        # union is trivial and no NaNs are introduced.
         combined_log_rr = pd.concat(
             log_rr_frames,
             keys=cluster_risk_index,
             names=["cluster_risk", "intake_step"],
-        ).fillna(0.0)
+        )
 
         # Convert to DataArray: (cluster_risk, intake_step, cause)
         stacked_log_rr = combined_log_rr.stack()
@@ -448,7 +443,7 @@ def _add_stage1_constraints(
             intake_values=intake_values,
             log_rr_by_intake=log_rr_by_intake,
             cluster_risk_index=cluster_risk_index,
-            risk_label=str(first_risk),
+            risk_label=risk_name,
             cluster_risk_pairs=cluster_risk_pairs,
             baseline_intakes=baseline_intakes,
             start_entries=start_entries,
