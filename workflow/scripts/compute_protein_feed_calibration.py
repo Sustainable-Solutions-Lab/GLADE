@@ -9,7 +9,7 @@ country and each protein feed category (``monogastric_protein``,
 ``ruminant_protein``), the positive slack on the corresponding feed bus is
 recorded as an exogenous supply that the model can rely on at solve time.
 
-Rationale: roughly 10–15% of global protein-feed demand cannot be produced
+Rationale: roughly 10-15% of global protein-feed demand cannot be produced
 endogenously by the model. The missing sources are fishmeal (seafood
 isn't modelled), synthetic amino acids, animal by-products (meat & bone
 meal, blood, feathers) and — until the corresponding processing pathways
@@ -36,9 +36,7 @@ logger = logging.getLogger(__name__)
 PROTEIN_CATEGORIES = ("monogastric_protein", "ruminant_protein")
 
 
-def _positive_slack_by_country(
-    n: pypsa.Network, feed_category: str
-) -> pd.Series:
+def _positive_slack_by_country(n: pypsa.Network, feed_category: str) -> pd.Series:
     """Return positive feed slack (Mt DM) by country for one protein bus."""
     bus_prefix = f"feed:{feed_category}:"
     pos_slack = n.generators.static[
@@ -102,12 +100,8 @@ def compute_protein_feed_calibration(
         rows, columns=["country", *[f"{c}_mt_dm" for c in PROTEIN_CATEGORIES]]
     )
 
-    totals = {
-        cat: float(deficits[cat].sum()) for cat in PROTEIN_CATEGORIES
-    }
-    n_nonzero = {
-        cat: int((deficits[cat] > 0).sum()) for cat in PROTEIN_CATEGORIES
-    }
+    totals = {cat: float(deficits[cat].sum()) for cat in PROTEIN_CATEGORIES}
+    n_nonzero = {cat: int((deficits[cat] > 0).sum()) for cat in PROTEIN_CATEGORIES}
     logger.info(
         "Protein-feed calibration: %s",
         ", ".join(

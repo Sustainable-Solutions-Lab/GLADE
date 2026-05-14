@@ -767,18 +767,18 @@ sources that the model does not produce endogenously:
    * - Palm kernel cake (PKEXP)
      - ~10
      - Modelled in the model: an extra coproduct on the ``palm_oil``
-       pathway in ``foods.csv``. See :ref:`palm-kernel-pathway`.
+       pathway in ``foods.csv``. See :ref:`palm-kernel pathway <palm-kernel-pathway>`.
    * - Maize gluten meal / feed (MZGLTM, MZGLTF)
      - ~5 + ~10
      - Modelled in the model via the new ``maize_wetmill`` pathway in
-       ``foods.csv``. See :ref:`maize-wetmill-pathway`.
+       ``foods.csv``. See :ref:`maize wet-milling pathway <maize-wetmill-pathway>`.
    * - Sugar beet pulp (BPULP)
      - ~9
      - Modelled in the model as a coproduct on the
        ``sugarbeet_sugar`` pathway. Categorises as a ruminant grain
        (not protein) — included for completeness of GLEAM3's
        "By-products" intake bucket attribution. See
-       :ref:`sugarbeet-pulp-pathway`.
+       :ref:`sugar beet pulp pathway <sugarbeet-pulp-pathway>`.
 
 For the genuinely unmodellable sources (fishmeal, synthetic AAs,
 animal byproducts), the workflow adds a calibration-derived exogenous
