@@ -14,7 +14,6 @@ from workflow.scripts.compute_gleam3_feed_fractions import (
     _normalize_code,
 )
 
-
 _EMPTY_FOOD_PROD = pd.DataFrame(columns=["country", "food", "production_tonnes"])
 
 
@@ -157,7 +156,9 @@ def test_fractions_sum_to_one(
         }
     )
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
-    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"])
+    result = _compute_fractions(
+        table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"]
+    )
 
     for _, grp in result.groupby(["gleam3_category", "animal_type", "country"]):
         assert grp["fraction"].sum() == pytest.approx(1.0)
@@ -186,7 +187,9 @@ def test_zero_volume_country_uses_global_fallback(
         }
     )
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
-    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"])
+    result = _compute_fractions(
+        table, crop_production, _EMPTY_FOOD_PROD, ["USA", "GUF"]
+    )
 
     # GUF has no crop data → falls back to global fractions
     guf = result[result["country"] == "GUF"]
@@ -235,16 +238,14 @@ def test_compute_food_production_sums_pathways() -> None:
         }
     )
     # Dispatch shares: maize_wetmill is rare (~7 %), others assumed 1.0.
-    result = _compute_food_production(
-        foods, crop_production, {"maize_wetmill": 0.07}
-    )
+    result = _compute_food_production(foods, crop_production, {"maize_wetmill": 0.07})
     lookup = result.set_index(["country", "food"])["production_tonnes"].to_dict()
 
-    # USA oilseed-meal = 100 × 0.78 + 50 × 0.54 = 78 + 27 = 105
+    # USA oilseed-meal = 100 * 0.78 + 50 * 0.54 = 78 + 27 = 105
     assert lookup[("USA", "oilseed-meal")] == pytest.approx(105.0)
-    # USA maize-gluten-meal = 200 × 0.054 × 0.07 ≈ 0.756
+    # USA maize-gluten-meal = 200 * 0.054 * 0.07 ~= 0.756
     assert lookup[("USA", "maize-gluten-meal")] == pytest.approx(0.756)
-    # BRA oilseed-meal = 80 × 0.78 = 62.4
+    # BRA oilseed-meal = 80 * 0.78 = 62.4
     assert lookup[("BRA", "oilseed-meal")] == pytest.approx(62.4)
     # BRA maize-gluten-meal: no maize production → no row
     assert ("BRA", "maize-gluten-meal") not in lookup
@@ -275,9 +276,7 @@ def test_food_production_changes_fraction_weights(
     table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
 
     # Without food_production: equal weighting (both fall back to mean_tracked).
-    flat = _compute_fractions(
-        table, crop_production, _EMPTY_FOOD_PROD, ["USA"]
-    )
+    flat = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA"])
     flat_usa = flat[flat["country"] == "USA"].set_index("model_feed_category")[
         "fraction"
     ]

@@ -15,7 +15,7 @@ are computed using per-(country, entity) production volumes as weights:
 
   * Crop entities → FAOSTAT QCL crop production directly.
   * Food entities → potential production derived from foods.csv pathways
-    (Σ_pathways  crop_production × pathway_factor × dispatch_share). The
+    (sum over pathways of crop_production * pathway_factor * dispatch_share). The
     optional dispatch_share lives in ``config.gleam3_feed_attribution.
     pathway_dispatch_shares`` and corrects for pathways whose realised
     share of the source crop is well below 1.0 globally (e.g. corn
@@ -186,8 +186,8 @@ def _compute_food_production(
 
     For each food entity, sum across the pathways that produce it:
 
-        potential[country, food] = Σ_pathways
-            crop_production[country, crop] × pathway_factor × dispatch_share
+        potential[country, food] = sum over pathways of
+            crop_production[country, crop] * pathway_factor * dispatch_share
 
     where ``dispatch_share`` is the global fraction of the source crop that
     flows through this pathway in reality (defaulting to 1.0 when the
@@ -448,7 +448,7 @@ def main() -> None:
     )
 
     # Derive per-(country, food) production potential from foods.csv
-    # pathways × FAOSTAT crop production, scaled by the configured
+    # pathways * FAOSTAT crop production, scaled by the configured
     # dispatch shares.
     food_production = _compute_food_production(
         foods, crop_production, pathway_dispatch_shares
@@ -461,9 +461,7 @@ def main() -> None:
     )
 
     # Compute fractions
-    result = _compute_fractions(
-        item_table, crop_production, food_production, countries
-    )
+    result = _compute_fractions(item_table, crop_production, food_production, countries)
 
     # Validation
     duplicate_mask = result.duplicated(
