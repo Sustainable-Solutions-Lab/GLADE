@@ -11,6 +11,12 @@ Inputs:
 - ``nhanes``: NHANES (FPED-derived) USA intake, per food group.
   NHANES values are intake-based and already in model basis; they
   override the GDD-IA values for the country/items NHANES covers.
+- ``faostat_supply``: FAOSTAT FBS-derived per-(country, group) supply
+  (g/day). Used only to fill the ``animal_fat`` group where GDD-IA's
+  ``fat_ani`` is not reported (a known coverage gap on ~37 countries),
+  scaled by ``ANIMAL_FAT_SUPPLY_TO_INTAKE`` to approximate post-FLW
+  intake. Other groups in the supply file are ignored here; they enter
+  the pipeline through ``prepare_food_loss_waste``.
 
 This script's job is just the source merge. The country-level
 kcal-normalisation step (against GDD-IA's `all-fg` minus out-of-scope
@@ -33,6 +39,12 @@ import pandas as pd
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger("merge_dietary_sources")
+
+# Supply-to-intake factor for FAOSTAT FBS animal-fat fallback. FAOSTAT
+# reports household supply (kg/cap/yr); typical combined consumer
+# loss+waste for animal fats is ~15%, matching the average waste fraction
+# inherited from red_meat in prepare_food_loss_waste.
+ANIMAL_FAT_SUPPLY_TO_INTAKE = 0.85
 
 
 def _drop_overlap(
@@ -61,9 +73,34 @@ def _drop_overlap(
     return target.loc[~mask].copy()
 
 
+def _faostat_animal_fat_fallback(
+    faostat_supply: pd.DataFrame,
+    existing: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build animal_fat intake rows for countries missing from ``existing``.
+
+    GDD-IA's ``fat_ani`` is reported for ~146/175 modeled countries.
+    The remaining ~30 (mostly European) need a baseline so that the
+    ``consume:rendered-fat:{country}`` links get a non-trivial baseline
+    diet target and the piecewise utility calibration covers every link.
+    """
+    rows = faostat_supply[faostat_supply["item"] == "animal_fat"].copy()
+    if rows.empty:
+        return rows
+    have_animal_fat = set(
+        existing.loc[existing["item"] == "animal_fat", "country"].unique()
+    )
+    rows = rows[~rows["country"].isin(have_animal_fat)].copy()
+    if rows.empty:
+        return rows
+    rows["value"] = rows["value"] * ANIMAL_FAT_SUPPLY_TO_INTAKE
+    return rows
+
+
 def main() -> None:
     gdd_ia_path = snakemake.input["gdd_ia"]
     nhanes_path = snakemake.input["nhanes"]
+    faostat_path = snakemake.input["faostat_supply"]
     output_path = snakemake.output["diet"]
 
     logger.info("Reading GDD-IA dietary intake from %s", gdd_ia_path)
@@ -81,11 +118,27 @@ def main() -> None:
         "NHANES: %d rows, items %s", len(nhanes), sorted(nhanes["item"].unique())
     )
 
+    logger.info("Reading FAOSTAT food group supply from %s", faostat_path)
+    faostat_supply = pd.read_csv(faostat_path)
+
     # NHANES overrides GDD-IA for the (country, item) pairs it covers.
     gdd_ia = _drop_overlap(gdd_ia, nhanes, "NHANES")
 
-    merged = pd.concat([gdd_ia, nhanes], ignore_index=True)
-    merged = merged.sort_values(["country", "item", "age"]).reset_index(drop=True)
+    combined = pd.concat([gdd_ia, nhanes], ignore_index=True)
+
+    # Supplement animal_fat from FAOSTAT FBS supply for countries that
+    # neither GDD-IA nor NHANES covers.
+    animal_fat_supplement = _faostat_animal_fat_fallback(faostat_supply, combined)
+    if not animal_fat_supplement.empty:
+        logger.info(
+            "FAOSTAT animal_fat fallback: %d countries (%s)",
+            len(animal_fat_supplement),
+            ", ".join(sorted(animal_fat_supplement["country"].unique())[:8])
+            + ("..." if animal_fat_supplement["country"].nunique() > 8 else ""),
+        )
+        combined = pd.concat([combined, animal_fat_supplement], ignore_index=True)
+
+    merged = combined.sort_values(["country", "item", "age"]).reset_index(drop=True)
 
     merged.to_csv(output_path, index=False)
     logger.info(

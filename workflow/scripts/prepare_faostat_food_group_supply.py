@@ -63,6 +63,11 @@ FAO_ITEMS = {
     "oil": [2914],  # Vegetable Oils
     "dairy": [2848, 2740, 2743],  # Milk (excl butter), Butter/Ghee, Cream
     "sugar": [2542],  # Sugar (Raw Equivalent)
+    # Rendered animal fats (lard/tallow). GDD-IA reports fat_ani for only
+    # ~146/175 countries; merge_dietary_sources uses this as a fallback
+    # for the remaining countries so every consume:rendered-fat:* link
+    # gets a baseline value.
+    "animal_fat": [2737],  # Fats, Animals, Raw
 }
 
 # Milk→product extraction rates from FAO dairy commodity tree
@@ -147,6 +152,10 @@ def main():
             factor = DAIRY_MILK_EQUIV_FACTORS.get(item_code, 1.0)
             dairy_sum += val * factor
         supplies["dairy"] = dairy_sum
+
+        # Animal fat (rendered fat, lard/tallow)
+        animal_fat_rows = group_df[group_df["Item Code"].isin(FAO_ITEMS["animal_fat"])]
+        supplies["animal_fat"] = animal_fat_rows["Value"].sum()
 
         for item, supply_kg in supplies.items():
             supply_g = (supply_kg * 1000.0) / 365.0

@@ -156,13 +156,16 @@ rule merge_dietary_sources:
     """Merge GDD-IA dietary intake with NHANES USA override.
 
     GDD-IA mass is already in model basis (kcal-derived). NHANES is
-    already in model basis. Output is the merged ``dietary_intake.csv``;
+    already in model basis. The FAOSTAT supply file is used only as
+    a fallback for the ``animal_fat`` group on countries that GDD-IA
+    does not cover. Output is the merged ``dietary_intake.csv``;
     GBD anchoring and kcal normalisation happen in
     ``estimate_baseline_diet``.
     """
     input:
         gdd_ia="<processing>/{name}/gdd_ia_dietary_intake.csv",
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
+        faostat_supply="<processing>/{name}/faostat_food_group_supply.csv",
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
