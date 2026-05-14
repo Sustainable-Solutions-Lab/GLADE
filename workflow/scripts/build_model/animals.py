@@ -205,7 +205,7 @@ def add_feed_to_animal_product_links(
     feed_baseline: pd.DataFrame | None = None,
     enforce_baseline_feed: bool = False,
     cost_calibration: pd.Series | None = None,
-    rendered_fat_yield_per_retail: dict[str, float] | None = None,
+    co_products: dict[str, dict] | None = None,
 ) -> None:
     """Add links that convert feed pools into animal products with emissions and manure N.
 
@@ -526,24 +526,27 @@ def add_feed_to_animal_product_links(
     link_df["efficiency3"] = link_df["n_fert_per_t_feed"]
     link_df["efficiency4"] = link_df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE
 
-    # Rendered-fat co-product (tallow for cattle, lard for pigs).
-    # Yields are configured per product in
-    # animal_products.rendered_fat_yield_per_retail (Mt rendered fat per
-    # Mt retail meat). Products not listed yield no rendered fat.
-    fat_yield_map = {
-        str(k): float(v) for k, v in (rendered_fat_yield_per_retail or {}).items()
-    }
-    link_df["rendered_fat_yield"] = link_df["product"].map(fat_yield_map).fillna(0.0)
-    link_df["efficiency5"] = (
-        link_df["adjusted_efficiency"] * link_df["rendered_fat_yield"]
-    )
-    # bus5: rendered-fat (only meaningful when rendered_fat_yield > 0; for
-    # other products efficiency5 = 0 makes the link inert on this bus).
-    link_df["bus5"] = "food:rendered-fat:" + link_df["country"]
+    # Animal-production co-products (e.g. rendered-fat tallow/lard).
+    # Each co-product is attached as an additional output bus on the
+    # animal_production link, starting at bus5. Yields are configured
+    # per source product in ``animal_products.co_products``; products
+    # not listed yield zero (link is inert on that co-product bus).
+    co_product_kwargs: dict[str, pd.Series | str] = {}
+    co_products = co_products or {}
+    for offset, (co_product_food, spec) in enumerate(sorted(co_products.items())):
+        bus_idx = 5 + offset
+        yield_map = {str(k): float(v) for k, v in spec["yield_per_retail"].items()}
+        yield_series = link_df["product"].map(yield_map).fillna(0.0)
+        co_product_kwargs[f"bus{bus_idx}"] = (
+            f"food:{co_product_food}:" + link_df["country"]
+        )
+        co_product_kwargs[f"efficiency{bus_idx}"] = (
+            link_df["adjusted_efficiency"] * yield_series
+        )
 
-    # All animal production links now have multiple outputs:
+    # All animal production links have multiple outputs:
     # bus1: animal product, bus2: CH4, bus3: manure N fertilizer
-    # (country-specific), bus4: N2O, bus5: rendered fat (cattle, pig)
+    # (country-specific), bus4: N2O, bus5+: configured co-products.
     n.links.add(
         link_df.index,
         bus0=link_df["feed_bus"],
@@ -558,14 +561,13 @@ def add_feed_to_animal_product_links(
         efficiency3=link_df["efficiency3"],
         bus4="emission:n2o",
         efficiency4=link_df["efficiency4"],
-        bus5=link_df["bus5"],
-        efficiency5=link_df["efficiency5"],
         country=link_df["country"],
         product=link_df["product"],
         feed_category=link_df["feed_category"],
         manure_ch4_share=link_df["manure_ch4_share"],
         pasture_n2o_share=link_df["pasture_n2o_share"],
         bounded_subsidy_bnusd_per_mt=link_df["bounded_subsidy_bnusd_per_mt"],
+        **co_product_kwargs,
     )
 
     # Store GLEAM feed baseline on links (for production stability)

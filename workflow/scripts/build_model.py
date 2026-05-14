@@ -603,7 +603,10 @@ if __name__ == "__main__":
         fiber_baseline_df = read_csv(snakemake.input.fiber_baseline)
         fiber_items = set(fiber_baseline_df["source_item"].unique())
         logger.info("Fiber baseline: %d rows", len(fiber_baseline_df))
-    food_list = sorted(set(base_food_list).union(animal_product_list))
+    animal_co_product_list = list(animal_products_cfg["co_products"].keys())
+    food_list = sorted(
+        set(base_food_list).union(animal_product_list).union(animal_co_product_list)
+    )
     byproduct_list = list(snakemake.params.byproducts)
     food_groups_clean = food_groups.dropna(subset=["food", "group"]).copy()
     food_groups_clean["food"] = food_groups_clean["food"].astype(str).str.strip()
@@ -965,9 +968,7 @@ if __name__ == "__main__":
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
         cost_calibration=animal_cost_calibration,
-        rendered_fat_yield_per_retail=animal_products_cfg[
-            "rendered_fat_yield_per_retail"
-        ],
+        co_products=animal_products_cfg["co_products"],
     )
 
     # Add exogenous feed generators (leaves/browse, swill)

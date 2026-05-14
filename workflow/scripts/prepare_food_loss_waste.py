@@ -829,6 +829,33 @@ def apply_waste_calibration(
     return result
 
 
+def _inherit_from_group(df: pd.DataFrame, source: str, target: str) -> pd.DataFrame:
+    """Replace ``target`` rows with a copy of ``source`` rows per country.
+
+    Used to make derivative food groups (e.g. animal_fat from red_meat)
+    inherit the source group's per-country loss/waste fractions, since
+    they share the same supply-chain infrastructure.
+    """
+    source_rows = df[df["food_group"] == source].copy()
+    if source_rows.empty:
+        logger.warning(
+            "No '%s' rows to inherit from for '%s'; leaving '%s' unchanged",
+            source,
+            target,
+            target,
+        )
+        return df
+    source_rows["food_group"] = target
+    result = pd.concat([df[df["food_group"] != target], source_rows], ignore_index=True)
+    logger.info(
+        "Inherited '%s' from '%s' (%d rows)",
+        target,
+        source,
+        len(source_rows),
+    )
+    return result
+
+
 def main():
     m49_file = snakemake.input["m49"]
     animal_production_file = snakemake.input["animal_production"]
@@ -1055,6 +1082,14 @@ def main():
     cal_groups = list(snakemake.params["waste_calibration_food_groups"])
     if waste_cal_path and cal_groups:
         result = apply_waste_calibration(result, waste_cal_path, cal_groups)
+
+    # animal_fat (rendered-fat / tallow / lard) inherits its loss/waste
+    # values from red_meat: rendered fat is a co-product of the same
+    # slaughter / processing chain, so it physically inherits the same
+    # supply-chain loss profile. Applied after waste calibration so that
+    # calibrated red_meat values flow through to animal_fat.
+    if "animal_fat" in food_groups and "red_meat" in food_groups:
+        result = _inherit_from_group(result, source="red_meat", target="animal_fat")
 
     # Sort for readability
     result = result.sort_values(["country", "food_group"]).reset_index(drop=True)

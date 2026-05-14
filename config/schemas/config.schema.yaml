@@ -790,7 +790,7 @@ properties:
       - gleam3_system_product_map
       - me_scaling_clamp_factor
       - net_to_metabolizable_energy_conversion
-      - rendered_fat_yield_per_retail
+      - co_products
       - faostat_items
       - residue_crops
     additionalProperties: false
@@ -845,15 +845,24 @@ properties:
             minimum: 0
             maximum: 1
             description: "Lactation efficiency (dairy)"
-      rendered_fat_yield_per_retail:
+      co_products:
         type: object
         additionalProperties: false
         patternProperties:
           "^[a-z0-9-]+$":
-            type: number
-            minimum: 0
-            description: "Mt rendered fat (tallow/lard) co-produced per Mt retail meat. Products not listed yield 0 (no rendered fat in the food supply)."
-        description: "Per-product rendered-fat yield, used as an additional output of animal_production links."
+            type: object
+            required: [yield_per_retail]
+            additionalProperties: false
+            properties:
+              yield_per_retail:
+                type: object
+                additionalProperties: false
+                patternProperties:
+                  "^[a-z0-9-]+$":
+                    type: number
+                    minimum: 0
+                description: "Mt co-product per Mt retail product, keyed by source animal product. Products not listed yield 0."
+        description: "Co-product foods emitted from animal_production links (in addition to the primary retail product). Each co-product gets its own food bus per country."
       faostat_items:
         type: object
         minProperties: 1

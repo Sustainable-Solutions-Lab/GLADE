@@ -482,15 +482,20 @@ animal_products:
   # Carcass-to-retail meat conversion factors live in the top-level
   # `weight_conversion.carcass_to_fresh` table (single source of truth used
   # by the animal-production, food-loss-waste, and baseline-diet pipelines).
-  # Rendered fat (tallow / lard) yielded as a co-product of animal
-  # production. Mt rendered fat per Mt retail meat, derived from
-  # typical carcass-fat fractions (tallow ~6% of cattle carcass /
-  # carcass_to_retail 0.67 = 0.090; lard ~10% / 0.73 = 0.137). Products
-  # not listed yield no rendered fat in the food supply.
-  # Sources: USDA AH 697; FAOSTAT FBS item 2737 cross-check.
-  rendered_fat_yield_per_retail:
-    meat-cattle: 0.090
-    meat-pig: 0.137
+  # Animal-production co-product foods. Each entry maps a co-product food
+  # name to per-source-product yields (Mt co-product per Mt primary retail
+  # product). Source products not listed yield zero co-product. The bus
+  # ``food:{co-product}:{country}`` is auto-created in the food_list so
+  # the co-product can be consumed, traded, or routed to disposal.
+  # Rendered fat (tallow / lard): typical carcass-fat fractions
+  # (tallow ~6% of cattle carcass / carcass_to_retail 0.67 = 0.090;
+  # lard ~10% / 0.73 = 0.137). Sources: USDA AH 697; FAOSTAT FBS
+  # item 2737 cross-check.
+  co_products:
+    rendered-fat:
+      yield_per_retail:
+        meat-cattle: 0.090
+        meat-pig: 0.137
   # FAOSTAT QCL item names to aggregate for each model product.
   # First item is the primary product; additional items are proxied species
   # whose production is lumped into the model product.

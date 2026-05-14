@@ -27,8 +27,6 @@ basis adjustment:
 Out-of-scope categories (kcal subtracted from country target):
 
 - ``alcohol``, ``fish_*``, ``shellfish``, ``spices``, ``other``
-- ``fat_ani`` (rendered animal fat) — until rendered-fat is wired into
-  animal_production as a co-product
 
 ``fruits_starch`` (plantain) maps to the ``starchy_vegetable`` food
 group (model crop ``plantain`` added).
@@ -70,7 +68,10 @@ logger = logging.getLogger("prepare_gdd_ia_dietary_intake")
 # Mapping: GDD-IA `prim` non-overlapping primary categories → food-opt
 # food groups. Cereal categories are intentionally absent because we use
 # the `prcd:whole_grains` / `prcd:prc_grains` split for the cereal
-# allocation. butter/cream/fat_ani are handled specially (see below).
+# allocation. butter/cream are handled specially (see below).
+# fat_ani (rendered animal fat) maps to the animal_fat food group via
+# rendered-fat, which is added as an animal_production co-product
+# (config: animal_products.co_products.rendered-fat).
 PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
     "roots": "starchy_vegetable",
     "vegetables": "vegetables",
