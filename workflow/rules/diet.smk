@@ -58,10 +58,12 @@ rule prepare_faostat_food_group_supply:
     Previously also supplemented GDD dietary intake; now retained only
     as an input to ``prepare_food_loss_waste`` (dairy/oil/sugar/eggs/
     poultry supply totals used for FLW fractions). The diet pipeline
-    is fully GDD-IA-driven and no longer uses this file.
+    is fully GDD-IA-driven and no longer uses this file. Uses the same
+    layered FBS/FBSH/proxy fallback as ``prepare_faostat_fbs_items``.
     """
     input:
         fbs_csv="data/downloads/faostat/FBS.parquet",
+        fbsh_csv="data/downloads/faostat/FBSH.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
@@ -86,12 +88,16 @@ rule prepare_faostat_food_group_supply:
 rule prepare_faostat_fbs_items:
     """Prepare raw item-level supply data from FAOSTAT Food Balance Sheets.
 
-    Reads supply data (kg/capita/year) for all items in the food item mapping
-    from a bulk FBS CSV, used for calculating within-group food consumption ratios.
+    Reads supply data (kg/capita/year) for all items in the food item mapping,
+    used for calculating within-group food consumption ratios. Uses a layered
+    fallback: new FBS at the reference year -> latest available year in new
+    FBS -> latest available year in historic FBSH (covers Japan, Chad, Mali,
+    Benin, Togo, Burundi, etc., which are not in new FBS) -> country proxy.
     """
     input:
         food_item_map="data/curated/faostat_food_item_map.csv",
         fbs_csv="data/downloads/faostat/FBS.parquet",
+        fbsh_csv="data/downloads/faostat/FBSH.parquet",
         m49_codes="data/curated/M49-codes.csv",
     params:
         countries=config["countries"],
@@ -99,11 +105,12 @@ rule prepare_faostat_fbs_items:
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
     output:
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
+        fbs_provenance="<processing>/{name}/faostat_fbs_items_provenance.csv",
     group:
         "prep"
     resources:
-        runtime="1m",
-        mem_mb=3200,
+        runtime="2m",
+        mem_mb=6000,
     log:
         "<logs>/{name}/prepare_faostat_fbs_items.log",
     benchmark:

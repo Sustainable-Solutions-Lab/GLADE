@@ -129,6 +129,127 @@ def get_item_map(df: pd.DataFrame) -> dict[str, int]:
     return result
 
 
+def build_layered_fbs_supply(
+    fbs_df: pd.DataFrame,
+    fbsh_df: pd.DataFrame,
+    countries: list[str],
+    item_codes: list[int],
+    reference_year: int,
+) -> pd.DataFrame:
+    """Resolve per-(country, item_code) FAOSTAT supply via a layered fallback.
+
+    Both ``fbs_df`` and ``fbsh_df`` must already have an ``iso3`` column
+    (call :func:`add_iso3_column`) and be filtered to the relevant element
+    and item codes. Years are picked here.
+
+    Cascade per (country, item_code):
+        1. ``FBS`` at ``reference_year``
+        2. ``FBS`` at the latest year <= ``reference_year``
+        3. ``FBSH`` at the latest available year
+        4. The same cascade applied to each proxy in
+           :data:`FBS_COUNTRY_FALLBACKS` (in order)
+        5. No data -- the cell is omitted.
+
+    Returns a DataFrame with columns ``country``, ``item_code``,
+    ``item_name``, ``supply_kg_per_capita_year``, ``source``, ``year``.
+    ``source`` is one of ``FBS:<year>``, ``FBSH:<year>``,
+    ``proxy:<iso>:FBS:<year>``, ``proxy:<iso>:FBSH:<year>`` and lets
+    downstream consumers audit the provenance.
+    """
+    fbs_df = fbs_df[fbs_df["Year"] <= reference_year] if not fbs_df.empty else fbs_df
+
+    def _latest(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return df
+        return (
+            df.sort_values(["iso3", "Item Code", "Year"])
+            .groupby(["iso3", "Item Code"], as_index=False)
+            .tail(1)
+        )
+
+    fbs_ref = fbs_df[fbs_df["Year"] == reference_year] if not fbs_df.empty else fbs_df
+    fbs_latest = _latest(fbs_df)
+    fbsh_latest = _latest(fbsh_df)
+
+    def _to_index(df: pd.DataFrame) -> dict[tuple[str, int], dict]:
+        if df.empty:
+            return {}
+        out: dict[tuple[str, int], dict] = {}
+        # Iterate as raw tuples for speed (column order: iso3, Item Code, Year, Item, Value)
+        sub = df[["iso3", "Item Code", "Year", "Item", "Value"]]
+        for iso, code, year, name, value in sub.itertuples(index=False, name=None):
+            out[(str(iso), int(code))] = {
+                "value": float(value) if pd.notna(value) else 0.0,
+                "year": int(year),
+                "name": str(name),
+            }
+        return out
+
+    idx_ref = _to_index(fbs_ref)
+    idx_latest = _to_index(fbs_latest)
+    idx_fbsh = _to_index(fbsh_latest)
+
+    rows: list[dict] = []
+    for country in countries:
+        proxy_chain = FBS_COUNTRY_FALLBACKS.get(country, [])
+        for code in item_codes:
+            key = (country, code)
+            hit = idx_ref.get(key)
+            if hit is not None:
+                src = f"FBS:{reference_year}"
+            else:
+                hit = idx_latest.get(key)
+                if hit is not None:
+                    src = f"FBS:{hit['year']}"
+                else:
+                    hit = idx_fbsh.get(key)
+                    if hit is not None:
+                        src = f"FBSH:{hit['year']}"
+                    else:
+                        # Walk proxy chain
+                        src = None
+                        for proxy in proxy_chain:
+                            pkey = (proxy, code)
+                            phit = idx_ref.get(pkey)
+                            if phit is not None:
+                                hit = phit
+                                src = f"proxy:{proxy}:FBS:{reference_year}"
+                                break
+                            phit = idx_latest.get(pkey)
+                            if phit is not None:
+                                hit = phit
+                                src = f"proxy:{proxy}:FBS:{phit['year']}"
+                                break
+                            phit = idx_fbsh.get(pkey)
+                            if phit is not None:
+                                hit = phit
+                                src = f"proxy:{proxy}:FBSH:{phit['year']}"
+                                break
+            if hit is None:
+                continue
+            rows.append(
+                {
+                    "country": country,
+                    "item_code": code,
+                    "item_name": hit["name"],
+                    "supply_kg_per_capita_year": hit["value"],
+                    "source": src,
+                    "year": hit["year"],
+                }
+            )
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "country",
+            "item_code",
+            "item_name",
+            "supply_kg_per_capita_year",
+            "source",
+            "year",
+        ],
+    )
+
+
 def filter_bulk(
     df: pd.DataFrame,
     *,

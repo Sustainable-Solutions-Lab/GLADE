@@ -287,6 +287,46 @@ rule extract_faostat_fbs:
         "../scripts/convert_faostat_to_parquet.py"
 
 
+# FBSH = historical Food Balance Sheets (1961-2013, old methodology).
+# Used as a fallback for countries that the new FBS dataset (2010-) does
+# not cover (Japan, Chad, Mali, Benin, Togo, Burundi, Eritrea, Somalia,
+# Central African Republic, etc.). For these countries we use their
+# latest available FBSH year (typically 2013) per-capita supply values.
+rule download_faostat_fbsh:
+    output:
+        temp("data/downloads/faostat/FBSH.zip"),
+    params:
+        url="https://bulks-faostat.fao.org/production/FoodBalanceSheetsHistoric_E_All_Data_(Normalized).zip",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_faostat_fbsh.log",
+    benchmark:
+        "<benchmarks>/shared/download_faostat_fbsh.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
+
+
+rule extract_faostat_fbsh:
+    input:
+        "data/downloads/faostat/FBSH.zip",
+    output:
+        "data/downloads/faostat/FBSH.parquet",
+    resources:
+        runtime="2m",
+        mem_mb=4000,
+    log:
+        "<logs>/shared/extract_faostat_fbsh.log",
+    benchmark:
+        "<benchmarks>/shared/extract_faostat_fbsh.tsv"
+    script:
+        "../scripts/convert_faostat_to_parquet.py"
+
+
 rule download_faostat_rl:
     output:
         temp("data/downloads/faostat/RL.zip"),
