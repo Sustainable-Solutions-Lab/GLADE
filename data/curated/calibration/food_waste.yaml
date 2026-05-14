@@ -14,20 +14,20 @@ fruits:
   baseline_positive_slack_mt: 0.0
   waste_retention_multiplier: 0.8230887314142601
 oil:
-  baseline_consumption_mt: 95.17083263739528
-  baseline_negative_slack_mt: 0.4338842276483774
-  baseline_positive_slack_mt: 4.699321932002022
-  waste_retention_multiplier: 1.0469217223850735
+  baseline_consumption_mt: 94.59350398547735
+  baseline_negative_slack_mt: 0.47512025013566017
+  baseline_positive_slack_mt: 4.369503170269127
+  waste_retention_multiplier: 1.0429373832336013
 starchy_vegetable:
-  baseline_consumption_mt: 538.4677341528827
+  baseline_consumption_mt: 536.1407316801583
   baseline_negative_slack_mt: 0.0
-  baseline_positive_slack_mt: 29.951513245844126
-  waste_retention_multiplier: 1.0588998187558691
+  baseline_positive_slack_mt: 27.62542913178595
+  waste_retention_multiplier: 1.0543256594115142
 stimulants:
-  baseline_consumption_mt: 24.929904784989276
-  baseline_negative_slack_mt: 0.0
+  baseline_consumption_mt: 23.519701489722138
+  baseline_negative_slack_mt: 1.4102031886577606
   baseline_positive_slack_mt: 2.862778324582905
-  waste_retention_multiplier: 1.1297304535649173
+  waste_retention_multiplier: 1.065825296535505
 vegetables:
   baseline_consumption_mt: 602.0013999161729
   baseline_negative_slack_mt: 120.93556874932256
