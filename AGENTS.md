@@ -177,6 +177,7 @@ See `workflow/scripts/build_model/__init__.py` for the complete reference.
 - Consistent style: Follow existing patterns in nearby files; don’t introduce new paradigms ad hoc.
 - Reproducibility: Use the Snakemake targets below to validate changes; don’t hand‑run ad hoc pipelines unless necessary.
 - No unused imports: The linter removes them automatically; only add imports when adding code that uses them.
+- ASCII-only in code, comments, and docstrings: ruff's `RUF001`/`RUF002`/`RUF003` rules flag ambiguous Unicode look-alikes (`×`, `–`, `—`, `’`, `…`, `Σ`, `≈`, non-breaking spaces, etc.) and block pushes via the pre-push hook. Use plain ASCII substitutes: `*` for multiplication, `-` for dashes, `'` for apostrophes, `~=` for approx-equal, spell out Greek letters. Math notation in docstrings is the most common offender — write `sum over i of a_i * b_i`, not `Σ_i a_i × b_i`.
 - Do not add `from __future__ import annotations`; type checkers and tooling already expect
   runtime string annotations, so this import is unnecessary and should be avoided.
 - Documentation-first interfaces: If you change a script’s inputs/outputs, update inline docstrings and any referenced docs/config keys.
