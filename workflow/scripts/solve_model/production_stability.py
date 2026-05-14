@@ -1091,33 +1091,46 @@ def add_crop_growth_cap_constraints(
         return
 
     cap = growth_cap_cfg["max_relative_increase"]
-    # Aggregate baselines per (crop, country)
+    # Build a group key per link and aggregate baselines per (crop, country).
+    group_keys = (
+        prod_links["crop"].astype(str) + "::" + prod_links["country"].astype(str)
+    )
     baseline_per_group = (
-        prod_links.groupby(["crop", "country"])["baseline_area_mha"]
+        prod_links.assign(_group=group_keys.values)
+        .groupby("_group")["baseline_area_mha"]
         .sum()
-        .rename("baseline")
+        .sort_index()
     )
 
-    # Build one constraint per (crop, country) group: sum of dispatch over
-    # links in the group <= (1 + cap) * baseline.
-    group_indices = prod_links.groupby(["crop", "country"]).indices
-    constraint_names: list[str] = []
-    upper_bounds_list: list[float] = []
-    for (crop, country), baseline in baseline_per_group.items():
-        link_names = prod_links.index[group_indices[(crop, country)]]
-        upper = (1.0 + cap) * float(baseline)
-        cname = f"crop_growth_cap_{crop}_{country}"
-        m.add_constraints(
-            link_p.sel(name=link_names).sum() <= upper,
-            name=f"GlobalConstraint-{cname}",
-        )
-        constraint_names.append(cname)
-        upper_bounds_list.append(upper)
+    # Vectorised: groupby-sum Link-p over the (crop, country) key, then
+    # add all constraints in a single linopy call.
+    group_map = xr.DataArray(
+        group_keys.values,
+        coords={"name": prod_links.index},
+        dims="name",
+        name="cap_group",
+    )
+    link_vars = link_p.sel(name=prod_links.index)
+    grouped = link_vars.groupby(group_map).sum()
 
+    upper_bounds = xr.DataArray(
+        ((1.0 + cap) * baseline_per_group).to_numpy(),
+        coords={"cap_group": baseline_per_group.index.to_numpy()},
+        dims="cap_group",
+    )
+
+    m.add_constraints(
+        grouped <= upper_bounds,
+        name="GlobalConstraint-crop_growth_cap",
+    )
+
+    constraint_names = [
+        f"crop_growth_cap_{key.replace('::', '_')}" for key in baseline_per_group.index
+    ]
     n.global_constraints.add(
         constraint_names,
         sense="<=",
-        constant=upper_bounds_list,
+        constant=upper_bounds.to_numpy(),
         type="crop_growth_cap",
     )
 

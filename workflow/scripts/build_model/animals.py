@@ -574,21 +574,19 @@ def add_feed_to_animal_product_links(
         bl["country"] = bl["country"].astype(str)
         bl["product"] = bl["product"].astype(str)
         bl["feed_category"] = bl["feed_category"].astype(str)
-        lookup = bl.set_index(["country", "product", "feed_category"])[
+        bl_indexed = bl.set_index(["country", "product", "feed_category"])[
             "feed_use_mt_dm"
-        ].to_dict()
-        baseline_values = pd.Series(
+        ]
+        key_index = pd.MultiIndex.from_arrays(
             [
-                lookup.get(
-                    (
-                        n.links.static.at[i, "country"],
-                        n.links.static.at[i, "product"],
-                        n.links.static.at[i, "feed_category"],
-                    ),
-                    0.0,
-                )
-                for i in link_df.index
+                link_df["country"].astype(str).to_numpy(),
+                link_df["product"].astype(str).to_numpy(),
+                link_df["feed_category"].astype(str).to_numpy(),
             ],
+            names=["country", "product", "feed_category"],
+        )
+        baseline_values = pd.Series(
+            bl_indexed.reindex(key_index).fillna(0.0).to_numpy(),
             index=link_df.index,
         )
         n.links.static.loc[link_df.index, "baseline_feed_use_mt_dm"] = (
