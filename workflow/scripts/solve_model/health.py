@@ -422,21 +422,17 @@ def _add_stage1_constraints(
         if not log_rr_frames:
             continue
 
-        # Concat along cluster_risk dimension
+        # Concat along cluster_risk dimension. When an intake group bundles
+        # several risk factors that share an intake grid but cover different
+        # causes (e.g. fruits = [CHD, Stroke, T2DM] vs vegetables = [CHD,
+        # Stroke]), the union of cause columns introduces structural NaNs
+        # for risk_factors that don't act on the missing cause. Those slots
+        # contribute zero to log(RR) for that cause, so fill them with 0.0.
         combined_log_rr = pd.concat(
             log_rr_frames,
             keys=cluster_risk_index,
             names=["cluster_risk", "intake_step"],
-        )
-
-        # Check for missing log_rr values
-        if combined_log_rr.isna().any().any():
-            missing = combined_log_rr[combined_log_rr.isna().any(axis=1)]
-            raise ValueError(
-                f"Missing log_rr values in risk breakpoints for {len(missing)} "
-                f"(cluster_risk, intake_step) combinations; first few: "
-                f"{list(missing.index[:5])}"
-            )
+        ).fillna(0.0)
 
         # Convert to DataArray: (cluster_risk, intake_step, cause)
         stacked_log_rr = combined_log_rr.stack()
