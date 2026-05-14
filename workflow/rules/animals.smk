@@ -259,38 +259,6 @@ if _protein_cal_cfg["generate"]:
             "../scripts/compute_protein_feed_calibration.py"
 
 
-_prod_stability_cal_cfg = config["prod_stability_calibration"]
-
-if _prod_stability_cal_cfg["generate"]:
-    _grid_scenarios = sorted(s for s in list_scenarios() if s.startswith("grid_c"))
-    if not _grid_scenarios:
-        raise ValueError(
-            "prod_stability_calibration.generate is true but no grid_c*_a* "
-            "scenarios were found. This rule expects to run against "
-            "config/calibration/stability.yaml."
-        )
-
-    rule compute_prod_stability_calibration:
-        input:
-            grid_deviations=expand(
-                f"<results>/{name}/analysis/scen-{{scenario}}/baseline_deviation.parquet",
-                scenario=_grid_scenarios,
-            ),
-        output:
-            calibrated_l1=_prod_stability_cal_cfg["calibrated_l1_yaml"],
-        params:
-            target_pct=_prod_stability_cal_cfg["target_deviation_pct"],
-        resources:
-            runtime="2m",
-            mem_mb=1000,
-        log:
-            f"<logs>/{name}/compute_prod_stability_calibration.log",
-        benchmark:
-            f"<benchmarks>/{name}/compute_prod_stability_calibration.tsv"
-        script:
-            "../scripts/compute_prod_stability_calibration.py"
-
-
 rule calculate_manure_emissions:
     input:
         ruminant_feed_categories="<processing>/{name}/ruminant_feed_categories.csv",

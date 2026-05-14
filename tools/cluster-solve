@@ -19,54 +19,11 @@ import json
 import logging
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-
-def build_namespace(entry: dict, shared_params: dict | None = None) -> SimpleNamespace:
-    """Build a snakemake-like namespace from a manifest entry.
-
-    The returned object has ``.input``, ``.params``, ``.output``, ``.log``,
-    and ``.wildcards`` attributes that mirror how Snakemake passes data to
-    scripts.
-
-    Parameters
-    ----------
-    entry : dict
-        Per-scenario manifest entry.
-    shared_params : dict or None
-        Structural params shared across all scenarios (factored out of
-        per-scenario entries to reduce manifest size).
-    """
-    # Build input namespace.  List-valued inputs (e.g. food_incentives) are
-    # stored as lists; scalar inputs as plain strings.
-    inputs = entry["inputs"]
-    input_ns = SimpleNamespace(**inputs)
-
-    # Build params namespace (merge shared params first, per-scenario overrides)
-    all_params = dict(shared_params or {})
-    all_params.update(entry["params"])
-    params_ns = SimpleNamespace(**all_params)
-
-    # Build output namespace
-    output_ns = SimpleNamespace(**entry["outputs"])
-
-    # Build wildcards namespace
-    wildcards_ns = SimpleNamespace(scenario=entry["scenario"])
-
-    # Build log (list, as Snakemake provides)
-    log_path = entry["log"]
-
-    smk = SimpleNamespace(
-        input=input_ns,
-        params=params_ns,
-        output=output_ns,
-        wildcards=wildcards_ns,
-        log=[log_path],
-    )
-    return smk
+from workflow.scripts.solve_namespace import build_namespace  # noqa: E402
 
 
 def run_scenario(

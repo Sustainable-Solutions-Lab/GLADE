@@ -2,23 +2,16 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Production Stability L1 Calibration
+# Production-stability L1 calibration
 # -----------------------------------
-# 3x3 log-log grid sweep of land L1 cost (Mha) and animal-feed L1 cost
-# (Mt DM) to locate the pair at which both land-use and animal-feed
-# deviations reach the target percentage of observed 2020 totals.
-# ``compute_prod_stability_calibration`` then writes the calibrated
-# values to ``data/curated/calibration/prod_stability_l1.yaml``.
+# Drives the land-use deviation and animal-feed deviation simultaneously to
+# `target_deviation_pct` (default 5% of observed 2020 totals) by running
+# Broyden's quasi-Newton iteration in log-log coordinates. Each iteration is
+# one paired solve (baseline with `enforce_baseline_diet=true` to derive
+# consumer values, then main with piecewise utility active).
 #
-# The grid is centered around the observed land contour and gives the
-# animal-feed contour enough headroom to bracket the target after hard
-# zero-baseline growth caps. If the true intersection drifts outside this
-# window after an upstream data update, the calibration script fails with a
-# clear error prompting you to widen the ``start``/``stop`` bounds below.
-#
-# Each grid point gets its own baseline scenario so that consumer values
-# (piecewise food utility blocks) are calibrated under the matching
-# production-stability regime.
+# Warm-starts from the previously calibrated YAML when one exists on disk;
+# otherwise uses the seed values in `prod_stability_calibration`.
 #
 # Usage:
 #   tools/calibrate stability
@@ -26,132 +19,44 @@
 # Or equivalently:
 #   tools/smk --configfile config/calibration/stability.yaml -- \
 #     data/curated/calibration/prod_stability_l1.yaml
-#
-# Note: 18 full-model solves (9 baselines + 9 grid points) run here.
-# Configure ``remote_solve`` in a local config override if you want to
-# offload the solves to an HPC cluster.
 
 name: "stability_calibration"
-scenarios:
-  # Baseline for the zero-stability reference scenario
-  baseline_off:
-    validation:
-      enforce_baseline_diet: true
-      production_stability:
-        enabled: false
-    food_utility_piecewise:
-      enabled: false
-    emissions:
-      ghg_price: 0
-    health:
-      value_per_yll: 0
-
-  l1_0_base:
-    validation:
-      production_stability:
-        enabled: false
-    consumer_values:
-      baseline_scenario: "baseline_off"
-    emissions:
-      ghg_price: 0
-    health:
-      value_per_yll: 0
-    macronutrients:
-      cal:
-        equal_to_baseline: true
-
-  _generators:
-    # --- Per-grid-point baseline scenarios ---
-    # Solved with enforce_baseline_diet to extract consumer values (duals)
-    # under each production stability regime.
-    - name: baseline_c{crop_cost}_a{animal_cost}
-      mode: grid
-      parameters: &grid_params
-        crop_cost:
-          space: log
-          start: 0.07
-          stop: 0.17
-          num: 3
-          name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
-        animal_cost:
-          space: log
-          start: 0.012
-          stop: 0.055
-          num: 3
-          name_format: "lambda x: str(round(x, 4)).replace('.', 'p')"
-      template:
-        validation:
-          enforce_baseline_diet: true
-          production_stability:
-            enabled: true
-            penalty_mode: "l1"
-            deviation_type: "absolute"
-            land_l1_cost: "{crop_cost}"
-            animal_feed_l1_cost: "{animal_cost}"
-        food_utility_piecewise:
-          enabled: false
-        emissions:
-          ghg_price: 0
-        health:
-          value_per_yll: 0
-
-    # --- Grid scenarios ---
-    # Each references its matching baseline via {param_fmt} for the
-    # name-formatted parameter value.
-    - name: grid_c{crop_cost}_a{animal_cost}
-      mode: grid
-      parameters: *grid_params
-      template:
-        validation:
-          production_stability:
-            enabled: true
-            penalty_mode: "l1"
-            deviation_type: "absolute"
-            land_l1_cost: "{crop_cost}"
-            animal_feed_l1_cost: "{animal_cost}"
-        consumer_values:
-          baseline_scenario: "baseline_c{crop_cost_fmt}_a{animal_cost_fmt}"
-        emissions:
-          ghg_price: 0
-        health:
-          value_per_yll: 0
-        macronutrients:
-          cal:
-            equal_to_baseline: true
 
 planning_horizon: 2020
 baseline_year: 2020
 
-# Block-based diminishing marginal utility for food consumption
+# Block-based diminishing marginal utility for food consumption (used by main
+# solves; baseline solves disable this inside the calibration script).
 food_utility_piecewise:
   enabled: true
 
-# Fallback baseline for the inherited `default` scenario; per-grid-point
-# baselines are still selected individually via each scenario's template.
+# Fallback consumer_values baseline; the script overrides this per iteration
+# to point at that iteration's baseline scenario.
 consumer_values:
-  baseline_scenario: "baseline_off"
+  baseline_scenario: "_cal_baseline_iter00"
 
 validation:
   use_actual_yields: true
-  # Every grid scenario overrides land_l1_cost to a numeric grid value; set a
-  # numeric default here to avoid leaking the base-config "calibrated"
-  # sentinel into the baseline scenarios (which have stability disabled).
+  # Numeric defaults; per-iteration scenarios override these with the
+  # current iterate's lambda values.
   production_stability:
+    enabled: true
+    penalty_mode: "l1"
+    deviation_type: "absolute"
     land_l1_cost: 0.1
-    animal_feed_l1_cost: 0.1
+    animal_feed_l1_cost: 0.03
 
-# We are generating the calibration file from the grid results; don't
-# attempt to resolve the sentinel at solve time.
+# Trigger the calibrate_prod_stability rule. The script writes the
+# calibrated_l1_yaml; don't try to resolve the sentinel at solve time.
 prod_stability_calibration:
   enabled: false
   generate: true
 
-plotting:
-  comparison_scenarios: "all"
-
 solving:
   solver: "gurobi"
   io_api: "direct"
-  threads: 2
-  mem_mb: 9000
+  # Solves run sequentially in the iteration, so give each solve more
+  # threads instead of running multiple solves in parallel.
+  threads: 8
+  mem_mb: 12000
   runtime: 45

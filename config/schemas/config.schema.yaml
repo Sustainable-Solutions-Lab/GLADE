@@ -1728,23 +1728,56 @@ properties:
 
   prod_stability_calibration:
     type: object
-    required: [enabled, generate, target_deviation_pct, calibrated_l1_yaml]
+    required:
+      - enabled
+      - generate
+      - target_deviation_pct
+      - calibrated_l1_yaml
+      - seed_land_l1_cost
+      - seed_animal_feed_l1_cost
+      - tolerance
+      - max_iter
+      - trust_region_log
+      - trace_csv
     additionalProperties: false
-    description: "Calibrated L1 production-stability penalty costs, resolved at solve time from a YAML file when land_l1_cost or animal_feed_l1_cost is the sentinel \"calibrated\"."
+    description: "Calibrated L1 production-stability penalty costs, resolved at solve time from a YAML file when land_l1_cost or animal_feed_l1_cost is the sentinel \"calibrated\". When generate=true, an in-process Broyden iteration produces the file."
     properties:
       enabled:
         type: boolean
         description: "Resolve the \"calibrated\" sentinel at solve time by reading calibrated_l1_yaml"
       generate:
         type: boolean
-        description: "Generate the calibrated file from the prod-stability grid sweep (breaks DAG cycle when true)"
+        description: "Generate the calibrated file from a fresh Broyden iteration (breaks DAG cycle when true)"
       target_deviation_pct:
         type: number
         exclusiveMinimum: 0
-        description: "Target baseline-deviation used for the contour intersection (% of observed baseline totals)"
+        description: "Target baseline-deviation, in percent of the observed baseline totals. Both land and animal-feed deviations are driven to this target."
       calibrated_l1_yaml:
         type: string
         description: "Path to the YAML file holding calibrated land_l1_cost and animal_feed_l1_cost"
+      seed_land_l1_cost:
+        type: number
+        exclusiveMinimum: 0
+        description: "Initial land L1 cost (cold start). Overridden by the previous calibrated YAML if one is found on disk."
+      seed_animal_feed_l1_cost:
+        type: number
+        exclusiveMinimum: 0
+        description: "Initial animal-feed L1 cost (cold start). Overridden by the previous calibrated YAML if one is found on disk."
+      tolerance:
+        type: number
+        exclusiveMinimum: 0
+        description: "Convergence tolerance on |log(d/target)|_inf; 0.02 corresponds to ±2% relative error on each deviation."
+      max_iter:
+        type: integer
+        minimum: 1
+        description: "Maximum Broyden iterations (each is one paired baseline+main solve)."
+      trust_region_log:
+        type: number
+        exclusiveMinimum: 0
+        description: "Trust-region cap on |Δx|_inf in log-coords per iteration. log(2)≈0.693 limits steps to at most doubling/halving λ."
+      trace_csv:
+        type: string
+        description: "Path to the per-iteration diagnostic trace CSV."
 
   solving:
     type: object

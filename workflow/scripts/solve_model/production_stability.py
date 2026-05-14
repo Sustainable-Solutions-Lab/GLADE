@@ -66,7 +66,7 @@ def resolve_calibrated_l1_costs(
     ``validation.production_stability.animal_feed_l1_cost`` may each be set
     to the string ``"calibrated"``; when they are, we look up the calibrated
     numeric values in ``calibrated_l1_yaml`` (produced by
-    ``compute_prod_stability_calibration``).
+    ``calibrate_prod_stability``).
 
     The input dict is not mutated. If no sentinel is present, returns the
     input unchanged.

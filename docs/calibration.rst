@@ -67,9 +67,9 @@ When upstream data or build logic changes, rerun in this order:
 #. :ref:`cost <cost-calibration>` — the cost-calibration solve uses the
    calibrated feed and waste behaviour to extract duals that make
    economic sense.
-#. :ref:`stability <prod-stability-calibration>` — the L1 grid sweep
-   uses all previous corrections so that the observed 5 % contours
-   reflect the fully-calibrated baseline.
+#. :ref:`stability <prod-stability-calibration>` — the L1 Broyden
+   iteration uses all previous corrections so that the observed
+   deviations reflect the fully-calibrated baseline.
 
 Running the calibrations
 ------------------------
@@ -89,9 +89,10 @@ The wrapper invokes ``tools/smk`` with the matching config and the
 appropriate output targets. Any extra flags are passed through, e.g.
 ``tools/calibrate cost -j8 --slurm``.
 
-Solves for the stability step can be offloaded to the HPC cluster via
-``remote_solve`` (see :doc:`cluster_execution`); the 9 grid points
-(plus 9 matching baselines) each take several minutes with Gurobi.
+The stability calibration runs locally in-process and is inherently
+sequential (each Broyden step depends on the previous solve), so HPC
+offloading isn't worthwhile at this size. Each iteration is one paired
+solve (baseline + main), and 3–5 iterations are typically enough.
 
 Consuming the calibrated values
 -------------------------------
@@ -244,61 +245,54 @@ Formally the calibration solves
    \quad
    \big\lVert \text{feed\_dev}(\ell^c_1, \ell^a_1) - 5\,\%\big\rVert.
 
-Grid sweep and intersection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Broyden iteration
+~~~~~~~~~~~~~~~~~
 
-``config/calibration/stability.yaml`` defines a narrow 3 × 3 log-spaced
-grid that brackets the known intersection (roughly
-:math:`\ell^c_1 \approx 0.1`, :math:`\ell^a_1 \approx 0.033`) with half
-a decade of cushion on each side; each grid point is solved against a
-matching baseline scenario for the piecewise consumer-value blocks.
-If an upstream data update pushes the intersection outside the grid,
-``compute_prod_stability_calibration`` fails with an error pointing at
-``config/calibration/stability.yaml`` so the bounds can be widened or
-shifted. Given a valid grid the script
+The deviation map
 
-#. interpolates, row-by-row, the animal_cost at which **feed**
-   deviation crosses 5 % (a 1-D curve in the plane), and analogously
-   the crop_cost at which **land** deviation crosses 5 % column-by-
-   column,
-#. iterates
-   :math:`\ell^c_1 \mapsto \ell^a_{1,\text{feed=5\%}}(\ell^c_1)`
-   and
-   :math:`\ell^a_1 \mapsto \ell^c_{1,\text{land=5\%}}(\ell^a_1)`
-   to a fixed point — the unique :math:`(\ell^c_1, \ell^a_1)` pair
-   that hits 5 % on both axes simultaneously,
-#. writes the exact intersection (no rounding) to
-   ``data/curated/calibration/prod_stability_l1.yaml``. It is resolved
-   at solve time wherever the sentinel ``"calibrated"`` appears in
-   ``validation.production_stability.land_l1_cost`` or
-   ``.animal_feed_l1_cost`` (see :ref:`production-stability-bounds`).
+.. math::
 
-The figure below illustrates the calibration geometry using
-representative values from an actual sweep.
+   F : (\ell^c_1, \ell^a_1) \;\longmapsto\;
+   (\text{land\_dev}, \text{feed\_dev})
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/prod_stability_calibration.png
-   :width: 100%
-   :alt: Production-stability L1 calibration: land-use deviation, feed deviation, and their 5% contours
+is monotone and near-affine in log-log coordinates (raising
+:math:`\ell^c_1` mainly tightens land deviation, raising
+:math:`\ell^a_1` mainly tightens feed deviation, with small cross
+coupling). Calibration is therefore a 2-D root-finding problem,
+solved with **Broyden's quasi-Newton method** on
+:math:`x = (\log \ell^c_1, \log \ell^a_1)` with residual
+:math:`r(x) = (\log(\text{land\_dev}/t),\, \log(\text{feed\_dev}/t))`.
+A trust-region cap of :math:`\lvert \Delta x \rvert_\infty \le \log 2`
+prevents single-step overshoot near the zero-baseline growth caps.
 
-   Production-stability L1 calibration on the
-   :math:`(\ell^c_1, \ell^a_1)` plane. *Left:* total land-use
-   deviation (crop + grassland) from baseline, as a percentage of the
-   baseline land total. The 5 % contour is essentially flat in
-   :math:`\ell^a_1` — raising the animal-feed penalty barely changes
-   land-use deviation once the crop penalty is past the knee.
-   *Middle:* animal-feed deviation, which is driven almost entirely
-   by :math:`\ell^a_1`; its 5 % contour is essentially flat in
-   :math:`\ell^c_1`. *Right:* the two 5 % contours overlaid; their
-   intersection (★) is the calibrated pair at which *both* deviations
-   equal 5 %. The near-orthogonality of the two contours is precisely
-   why the fixed-point iteration converges in a handful of steps.
+Each iteration is one paired solve (baseline with
+``enforce_baseline_diet=true`` to derive consumer values, then main
+with piecewise utility active). Convergence is typically reached in
+3–5 iterations from a cold start and 1–2 from a warm start (the
+previously calibrated YAML is auto-detected and used as the seed). The
+initial Jacobian is :math:`\mathrm{diag}(-1, -1)`, which is the exact
+log-log slope for a relationship of the form
+:math:`\text{dev} \propto 1/\ell_1`.
+
+Convergence target: :math:`\lvert \log(\text{dev}/t) \rvert_\infty
+< 0.02`, i.e. both deviations within ±2 % of the target. The
+calibrated pair is written to
+``data/curated/calibration/prod_stability_l1.yaml`` and resolved at
+solve time wherever the sentinel ``"calibrated"`` appears in
+``validation.production_stability.land_l1_cost`` or
+``.animal_feed_l1_cost`` (see :ref:`production-stability-bounds`).
+
+A per-iteration diagnostic CSV is written to
+``results/{name}/calibration/prod_stability_trace.csv`` with the
+:math:`(\ell^c_1, \ell^a_1)` iterate, achieved deviations, and residual
+norm for each step.
 
 Implementation
 ~~~~~~~~~~~~~~
 
-Rule: ``compute_prod_stability_calibration`` in
-``workflow/rules/animals.smk``. Script:
-``workflow/scripts/compute_prod_stability_calibration.py``.
+Rule: ``calibrate_prod_stability`` in
+``workflow/rules/prod_stability.smk``. Script:
+``workflow/scripts/calibrate_prod_stability.py``.
 
 The calibrated L1 cost is also used as a slice parameter in the
 sensitivity analysis; see :ref:`sensitivity-prod-stability-cost` for the

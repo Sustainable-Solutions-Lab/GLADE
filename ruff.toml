@@ -40,6 +40,7 @@ ignore = [
 "workflow/scripts/prepare_*.py" = ["N806"]  # Constants use uppercase by convention
 "workflow/scripts/solve_model.py" = ["N801"]  # linopy stub class for type checking
 "workflow/scripts/analysis/mars.py" = ["N803", "N806"]  # Mathematical variables (X, B, Q, H) use conventional uppercase
+"workflow/scripts/calibrate_prod_stability.py" = ["N803", "N806"]  # Jacobian J/J0 use conventional uppercase
 "tests/test_mars_sensitivity.py" = ["N806"]  # Mathematical variables (X) use conventional uppercase
 
 [lint.isort]
