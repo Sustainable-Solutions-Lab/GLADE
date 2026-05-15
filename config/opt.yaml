@@ -9,24 +9,24 @@ scenarios:
     # Fixed consumption to extract consumer values (dual variables)
     validation:
       enforce_baseline_diet: true
-    food_incentives:
+    food_utility_piecewise:
       enabled: false
     health:
       value_per_yll: 0
     emissions:
       ghg_price: 0
-    # Note: no constraint on caloric intake
 
   default:
-    food_utility_piecewise:
-      enabled: true
     health:
       value_per_yll: 5000
     emissions:
       ghg_price: 200
     macronutrients:
       cal:
-        equal: 2400  # kcal/person/day
+        equal_to_baseline: true
+
+food_utility_piecewise:
+  enabled: true
 
 solving:
   solver: "gurobi"

@@ -75,7 +75,7 @@ validation:
   grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
   production_stability:
     enabled: true
-    penalty_mode: "hard"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
+    penalty_mode: "l1"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
     quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
     # L1 penalty costs live directly under production_stability with scope-
     # specific names. String "calibrated" resolves at solve time from
@@ -125,19 +125,8 @@ validation:
     # regions, resource classes and water-supply types within each
     # country, preserving within-country reallocation freedom while
     # bounding total country-level expansion of any single crop.
-    #
-    # The cap is a *backstop* against ridiculous expansion (e.g. the
-    # canonical olive-USA case where a -0.40 bnUSD/Mha cost correction
-    # calibrated at baseline 0.04 Mha drives 19× expansion under L1).
-    # It is intentionally generous: under realistic dietary-shift
-    # scenarios legumes can grow by 300-400% globally, so the per-country
-    # cap must accommodate substantial crop-level shifts. The
-    # principled fix to the cost-calibration leakage lives in
-    # build_model.py (negative corrections applied only up to baseline
-    # area, not extrapolated linearly); the cap remains as a structural
-    # safety net.
     enabled: true
-    max_relative_increase: 10.0  # +1000% (11× baseline)
+    max_relative_increase: 10.0  # +1000%
 
 # --- section: food_incentives ---
 food_incentives:

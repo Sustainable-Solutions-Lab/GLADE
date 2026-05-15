@@ -49,23 +49,9 @@ scenarios:
       cal:
         equal_to_baseline: true
 
-# Set planning horizon and baseline year to match GDD baseline data (2018)
-planning_horizon: 2020
-baseline_year: 2020
-
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true
-
-validation:
-  use_actual_yields: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
-
-aggregation:
-  resource_class_score: "regional_crop_mix_actual_yield"
 
 plotting:
   comparison_scenarios: "all"

@@ -107,23 +107,10 @@ sensitivity_analysis:
   # see config/default.yaml for the full rationale.
   discover_scenarios_on_disk: true
 
-# Match GDD baseline data (2018) via planning horizon / baseline year.
-planning_horizon: 2020
-baseline_year: 2020
-
-# Piecewise food utility is incompatible with enforce_baseline_diet.
-food_utility_piecewise:
-  enabled: false
-
 # Fix consumption to the baseline diet and keep the calibrated L1
 # production-stability regime used in gsa.yaml.
 validation:
-  use_actual_yields: true
   enforce_baseline_diet: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
 
 # Keep post-hoc YLL evaluation disabled: diet is fixed, so health outputs
 # would be essentially constant across scenarios and just add solve time.
