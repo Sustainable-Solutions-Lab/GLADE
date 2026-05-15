@@ -36,19 +36,26 @@ piecewise-linear approximation:
     Stage 1: Intake x_r → log(RR_{r,d}) for each (cluster, risk) pair
     Stage 2: Σ_r log(RR_{r,d}) → exp(·) → RR_d → YLL store level
 
-Both stages use delta (incremental) variables for piecewise-linear interpolation:
+**Stage 1** uses delta (incremental) variables with SOS1 segment indicators
+because the dose-response curves may be non-convex:
 
     δ_j ∈ [0,1], δ_j ≤ δ_{j-1} (fill-up ordering)
     x = x_0 + Σ_j δ_j Δx_j
     f(x) = f_0 + Σ_j δ_j Δf_j
 
-**Stage 1** requires segment indicator variables to guarantee correct interpolation
-(dose-response curves may be non-convex). Continuous y_j ∈ [0,1] variables with
-SOS1 constraints are used; linopy's ``reformulate_sos='auto'`` converts these to
-binary+Big-M constraints for solvers that don't support SOS natively (e.g. HiGHS).
+Linopy's ``reformulate_sos='auto'`` converts the SOS1 constraints to binary
++ Big-M for solvers that don't support SOS natively (e.g. HiGHS).
 
-**Stage 2** needs no segment indicators because exp() is convex and we minimize
-RR. Convexity guarantees the optimizer naturally selects the correct delta pattern.
+**Stage 2** uses an LP-tangent (chord-only) formulation: no auxiliary
+variables at all. Because ``exp()`` is convex and the YLL cost minimises
+RR, the constraint
+
+    store_var >= scale * (slope_j * log_total + intercept_j - rr_ref)
+
+added for each piece j of the chord PWL approximation of ``exp(log_total)``
+collapses at the optimum to the exact chord-PWL value of ``exp(log_total)``.
+A domain bound ``log_total ∈ [log_pts[0], log_pts[-1]]`` is added explicitly
+(it was implicit in the δ ∈ [0,1] bound of the previous formulation).
 
 Code Organization
 -----------------
@@ -62,8 +69,7 @@ Code Organization
 - Stage 2 (log(RR) → YLL):
     - _build_cause_breakpoints: Build log-RR breakpoints per cause
     - _group_cluster_cause_pairs: Group pairs by shared log-RR grids
-    - _add_stage2_constraints: Main Stage 2 logic
-    - _add_stage2_delta: δ variables + fill-up (no indicators needed)
+    - _add_stage2_constraints: Main Stage 2 logic (LP-tangent chords + domain bounds)
 - Main entry point: add_health_objective
 """
 
@@ -94,7 +100,6 @@ HEALTH_AUX_MAP: dict[int, set[str]] = {}
 
 # Counters for unique variable naming
 _LAMBDA_GROUP_COUNTER = itertools.count()
-_TOTAL_GROUP_COUNTER = itertools.count()
 
 
 def _register_auxiliary_variable(m: linopy.Model, name: str) -> None:
@@ -820,225 +825,109 @@ def _add_stage2_constraints(
 ) -> int:
     """Add Stage 2 constraints: Σ_r log(RR_{r,d}) → YLL store level.
 
-    Stage 2 transforms the summed log-RR values into YLL store levels using
-    piecewise-linear interpolation to compute exp(·).
+    The chord PWL approximation of exp() through the cause breakpoints is
+    convex, so the constraint ``rr >= chord_PWL(log_total)`` is equivalent
+    to one chord inequality per piece (the per-piece chord lower bounds
+    collapse at the optimum to the exact chord PWL value).
 
-    Both solvers use the delta formulation without segment indicators:
-        - δ_j ∈ [0,1], δ_j ≤ δ_{j-1} (fill-up ordering)
-        - log(RR) = z_0 + Σ_j δ_j Δz_j, RR = f_0 + Σ_j δ_j Δf_j
+    Substituting into the health cost expression, this gives, for each
+    piece j of the cause's breakpoints,
 
-    No segment indicators are needed because exp() is convex and we minimize
-    RR (to minimize YLL cost). Convexity guarantees the optimizer naturally
-    selects the correct "fill from left" delta pattern.
+        store_var >= scale_factor * (slope_j * log_total + intercept_j - rr_ref)
+
+    together with the domain bound ``log_total ∈ [log_pts[0], log_pts[-1]]``.
 
     The store level represents the health cost normalized by V (value per YLL):
 
         e_{c,d} = (RR_d - RR_d^ref) * (YLL_{c,d} / RR_d^base) * 10^{-6}
 
-    Parameters
-    ----------
-    m
-        The linopy model.
-    log_rr_totals
-        {(cluster, cause): Σ_r log(RR_{r,d})} from Stage 1.
-    log_total_groups
-        (cluster, cause) pairs grouped by log-RR coordinates.
-    cluster_cause_data
-        Metadata for each (cluster, cause) pair.
-    health_stores
-        DataFrame of YLL stores indexed by (health_cluster, cause).
-    store_level_var
-        Store energy level variables.
-
     Returns
     -------
     int
-        Number of store level constraints added.
+        Number of (cluster, cause) pairs handled.
     """
     constraints_added = 0
-
     for log_rr_grid, cluster_cause_pairs in log_total_groups.items():
-        log_total_vals = np.asarray(log_rr_grid, dtype=float)
-        log_total_steps = pd.Index(range(len(log_total_vals)), name="log_total_step")
-
-        # Create cluster-cause labels for vectorized operations
-        cluster_cause_labels = [
-            f"c{cluster}_cause{cause}" for cluster, cause in cluster_cause_pairs
-        ]
-        cluster_cause_index = pd.Index(cluster_cause_labels, name="cluster_cause")
-        cause_label = str(cluster_cause_pairs[0][1])
-
-        # Build breakpoint arrays for log-RR (z) and RR (exp(z))
-        coeff_log_total = xr.DataArray(
-            log_total_vals,
-            coords={"log_total_step": log_total_steps},
-            dims=["log_total_step"],
-        )
-
-        # Get RR values at breakpoints (same for all pairs in this group)
-        # Use the first pair's cause_bp since all share the same breakpoints
+        log_pts = np.asarray(log_rr_grid, dtype=float)
         sample_data = cluster_cause_data[cluster_cause_pairs[0]]
-        rr_vals = sample_data["cause_bp"]["rr_total"].values
-        coeff_rr = xr.DataArray(
-            rr_vals,
-            coords={"log_total_step": log_total_steps},
-            dims=["log_total_step"],
-        )
+        rr_pts = sample_data["cause_bp"]["rr_total"].values.astype(float)
 
-        # Delta formulation for both solvers (no segment indicators needed)
-        constraints_added += _add_stage2_delta(
+        constraints_added += _add_stage2_lp_tangent(
             m=m,
             log_rr_totals=log_rr_totals,
             cluster_cause_pairs=cluster_cause_pairs,
-            cluster_cause_labels=cluster_cause_labels,
-            cluster_cause_index=cluster_cause_index,
             cluster_cause_data=cluster_cause_data,
             health_stores=health_stores,
             store_level_var=store_level_var,
-            coeff_log_total=coeff_log_total,
-            coeff_rr=coeff_rr,
-            cause_label=cause_label,
+            log_pts=log_pts,
+            rr_pts=rr_pts,
         )
-
     return constraints_added
 
 
-def _add_stage2_delta(
+def _add_stage2_lp_tangent(
     m: linopy.Model,
     log_rr_totals: dict[tuple[int, str], linopy.LinearExpression],
     cluster_cause_pairs: list[tuple[int, str]],
-    cluster_cause_labels: list[str],
-    cluster_cause_index: pd.Index,
     cluster_cause_data: dict[tuple[int, str], dict],
     health_stores: pd.DataFrame,
     store_level_var: xr.DataArray,
-    coeff_log_total: xr.DataArray,
-    coeff_rr: xr.DataArray,
-    cause_label: str,
+    log_pts: np.ndarray,
+    rr_pts: np.ndarray,
 ) -> int:
-    """Stage 2 delta formulation (no binary variables).
+    """Stage 2 LP-tangent formulation (no auxiliary variables).
 
-    Creates δ variables with fill-up constraints for piecewise-linear interpolation
-    of the exponential function (log(RR) → RR).
+    For each piece j of the chord PWL approximation of exp() through the
+    cause breakpoints, we add
 
-    Returns number of store level constraints added.
+        store_var >= scale_factor * (slope_j * log_total + intercept_j - rr_ref)
+
+    plus the domain bound log_total ∈ [log_pts[0], log_pts[-1]]. Because
+    exp() is convex and store_var carries a non-negative coefficient in the
+    objective, the per-piece chord lower bounds collapse at the optimum to
+    the exact chord-PWL value of exp(log_total) — mathematically equivalent
+    to the previous δ-fill-up formulation.
+
+    Returns the number of (cluster, cause) pairs handled.
     """
-    log_total_steps = coeff_log_total.coords["log_total_step"]
-    n_points = len(log_total_steps)
-    segment_dim = "log_total_step_seg"
-    segment_coords = pd.Index(range(n_points - 1), name=segment_dim)
+    n_seg = len(log_pts) - 1
+    slopes = np.diff(rr_pts) / np.diff(log_pts)
+    intercepts = rr_pts[:-1] - slopes * log_pts[:-1]
+    log_lo = float(log_pts[0])
+    log_hi = float(log_pts[-1])
 
-    # Compute segment widths: Δz_j = z_{j+1} - z_j, Δf_j = f_{j+1} - f_j
-    delta_z = coeff_log_total.diff("log_total_step")
-    delta_z = delta_z.rename({"log_total_step": segment_dim})
-    delta_z = delta_z.assign_coords({segment_dim: segment_coords})
+    piece_index = pd.Index(range(n_seg), name="health_chord_piece")
+    slopes_xr = xr.DataArray(slopes, coords={"health_chord_piece": piece_index})
+    intercepts_xr = xr.DataArray(intercepts, coords={"health_chord_piece": piece_index})
 
-    delta_rr = coeff_rr.diff("log_total_step")
-    delta_rr = delta_rr.rename({"log_total_step": segment_dim})
-    delta_rr = delta_rr.assign_coords({segment_dim: segment_coords})
-
-    # Create δ variables
-    delta_var = m.add_variables(
-        lower=0,
-        upper=1,
-        coords=[cluster_cause_index, segment_coords],
-        name=f"health_delta_total_group_{next(_TOTAL_GROUP_COUNTER)}_{cause_label}",
-    )
-    _register_auxiliary_variable(m, delta_var.name)
-
-    # Fill-up constraints: δ_j ≤ δ_{j-1} for j ≥ 1
-    # Vectorized: use roll() to shift values, then compare slices with aligned coords
-    if n_points > 2:
-        # Roll shifts values circularly by -1: [δ0, δ1, ..., δn-1] -> [δ1, δ2, ..., δn-1, δ0]
-        # Select first n-2 elements to get [δ1, δ2, ..., δn-2] with coords [0, 1, ..., n-3]
-        delta_rolled = delta_var.roll({segment_dim: -1})
-        delta_current = delta_rolled.isel(
-            {segment_dim: slice(0, -1)}
-        )  # δ[j] for j=1..n-2
-        delta_prev = delta_var.isel({segment_dim: slice(0, -1)})  # δ[j-1] for j=1..n-2
-
-        # Both have same coords, so comparison works directly
-        m.add_constraints(
-            delta_current <= delta_prev,
-            name=f"health_delta_total_fillup_{cause_label}",
-        )
-
-    # Perturbation for delta formulation is not needed - the equality constraint
-    # on log(RR) uniquely determines delta values, eliminating degeneracy.
-
-    # Base values (at first breakpoint)
-    z_0 = float(coeff_log_total.isel(log_total_step=0).values)
-    f_0 = float(coeff_rr.isel(log_total_step=0).values)
-
-    # Vectorized log-RR and RR interpolation for all (cluster, cause) pairs at once
-    # log_interp_all has shape (n_cluster_cause,)
-    log_interp_all = z_0 + (delta_var * delta_z).sum(segment_dim)
-    rr_interp_all = f_0 + (delta_var * delta_rr).sum(segment_dim)
-
-    # Build arrays of per-pair coefficients for vectorized store level computation
-    # Indexed by cluster_cause_index
-    rr_ref_vals = np.array(
-        [cluster_cause_data[(c, d)]["rr_ref"] for c, d in cluster_cause_pairs]
-    )
-    yll_total_vals = np.array(
-        [cluster_cause_data[(c, d)]["yll_total"] for c, d in cluster_cause_pairs]
-    )
-    rr_baseline_vals = np.array(
-        [cluster_cause_data[(c, d)]["rr_baseline"] for c, d in cluster_cause_pairs]
-    )
-
-    rr_ref = xr.DataArray(
-        rr_ref_vals,
-        coords={"cluster_cause": cluster_cause_index},
-        dims=["cluster_cause"],
-    )
-    scale_factor = xr.DataArray(
-        yll_total_vals / rr_baseline_vals * constants.YLL_TO_MILLION_YLL,
-        coords={"cluster_cause": cluster_cause_index},
-        dims=["cluster_cause"],
-    )
-
-    # Vectorized YLL expression: (RR - RR^ref) * scale_factor
-    yll_expr_all = (rr_interp_all - rr_ref) * scale_factor
-
-    # Build store names array for vectorized store level constraint
-    store_names = [
-        health_stores.loc[(cluster, cause), "name"]
-        for cluster, cause in cluster_cause_pairs
-    ]
-
-    # Verify all log_rr_totals exist and collect them
-    total_exprs = []
     for cluster, cause in cluster_cause_pairs:
         if (cluster, cause) not in log_rr_totals:
             raise ValueError(
                 f"No log_rr total from Stage 1 for cluster {cluster}, cause {cause}. "
-                f"Check that food group stores exist and map to health clusters."
+                "Check that food group stores exist and map to health clusters."
             )
-        total_exprs.append(log_rr_totals[(cluster, cause)])
-
-    # Add balance constraints - need to loop since total_exprs are separate expressions
-    # But we can batch the store level constraints
-    for (cluster, cause), label, total_expr in zip(
-        cluster_cause_pairs, cluster_cause_labels, total_exprs
-    ):
-        log_interp = log_interp_all.sel(cluster_cause=label)
-        m.add_constraints(
-            log_interp == total_expr,
-            name=f"health_delta_total_balance_c{cluster}_cause{cause}",
+        total_expr = log_rr_totals[(cluster, cause)]
+        data = cluster_cause_data[(cluster, cause)]
+        rr_ref = data["rr_ref"]
+        scale_factor = (
+            data["yll_total"] / data["rr_baseline"] * constants.YLL_TO_MILLION_YLL
         )
 
-    # Add store level constraints (still looped due to coordinate complexity)
-    # But we pre-computed the vectorized yll_expr_all above
-    for (cluster, cause), label, store_name in zip(
-        cluster_cause_pairs, cluster_cause_labels, store_names
-    ):
-        yll_expr = yll_expr_all.sel(cluster_cause=label)
+        store_name = health_stores.loc[(cluster, cause), "name"]
         store_var = store_level_var.sel(name=store_name)
 
         m.add_constraints(
-            store_var >= yll_expr,
-            name=f"health_store_level_c{cluster}_cause{cause}",
+            store_var - scale_factor * slopes_xr * total_expr
+            >= scale_factor * (intercepts_xr - rr_ref),
+            name=f"health_stage2_chord_c{cluster}_cause{cause}",
+        )
+        m.add_constraints(
+            total_expr >= log_lo,
+            name=f"health_stage2_dom_lo_c{cluster}_cause{cause}",
+        )
+        m.add_constraints(
+            total_expr <= log_hi,
+            name=f"health_stage2_dom_hi_c{cluster}_cause{cause}",
         )
 
     return len(cluster_cause_pairs)
