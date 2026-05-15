@@ -6,6 +6,7 @@
 
 import logging
 
+import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
@@ -94,65 +95,90 @@ def _merge_small_width_blocks(
     if rows.empty or min_width_mt <= 0:
         return rows.copy(), 0, 0
 
-    merged_groups: list[pd.DataFrame] = []
+    # Fast path: short-circuit when no block falls below the threshold.
+    if (rows["width_mt_per_year"] >= min_width_mt).all():
+        return rows.copy(), 0, 0
+
+    # Sort once globally; then walk groups via index slicing rather than groupby
+    # DataFrame iteration to avoid thousands of per-link DataFrame allocations.
+    ordered = rows.sort_values(["name", "block_id"], kind="stable").reset_index(
+        drop=True
+    )
+    names_arr = ordered["name"].to_numpy()
+    widths_arr = ordered["width_mt_per_year"].to_numpy(dtype=float)
+    utils_arr = ordered["marginal_utility_bnusd_per_mt"].to_numpy(dtype=float)
+
+    # Group boundaries via change-points on the sorted name column.
+    n_rows = len(names_arr)
+    group_change = np.empty(n_rows, dtype=bool)
+    group_change[0] = True
+    group_change[1:] = names_arr[1:] != names_arr[:-1]
+    group_starts = np.flatnonzero(group_change)
+    group_ends = np.empty_like(group_starts)
+    group_ends[:-1] = group_starts[1:]
+    group_ends[-1] = n_rows
+
+    out_names_chunks: list[np.ndarray] = []
+    out_blocks_chunks: list[np.ndarray] = []
+    out_widths_chunks: list[np.ndarray] = []
+    out_utils_chunks: list[np.ndarray] = []
+
     merged_blocks = 0
     affected_links = 0
 
-    for name, group in rows.groupby("name", sort=False):
-        ordered = group.sort_values("block_id")
-        blocks = [
-            {
-                "width": float(width),
-                "utility": float(utility),
-            }
-            for width, utility in zip(
-                ordered["width_mt_per_year"],
-                ordered["marginal_utility_bnusd_per_mt"],
-                strict=True,
-            )
-        ]
+    for s, e in zip(group_starts, group_ends):
+        n_blocks = e - s
+        w_slice = widths_arr[s:e]
+        u_slice = utils_arr[s:e]
 
+        # Pass-through fast path: nothing to merge for this link.
+        if n_blocks <= 1 or (w_slice >= min_width_mt).all():
+            out_names_chunks.append(np.full(n_blocks, names_arr[s], dtype=object))
+            out_blocks_chunks.append(np.arange(1, n_blocks + 1))
+            out_widths_chunks.append(w_slice)
+            out_utils_chunks.append(u_slice)
+            continue
+
+        # Slow path: iterative merge of small blocks (n is small per link).
+        widths = w_slice.tolist()
+        utilities = u_slice.tolist()
         link_merged = 0
-        while len(blocks) > 1:
-            donor_idx = next(
-                (i for i, block in enumerate(blocks) if block["width"] < min_width_mt),
-                None,
+        while len(widths) > 1:
+            donor = next(
+                (i for i, w in enumerate(widths) if w < min_width_mt),
+                -1,
             )
-            if donor_idx is None:
+            if donor < 0:
                 break
-
-            receiver_idx = donor_idx - 1 if donor_idx > 0 else 1
-            donor = blocks[donor_idx]
-            receiver = blocks[receiver_idx]
-
-            total_width = receiver["width"] + donor["width"]
-            receiver["utility"] = (
-                receiver["utility"] * receiver["width"]
-                + donor["utility"] * donor["width"]
-            ) / total_width
-            receiver["width"] = total_width
-
-            del blocks[donor_idx]
+            recv = donor - 1 if donor > 0 else 1
+            total_w = widths[recv] + widths[donor]
+            utilities[recv] = (
+                utilities[recv] * widths[recv] + utilities[donor] * widths[donor]
+            ) / total_w
+            widths[recv] = total_w
+            del widths[donor]
+            del utilities[donor]
             link_merged += 1
 
         if link_merged > 0:
             merged_blocks += link_merged
             affected_links += 1
 
-        merged_groups.append(
-            pd.DataFrame(
-                {
-                    "name": name,
-                    "block_id": range(1, len(blocks) + 1),
-                    "width_mt_per_year": [block["width"] for block in blocks],
-                    "marginal_utility_bnusd_per_mt": [
-                        block["utility"] for block in blocks
-                    ],
-                }
-            )
-        )
+        n_out = len(widths)
+        out_names_chunks.append(np.full(n_out, names_arr[s], dtype=object))
+        out_blocks_chunks.append(np.arange(1, n_out + 1))
+        out_widths_chunks.append(np.asarray(widths, dtype=float))
+        out_utils_chunks.append(np.asarray(utilities, dtype=float))
 
-    return pd.concat(merged_groups, ignore_index=True), merged_blocks, affected_links
+    result = pd.DataFrame(
+        {
+            "name": np.concatenate(out_names_chunks),
+            "block_id": np.concatenate(out_blocks_chunks),
+            "width_mt_per_year": np.concatenate(out_widths_chunks),
+            "marginal_utility_bnusd_per_mt": np.concatenate(out_utils_chunks),
+        }
+    )
+    return result, merged_blocks, affected_links
 
 
 def add_piecewise_food_utility(
@@ -262,15 +288,20 @@ def add_piecewise_food_utility(
         link_p.sel(name=link_names) == block_flow.sum("block_id") + overflow,
         name="GlobalConstraint-food_utility_piecewise_balance",
     )
-    m.objective += -(utilities * block_flow).sum()
 
     # Continue the utility schedule into overflow to prevent the solver from
     # bypassing blocks.  Without this, overflow has zero utility, which is
-    # more attractive than any negative-utility block — causing the solver to
+    # more attractive than any negative-utility block - causing the solver to
     # route all consumption of negative-mu foods through overflow and
     # effectively ignoring the piecewise schedule.
     overflow_utilities = utilities.isel(block_id=-1)
-    m.objective += -(overflow_utilities * overflow).sum()
+
+    # Combine both contributions into a single objective update.  Each
+    # m.objective += <expr> merges <expr> with the full existing objective,
+    # so issuing two of them doubles that O(N_obj_terms) merge cost.
+    m.objective += -(
+        (utilities * block_flow).sum() + (overflow_utilities * overflow).sum()
+    )
 
     FOOD_UTILITY_COEFFS[id(m)] = (utilities, overflow_utilities)
 

@@ -356,6 +356,14 @@ def _add_stage1_constraints(
     log_rr_totals: dict[tuple[int, str], linopy.LinearExpression] = {}
     start_entries: dict[int, float] = {}
 
+    # Collect per-risk (cluster, cause)-indexed log(RR) contributions and merge
+    # them in one shot at the end of the loop.  Doing element-wise scalar
+    # accumulation inside the inner double loop here was the dominant cost in
+    # _add_stage1_constraints: each `log_rr_totals[key] = log_rr_totals[key] +
+    # expr` triggers a full linopy expression merge.
+    per_risk_log_rr: list[linopy.LinearExpression] = []
+    present_pairs: set[tuple[int, str]] = set()
+
     # Process (cluster, risk) pairs grouped by risk_factor. All clusters within
     # one risk share the same intake breakpoints and cause set, so a single
     # variable array can span every (cluster, risk) pair in the group.
@@ -464,22 +472,32 @@ def _add_stage1_constraints(
             name="cluster",
         )
 
-        # Σ_r log(RR_{r,d}) for each (cluster, cause)
+        # Sum over r of log(RR_{r,d}) for each (cluster, cause)
         log_rr_by_cluster = log_rr_contrib.groupby(cluster_grouper).sum()
 
-        # Store expressions for Stage 2
-        causes = log_rr_by_cluster.coords["cause"].values
-        clusters = log_rr_by_cluster.coords["cluster"].values
+        # Defer the actual cross-risk sum until after the loop: collect the
+        # per-risk array and record which (cluster, cause) keys it contributes
+        # to, so the downstream dict only contains pairs that were actually
+        # observed (matching the original behaviour).
+        per_risk_log_rr.append(log_rr_by_cluster)
+        risk_clusters = log_rr_by_cluster.coords["cluster"].values
+        risk_causes = log_rr_by_cluster.coords["cause"].values
+        for c in risk_clusters:
+            for cause in risk_causes:
+                present_pairs.add((int(c), str(cause)))
 
-        for c in clusters:
-            for cause in causes:
-                expr = log_rr_by_cluster.sel(cluster=c, cause=cause)
-                key = (c, cause)
-
-                if key in log_rr_totals:
-                    log_rr_totals[key] = log_rr_totals[key] + expr
-                else:
-                    log_rr_totals[key] = expr
+    # Cross-risk sum: linopy.merge along the term dimension is equivalent to
+    # summing the expressions, but does the work as a single xarray.concat
+    # with outer alignment on (cluster, cause) instead of one merge per pair.
+    if per_risk_log_rr:
+        if len(per_risk_log_rr) == 1:
+            combined = per_risk_log_rr[0]
+        else:
+            combined = linopy.merge(per_risk_log_rr, dim="_term")
+        for cluster_key, cause_key in present_pairs:
+            log_rr_totals[(cluster_key, cause_key)] = combined.sel(
+                cluster=cluster_key, cause=cause_key
+            )
 
     return log_rr_totals, start_entries
 
