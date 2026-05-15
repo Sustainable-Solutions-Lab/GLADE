@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 import time
 
-from linopy.constraints import print_single_constraint
+from linopy.common import format_single_constraint
 import numpy as np
 import pandas as pd
 import pypsa
@@ -1704,7 +1704,7 @@ def run_solve(
                     constraint_details = []
                     for label in infeasible_labels:
                         try:
-                            detail = print_single_constraint(n.model, label)
+                            detail = format_single_constraint(n.model, label)
                             constraint_details.append(detail)
                         except Exception as e:
                             constraint_details.append(
