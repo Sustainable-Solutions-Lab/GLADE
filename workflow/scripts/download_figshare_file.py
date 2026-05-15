@@ -99,6 +99,15 @@ def _download_file(file_id: int, output: Path, show_progress: bool) -> None:
                     f.write(chunk)
                     progress.update(len(chunk))
 
+            if total_bytes is not None:
+                written = output.stat().st_size
+                if written != total_bytes:
+                    output.unlink(missing_ok=True)
+                    raise RuntimeError(
+                        f"Truncated download for {output.name}: got {written} bytes, "
+                        f"expected {total_bytes} (Content-Length)"
+                    )
+
             # Download successful, break out of retry loop
             break
 
