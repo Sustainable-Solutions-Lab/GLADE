@@ -109,7 +109,7 @@ Step-by-Step Example
 --------------------
 
 The example below uses a global sensitivity analysis config (``gsa.yaml``)
-with ~24,000 scenarios.
+with ~12,000 scenarios (3 stability regimes x 4096 Sobol samples).
 
 **1. Build and solve baselines locally**
 
@@ -289,7 +289,7 @@ Keeping the Manifest in Sync
 The manifest generator (``tools/export-solve-manifest``) mirrors the input
 and parameter definitions from the ``solve_model`` / ``solve_and_analyze_model``
 Snakemake rules.  It is intentionally decoupled from Snakemake for performance
-(~15s vs ~5min via the Snakemake API for 24k scenarios).
+(~15s vs ~5min via the Snakemake API for ~12k scenarios).
 
 When adding or changing inputs or parameters on these rules, **also update
 the manifest generator**.  Comments on the rules and on ``solve_model_inputs``

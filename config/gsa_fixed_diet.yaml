@@ -44,7 +44,7 @@ scenarios:
   _generators:
     - name: gsa-fd_{sample_id}
       mode: sensitivity
-      samples: 8192
+      samples: 2048
       slice_parameters: [ghg_price]
       parameter_groups:
         "Emission factors": [ch4_factor, n2o_factor, luc_factor]

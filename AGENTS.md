@@ -239,14 +239,14 @@ Notes:
 
 ### HPC Cluster Workflow
 
-For large-scale runs (e.g., GSA with 24k+ scenarios), solves are executed on an HPC cluster **without Snakemake** to avoid DAG construction overhead and filesystem latency. The workflow uses a manifest-based approach:
+For large-scale runs (e.g., GSA with ~12k scenarios), solves are executed on an HPC cluster **without Snakemake** to avoid DAG construction overhead and filesystem latency. The workflow uses a manifest-based approach:
 
 1. **`tools/export-solve-manifest`** (local): Generates a JSON manifest containing fully-resolved inputs, params, and outputs for each scenario. This mirrors the logic in the `solve_model` / `solve_and_analyze_model` Snakemake rules but runs independently.
 2. **`tools/sync-solve-inputs`** (local): Syncs built model, processing files, manifest, and scripts to the cluster.
 3. **`tools/batch-solve`** (cluster): Submits SLURM array jobs that call `tools/cluster-solve` per scenario.
 4. **`tools/cluster-solve`** (cluster): Reads a manifest entry, constructs a lightweight namespace shim, and calls `run_solve` / `run_analysis` directly — no Snakemake imports.
 
-**Important**: When adding or changing inputs/params on the `solve_model` or `solve_and_analyze_model` rules, you **must** also update `tools/export-solve-manifest` to include the same inputs/params in the manifest. The manifest generator is intentionally decoupled from Snakemake for performance (13s vs ~5min via the Snakemake API for 24k scenarios). See the comments on the rules in `workflow/rules/model.smk` and `workflow/rules/analysis.smk`.
+**Important**: When adding or changing inputs/params on the `solve_model` or `solve_and_analyze_model` rules, you **must** also update `tools/export-solve-manifest` to include the same inputs/params in the manifest. The manifest generator is intentionally decoupled from Snakemake for performance (13s vs ~5min via the Snakemake API for ~12k scenarios). See the comments on the rules in `workflow/rules/model.smk` and `workflow/rules/analysis.smk`.
 
 See `docs/cluster_execution.rst` for full documentation.
 

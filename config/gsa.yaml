@@ -76,7 +76,7 @@ scenarios:
     # --- Default stability regime (calibrated, resolved at solve time) ---
     - name: gsa_{sample_id}
       mode: sensitivity
-      samples: 8192
+      samples: 4096
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: &gsa_parameter_groups
         "Emission factors": [ch4_factor, n2o_factor, luc_factor]
@@ -155,7 +155,7 @@ scenarios:
     # --- Lower stability (÷ √10 on both penalties): l1=0.02343, animals.l1=0.01740 ---
     - name: gsa-l1-low_{sample_id}
       mode: sensitivity
-      samples: 8192
+      samples: 4096
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: *gsa_parameter_groups
       parameters: *gsa_parameters
@@ -171,7 +171,7 @@ scenarios:
     # --- Higher stability (× √10 on both penalties): l1=0.23427, animals.l1=0.17398 ---
     - name: gsa-l1-high_{sample_id}
       mode: sensitivity
-      samples: 8192
+      samples: 4096
       slice_parameters: [value_per_yll, ghg_price]
       parameter_groups: *gsa_parameter_groups
       parameters: *gsa_parameters
