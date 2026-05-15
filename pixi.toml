@@ -66,7 +66,7 @@ food-opt-workflow = { path = ".", editable = true }
 snakemake-logger-plugin-compact = { path = "tools/snakemake-logger-plugin-compact" }
 
 # Optimization and modeling; own branches of pypsa and linopy with custom features needed by food-opt
-pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.0.7.3+food.opt" }
+pypsa = { git = "https://github.com/koen-vg/PyPSA.git", tag = "v1.2.0+food.opt" }
 linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.7.0+food.opt" }
 
 # Geospatial processing
