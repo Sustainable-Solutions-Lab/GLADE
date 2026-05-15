@@ -143,7 +143,9 @@ def _evaluate(
     Path(entry_b["log"]).parent.mkdir(parents=True, exist_ok=True)
     smk_b = build_namespace(entry_b)
     t0 = time.time()
-    n_baseline = run_solve(smk_b, logger)
+    n_baseline = run_solve(
+        smk_b, logger, skip_post_processing=True, skip_assign_duals=True
+    )
     timings["baseline_s"] = time.time() - t0
     if n_baseline is None:
         raise RuntimeError(
@@ -163,7 +165,7 @@ def _evaluate(
     logger.info("[iter %d] main solve", iter_id)
     smk_m = build_namespace(entry_m_preview)
     t0 = time.time()
-    n_main = run_solve(smk_m, logger)
+    n_main = run_solve(smk_m, logger, skip_post_processing=True, skip_assign_duals=True)
     timings["main_s"] = time.time() - t0
     if n_main is None:
         raise RuntimeError(

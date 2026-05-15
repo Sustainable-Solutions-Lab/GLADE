@@ -8,6 +8,7 @@ import functools
 import gc
 import logging
 from pathlib import Path
+import time
 
 from linopy.constraints import print_single_constraint
 import numpy as np
@@ -41,6 +42,34 @@ from workflow.scripts.solve_model.production_stability import (
 
 # Module-level logger (replaced by run_solve's caller)
 logger = logging.getLogger(__name__)
+
+_PHASE_TIMES: list[tuple[str, float]] = []
+
+
+@contextlib.contextmanager
+def _phase(label: str):
+    """Log wall-clock time for a phase of solve_model.run_solve."""
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        dt = time.perf_counter() - t0
+        _PHASE_TIMES.append((label, dt))
+        logger.info("[phase] %-46s %7.2f s", label, dt)
+
+
+def report_phase_timings() -> None:
+    """Emit a final summary of all phase timings in order, plus a total."""
+    if not _PHASE_TIMES:
+        return
+    total = sum(dt for _, dt in _PHASE_TIMES)
+    logger.info("=" * 70)
+    logger.info("PHASE TIMING SUMMARY")
+    logger.info("=" * 70)
+    for label, dt in _PHASE_TIMES:
+        pct = 100 * dt / total if total else 0.0
+        logger.info("  %-46s %7.2f s  (%5.1f%%)", label, dt, pct)
+    logger.info("  %-46s %7.2f s", "TOTAL (phases sum)", total)
 
 
 class _ShadowPriceLogFilter(logging.Filter):
@@ -1172,7 +1201,13 @@ def _apply_protein_feed_calibration(
         )
 
 
-def run_solve(smk, _logger) -> pypsa.Network | None:
+def run_solve(
+    smk,
+    _logger,
+    *,
+    skip_post_processing: bool = False,
+    skip_assign_duals: bool = False,
+) -> pypsa.Network | None:
     """Core solve logic returning the solved network.
 
     Parameters
@@ -1181,6 +1216,17 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         Snakemake object providing inputs, params, config, wildcards, and log.
     _logger
         Logger instance (already configured by the caller).
+    skip_post_processing
+        If True, do not call ``n.optimize.post_processing()``.  Callers that
+        only need ``n.links.dynamic.p0`` etc. (set by ``assign_solution``) can
+        opt out of the PyPSA bus-injection recompute, which is dominated by
+        per-link-port ``DataFrame.rename`` calls and is the single largest
+        cost after the solver itself for the food-opt model.
+    skip_assign_duals
+        If True, do not call ``n.optimize.assign_duals(...)``.  This is safe
+        whenever the caller does not need the generic dual assignment on
+        non-Link components.  ``_extract_p_set_duals`` still runs and reads
+        Link ``p_set`` duals directly from ``n.model.constraints``.
 
     Returns
     -------
@@ -1190,16 +1236,19 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     """
     global logger
     logger = _logger
+    _PHASE_TIMES.clear()
 
-    n = pypsa.Network(smk.input.network)
+    with _phase("pypsa.Network(load_netcdf)"):
+        n = pypsa.Network(smk.input.network)
 
     # Apply sensitivity adjustments (moved from build_model to allow shared builds)
     sensitivity_cfg = smk.params.sensitivity
     if sensitivity_cfg:
         from workflow.scripts.solve_model.sensitivity import apply_sensitivity_factors
 
-        logger.info("Applying sensitivity adjustments...")
-        apply_sensitivity_factors(n, sensitivity_cfg)
+        with _phase("apply_sensitivity_factors"):
+            logger.info("Applying sensitivity adjustments...")
+            apply_sensitivity_factors(n, sensitivity_cfg)
 
     # Apply grassland forage calibration if enabled for this scenario
     if smk.params.forage_calibration_enabled:
@@ -1282,9 +1331,10 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         fix_food_consumption_to_baseline(n, matched_baseline)
 
     # Create the linopy model
-    logger.info("Creating linopy model...")
-    n.optimize.create_model(include_objective_constant=False)
-    logger.info("Linopy model created.")
+    with _phase("pypsa.optimize.create_model"):
+        logger.info("Creating linopy model...")
+        n.optimize.create_model(include_objective_constant=False)
+        logger.info("Linopy model created.")
 
     if piecewise_utility_enabled:
         if enforce_baseline:
@@ -1292,11 +1342,12 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
                 "food_utility_piecewise cannot be combined with "
                 "validation.enforce_baseline_diet=true"
             )
-        add_piecewise_food_utility(
-            n,
-            smk.input.food_utility_piecewise,
-            float(piecewise_utility_cfg["min_block_width_mt"]),
-        )
+        with _phase("add_piecewise_food_utility"):
+            add_piecewise_food_utility(
+                n,
+                smk.input.food_utility_piecewise,
+                float(piecewise_utility_cfg["min_block_width_mt"]),
+            )
 
     solver_name = smk.params.solver
     solver_options = dict(smk.params.solver_options)
@@ -1374,15 +1425,17 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
             if isinstance(bounds, dict) and bounds.get("equal_to_baseline")
         }
 
-    add_macronutrient_constraints(
-        n, macronutrient_cfg, population_map, baseline_by_nutrient
-    )
-    add_food_group_constraints(
-        n,
-        smk.params.food_group_constraints,
-        population_map,
-        per_country_equal,
-    )
+    with _phase("add_macronutrient_constraints"):
+        add_macronutrient_constraints(
+            n, macronutrient_cfg, population_map, baseline_by_nutrient
+        )
+    with _phase("add_food_group_constraints"):
+        add_food_group_constraints(
+            n,
+            smk.params.food_group_constraints,
+            population_map,
+            per_country_equal,
+        )
 
     # Add residue feed limit constraints
     max_feed_fraction = float(smk.params.residue_max_feed_fraction)
@@ -1391,7 +1444,8 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         smk.params.countries,
         smk.input.m49,
     )
-    add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
+    with _phase("add_residue_feed_constraints"):
+        add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
     # Add production stability constraints (per-link for both crops and animals).
     # Resolve the "calibrated" sentinel before any downstream code reads
@@ -1403,34 +1457,40 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
     )
     if stability_cfg["enabled"]:
         slack_marginal_cost = float(smk.params.slack_marginal_cost)
-        add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
+        with _phase("add_production_stability_constraints"):
+            add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
 
     # Diet stability: per-(food, country) L1 (or quadratic) penalty anchoring
     # consumption to the baseline diet. Independent of production_stability;
     # only applies when validation.diet_stability.enabled is true and the
     # diet is not already pinned via enforce_baseline_diet.
     if diet_stability_cfg["enabled"] and not enforce_baseline:
-        add_diet_stability_constraints(n, matched_baseline, diet_stability_cfg)
+        with _phase("add_diet_stability_constraints"):
+            add_diet_stability_constraints(n, matched_baseline, diet_stability_cfg)
 
     # Add animal growth cap constraints (independent of production stability)
     animal_growth_cap_cfg = smk.params.animal_growth_cap
-    add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
+    with _phase("add_animal_growth_cap_constraints"):
+        add_animal_growth_cap_constraints(n, animal_growth_cap_cfg)
 
     # Add crop growth cap constraints (independent of production stability)
     crop_growth_cap_cfg = smk.params.crop_growth_cap
-    add_crop_growth_cap_constraints(n, crop_growth_cap_cfg)
+    with _phase("add_crop_growth_cap_constraints"):
+        add_crop_growth_cap_constraints(n, crop_growth_cap_cfg)
 
     # Apply negative cost-calibration corrections only up to baseline (two-tier).
     # Positive corrections are already applied additively at build time;
     # negative corrections were stored on links as ``bounded_subsidy_*``
     # attributes and are activated here.
-    add_bounded_subsidy_constraints(n)
+    with _phase("add_bounded_subsidy_constraints"):
+        add_bounded_subsidy_constraints(n)
 
     # Add within-group food ratio constraints if enabled (separate from baseline enforcement)
     ratio_cfg = smk.params.fix_within_group_ratios
     if ratio_cfg["enabled"] and not enforce_baseline:
         ratios_df = _build_ratios_from_baseline(prepared_baseline_df)
-        add_within_group_ratio_constraints(n, ratios_df)
+        with _phase("add_within_group_ratio_constraints"):
+            add_within_group_ratio_constraints(n, ratios_df)
     elif ratio_cfg["enabled"] and enforce_baseline:
         logger.info(
             "Skipping fix_within_group_ratios: redundant when enforce_baseline_diet=true"
@@ -1444,20 +1504,21 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         sensitivity_cfg = smk.params.sensitivity or {}
         rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
 
-        add_health_objective(
-            n,
-            smk.input.health_risk_breakpoints,
-            smk.input.health_cluster_cause,
-            smk.input.health_cause_log,
-            smk.input.health_cluster_summary,
-            smk.input.health_clusters,
-            smk.params.health_risk_factors,
-            smk.params.health_risk_cause_map,
-            value_per_yll,
-            smk.input.health_cluster_risk_baseline,
-            rr_quantiles=rr_quantiles,
-            tmrel_path=smk.input.health_derived_tmrel,
-        )
+        with _phase("add_health_objective"):
+            add_health_objective(
+                n,
+                smk.input.health_risk_breakpoints,
+                smk.input.health_cluster_cause,
+                smk.input.health_cause_log,
+                smk.input.health_cluster_summary,
+                smk.input.health_clusters,
+                smk.params.health_risk_factors,
+                smk.params.health_risk_cause_map,
+                value_per_yll,
+                smk.input.health_cluster_risk_baseline,
+                rr_quantiles=rr_quantiles,
+                tmrel_path=smk.input.health_derived_tmrel,
+            )
 
     # Export fully-constructed model to MPS for Gurobi parameter tuning
     if smk.params.export_for_tuning and hasattr(smk.output, "network"):
@@ -1471,14 +1532,15 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         logger.info("Model exported. Run tuning with:")
         logger.info("  pixi run -e gurobi python tools/tune_model.py %s", output_path)
 
-    status, condition = n.model.solve(
-        solver_name=solver_name,
-        io_api=io_api,
-        env=gurobi_env,
-        calculate_fixed_duals=smk.params.calculate_fixed_duals,
-        reformulate_sos="auto",
-        **solver_options,
-    )
+    with _phase("model.solve (to_solver + solver run)"):
+        status, condition = n.model.solve(
+            solver_name=solver_name,
+            io_api=io_api,
+            env=gurobi_env,
+            calculate_fixed_duals=smk.params.calculate_fixed_duals,
+            reformulate_sos="auto",
+            **solver_options,
+        )
     result = (status, condition)
 
     # Free solver-internal model (Gurobi/HiGHS); solution is already stored
@@ -1506,10 +1568,16 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
                 removed[name] = variables_container.data.pop(name)
 
         try:
-            n.optimize.assign_solution()
-            n.optimize.assign_duals(False)
-            _extract_p_set_duals(n)
-            n.optimize.post_processing()
+            with _phase("assign_solution"):
+                n.optimize.assign_solution()
+            if not skip_assign_duals:
+                with _phase("assign_duals"):
+                    n.optimize.assign_duals(False)
+            with _phase("_extract_p_set_duals"):
+                _extract_p_set_duals(n)
+            if not skip_post_processing:
+                with _phase("post_processing"):
+                    n.optimize.post_processing()
         finally:
             if removed:
                 variables_container.data.update(removed)
@@ -1615,6 +1683,7 @@ def run_solve(smk, _logger) -> pypsa.Network | None:
         with contextlib.suppress(OSError):
             ctypes.CDLL("libc.so.6").malloc_trim(0)
 
+        report_phase_timings()
         return n
     elif condition in {"infeasible", "infeasible_or_unbounded"}:
         logger.error("Model is infeasible or unbounded!")
