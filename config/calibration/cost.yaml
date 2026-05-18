@@ -23,12 +23,36 @@
 name: "cost_calibration"
 
 scenarios:
-  # Step 1: Baseline solve to extract consumer values / utility blocks
+  # Step 1: Baseline solve to extract consumer values / utility blocks.
+  #
+  # Production stability is enabled with a +/-20 % band so that the food
+  # p_set duals reflect the marginal cost of supply under realistic
+  # (geographically pinned) production patterns, while leaving the LP enough
+  # room to absorb structural FAOSTAT-vs-FBS mismatches (most foods <10 %,
+  # a few <20 %). The file-level `validation.slack_marginal_cost` override
+  # ($5 000/t) caps the small set of foods with structural mismatches >20 %
+  # (buckwheat, plantain, coffee, tea, olive-oil) at a sensible level
+  # rather than the default $50 000/t slack ceiling. See docs/costs.rst.
   baseline:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        enabled: false  # consumer-values extraction only; no stability constraints
+        enabled: true
+        penalty_mode: "hard"
+        crops:
+          enabled: true
+          max_relative_deviation: 0.20
+          enable_slack: true
+        grassland:
+          enabled: true
+          max_relative_deviation: 0.20
+          enable_slack: true
+        animals:
+          enabled: true
+          max_relative_deviation: 0.20
+          enable_slack: true
+        land_conversion:
+          enabled: false
     food_utility_piecewise:
       enabled: false
     emissions:
@@ -77,6 +101,12 @@ cost_calibration:
 
 validation:
   use_actual_yields: true
+  # Cap slack-driven duals at the upper end of realistic food wholesale
+  # prices ($5 000/t) so the structural FAOSTAT-vs-FBS mismatches in step 1
+  # do not peg consumer-value duals at the default $50 000/t ceiling, while
+  # leaving enough headroom for high-value foods (meat, dairy, olive-oil)
+  # to be priced from real supply rather than capped at slack.
+  slack_marginal_cost: 5.0
 
 water:
   supply_scenario: "current_use"
