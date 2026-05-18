@@ -33,12 +33,14 @@ FDDRBEET,sugarbeet,crop,ruminant,Fodder beet → sugar beet
 GRAINS,barley,crop,ruminant,Barley and other cereals (using barley as representative)
 GRAINS,oat,crop,ruminant,Oat grain represented by GLEAM mixed cereals nutritional profile
 GRAINS,rye,crop,ruminant,Rye grain represented by GLEAM mixed cereals nutritional profile
+GRAINS,buckwheat,crop,ruminant,Buckwheat grain represented by GLEAM mixed cereals nutritional profile
 CORN,maize,crop,both,Maize grain
 WHEAT,wheat,crop,monogastric,Wheat grain
 MAIZE,maize,crop,monogastric,Maize grain (same as CORN)
 BARLEY,barley,crop,monogastric,Barley grain
 BARLEY,oat,crop,monogastric,Oat grain proxied with barley nutritional profile
 BARLEY,rye,crop,monogastric,Rye grain proxied with barley nutritional profile
+BARLEY,buckwheat,crop,monogastric,Buckwheat grain proxied with barley nutritional profile
 MILLET,pearl-millet,crop,monogastric,Millet grain → pearl millet
 RICE,wetland-rice,crop,monogastric,Rice grain → wetland rice
 SORGHUM,sorghum,crop,monogastric,Sorghum grain
