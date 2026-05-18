@@ -326,6 +326,11 @@ yield_calibration:
   crops:
   - plantain  # GAEZ uses banana raster as proxy; FAOSTAT plantain yields are
               # ~30% higher than GAEZ-banana yields in African producers.
+  - coffee    # GAEZ COC yields systematically below FAOSTAT in major
+              # producers (BRA, VNM, COL), giving ~25% global under-production.
+  - tea       # GAEZ TEA yields overshoot in CHN; without rescaling the model
+              # produces ~30% more dried tea than FAOSTAT fresh-leaf statistics
+              # imply (after the standard 4:1 fresh-to-dry conversion).
   # Numerical safety: per-country multipliers outside [min, max] are clipped
   # (and logged) to avoid degenerate cases (zero current production, etc.).
   multiplier_min: 0.5
