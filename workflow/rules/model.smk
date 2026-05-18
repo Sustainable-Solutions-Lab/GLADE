@@ -83,6 +83,20 @@ def build_model_fodder_yield_correction_input(wildcards):
     return {}
 
 
+def build_model_yield_calibration_input(wildcards):
+    """Conditionally include the FBS-corrected FAOSTAT yield calibration CSV.
+
+    Only required when the calibration is enabled AND
+    ``validation.use_actual_yields`` is true; in optimisation mode the
+    GAEZ potential yields are used as-is.
+    """
+    if not config["yield_calibration"]["enabled"]:
+        return {}
+    if not config["validation"]["use_actual_yields"]:
+        return {}
+    return {"yield_calibration": "<processing>/{name}/yield_calibration.csv"}
+
+
 def build_model_cost_calibration_input(wildcards):
     """Conditionally include cost calibration CSVs (crops, grassland, animals).
 
@@ -108,6 +122,7 @@ rule build_model:
         unpack(harvested_area_model_inputs),
         unpack(build_model_grassland_calibration_input),
         unpack(build_model_fodder_yield_correction_input),
+        unpack(build_model_yield_calibration_input),
         unpack(build_model_cost_calibration_input),
         unpack(build_model_biofuel_baseline_input),
         unpack(build_model_fiber_baseline_input),

@@ -224,35 +224,50 @@ if __name__ == "__main__":
 
             yields_data[yields_key] = yields_df
 
-    # Apply Eurostat-based fodder yield corrections
+    # Apply per-(country, crop) yield corrections. Two sources, applied
+    # multiplicatively through the same per-cell rescaling:
+    #   * fodder_yield_corrections: Eurostat-anchored FDD-crop corrections,
+    #     always applied (calibrates GAEZ yields to observed European patterns).
+    #   * yield_calibration: FBS-corrected-FAOSTAT-anchored corrections for
+    #     crops where GAEZ relies on a proxy raster (e.g. plantain via banana).
+    #     Only wired in when validation.use_actual_yields=true (see
+    #     workflow/rules/model.smk).
+    def _apply_yield_corrections(corr_df: pd.DataFrame, source_label: str) -> None:
+        if corr_df.empty:
+            return
+        _r2c_corr = gpd.read_file(snakemake.input.regions)[
+            ["region", "country"]
+        ].set_index("region")["country"]
+        n_adjusted = 0
+        for _, row in corr_df.iterrows():
+            country = str(row["country"])
+            crop = str(row["crop"])
+            factor = float(row["yield_correction_factor"])
+            corr_regions = set(_r2c_corr[_r2c_corr == country].index)
+            for ws in ("r", "i"):
+                key = f"{crop}_yield_{ws}"
+                if key not in yields_data:
+                    continue
+                df = yields_data[key]
+                mask = df.index.get_level_values("region").isin(corr_regions)
+                if mask.any():
+                    df.loc[mask, "yield"] = df.loc[mask, "yield"] * factor
+                    n_adjusted += int(mask.sum())
+        logger.info(
+            "Applied %s yield corrections: %d region-class entries adjusted "
+            "across %d (country, crop) pairs",
+            source_label,
+            n_adjusted,
+            len(corr_df),
+        )
+
     fodder_corr_path = snakemake.input.get("fodder_yield_corrections")
     if fodder_corr_path:
-        fodder_corr = read_csv(fodder_corr_path)
-        if not fodder_corr.empty:
-            _r2c_corr = gpd.read_file(snakemake.input.regions)[
-                ["region", "country"]
-            ].set_index("region")["country"]
-            n_adjusted = 0
-            for _, row in fodder_corr.iterrows():
-                country = str(row["country"])
-                crop = str(row["crop"])
-                factor = float(row["yield_correction_factor"])
-                corr_regions = set(_r2c_corr[_r2c_corr == country].index)
-                for ws in ("r", "i"):
-                    key = f"{crop}_yield_{ws}"
-                    if key not in yields_data:
-                        continue
-                    df = yields_data[key]
-                    mask = df.index.get_level_values("region").isin(corr_regions)
-                    if mask.any():
-                        df.loc[mask, "yield"] = df.loc[mask, "yield"] * factor
-                        n_adjusted += int(mask.sum())
-            logger.info(
-                "Applied fodder yield corrections: %d region-class entries adjusted "
-                "across %d (country, crop) pairs",
-                n_adjusted,
-                len(fodder_corr),
-            )
+        _apply_yield_corrections(read_csv(fodder_corr_path), "fodder")
+
+    yield_cal_path = snakemake.input.get("yield_calibration")
+    if yield_cal_path:
+        _apply_yield_corrections(read_csv(yield_cal_path), "FAOSTAT-target")
 
     # Read regions
     regions_df = gpd.read_file(snakemake.input.regions)

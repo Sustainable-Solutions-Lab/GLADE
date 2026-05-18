@@ -357,6 +357,79 @@ rule build_fodder_yield_corrections:
         "../scripts/build_fodder_yield_corrections.py"
 
 
+def _yield_calibration_inputs(_wildcards):
+    """GAEZ yield + harvested-area inputs for each calibrated crop."""
+    irrigated = set(irrigated_crops())
+    inputs = {
+        "regions": "<processing>/{name}/regions.geojson",
+        "faostat_production": "<processing>/{name}/faostat_crop_production.csv",
+    }
+    for crop in config["yield_calibration"]["crops"]:
+        if crop not in config["crops"]:
+            continue
+        inputs[f"gaez_yield_{crop}_r"] = (
+            f"<processing>/{{name}}/crop_yields/{crop}_r.csv"
+        )
+        inputs[f"gaez_harvested_{crop}_r"] = (
+            f"<processing>/{{name}}/harvested_area/gaez/{crop}_r.csv"
+        )
+        if crop in irrigated:
+            inputs[f"gaez_yield_{crop}_i"] = (
+                f"<processing>/{{name}}/crop_yields/{crop}_i.csv"
+            )
+            inputs[f"gaez_harvested_{crop}_i"] = (
+                f"<processing>/{{name}}/harvested_area/gaez/{crop}_i.csv"
+            )
+    return inputs
+
+
+def _yield_calibration_moisture(_wildcards):
+    """Per-crop moisture fractions needed to convert GAEZ DM yields to fresh."""
+    import pandas as pd
+
+    df = pd.read_csv("data/curated/crop_moisture_content.csv", comment="#").set_index(
+        "crop"
+    )
+    out = {}
+    for crop in config["yield_calibration"]["crops"]:
+        if crop not in df.index:
+            raise KeyError(
+                f"yield_calibration: no moisture entry for {crop} in "
+                "data/curated/crop_moisture_content.csv"
+            )
+        out[crop] = float(df.loc[crop, "moisture_fraction"])
+    return out
+
+
+rule build_yield_calibration:
+    """Per-(country, crop) yield calibration anchored on FBS-corrected FAOSTAT
+    production for crops listed in config[yield_calibration].crops. Output
+    schema matches fodder_yield_corrections.csv and is applied through the
+    same per-cell yield-rescaling path in build_model.py, only when
+    validation.use_actual_yields=true. Used for crops where GAEZ relies on
+    a proxy raster (e.g. plantain via banana)."""
+    input:
+        unpack(_yield_calibration_inputs),
+    params:
+        crops=config["yield_calibration"]["crops"],
+        multiplier_min=config["yield_calibration"]["multiplier_min"],
+        multiplier_max=config["yield_calibration"]["multiplier_max"],
+        moisture_by_crop=_yield_calibration_moisture,
+    output:
+        "<processing>/{name}/yield_calibration.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=300,
+    log:
+        "<logs>/{name}/build_yield_calibration.log",
+    benchmark:
+        "<benchmarks>/{name}/build_yield_calibration.tsv"
+    script:
+        "../scripts/build_yield_calibration.py"
+
+
 # Modelled fruits whose harvested area is sourced via FAOSTAT-attribution +
 # yield-weighted cell distribution (instead of GAEZ-FRT-raster scaling).
 # Apple goes via CROPGRIDS; banana absorbs FRT residual on top of its BAN

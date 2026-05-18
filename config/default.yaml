@@ -304,6 +304,33 @@ cropgrids:
   # region). Per-crop overrides could be added later if needed.
   suitable_area_expansion: 1.0
 
+# --- section: yield_calibration ---
+# Per-(country, crop) yield rescaling for crops where GAEZ relies on a proxy
+# raster (e.g. plantain uses the GAEZ banana raster because GAEZ has no
+# separate plantain output). For each listed crop, the build step derives a
+# country-level multiplier
+#
+#   multiplier_c = FBS-corrected FAOSTAT production_c
+#                  / current model GAEZ-derived production_c
+#
+# that is applied uniformly to every per-cell yield in country c, so the
+# country-level production matches FAOSTAT by construction while the GAEZ
+# within-country spatial pattern is preserved.
+#
+# Only applied when ``validation.use_actual_yields`` is true; in optimisation
+# mode the GAEZ potential yields are used unrescaled. The mechanism mirrors
+# ``fodder_decomposition.yield_corrections`` (Eurostat-anchored) and the two
+# corrections compose multiplicatively where they overlap.
+yield_calibration:
+  enabled: true
+  crops:
+  - plantain  # GAEZ uses banana raster as proxy; FAOSTAT plantain yields are
+              # ~30% higher than GAEZ-banana yields in African producers.
+  # Numerical safety: per-country multipliers outside [min, max] are clipped
+  # (and logged) to avoid degenerate cases (zero current production, etc.).
+  multiplier_min: 0.5
+  multiplier_max: 3.0
+
 # --- section: non_food_crops ---
 # Crops not intended for human food production (fodder, biomass).
 # These are excluded from foods.csv validation but still need yield/land data.
