@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Food Demand Calibration
+# -----------------------
+# Generates ``data/curated/calibration/food_demand.csv`` -- a per-food global
+# demand multiplier. Applied at solve time to ``target_mt`` for each
+# food_consumption link (see ``_match_baseline_to_consume_links`` in
+# ``workflow/scripts/solve_model/core.py``). The multiplier reconciles the
+# residual per-food global gap between FAOSTAT QCL-derived supply and the
+# GDD-IA-derived demand that remains after food_waste calibration.
+#
+# Without this step the model carries the residual mismatch as food-level
+# slack in every downstream solve, which (a) inflates production-stability
+# duals (the LP has to either over-produce, under-consume, or eat slack
+# cost), and (b) injects spurious sign on the cost-calibration corrections
+# for the affected foods (e.g. olive-oil excess pushes olive's cost
+# calibration negative).
+#
+# Method:
+#   multiplier = clip((consumption - net_slack) / consumption, [0.5, 2.0])
+#
+# where net_slack = sum(slack_positive_food) - sum(-slack_negative_food)
+# summed over countries for each food. Positive net slack means the LP had
+# to invoke positive slack (shortage filling) -> demand was too high -> the
+# multiplier shrinks. Negative net slack means the LP absorbed excess
+# supply -> demand was too low -> the multiplier grows.
+#
+# Usage:
+#   tools/calibrate food_demand
+#
+# Or equivalently:
+#   tools/smk --configfile config/calibration/food_demand.yaml -- \
+#     data/curated/calibration/food_demand.csv
+
+name: "food_demand_calibration"
+
+scenarios:
+  # Single uncalibrated scenario. With food_demand_calibration.generate
+  # set true at the base level, solve_model skips reading the calibration
+  # file (the rule's input function makes it conditional on
+  # ``enabled and not generate``), so the food_consumption p_set values
+  # carry only the raw baseline-diet demand and the slack reveals the gap.
+  uncalibrated: {}
+
+planning_horizon: 2020
+
+# Mirrors validation.yaml and food_waste.yaml: production and consumption
+# are pinned to baseline so slack on food buses reflects supply/demand
+# mismatch only.
+validation:
+  use_actual_yields: true
+  use_actual_production: true
+  enforce_baseline_diet: true
+  enforce_baseline_feed: true
+  disable_spared_cropland: true
+  disable_spared_grassland: true
+  slack_marginal_cost: 10
+
+# Skip downstream calibrations so this step is order-independent.
+cost_calibration:
+  enabled: false
+
+food_demand_calibration:
+  generate: true
+  scenario: "uncalibrated"
+
+health:
+  value_per_yll: 0
+
+emissions:
+  ghg_pricing_enabled: false
+
+solving:
+  io_api: "direct"
+  solver: "gurobi"
+  threads: 2

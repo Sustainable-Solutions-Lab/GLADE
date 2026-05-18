@@ -253,6 +253,30 @@ if _food_waste_cal_cfg["generate"]:
             "../scripts/compute_food_waste_calibration.py"
 
 
+_food_demand_cal_cfg = config["food_demand_calibration"]
+
+if _food_demand_cal_cfg["generate"]:
+    _food_demand_cal_scenario = _food_demand_cal_cfg["scenario"]
+
+    rule compute_food_demand_calibration:
+        input:
+            network=f"<results>/{name}/solved/model_scen-{_food_demand_cal_scenario}.nc",
+        params:
+            min_multiplier=_food_demand_cal_cfg["min_multiplier"],
+            max_multiplier=_food_demand_cal_cfg["max_multiplier"],
+        output:
+            calibration_file=_food_demand_cal_cfg["calibration_file"],
+        resources:
+            runtime="2m",
+            mem_mb=2000,
+        log:
+            f"<logs>/{name}/compute_food_demand_calibration_scen-{_food_demand_cal_scenario}.log",
+        benchmark:
+            f"<benchmarks>/{name}/compute_food_demand_calibration_scen-{_food_demand_cal_scenario}.tsv"
+        script:
+            "../scripts/compute_food_demand_calibration.py"
+
+
 rule prepare_gbd_food_group_intake:
     """Process GBD 2019 dietary risk exposure data for food group intake estimates.
 

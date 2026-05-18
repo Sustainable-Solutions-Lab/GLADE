@@ -6,15 +6,17 @@
 # Orchestrator for the calibrations that feed the default workflow.
 #
 # Dependency order (upstream data changed → rerun in this order):
-#   1. feed       → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_protein}.csv
-#   2. food_waste → data/curated/calibration/food_waste.yaml
-#   3. cost       → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
-#   4. stability  → data/curated/calibration/prod_stability_l1.yaml
+#   1. feed        → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_protein}.csv
+#   2. food_waste  → data/curated/calibration/food_waste.yaml
+#   3. food_demand → data/curated/calibration/food_demand.csv
+#   4. cost        → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
+#   5. stability   → data/curated/calibration/prod_stability_l1.yaml
 #
 # Usage:
 #   tools/calibrate                # run all in order
 #   tools/calibrate feed           # one step (forage + protein feed slack)
 #   tools/calibrate food_waste
+#   tools/calibrate food_demand
 #   tools/calibrate cost
 #   tools/calibrate stability
 #   tools/calibrate --check        # report which calibrations are stale (no execution)
@@ -40,6 +42,9 @@ FEED_TARGETS=(
 )
 FOOD_WASTE_TARGETS=(
   data/curated/calibration/food_waste.yaml
+)
+FOOD_DEMAND_TARGETS=(
+  data/curated/calibration/food_demand.csv
 )
 COST_TARGETS=(
   data/curated/calibration/crop_cost.csv
@@ -126,23 +131,28 @@ case "$cmd" in
   --check|check)
     echo "[calibrate] Checking staleness (no execution) ..."
     rc=0
-    check_step feed       config/calibration/feed.yaml       "${FEED_TARGETS[@]}"       -- "$@" || rc=$?
-    check_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@" || rc=$?
-    check_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@" || rc=$?
-    check_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@" || rc=$?
+    check_step feed        config/calibration/feed.yaml        "${FEED_TARGETS[@]}"        -- "$@" || rc=$?
+    check_step food_waste  config/calibration/food_waste.yaml  "${FOOD_WASTE_TARGETS[@]}"  -- "$@" || rc=$?
+    check_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@" || rc=$?
+    check_step cost        config/calibration/cost.yaml        "${COST_TARGETS[@]}"        -- "$@" || rc=$?
+    check_step stability   config/calibration/stability.yaml   "${STABILITY_TARGETS[@]}"   -- "$@" || rc=$?
     exit "$rc"
     ;;
   all)
-    run_step feed       config/calibration/feed.yaml       "${FEED_TARGETS[@]}"       -- "$@"
-    run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
-    run_step cost       config/calibration/cost.yaml       "${COST_TARGETS[@]}"       -- "$@"
-    run_step stability  config/calibration/stability.yaml  "${STABILITY_TARGETS[@]}"  -- "$@"
+    run_step feed        config/calibration/feed.yaml        "${FEED_TARGETS[@]}"        -- "$@"
+    run_step food_waste  config/calibration/food_waste.yaml  "${FOOD_WASTE_TARGETS[@]}"  -- "$@"
+    run_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@"
+    run_step cost        config/calibration/cost.yaml        "${COST_TARGETS[@]}"        -- "$@"
+    run_step stability   config/calibration/stability.yaml   "${STABILITY_TARGETS[@]}"   -- "$@"
     ;;
   feed)
     run_step feed config/calibration/feed.yaml "${FEED_TARGETS[@]}" -- "$@"
     ;;
   food_waste)
     run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
+    ;;
+  food_demand)
+    run_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@"
     ;;
   cost)
     run_step cost config/calibration/cost.yaml "${COST_TARGETS[@]}" -- "$@"
@@ -152,7 +162,7 @@ case "$cmd" in
     ;;
   *)
     echo "[calibrate] Unknown subcommand: $cmd" >&2
-    echo "Usage: tools/calibrate [all|feed|food_waste|cost|stability|--check]" >&2
+    echo "Usage: tools/calibrate [all|feed|food_waste|food_demand|cost|stability|--check]" >&2
     exit 2
     ;;
 esac

@@ -54,6 +54,7 @@ required:
   - cost_calibration
   - feed_protein_calibration
   - food_loss_waste_calibration
+  - food_demand_calibration
   - prod_stability_calibration
   - solving
   - remote_solve
@@ -1697,6 +1698,33 @@ properties:
         items:
           type: string
         description: "Food groups to calibrate; other groups keep their FBS/SDG-derived waste fractions"
+      scenario:
+        type: string
+        description: "Scenario name whose solved model is used to generate calibration"
+
+  food_demand_calibration:
+    type: object
+    required: [enabled, generate, calibration_file, min_multiplier, max_multiplier, scenario]
+    additionalProperties: false
+    description: "Per-food global multiplier on baseline-diet target_mt applied uniformly across countries at solve time, derived from per-food slack on an uncalibrated validation solve."
+    properties:
+      enabled:
+        type: boolean
+        description: "Apply the calibrated multipliers in _match_baseline_to_consume_links"
+      generate:
+        type: boolean
+        description: "Generate calibration from a solved model (breaks DAG cycle when true)"
+      calibration_file:
+        type: string
+        description: "Path to CSV with columns food, multiplier, net_slack_mt, consumption_mt"
+      min_multiplier:
+        type: number
+        exclusiveMinimum: 0
+        description: "Lower bound; raw multipliers below this are clipped (and logged)"
+      max_multiplier:
+        type: number
+        exclusiveMinimum: 0
+        description: "Upper bound; raw multipliers above this are clipped (and logged)"
       scenario:
         type: string
         description: "Scenario name whose solved model is used to generate calibration"

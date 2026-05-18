@@ -302,6 +302,8 @@ def _match_baseline_to_consume_links(
     baseline_df: pd.DataFrame,
     consume_links: pd.DataFrame,
     population: dict[str, float],
+    *,
+    food_demand_multiplier: dict[str, float] | None = None,
 ) -> pd.DataFrame | None:
     """Match baseline diet data to food consumption links and compute Mt targets.
 
@@ -316,6 +318,12 @@ def _match_baseline_to_consume_links(
     attribute (which carries ``1 - waste_fraction`` per (country,
     food_group)). To pin the consume link's p0 correctly we divide the
     intake-basis Mt target by that multiplier.
+
+    When ``food_demand_multiplier`` is provided it is applied uniformly
+    across countries to each food's target_mt. This is the per-food global
+    demand calibration (see ``food_demand_calibration`` in config), which
+    reconciles the residual mismatch between FAOSTAT QCL-derived supply
+    and GDD-IA-derived demand after food_waste calibration.
     """
     df = _prepare_baseline_diet_for_food_constraints(baseline_df, consume_links)
 
@@ -345,6 +353,23 @@ def _match_baseline_to_consume_links(
     flw_mult = pd.to_numeric(matched["flw_multiplier"], errors="coerce").fillna(1.0)
     flw_mult = flw_mult.clip(lower=0.01).to_numpy()
     matched["target_mt"] = intake_target / flw_mult
+
+    if food_demand_multiplier is not None:
+        demand_mult = (
+            matched["food"]
+            .astype(str)
+            .map(food_demand_multiplier)
+            .fillna(1.0)
+            .to_numpy()
+        )
+        matched["target_mt"] = matched["target_mt"] * demand_mult
+        n_adjusted = int((demand_mult != 1.0).sum())
+        logger.info(
+            "Applied food_demand multipliers on %d / %d (food, country) targets",
+            n_adjusted,
+            len(matched),
+        )
+
     return matched
 
 
@@ -1322,8 +1347,21 @@ def run_solve(
     diet_stability_cfg = smk.params.diet_stability
     needs_baseline_match = enforce_baseline or diet_stability_cfg["enabled"]
     if needs_baseline_match:
+        food_demand_multiplier: dict[str, float] | None = None
+        fd_cal_path = getattr(smk.input, "food_demand_calibration", None)
+        if fd_cal_path:
+            fd_cal = pd.read_csv(fd_cal_path)
+            food_demand_multiplier = dict(
+                zip(fd_cal["food"].astype(str), fd_cal["multiplier"].astype(float))
+            )
+            logger.info(
+                "Loaded food_demand calibration: %d foods", len(food_demand_multiplier)
+            )
         matched_baseline = _match_baseline_to_consume_links(
-            prepared_baseline_df, consume_links, population_map
+            prepared_baseline_df,
+            consume_links,
+            population_map,
+            food_demand_multiplier=food_demand_multiplier,
         )
     if enforce_baseline and matched_baseline is not None:
         slack_cost = float(smk.params.slack_marginal_cost)

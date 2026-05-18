@@ -634,6 +634,26 @@ food_loss_waste_calibration:
   - stimulants
   scenario: "default"
 
+# Food demand calibration: a per-food global multiplier on the baseline-diet
+# target_mt applied uniformly across countries at solve time (see
+# ``_match_baseline_to_consume_links`` in workflow/scripts/solve_model/core.py).
+# Derived from per-food slack on an uncalibrated validation-mode solve (see
+# config/calibration/food_demand.yaml and ``tools/calibrate food_demand``).
+# Closes the residual per-food global gap that remains between FAOSTAT
+# QCL-derived supply and the GDD-IA-derived demand after food-waste
+# calibration, so downstream cost and production-stability calibrations
+# see a self-consistent baseline.
+food_demand_calibration:
+  enabled: true
+  generate: false
+  calibration_file: "data/curated/calibration/food_demand.csv"
+  # Bounds on the per-food multiplier. Tight on purpose: anything that
+  # would fall outside flags a structural data issue worth investigating
+  # rather than being silently absorbed.
+  min_multiplier: 0.5
+  max_multiplier: 2.0
+  scenario: "uncalibrated"
+
 # --- section: food_groups ---
 food_groups:
   included:
