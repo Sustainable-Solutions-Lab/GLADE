@@ -603,6 +603,7 @@ def build_within_group_shares(
     byproducts: list[str],
     weight_conversion: dict[str, dict[str, float]],
     frt_attribution_df: pd.DataFrame,
+    edible_portion_by_food: dict[str, float],
 ) -> pd.DataFrame:
     """Build within-group food shares per country from FAOSTAT data.
 
@@ -610,6 +611,19 @@ def build_within_group_shares(
     FRT target_production_tonnes table from ``build_frt_area_attribution``;
     it is consumed by the fruits FRT sub-projection so demand attribution
     mirrors supply attribution exactly (see ``_project_pooled_supply``).
+
+    ``edible_portion_by_food`` carries the edible-mass fraction of fresh
+    commodity weight for each food (default 1.0 for foods absent from the
+    mapping, e.g. processed products like flour and oil where the entire
+    commodity is consumed). FBS food-supply is reported in commodity
+    weight (whole fruit, post-supply-chain-loss) while GDD-anchored group
+    totals are on edible-portion basis. The two are reconciled here by
+    multiplying every per-FBS-item supply by the food's edible portion
+    before aggregating into the within-group share, so the EDIBLE group
+    total is split across foods on an EDIBLE-weighted basis. Without this
+    rescaling, low-edible-portion foods (plantain at 0.59, watermelon at
+    0.52, citrus at ~0.59) absorb a disproportionately large share of
+    their group's intake total.
 
     Returns DataFrame with columns: country, food, food_group, share
     """
@@ -745,6 +759,14 @@ def build_within_group_shares(
     shares_df["fbs_supply_kg"] = (
         shares_df["fbs_supply_kg"] * shares_df["carcass_to_retail_factor"]
     )
+    # Rescale to edible-mass basis so within-group shares match the
+    # GDD-anchored group totals (see docstring).
+    shares_df["edible_portion"] = (
+        shares_df["food"].map(edible_portion_by_food).fillna(1.0).clip(lower=1e-6)
+    )
+    shares_df["fbs_supply_kg"] = (
+        shares_df["fbs_supply_kg"] * shares_df["edible_portion"]
+    )
     shares_df["supply_weight"] = shares_df["share"] * shares_df["fbs_supply_kg"]
     shares_df = (
         shares_df.groupby(["country", "food_group", "food"], as_index=False)[
@@ -766,6 +788,7 @@ def build_within_group_shares(
             countries=countries,
             crop_production_df=crop_production_df,
             frt_attribution_df=frt_attribution_df,
+            edible_portion_by_food=edible_portion_by_food,
         )
     group_total_weight = shares_df.groupby(["country", "food_group"])[
         "supply_weight"
@@ -854,6 +877,7 @@ def _project_pooled_supply(
     countries: list[str],
     crop_production_df: pd.DataFrame,
     frt_attribution_df: pd.DataFrame,
+    edible_portion_by_food: dict[str, float],
 ) -> pd.DataFrame:
     """Rebuild within-group supply weights via pooled FBS projection.
 
@@ -868,6 +892,15 @@ def _project_pooled_supply(
         pooled FBS supply (sum of ``pool_codes`` supplies), weighted by
         the per-(country, food) share computed by the sub-spec's
         ``share_method``.
+
+    Both contributions are then multiplied by the recipient food's
+    edible portion. This keeps the within-group weights on the same
+    edible-mass basis as the GDD-anchored group totals, matching the
+    rescaling applied in the non-pooled branch of
+    ``build_within_group_shares``. The edible portion follows the
+    recipient food, not the source FBS item — in the BAN sub-projection,
+    for instance, plantain FBS supply is redistributed to banana, and
+    banana's edible portion (not plantain's) is applied.
 
     Splitting a group's pool across several sub-specs lets demand
     attribution mirror GAEZ-module-aligned supply attribution. For
@@ -947,12 +980,15 @@ def _project_pooled_supply(
                 projected_supply += pool_supply * sub["share"].get(
                     (country, food), sub["global"].get(food, 0.0)
                 )
+            edible = float(edible_portion_by_food.get(food, 1.0))
             rebuilt_rows.append(
                 {
                     "country": country,
                     "food_group": food_group,
                     "food": food,
-                    "supply_weight": float(explicit_supply + projected_supply),
+                    "supply_weight": float(
+                        (explicit_supply + projected_supply) * edible
+                    ),
                 }
             )
 
@@ -1340,6 +1376,8 @@ def main():
     qcl_resolution_path = snakemake.input.qcl_resolution
     food_groups_path = snakemake.input.food_groups
     food_loss_waste_path = snakemake.input.food_loss_waste
+    edible_portion_path = snakemake.input.edible_portion
+    foods_path = snakemake.input.foods
     output_path = snakemake.output.baseline_diet
 
     reference_year = int(snakemake.params.reference_year)
@@ -1380,6 +1418,33 @@ def main():
     frt_attribution_df = pd.read_csv(frt_attribution_path)
     population_df = pd.read_csv(population_path)
     flw_df = pd.read_csv(food_loss_waste_path)
+
+    # Build food -> edible-portion mapping by tracing each food back to its
+    # source crop via foods.csv (the food_processing pathway table). FBS
+    # food-supply is reported in fresh whole-commodity weight; the GDD-based
+    # group totals are on edible-portion basis. Within-group shares must
+    # therefore weight FBS supply by the food's edible portion so the
+    # split of an edible group total is itself edible-weighted. Foods
+    # without a crop link or without an edible-portion entry default to 1.0
+    # (processed foods like flour and oil consume the whole commodity by
+    # convention, and meat is already on retail basis after the carcass-
+    # to-retail conversion applied earlier).
+    edible_portion_df = pd.read_csv(edible_portion_path)
+    edible_by_crop = dict(
+        zip(
+            edible_portion_df["crop"].astype(str),
+            edible_portion_df["edible_portion_coefficient"].astype(float),
+        )
+    )
+    foods_df = pd.read_csv(foods_path, comment="#")
+    food_to_crop = dict(zip(foods_df["food"].astype(str), foods_df["crop"].astype(str)))
+    edible_portion_by_food: dict[str, float] = {}
+    for food in food_groups_df["food"].astype(str):
+        crop = food_to_crop.get(food)
+        if crop is None:
+            continue
+        if crop in edible_by_crop:
+            edible_portion_by_food[food] = float(edible_by_crop[crop])
 
     # Build group-basis mapping from food_basis + food_groups
     food_to_group = food_groups_df.set_index("food")["group"].to_dict()
@@ -1447,6 +1512,7 @@ def main():
         byproducts,
         weight_conversion,
         frt_attribution_df,
+        edible_portion_by_food,
     )
     # Cap dairy-buffalo shares at domestic production so countries
     # whose total milk intake exceeds production (PAK is the headline

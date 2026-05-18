@@ -305,6 +305,8 @@ rule estimate_baseline_diet:
         food_basis="data/curated/food_basis.csv",
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         source_basis_country_overrides="data/curated/diet_source_basis_overrides.csv",
+        edible_portion="<processing>/{name}/fao_edible_portion.csv",
+        foods="data/curated/foods.csv",
     params:
         reference_year=config["baseline_year"],
         baseline_age=config["diet"]["baseline_age"],
