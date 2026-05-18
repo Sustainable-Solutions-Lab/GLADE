@@ -856,89 +856,219 @@ biomass:
   - gram
   - rendered-fat  # tallow/lard yielded as a co-product of cattle/pig animal_production; ~50% goes to industrial uses (soap, biofuel) not captured in IA food intake
 
-# --- section: trade ---
-trade:
-  hubs: 20
-  crop_default_trade_cost_per_km: 0.01  # USD_2024 per tonne per km (1e-2)
-  crop_trade_cost_categories:
-    bulk_dry_goods:
-      cost_per_km: 0.006  # USD_2024 per tonne per km (6e-3)
-      crops:
-      - wheat
-      - dryland-rice
-      - wetland-rice
-      - maize
-      - soybean
-      - barley
-      - oat
-      - rye
-      - dry-pea
-      - chickpea
-      - cocoa
-      - coffee
-      - tea
-      - cotton
-    bulky_fresh:
-      cost_per_km: 0.014  # USD_2024 per tonne per km (1.4e-2)
-      crops:
-      - white-potato
-      - sweet-potato
-      - yam
-      - cassava
-      - sugarbeet
-      - biomass-sorghum
-    perishable_high_value:
-      cost_per_km: 0.022  # USD_2024 per tonne per km (2.2e-2)
-      crops:
-      - tomato
-      - carrot
-      - onion
-      - cabbage
-      - banana
-      - watermelon
-      - mango
-      - sugarcane
-      - sunflower
-      - rapeseed
-      - groundnut
-  non_tradable_crops:
-    - alfalfa
-    - biomass-sorghum
-    - silage-maize
-  food_default_trade_cost_per_km: 0.021  # USD_2024 per tonne per km (2.1e-2)
-  food_trade_cost_categories:
-    chilled_meat:
-      cost_per_km: 0.028  # USD_2024 per tonne per km (2.8e-2)
-      foods:
-      - meat-cattle
-      - meat-pig
-      - meat-chicken
-    dairy_and_eggs:
-      cost_per_km: 0.024  # USD_2024 per tonne per km (2.4e-2)
-      foods:
-      - dairy
-      - eggs
-  non_tradable_foods: []
-  feed_default_trade_cost_per_km: 0.012  # USD_2024 per tonne per km (1.2e-2)
-  feed_trade_cost_categories:
-    grain_protein:
-      cost_per_km: 0.006  # USD_2024 per tonne per km (6e-3) - matches crop bulk_dry_goods
-      feeds:
-      - ruminant_grain
-      - ruminant_protein
-      - monogastric_grain
-      - monogastric_protein
-    forage:
-      cost_per_km: 0.012  # USD_2024 per tonne per km (1.2e-2) - 2x grain cost
-      feeds:
-      - ruminant_forage
-    bulky_low_quality:
-      cost_per_km: 0.016  # USD_2024 per tonne per km (1.6e-2) - 2.67x grain cost
-      feeds:
-      - ruminant_roughage
-      - monogastric_low_quality
-  non_tradable_feeds:
-  - ruminant_forage
+# --- section: commodities ---
+# Unified commodity-class framework. Every modelled crop, food (including
+# animal products and byproducts), and feed category is assigned to exactly
+# one class. Each class carries two cost parameters:
+#
+#   trade_cost_per_t_km     -- USD_2024 per tonne per km, charged on inter-hub
+#                              and country-to-hub trade links
+#   marketing_cost_per_t    -- USD_2024 per tonne, one-shot farm-to-wholesale
+#                              marketing markup charged on the production link
+#                              of the commodity (crop_production, food_processing,
+#                              feed_conversion, animal_production)
+#
+# No fallbacks: a config that fails to assign a commodity to a class will be
+# rejected by ``workflow/validation/commodities.py``. See ``docs/costs.rst``
+# (Marketing costs) and ``docs/food_processing.rst`` (Trade costs) for the
+# literature behind the default magnitudes.
+commodities:
+  hubs: 20  # Number of trade hubs (shared across crop, food, and feed trade)
+
+  crops:
+    non_tradable: [alfalfa, biomass-sorghum, silage-maize]
+    classes:
+      bulk_dry_goods:
+        trade_cost_per_t_km: 0.006   # USD_2024 / t / km
+        marketing_cost_per_t: 30     # USD_2024 / t (farm to grain elevator / first-handler wholesale)
+        items:
+        - wheat
+        - dryland-rice
+        - wetland-rice
+        - maize
+        - barley
+        - oat
+        - rye
+        - sorghum
+        - buckwheat
+        - foxtail-millet
+        - pearl-millet
+        - soybean
+        - dry-pea
+        - chickpea
+        - cowpea
+        - gram
+        - phaseolus-bean
+        - pigeonpea
+        - cocoa
+        - coffee
+        - tea
+        - sunflower
+        - rapeseed
+        - groundnut
+        - sesame
+        - cotton
+      bulky_fresh:
+        trade_cost_per_t_km: 0.014
+        marketing_cost_per_t: 60     # USD_2024 / t (bulky low-value perishable; cassava, potato, sugar crops, biomass)
+        items:
+        - white-potato
+        - sweet-potato
+        - cassava
+        - yam
+        - plantain
+        - sugarbeet
+        - sugarcane
+        - oil-palm
+        - alfalfa
+        - silage-maize
+        - biomass-sorghum
+      perishable_high_value:
+        trade_cost_per_t_km: 0.022
+        marketing_cost_per_t: 200    # USD_2024 / t (fragile fresh produce; cooling, packing, fast logistics)
+        items:
+        - tomato
+        - carrot
+        - onion
+        - cabbage
+        - banana
+        - watermelon
+        - mango
+        - citrus
+        - coconut
+        - apple
+        - olive
+
+  foods:
+    non_tradable: []
+    classes:
+      processed_dry_goods:
+        trade_cost_per_t_km: 0.012   # USD_2024 / t / km (bulk milled / dried goods)
+        marketing_cost_per_t: 80     # USD_2024 / t (mill + wholesale margin on staple processed foods)
+        items:
+        - flour-white
+        - flour-wholemeal
+        - rice-brown
+        - rice-white
+        - barley-hulled
+        - buckwheat
+        - foxtail-millet
+        - maize
+        - oat
+        - pearl-millet
+        - rye
+        - sorghum
+        - chickpea
+        - cowpea
+        - dry-pea
+        - gram
+        - phaseolus-bean
+        - pigeon-pea
+        - soy
+        - groundnut
+        - sesame-seed
+        - sunflower-seed
+        - sugar
+        - cocoa-powder
+        - coffee-green
+        - tea-dried
+      processed_oils:
+        trade_cost_per_t_km: 0.016   # USD_2024 / t / km (liquid bulk; tankers / drums)
+        marketing_cost_per_t: 120    # USD_2024 / t (extraction + refining + wholesale)
+        items:
+        - coconut-oil
+        - cottonseed-oil
+        - groundnut-oil
+        - olive-oil
+        - palm-oil
+        - rapeseed-oil
+        - sesame-oil
+        - soybean-oil
+        - sunflower-oil
+      fresh_produce:
+        trade_cost_per_t_km: 0.022
+        marketing_cost_per_t: 200    # USD_2024 / t (fresh fruits, vegetables, roots delivered as food)
+        items:
+        - apple
+        - banana
+        - citrus
+        - coconut
+        - mango
+        - plantain
+        - watermelon
+        - cabbage
+        - carrot
+        - onion
+        - tomato
+        - cassava
+        - potato
+        - sweet-potato
+        - yam
+      chilled_meat:
+        trade_cost_per_t_km: 0.028
+        marketing_cost_per_t: 800    # USD_2024 / t retail-equiv (slaughter + packing margin; USDA ERS 2023)
+        items:
+        - meat-cattle
+        - meat-pig
+        - meat-chicken
+        - meat-sheep
+      dairy_and_eggs:
+        trade_cost_per_t_km: 0.024
+        marketing_cost_per_t: 300    # USD_2024 / t (dairy processing + packaging + cold chain)
+        items:
+        - dairy
+        - dairy-buffalo
+        - eggs
+      feed_byproduct:
+        trade_cost_per_t_km: 0.008   # USD_2024 / t / km (bulk dry feed-grade)
+        marketing_cost_per_t: 30     # USD_2024 / t (low-value bulk byproducts routed to feed)
+        items:
+        - barley-bran
+        - beet-pulp
+        - buckwheat-hulls
+        - oat-bran
+        - rice-bran
+        - wheat-bran
+        - wheat-germ
+        - ddgs
+        - maize-gluten-feed
+        - maize-gluten-meal
+        - oilseed-meal
+        - palm-kernel-meal
+        - rapeseed-meal
+        - molasses
+      industrial_byproduct:
+        trade_cost_per_t_km: 0.008
+        marketing_cost_per_t: 40     # USD_2024 / t (bulk fiber / biofuel / co-product exports)
+        items:
+        - cotton-lint
+        - maize-ethanol
+        - maize-starch
+        - sugarcane-ethanol
+        - rendered-fat
+
+  feeds:
+    non_tradable: [ruminant_forage]
+    classes:
+      grain_protein:
+        trade_cost_per_t_km: 0.006   # matches crop bulk_dry_goods (concentrated, dense)
+        marketing_cost_per_t: 30
+        items:
+        - ruminant_grain
+        - ruminant_protein
+        - monogastric_grain
+        - monogastric_protein
+      forage:
+        trade_cost_per_t_km: 0.012   # 2x grain cost
+        marketing_cost_per_t: 25
+        items:
+        - ruminant_forage
+      bulky_low_quality:
+        trade_cost_per_t_km: 0.016   # ~2.7x grain cost
+        marketing_cost_per_t: 35
+        items:
+        - ruminant_roughage
+        - monogastric_low_quality
 
 # --- section: health ---
 health:

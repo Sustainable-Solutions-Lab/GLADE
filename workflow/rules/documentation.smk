@@ -427,7 +427,7 @@ rule doc_fig_trade_network:
         svg="docs/_static/figures/trade_network.svg",
         png="docs/_static/figures/trade_network.png",
     params:
-        n_hubs=config["trade"]["hubs"],
+        n_hubs=config["commodities"]["hubs"],
     group:
         "analysis_plot"
     resources:

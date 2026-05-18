@@ -93,6 +93,7 @@ def add_regional_crop_production_links(
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
     crop_loss_multiplier: pd.Series,
+    crop_marketing_cost_usd_per_t: Mapping[str, float],
 ) -> None:
     """Add crop production links per region/resource class and water supply.
 
@@ -315,6 +316,22 @@ def add_regional_crop_production_links(
     # Convert USD/ha to bnUSD/Mha
     all_df["marginal_cost"] = per_link_cost * 1e6 * constants.USD_TO_BNUSD
 
+    # Add the farm-to-wholesale marketing markup, charged per tonne of crop
+    # output (post-seed, post-loss). The link's marginal_cost is in
+    # bnUSD/Mha; marketing_cost_per_t * efficiency (t/ha) -> USD/ha.
+    marketing_per_t = all_df["crop"].astype(str).map(crop_marketing_cost_usd_per_t)
+    if marketing_per_t.isna().any():
+        missing = sorted(
+            all_df.loc[marketing_per_t.isna(), "crop"].astype(str).unique()
+        )
+        raise KeyError(f"Missing crop marketing cost for: {missing}")
+    all_df["marginal_cost"] = all_df["marginal_cost"] + (
+        marketing_per_t.to_numpy(dtype=float)
+        * all_df["efficiency"].to_numpy(dtype=float)
+        * 1e6
+        * constants.USD_TO_BNUSD
+    )
+
     # Apply additive calibration correction if available.
     #
     # Two-tier handling so corrections retain their calibration-time
@@ -446,6 +463,7 @@ def add_multi_cropping_links(
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
     crop_loss_multiplier: pd.Series,
+    crop_marketing_cost_usd_per_t: Mapping[str, float],
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow.
 
@@ -554,6 +572,15 @@ def add_multi_cropping_links(
         crop_costs.get((c, cc), global_median_cost.get(c, 0.0))
         for c, cc in zip(merged["crop"], merged["country"])
     ]
+    # Marketing markup per cycle: marketing_cost_per_t * yield (post seed/loss)
+    marketing_per_t = merged["crop"].astype(str).map(crop_marketing_cost_usd_per_t)
+    if marketing_per_t.isna().any():
+        missing = sorted(merged.loc[marketing_per_t.isna(), "crop"].unique())
+        raise KeyError(f"Missing crop marketing cost for: {missing}")
+    merged["cost_usd_per_ha"] = merged["cost_usd_per_ha"] + (
+        marketing_per_t.to_numpy(dtype=float)
+        * merged["yield_efficiency"].to_numpy(dtype=float)
+    )
     cost_totals = merged.groupby(key_cols)["cost_usd_per_ha"].sum().rename("total_cost")
     base = base.join(cost_totals)
 

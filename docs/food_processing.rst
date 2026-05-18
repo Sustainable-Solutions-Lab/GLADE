@@ -116,20 +116,29 @@ This reduces links from :math:`O(n^2)` to :math:`O(n \times h + h^2)`, where :ma
 Configuration
 ~~~~~~~~~~~~~
 
-.. literalinclude:: ../config/default.yaml
-   :language: yaml
-   :start-after: # --- section: trade ---
-   :end-before: # --- section: health ---
+Inter-hub transport costs (``trade_cost_per_t_km``) live alongside the
+farm-to-wholesale marketing markups (``marketing_cost_per_t``) inside
+the unified ``commodities:`` block. See
+:doc:`configuration` for the full literal include, and :doc:`costs`
+(:ref:`commodity-cost-classes`) for the per-class default values and
+sources.
 
 Trade Cost Categories
 ~~~~~~~~~~~~~~~~~~~~~
 
-Transport costs differentiate by commodity handling requirements:
+Transport costs differentiate by commodity handling requirements. The
+seven crop / food classes and three feed classes used in the model are
+listed (together with marketing markups and references) under
+:ref:`commodity-cost-classes`. Representative examples:
 
 * **Bulk dry goods**: Cereals, legumes in containers/bulk carriers
 * **Bulky fresh**: Potatoes, cassava, sugar beets
-* **Perishable high-value**: Fruits, vegetables, sugarcane requiring refrigeration
+* **Perishable high-value / fresh produce**: Fruits, vegetables,
+  sugarcane requiring refrigeration
 * **Chilled meat**: Temperature-controlled meat transport
+* **Dairy and eggs**: Cold-chain packaged dairy and eggs
+* **Feed byproducts**: Brans, meals, distillers grains in bulk
+* **Industrial byproducts**: Cotton lint, ethanol, starch
 
 Hub Location
 ~~~~~~~~~~~~
@@ -155,13 +164,15 @@ Non-Tradable Commodities
 
 Certain products are designated non-tradable:
 
-* **Fodder crops** (alfalfa, biomass sorghum) via ``trade.non_tradable_crops`` —
+* **Fodder crops** (alfalfa, biomass sorghum) via ``commodities.crops.non_tradable`` --
   too bulky/low-value to transport
-* **Foods** listed in ``trade.non_tradable_foods`` (optional) — keeps fragile or
+* **Foods** listed in ``commodities.foods.non_tradable`` (optional) -- keeps fragile or
   policy-protected items local
+* **Feed categories** listed in ``commodities.feeds.non_tradable`` (default: fresh
+  forage) -- the local-only feed pool
 
-Non-tradable crops or foods must be consumed (as food, feed, or byproducts) within
-their production region.
+Non-tradable crops, foods, or feeds must be consumed (as food, feed, or byproducts)
+within their production region.
 
 Model Implementation
 --------------------
@@ -191,4 +202,4 @@ Trade links are created in ``workflow/scripts/build_model.py``:
 
 The same structure applies to all foods (including animal products and byproducts),
 so every consumable item can flow through the hub network unless it is listed under
-``trade.non_tradable_foods``.
+``commodities.foods.non_tradable``.

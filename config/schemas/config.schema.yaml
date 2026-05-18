@@ -41,7 +41,7 @@ required:
   - weight_conversion
   - diet
   - biomass
-  - trade
+  - commodities
   - health
   - aggregation
   - countries
@@ -1136,109 +1136,54 @@ properties:
           pattern: "^[a-z0-9-]+$"
         description: "Foods that remain part of the diet but can also be routed to biomass for disposal (forced co-products of other commodity demands)."
 
-  trade:
+  commodities:
     type: object
-    required:
-      - hubs
-      - crop_default_trade_cost_per_km
-      - crop_trade_cost_categories
-      - non_tradable_crops
-      - food_default_trade_cost_per_km
-      - food_trade_cost_categories
-      - non_tradable_foods
-      - feed_default_trade_cost_per_km
-      - feed_trade_cost_categories
-      - non_tradable_feeds
+    required: [hubs, crops, foods, feeds]
     additionalProperties: false
     properties:
       hubs:
         type: integer
         minimum: 1
         description: "Number of trade hubs (shared across crop, food, and feed trade)"
-      crop_default_trade_cost_per_km:
-        type: number
-        minimum: 0
-        description: "USD per tonne per km (default for unlisted crops)"
-      crop_trade_cost_categories:
+      crops: &commodity_domain
         type: object
-        patternProperties:
-          "^[a-z0-9_]+$":
+        required: [classes, non_tradable]
+        additionalProperties: false
+        properties:
+          non_tradable:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              pattern: "^[a-z0-9_-]+$"
+            description: "Commodities that cannot be traded between countries"
+          classes:
             type: object
-            required: [cost_per_km, crops]
-            additionalProperties: false
-            properties:
-              cost_per_km:
-                type: number
-                minimum: 0
-                description: "USD per tonne per km"
-              crops:
-                type: array
-                items:
-                  type: string
-                  pattern: "^[a-z0-9-]+$"
-      non_tradable_crops:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: "^[a-z0-9-]+$"
-        description: "Crops that cannot be traded"
-      food_default_trade_cost_per_km:
-        type: number
-        minimum: 0
-        description: "USD per tonne per km (default for unlisted foods)"
-      food_trade_cost_categories:
-        type: object
-        patternProperties:
-          "^[a-z0-9_]+$":
-            type: object
-            required: [cost_per_km, foods]
-            additionalProperties: false
-            properties:
-              cost_per_km:
-                type: number
-                minimum: 0
-                description: "USD per tonne per km"
-              foods:
-                type: array
-                items:
-                  type: string
-                  pattern: "^[a-z0-9-]+$"
-      non_tradable_foods:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: "^[a-z0-9-]+$"
-        description: "Foods that cannot be traded"
-      feed_default_trade_cost_per_km:
-        type: number
-        minimum: 0
-        description: "USD per tonne per km (default for unlisted feeds)"
-      feed_trade_cost_categories:
-        type: object
-        patternProperties:
-          "^[a-z0-9_]+$":
-            type: object
-            required: [cost_per_km, feeds]
-            additionalProperties: false
-            properties:
-              cost_per_km:
-                type: number
-                minimum: 0
-                description: "USD per tonne per km"
-              feeds:
-                type: array
-                items:
-                  type: string
-                  pattern: "^[a-z0-9_]+$"
-      non_tradable_feeds:
-        type: array
-        uniqueItems: true
-        items:
-          type: string
-          pattern: "^[a-z0-9_]+$"
-        description: "Feeds that cannot be traded"
+            minProperties: 1
+            patternProperties:
+              "^[a-z0-9_]+$":
+                type: object
+                required: [trade_cost_per_t_km, marketing_cost_per_t, items]
+                additionalProperties: false
+                properties:
+                  trade_cost_per_t_km:
+                    type: number
+                    minimum: 0
+                    description: "USD per tonne per km charged on trade links"
+                  marketing_cost_per_t:
+                    type: number
+                    minimum: 0
+                    description: "USD per tonne charged once on the production link (farm-to-wholesale markup)"
+                  items:
+                    type: array
+                    uniqueItems: true
+                    minItems: 1
+                    items:
+                      type: string
+                      pattern: "^[a-z0-9_-]+$"
+                    description: "Commodities assigned to this class"
+      foods: *commodity_domain
+      feeds: *commodity_domain
 
   health:
     type: object

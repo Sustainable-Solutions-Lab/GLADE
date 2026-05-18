@@ -183,7 +183,7 @@ rule build_model:
         diet=config["diet"],
         byproducts=config["byproducts"],
         animal_products=config["animal_products"],
-        trade=config["trade"],
+        commodities=config["commodities"],
         grazing=config["grazing"],
         baseline_year=config["baseline_year"],
         validation=config["validation"],

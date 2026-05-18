@@ -206,6 +206,7 @@ def add_feed_to_animal_product_links(
     enforce_baseline_feed: bool = False,
     cost_calibration: pd.Series | None = None,
     co_products: dict[str, dict] | None = None,
+    animal_marketing_cost_usd_per_t: dict[str, float] | None = None,
 ) -> None:
     """Add links that convert feed pools into animal products with emissions and manure N.
 
@@ -459,6 +460,20 @@ def add_feed_to_animal_product_links(
         )
     else:
         df["marginal_cost"] = 0.0
+
+    # Farm-to-wholesale marketing markup on animal products (slaughter +
+    # packing + processing margin). USD per tonne product -> bnUSD per Mt feed
+    # via efficiency. Missing assignments are caught upstream by validation.
+    if animal_marketing_cost_usd_per_t is not None:
+        marketing_per_t = df["product"].map(animal_marketing_cost_usd_per_t)
+        if marketing_per_t.isna().any():
+            missing = sorted(df.loc[marketing_per_t.isna(), "product"].unique())
+            raise KeyError(f"Missing animal marketing cost for: {missing}")
+        df["marginal_cost"] = df["marginal_cost"] + (
+            marketing_per_t.to_numpy(dtype=float)
+            * df["efficiency"].to_numpy(dtype=float)
+            * constants.USD_TO_BNUSD
+        )
 
     # Apply cost calibration corrections, two-tier (see crops.py for the
     # rationale): positive corrections are added additively to

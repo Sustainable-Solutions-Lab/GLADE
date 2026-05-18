@@ -32,7 +32,7 @@ aggregation:
   resource_class_quantiles: [0.5]
   irrigated_area_source: "current"
 
-trade:
+commodities:
   hubs: 14
 
 crops:

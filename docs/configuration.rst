@@ -810,17 +810,28 @@ Animal Products
 
 Disable grazing to force intensive feed-based systems.
 
-Trade Configuration
-~~~~~~~~~~~~~~~~~~~
+Commodity Configuration (Trade and Marketing Costs)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. literalinclude:: ../config/default.yaml
    :language: yaml
-   :start-after: # --- section: trade ---
+   :start-after: # --- section: commodities ---
    :end-before: # --- section: health ---
 
-Increase trade costs to explore localized food systems; decrease for globalized trade.
+The ``commodities`` block carries both the inter-hub trade cost (``trade_cost_per_t_km``,
+USD_2024 per tonne per km) and the farm-to-wholesale marketing markup
+(``marketing_cost_per_t``, USD_2024 per tonne) for every modelled commodity.
 
-All trade costs are expressed in USD_2024 per tonne per kilometer.
+Every crop in ``crops:``, every modelled feed category, and every food (including
+animal products and byproducts) must appear in exactly one class. The strict
+assignment is enforced by ``workflow/validation/commodities.py`` -- there is no
+default fallback. See :doc:`costs` for the literature behind the default magnitudes
+and :ref:`commodity-cost-classes` for the class-by-class table.
+
+Increase ``trade_cost_per_t_km`` to explore localized food systems; decrease for
+globalized trade. The ``marketing_cost_per_t`` parameter is the new
+farm-to-wholesale layer; raising it widens the gap between farm-gate production
+costs and effective commodity prices in the optimiser.
 
 Emissions Pricing
 ~~~~~~~~~~~~~~~~~

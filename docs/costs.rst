@@ -29,6 +29,9 @@ The model distinguishes between three main categories of production costs:
 **Land Conversion Costs**
    Investment costs for expanding agriculture onto new land, covering physical clearing and soil preparation. Differentiated by forest vs. non-forest cover type, annualized using a capital recovery factor over a configurable investment horizon. Applied as marginal costs on ``land_conversion`` and ``new_to_pasture`` links. See :doc:`land_use` for details.
 
+**Marketing Costs (Farm-to-Wholesale)**
+   The markup between the farm gate and the wholesale (inter-regional trade) market. Covers drying, on-farm and commercial storage, first-mile transport, elevator / aggregator handling, slaughter and packing for meat, processing for foods and feeds, insurance, and the trader margin. Applied as a per-tonne markup on the relevant production link (``crop_production``, ``food_processing``, ``feed_conversion``, ``animal_production``). See :ref:`marketing-costs` below for the per-class table.
+
 What Costs Include and Exclude
 -------------------------------
 
@@ -167,6 +170,163 @@ whenever ``cost_calibration.enabled`` is true (the default).
 
 Regenerate with ``tools/calibrate cost``. See :ref:`calibration` for the
 full dependency graph and algorithm.
+
+.. _marketing-costs:
+
+Marketing Costs (Farm-to-Wholesale)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Farm-gate production costs alone substantially understate the price a
+commodity carries when it reaches an inter-regional wholesale market.
+The intervening marketing margin -- drying, storage, first-mile
+transport, elevator / aggregator handling, slaughter and packing for
+meat, dairy and oil processing, insurance, and the trader margin --
+typically accounts for 10-25 % of bulk-grain wholesale price,
+15-40 % of fresh-produce wholesale price, and 8-15 % of the meat
+wholesale value paid to slaughter and packing.
+
+The model captures this as a single per-tonne ``marketing_cost_per_t``
+parameter per commodity class, configured under the unified
+``commodities:`` block (see :doc:`configuration`). The markup is
+applied as a one-shot per-tonne cost on each commodity's *production*
+link:
+
+* On ``crop_production`` links: ``marketing_cost_per_t * yield``, added
+  to the link's marginal cost (USD/ha basis).
+* On ``food_processing`` links: ``sum over outputs of
+  marketing_cost_per_t * efficiency``, summed across the pathway's
+  output foods (multi-output Links).
+* On ``feed_conversion`` links: ``marketing_cost_per_t * share`` for
+  the destination feed category.
+* On ``animal_production`` links: ``marketing_cost_per_t * efficiency``
+  for the produced animal product.
+
+The defaults below come from the public agricultural-marketing
+literature -- principally USDA ERS and FAO. They are *order of
+magnitude* anchors that the cost-calibration step adjusts locally.
+
+.. _commodity-cost-classes:
+
+.. list-table:: Default marketing-cost parameters (USD_2024 per tonne)
+   :header-rows: 1
+   :widths: 18 12 60 10
+
+   * - Class
+     - Default ``marketing_cost_per_t``
+     - Composition and source
+     - Coverage
+   * - ``crops.bulk_dry_goods``
+     - 30
+     - Farm-to-grain-elevator markup for storable bulk commodities:
+       drying (~$3-7/t), shrink (~1.4 % of grain value), commercial
+       storage 3-6 months (~$7-13/t), elevator handling in+out
+       (~$3-11/t), first-mile truck (~$3-6/t). Bottom end of the
+       $9-65/t range reported by Texas A&M Transportation Institute
+       (`TTI 2019`_) for US soybeans farm-to-Gulf, picking the
+       no-delay base case.
+     - cereals, oilseeds, pulses, stimulant crops, cotton fibre
+   * - ``crops.bulky_fresh``
+     - 60
+     - Twice the bulk-dry-goods markup. Bulky low-value perishables
+       (roots, tubers, sugar crops, biomass) carry a larger handling
+       margin relative to wholesale price because their mass per
+       value is high and shelf life is short. FAO (`FAO 1997`_,
+       chapter 12) places handling in this group near 15-25 % of
+       wholesale price.
+     - roots and tubers (potato, cassava, yam, plantain), sugarbeet,
+       sugarcane, oil-palm, fodder/biomass crops
+   * - ``crops.perishable_high_value``
+     - 200
+     - Cooling, cold-chain transport, packing, sorting and the wider
+       trader margin pull this class to the 25-40 % share of
+       wholesale price reported by FAO (`FAO 1997`_) and the USDA
+       Food Dollar Series (`USDA ERS Food Dollar`_) farm-share data
+       for fresh produce.
+     - fresh vegetables, fruits, olives
+   * - ``foods.processed_dry_goods``
+     - 80
+     - Mill / dry-processing margin plus dry-goods wholesale: USDA
+       ERS reports the wholesaling and retailing share of food-at-home
+       spending in the 13-16 % range (`USDA ERS Food Dollar`_), which
+       for a $400-600/t milled-grain or processed-pulse wholesale
+       price puts the marketing layer around $80/t.
+     - milled cereals, dehulled grains, food-grade pulses, whole
+       seeds, sugar, dried stimulants
+   * - ``foods.processed_oils``
+     - 120
+     - Oil extraction, refining and wholesale margin. Oil mill margins
+       reported by AOCS / industry surveys (`USDA WASDE`_ oilseed
+       chapter) are typically 5-10 % of refined-oil wholesale price
+       (~$1100-1500/t), giving ~$60-150/t.
+     - vegetable oils
+   * - ``foods.fresh_produce``
+     - 200
+     - Same magnitude and same logic as ``crops.perishable_high_value``;
+       most items in this class are simply the crop sold as food.
+     - fresh fruits, vegetables, roots delivered as food
+   * - ``foods.chilled_meat``
+     - 800
+     - USDA ERS Meat Price Spreads (`USDA ERS Meat Price Spreads`_)
+       gives a 2023 farm-to-wholesale spread for Choice beef of
+       36.8 cents per pound retail-equivalent (wholesale 452.9 minus
+       gross farm 416.1), i.e. ~$810/t retail-equivalent. Pork and
+       broiler farm-to-wholesale margins fall in the same magnitude
+       once expressed per tonne retail equivalent.
+     - meat-cattle, meat-pig, meat-chicken, meat-sheep
+   * - ``foods.dairy_and_eggs``
+     - 300
+     - Dairy processing, packaging and cold-chain wholesale margin.
+       USDA ERS reports a 2022 farm share of US dairy retail near
+       28 % on a ~$5.3/kg basket, which on a per-tonne wholesale
+       basis implies a farm-to-wholesale margin of $200-400/t
+       (`USDA ERS Dairy`_).
+     - dairy, dairy-buffalo, eggs
+   * - ``foods.feed_byproduct``
+     - 30
+     - Bulk low-value co-products diverted to feed (brans, meals,
+       hulls, gluten products, distillers grains, molasses) carry
+       the same farm-to-wholesale handling cost as bulk grains.
+     - milling and oil-extraction byproducts, sugar molasses
+   * - ``foods.industrial_byproduct``
+     - 40
+     - Fibre, biofuel and industrial co-products. Cotton lint at the
+       gin-to-warehouse stage adds roughly $30-50/t in handling
+       (USDA AMS cotton classing fees); fuel ethanol and starch
+       carry similar bulk-storage handling margins.
+     - cotton-lint, ethanol products, maize-starch, rendered-fat
+   * - ``feeds.grain_protein``
+     - 30
+     - Compounded feed mill margin (grinding, mixing, bagging) on
+       grain and protein concentrates. Mirrors the bulk-dry-goods
+       crop markup since these feeds are largely those crops in a
+       different form.
+     - ruminant_grain, ruminant_protein, monogastric_grain,
+       monogastric_protein
+   * - ``feeds.forage``
+     - 25
+     - Hay-and-forage handling: baling, on-farm or commercial
+       barn storage, short-haul truck. Lower than grain marketing
+       because most forage moves short distances on or near the
+       farm of origin.
+     - ruminant_forage
+   * - ``feeds.bulky_low_quality``
+     - 35
+     - Bulk roughage and low-quality co-products with higher
+       per-tonne handling cost than baled forage.
+     - ruminant_roughage, monogastric_low_quality
+
+The configuration is the single source of truth -- raising any value
+here moves that marketing layer directly into the optimisation. Every
+modelled commodity must appear in exactly one class; missing
+assignments are rejected by ``workflow/validation/commodities.py``
+before any solve.
+
+.. _TTI 2019: https://static.tti.tamu.edu/tti.tamu.edu/documents/TTI-2019-11.pdf
+.. _FAO 1997: https://www.fao.org/4/w3240e/W3240E12.htm
+.. _USDA ERS Food Dollar: https://www.ers.usda.gov/data-products/food-dollar-series
+.. _USDA ERS Meat Price Spreads: https://www.ers.usda.gov/data-products/meat-price-spreads
+.. _USDA ERS Dairy: https://www.ers.usda.gov/data-products/price-spreads-from-farm-to-consumer
+.. _USDA WASDE: https://www.usda.gov/oce/commodity/wasde
 
 Livestock Costs
 ~~~~~~~~~~~~~~~

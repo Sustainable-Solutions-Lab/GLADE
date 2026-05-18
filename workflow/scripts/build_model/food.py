@@ -30,6 +30,7 @@ def add_food_conversion_links(
     food_to_group: dict[str, str],
     crop_list: list,
     byproduct_list: list,
+    food_marketing_cost_usd_per_t: dict[str, float],
 ) -> None:
     """Add links for converting crops to foods via processing pathways.
 
@@ -98,6 +99,10 @@ def add_food_conversion_links(
         link_df["crop"] = crop
         link_df["pathway"] = pathway
 
+        # Marketing cost on the pathway (USD per Mt input). Each output food
+        # contributes ``marketing_cost_per_t_food * efficiency_to_that_food``.
+        link_marketing_usd_per_t = 0.0
+
         # Add each output food as a separate bus with its efficiency.
         # Efficiency = pathway_factor * crop_to_fresh_factor (no country
         # dependence: loss is on crop_production, waste is on consumption).
@@ -112,7 +117,17 @@ def add_food_conversion_links(
             group = food_to_group.get(food)
             if (group is None or pd.isna(group)) and food not in byproduct_foods:
                 missing_group_foods.add(food)
-            link_df[eff_key] = factor * conversion_factor
+            efficiency = factor * conversion_factor
+            link_df[eff_key] = efficiency
+
+            if food not in food_marketing_cost_usd_per_t:
+                raise KeyError(
+                    f"Missing food marketing cost for pathway output '{food}'"
+                )
+            link_marketing_usd_per_t += food_marketing_cost_usd_per_t[food] * efficiency
+
+        # bnUSD per Mt input
+        link_df["marketing_cost"] = link_marketing_usd_per_t * constants.USD_TO_BNUSD
 
         batched_frames.setdefault(n_outputs, []).append(link_df)
 
@@ -121,7 +136,7 @@ def add_food_conversion_links(
         link_params = {
             "bus0": all_df["bus0"],
             "carrier": "food_processing",
-            "marginal_cost": _LOW_PROCESSING_COST,
+            "marginal_cost": _LOW_PROCESSING_COST + all_df["marketing_cost"],
             "p_nom_extendable": True,
             "country": all_df["country"],
             "crop": all_df["crop"],
@@ -170,6 +185,7 @@ def add_feed_supply_links(
     food_list: list,
     residue_items: list,
     countries: list,
+    feed_marketing_cost_usd_per_t: dict[str, float],
 ) -> None:
     """Add links converting crops and foods into categorized feed pools.
 
@@ -260,7 +276,28 @@ def add_feed_supply_links(
     # share < 1 on each row; mass balance holds because shares per
     # (item, source_type, animal_type) sum to 1.0 (validated upstream in
     # categorize_feeds.apply_category_overrides).
-    efficiency = expanded["share"].astype(float) if "share" in expanded.columns else 1.0
+    if "share" in expanded.columns:
+        efficiency_arr = expanded["share"].astype(float).to_numpy()
+    else:
+        efficiency_arr = pd.Series(1.0, index=expanded.index).to_numpy()
+    efficiency = efficiency_arr
+
+    # Feed marketing cost per Mt input = marketing_cost_per_t (USD/t feed
+    # output) * share. Missing assignments are caught upstream by
+    # ``workflow.validation.commodities``.
+    feed_marketing_series = expanded["feed_category_value"].map(
+        feed_marketing_cost_usd_per_t
+    )
+    if feed_marketing_series.isna().any():
+        missing = sorted(
+            expanded.loc[feed_marketing_series.isna(), "feed_category_value"].unique()
+        )
+        raise KeyError(f"Missing feed marketing cost for: {missing}")
+    marketing_cost = (
+        feed_marketing_series.to_numpy(dtype=float)
+        * efficiency_arr
+        * constants.USD_TO_BNUSD
+    )
 
     n.links.add(
         expanded.index,
@@ -268,7 +305,7 @@ def add_feed_supply_links(
         bus1=expanded["bus1"],
         carrier="feed_conversion",
         efficiency=efficiency,
-        marginal_cost=_LOW_PROCESSING_COST,
+        marginal_cost=_LOW_PROCESSING_COST + marketing_cost,
         p_nom_extendable=True,
         country=expanded["country"],
         feed_category=expanded["feed_category_value"],

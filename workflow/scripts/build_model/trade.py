@@ -17,7 +17,7 @@ import pandas as pd
 import pypsa
 from sklearn.cluster import KMeans
 
-from .. import constants
+from .commodity_costs import non_tradable_items, trade_costs_per_km
 
 logger = logging.getLogger(__name__)
 
@@ -48,62 +48,14 @@ def compute_trade_hubs(regions_gdf: gpd.GeoDataFrame, n_hubs: int) -> np.ndarray
     return km.cluster_centers_
 
 
-def _resolve_trade_costs(
-    trade_config: dict,
-    items: list,
-    *,
-    categories_key: str | None,
-    default_cost_key: str | None,
-    fallback_cost_key: str,
-    category_item_key: str,
-) -> tuple[dict[str, float], float]:
-    """Map each item to its configured trade cost per kilometre."""
-
-    def _to_bnusd_per_mt(cost_per_tonne: float) -> float:
-        # Trade inputs are provided as USD per tonne-km; convert to bnUSD per Mt-km.
-        return cost_per_tonne * constants.USD_TO_BNUSD / constants.TONNE_TO_MEGATONNE
-
-    # Get default cost from config hierarchy
-    if default_cost_key is not None:
-        default_cost = float(trade_config[default_cost_key])
-    else:
-        default_cost = float(trade_config[fallback_cost_key])
-
-    default_cost = _to_bnusd_per_mt(default_cost)
-
-    item_costs = {str(item): default_cost for item in items}
-
-    if categories_key is None:
-        return item_costs, default_cost
-
-    # Override with category-specific costs
-    categories = trade_config[categories_key]
-    for _category, cfg in categories.items():
-        category_cost = float(cfg["cost_per_km"])
-        category_cost = _to_bnusd_per_mt(category_cost)
-        configured_items = cfg[category_item_key]
-
-        for item in configured_items:
-            item_label = str(item)
-            if item_label in item_costs:
-                item_costs[item_label] = category_cost
-
-    return item_costs, default_cost
-
-
 def _add_trade_hubs_and_links(
     n: pypsa.Network,
-    trade_config: dict,
+    domain_cfg: dict,
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     items: list,
     *,
     hub_centers: np.ndarray,
-    marginal_cost_key: str,
-    cost_categories_key: str | None,
-    default_cost_key: str | None,
-    category_item_key: str,
-    non_tradable_key: str,
     bus_prefix: str,
     carrier_prefix: str,
     hub_name_prefix: str,
@@ -115,14 +67,6 @@ def _add_trade_hubs_and_links(
     """Shared implementation for adding trade hubs and links for a set of items."""
 
     n_hubs = len(hub_centers)
-    item_costs, _default_cost = _resolve_trade_costs(
-        trade_config,
-        items,
-        categories_key=cost_categories_key,
-        default_cost_key=default_cost_key,
-        fallback_cost_key=marginal_cost_key,
-        category_item_key=category_item_key,
-    )
 
     if len(regions_gdf) == 0 or len(countries) == 0:
         logger.info("Skipping %s trade hubs: no regions/countries available", log_label)
@@ -133,9 +77,9 @@ def _add_trade_hubs_and_links(
         logger.info("Skipping %s trade hubs: no items configured", log_label)
         return
 
-    non_tradable = {
-        str(item) for item in trade_config[non_tradable_key] if item in items
-    }
+    item_costs = trade_costs_per_km(domain_cfg, items)
+
+    non_tradable = {item for item in non_tradable_items(domain_cfg) if item in items}
     tradable_items = [item for item in items if item not in non_tradable]
     if non_tradable:
         logger.info(
@@ -318,7 +262,7 @@ def _add_trade_hubs_and_links(
 
 def add_crop_trade_hubs_and_links(
     n: pypsa.Network,
-    trade_config: dict,
+    commodities_config: dict,
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     crop_list: list,
@@ -329,16 +273,11 @@ def add_crop_trade_hubs_and_links(
 
     _add_trade_hubs_and_links(
         n,
-        trade_config,
+        commodities_config["crops"],
         regions_gdf,
         countries,
         crop_list,
         hub_centers=hub_centers,
-        marginal_cost_key="crop_trade_marginal_cost_per_km",
-        cost_categories_key="crop_trade_cost_categories",
-        default_cost_key="crop_default_trade_cost_per_km",
-        category_item_key="crops",
-        non_tradable_key="non_tradable_crops",
         bus_prefix="crop",
         carrier_prefix="crop_",
         hub_name_prefix="hub:crop",
@@ -351,7 +290,7 @@ def add_crop_trade_hubs_and_links(
 
 def add_food_trade_hubs_and_links(
     n: pypsa.Network,
-    trade_config: dict,
+    commodities_config: dict,
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     food_list: list,
@@ -362,16 +301,11 @@ def add_food_trade_hubs_and_links(
 
     _add_trade_hubs_and_links(
         n,
-        trade_config,
+        commodities_config["foods"],
         regions_gdf,
         countries,
         food_list,
         hub_centers=hub_centers,
-        marginal_cost_key="food_trade_marginal_cost_per_km",
-        cost_categories_key="food_trade_cost_categories",
-        default_cost_key="food_default_trade_cost_per_km",
-        category_item_key="foods",
-        non_tradable_key="non_tradable_foods",
         bus_prefix="food",
         carrier_prefix="food_",
         hub_name_prefix="hub:food",
@@ -384,7 +318,7 @@ def add_food_trade_hubs_and_links(
 
 def add_feed_trade_hubs_and_links(
     n: pypsa.Network,
-    trade_config: dict,
+    commodities_config: dict,
     regions_gdf: gpd.GeoDataFrame,
     countries: list,
     feed_categories: list,
@@ -398,14 +332,12 @@ def add_feed_trade_hubs_and_links(
     feed_{category}_{country}.
 
     Grassland feed is excluded from trading (fresh, location-specific).
-    Other feeds are tradable with costs reflecting bulkiness:
-    - Grain/protein feeds: Low cost (concentrated, easy handling)
-    - Forage feeds: Medium cost (moderately bulky)
-    - Roughage/low-quality: High cost (very bulky, low value)
+    Other feeds are tradable with costs reflecting bulkiness, see
+    ``commodities.feeds.classes`` in the config.
 
     Args:
         n: PyPSA network to modify
-        trade_config: Trade configuration dictionary
+        commodities_config: ``commodities`` configuration dictionary
         regions_gdf: GeoDataFrame with regional geometries for hub placement
         countries: List of country codes to connect
         feed_categories: List of feed category names (from infrastructure)
@@ -413,16 +345,11 @@ def add_feed_trade_hubs_and_links(
     """
     _add_trade_hubs_and_links(
         n,
-        trade_config,
+        commodities_config["feeds"],
         regions_gdf,
         countries,
         feed_categories,
         hub_centers=hub_centers,
-        marginal_cost_key="feed_default_trade_cost_per_km",
-        cost_categories_key="feed_trade_cost_categories",
-        default_cost_key="feed_default_trade_cost_per_km",
-        category_item_key="feeds",
-        non_tradable_key="non_tradable_feeds",
         bus_prefix="feed",
         carrier_prefix="feed_",
         hub_name_prefix="hub:feed",

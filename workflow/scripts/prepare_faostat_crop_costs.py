@@ -12,8 +12,8 @@ Prices are CPI-deflated to the configured base year before averaging.
 
 Inputs
 ------
-- PP.parquet : FAOSTAT Prices bulk (element 5531 = Producer Price USD/tonne)
-- QCL.parquet : FAOSTAT Production bulk (element 5419 = Yield hg/ha)
+- PP.parquet : FAOSTAT Prices bulk (element 5532 = Producer Price USD/tonne)
+- QCL.parquet : FAOSTAT Production bulk (element 5412 = Yield kg/ha)
 - faostat_crop_item_map.csv : model crop → FAOSTAT item mapping
 - M49-codes.csv : M49 → ISO3 mapping
 - cpi_annual.csv : US CPI-U annual averages for deflation
@@ -166,8 +166,8 @@ def main() -> None:
     qcl_df = qcl_df.dropna(subset=["Value"])
     qcl_df["country"] = qcl_df["iso3"].str.upper()
     qcl_df["year"] = pd.to_numeric(qcl_df["Year"], errors="coerce").astype(int)
-    # Convert hg/ha to t/ha (1 hg = 0.0001 t)
-    qcl_df["yield_t_per_ha"] = qcl_df["Value"].astype(float) / 10_000.0
+    # Convert kg/ha to t/ha
+    qcl_df["yield_t_per_ha"] = qcl_df["Value"].astype(float) / 1_000.0
     logger.info("QCL yield data: %d rows after filtering", len(qcl_df))
 
     # Build per-(crop, country, year) price and yield tables

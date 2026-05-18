@@ -18,6 +18,7 @@ import pypsa
 from workflow.scripts.build_model import (
     animals,
     biomass,
+    commodity_costs,
     crops,
     food,
     grassland,
@@ -497,6 +498,17 @@ if __name__ == "__main__":
     crop_costs = costs_df.set_index(["crop", "country"])[cost_col].astype(float)
     global_median_cost = costs_df.groupby("crop")[cost_col].median()
 
+    # Per-class farm-to-wholesale marketing markups (USD per tonne). One
+    # lookup per commodity domain; missing assignments are caught upstream
+    # by ``workflow.validation.commodities``.
+    commodities_cfg = snakemake.params.commodities
+    crop_marketing_usd_per_t = commodity_costs.marketing_costs_per_t(
+        commodities_cfg["crops"], snakemake.params.crops
+    )
+    feed_marketing_usd_per_t = commodity_costs.marketing_costs_per_t(
+        commodities_cfg["feeds"], FEED_CATEGORIES
+    )
+
     # Per-crop sowing rates (kg seed per ha per year). Source values in
     # data/curated/seed_rates.csv are fresh / as-planted mass to match the
     # citation literature (e.g. 2200 kg/ha seed tubers for potato). The
@@ -608,6 +620,9 @@ if __name__ == "__main__":
         set(base_food_list).union(animal_product_list).union(animal_co_product_list)
     )
     byproduct_list = list(snakemake.params.byproducts)
+    food_marketing_usd_per_t = commodity_costs.marketing_costs_per_t(
+        commodities_cfg["foods"], food_list
+    )
     food_groups_clean = food_groups.dropna(subset=["food", "group"]).copy()
     food_groups_clean["food"] = food_groups_clean["food"].astype(str).str.strip()
     food_groups_clean["group"] = food_groups_clean["group"].astype(str).str.strip()
@@ -841,6 +856,7 @@ if __name__ == "__main__":
         min_yield_t_per_ha=min_crop_yield,
         seed_kg_dm_per_ha=seed_kg_dm_per_ha,
         crop_loss_multiplier=crop_loss_multiplier,
+        crop_marketing_cost_usd_per_t=crop_marketing_usd_per_t,
     )
     land.add_multi_cropping_land_correction(
         n,
@@ -866,6 +882,7 @@ if __name__ == "__main__":
             min_yield_t_per_ha=min_crop_yield,
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
             crop_loss_multiplier=crop_loss_multiplier,
+            crop_marketing_cost_usd_per_t=crop_marketing_usd_per_t,
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")
@@ -900,6 +917,7 @@ if __name__ == "__main__":
         food_to_group,
         snakemake.params.crops,
         byproduct_list,
+        food_marketing_cost_usd_per_t=food_marketing_usd_per_t,
     )
 
     # Feed supply
@@ -913,17 +931,18 @@ if __name__ == "__main__":
         food_list,
         residue_feed_items,
         cfg_countries,
+        feed_marketing_cost_usd_per_t=feed_marketing_usd_per_t,
     )
 
     # Compute trade hub positions once (shared across crop, food, and feed trade)
     hub_centers = trade.compute_trade_hubs(
-        regions_df, int(snakemake.params.trade["hubs"])
+        regions_df, int(snakemake.params.commodities["hubs"])
     )
 
     # Feed trade networks (between countries via hubs)
     trade.add_feed_trade_hubs_and_links(
         n,
-        snakemake.params.trade,
+        snakemake.params.commodities,
         regions_df,
         cfg_countries,
         FEED_CATEGORIES,
@@ -969,6 +988,7 @@ if __name__ == "__main__":
         enforce_baseline_feed=enforce_baseline_feed,
         cost_calibration=animal_cost_calibration,
         co_products=animal_products_cfg["co_products"],
+        animal_marketing_cost_usd_per_t=food_marketing_usd_per_t,
     )
 
     # Add exogenous feed generators (leaves/browse, swill)
@@ -1018,7 +1038,7 @@ if __name__ == "__main__":
     # Trade networks
     trade.add_crop_trade_hubs_and_links(
         n,
-        snakemake.params.trade,
+        snakemake.params.commodities,
         regions_df,
         cfg_countries,
         list(crop_list),
@@ -1026,7 +1046,7 @@ if __name__ == "__main__":
     )
     trade.add_food_trade_hubs_and_links(
         n,
-        snakemake.params.trade,
+        snakemake.params.commodities,
         regions_df,
         cfg_countries,
         food_list,
