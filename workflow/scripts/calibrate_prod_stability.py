@@ -367,6 +367,12 @@ def main() -> None:
     body = yaml.safe_dump(
         {
             "target_deviation_pct": target_pct,
+            # Mode the L1 coefficients were fit in. The validator in
+            # workflow.validation.calibration gates the "calibrated"
+            # sentinel against the consuming config to make sure these
+            # coefficients are only resolved in the same regime.
+            "penalty_mode": "l1",
+            "deviation_type": "absolute",
             "land_l1_cost": lambda_c,
             "animal_feed_l1_cost": lambda_a,
             "iterations": len(trace) - 1,
