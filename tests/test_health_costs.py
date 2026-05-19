@@ -43,9 +43,18 @@ class TestAgeBucketMin:
     def test_ninety_five_plus(self):
         assert _age_bucket_min("95+") == 95
 
-    def test_bare_zero(self):
-        """A bare '0' with no range marker falls through to the default."""
-        assert _age_bucket_min("0") == 0
+    def test_all_ages_treated_as_adult(self):
+        """GDD-IA emits 'All ages' for its adult-equivalent rows; the bucket
+        minimum must be high enough to pass the intake_age_min filter."""
+        assert _age_bucket_min("All ages") >= 18
+        assert _age_bucket_min("all-a") >= 18
+
+    def test_unknown_label_raises(self):
+        """Unrecognised age labels must surface as errors rather than
+        silently falling through to a zero bucket (which silently dropped
+        every diet observation past the intake_age_min filter)."""
+        with pytest.raises(ValueError, match="Unrecognised age bucket label"):
+            _age_bucket_min("0")
 
 
 # ---------------------------------------------------------------------------

@@ -46,15 +46,22 @@ AGE_BUCKETS = [
 
 # Age utilities
 def _age_bucket_min(age: str) -> int:
-    """Return the lower bound of an age bucket label like '25-29' or '95+'."""
+    """Return the lower bound of an age bucket label like '25-29' or '95+'.
+
+    The GDD-IA dietary intake table only emits adult-equivalent rows tagged
+    as 'All ages' / 'all-a'. Treat those as adult-equivalent so the
+    intake_age_min filter does not drop every diet observation.
+    """
     age = str(age)
+    if age in ("All ages", "all-a"):
+        return 18
     if age.startswith("<"):
         return 0
     if "-" in age:
         return int(age.split("-")[0])
     if age.endswith("+"):
         return int(age.rstrip("+"))
-    return 0
+    raise ValueError(f"Unrecognised age bucket label: {age!r}")
 
 
 # Logger will be configured in __main__ block
