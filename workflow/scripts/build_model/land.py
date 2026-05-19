@@ -258,20 +258,41 @@ def add_land_components(
     land_index_df["resource_class"] = land_index_df["resource_class"].astype(int)
     land_index_df["baseline_area_ha"] = baseline_series.to_numpy()
 
-    # Only cropland-suitable current grassland should reduce convertible land.
+    # Allocate convertible-grassland subtraction across rainfed and
+    # irrigated rows of the same (region, resource_class) in proportion
+    # to their cropland-envelope areas. aggregate_class_areas already
+    # makes the rainfed/irrigated land partition disjoint per pixel, so
+    # the grassland (which has no water-supply attribute) must be split
+    # between the two buckets to avoid letting the LP grow irrigated
+    # cropland onto land that is physically occupied by grassland.
     land_index_df["convertible_grassland_ha"] = 0.0
-    rainfed_rows = land_index_df["water_supply"] == "r"
-    if rainfed_rows.any() and not convertible_grassland.empty:
-        rainfed_idx = pd.MultiIndex.from_frame(
-            land_index_df.loc[rainfed_rows, ["region", "resource_class"]],
+    if not convertible_grassland.empty:
+        rc_totals = (
+            land_index_df.groupby(["region", "resource_class"])["area_ha"]
+            .sum()
+            .rename("rc_total_area_ha")
+        )
+        land_index_df = land_index_df.merge(
+            rc_totals.reset_index(),
+            on=["region", "resource_class"],
+            how="left",
+        )
+        rc_idx = pd.MultiIndex.from_frame(
+            land_index_df[["region", "resource_class"]],
             names=["region", "resource_class"],
         )
-        aligned_convertible = convertible_grassland.reindex(
-            rainfed_idx, fill_value=0.0
+        rc_convertible = convertible_grassland.reindex(
+            rc_idx, fill_value=0.0
         ).to_numpy()
-        land_index_df.loc[rainfed_rows, "convertible_grassland_ha"] = (
-            aligned_convertible
-        )
+        rc_total = land_index_df["rc_total_area_ha"].to_numpy()
+        with np.errstate(divide="ignore", invalid="ignore"):
+            share = np.where(
+                rc_total > 0,
+                land_index_df["area_ha"].to_numpy() / rc_total,
+                0.0,
+            )
+        land_index_df["convertible_grassland_ha"] = rc_convertible * share
+        land_index_df = land_index_df.drop(columns=["rc_total_area_ha"])
 
     adjusted_area = (
         land_index_df["area_ha"] - land_index_df["convertible_grassland_ha"]
