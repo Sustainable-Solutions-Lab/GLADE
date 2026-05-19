@@ -348,7 +348,11 @@ if __name__ == "__main__":
                 raise ValueError(
                     f"Water requirement raster for '{crop}' ({ws}) has unexpected dimensions"
                 )
-            water_requirement_data[(crop, ws)] = water_arr
+            # GAEZ water rasters are in mm of depth; convert to m^3/ha
+            # (1 mm over 1 ha = 10 m^3) so downstream aggregations and the
+            # build_model coefficient (Mm3/Mha == m3/ha numerically) line up
+            # with the single-crop path in build_crop_yields.
+            water_requirement_data[(crop, ws)] = water_arr * 10.0
 
     valid_classes = [
         int(cls)

@@ -716,7 +716,10 @@ def add_multi_cropping_links(
             int(water_invalid.sum()),
         )
 
-    index_df["water_efficiency"] = np.where(water_valid, -water_req * 1e-3, 0.0)
+    # bus0 is land in Mha, bus2 is water in Mm3, so the coefficient is
+    # m3/ha (numerically equal to Mm3/Mha). water_requirement_m3_per_ha is
+    # already in m3/ha after build_multi_cropping converts the GAEZ mm raster.
+    index_df["water_efficiency"] = np.where(water_valid, -water_req, 0.0)
     index_df["has_water"] = water_valid.astype(int)
 
     fert_total = index_df["fertilizer_total"].astype(float)
