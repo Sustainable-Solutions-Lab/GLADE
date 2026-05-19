@@ -248,8 +248,8 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     # Bounded negative cost-calibration corrections (subsidies up to baseline)
     # are linopy-level objective terms on auxiliary variables not visible to
     # PyPSA statistics. Recover them exactly from solved dispatch:
-    # the LP optimum of aux ∈ [0, baseline], aux ≤ p with negative rate is
-    # aux* = min(p, baseline), so contribution = rate · min(p, baseline).
+    # the LP optimum of aux in [0, baseline], aux <= p with negative rate is
+    # aux* = min(p, baseline), so contribution = rate * min(p, baseline).
     for carrier, category, rate_col, baseline_col in [
         (
             "crop_production",
@@ -284,6 +284,48 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
         baselines = sub[baseline_col].astype(float).to_numpy()
         p = n.links.dynamic.p0.loc[:, sub.index].sum(axis=0).to_numpy()
         aux = np.minimum(np.maximum(p, 0.0), baselines)
+        cost = float((rates * aux).sum())
+        if abs(cost) > 1e-12:
+            total[category] = total.get(category, 0.0) + cost
+
+    # Bounded positive cost-calibration corrections (penalties above baseline)
+    # are the mirror image. The LP optimum of aux >= 0, aux >= p - baseline
+    # with positive rate is aux* = max(0, p - baseline), so
+    # contribution = rate * max(0, p - baseline).
+    for carrier, category, rate_col, baseline_col in [
+        (
+            "crop_production",
+            "Crop production",
+            "bounded_penalty_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
+            "grassland_production",
+            "Crop production",
+            "bounded_penalty_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
+            "animal_production",
+            "Animal production",
+            "bounded_penalty_bnusd_per_mt",
+            "baseline_feed_use_mt_dm",
+        ),
+    ]:
+        links = n.links.static
+        if rate_col not in links.columns or baseline_col not in links.columns:
+            continue
+        pen = links[
+            (links["carrier"] == carrier)
+            & (links[rate_col] > 0)
+            & (links[baseline_col] > 0)
+        ]
+        if pen.empty:
+            continue
+        rates = pen[rate_col].astype(float).to_numpy()
+        baselines = pen[baseline_col].astype(float).to_numpy()
+        p = n.links.dynamic.p0.loc[:, pen.index].sum(axis=0).to_numpy()
+        aux = np.maximum(p - baselines, 0.0)
         cost = float((rates * aux).sum())
         if abs(cost) > 1e-12:
             total[category] = total.get(category, 0.0) + cost
