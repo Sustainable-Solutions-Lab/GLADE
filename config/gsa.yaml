@@ -10,10 +10,10 @@
 #
 # The analysis is replicated at three production-stability regimes:
 #   default (calibrated):  land_l1_cost/animal_feed_l1_cost from calibration file
-#   lower  (÷ √10):        land_l1_cost=0.02343, animal_feed_l1_cost=0.01740
-#   higher (× √10):        land_l1_cost=0.23427, animal_feed_l1_cost=0.17398
-# The lower/higher numeric variants are hand-scaled ±½ order of magnitude
-# around the calibrated central values (~0.074 land, ~0.055 animal). If the
+#   lower  (/ sqrt(10)):   land_l1_cost=0.17590, animal_feed_l1_cost=0.01269
+#   higher (* sqrt(10)):   land_l1_cost=1.75896, animal_feed_l1_cost=0.12689
+# The lower/higher numeric variants are hand-scaled +/- 1/2 order of magnitude
+# around the calibrated central values (~0.556 land, ~0.040 animal). If the
 # calibrated values drift meaningfully, rescale these variants to match.
 # Each regime has its own baseline scenario for consumer-values calibration.
 
@@ -58,16 +58,16 @@ scenarios:
     validation:
       enforce_baseline_diet: true
       production_stability:
-        land_l1_cost: 0.02343
-        animal_feed_l1_cost: 0.01740
+        land_l1_cost: 0.17590
+        animal_feed_l1_cost: 0.01269
 
   baseline_l1_high:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
       production_stability:
-        land_l1_cost: 0.23427
-        animal_feed_l1_cost: 0.17398
+        land_l1_cost: 1.75896
+        animal_feed_l1_cost: 0.12689
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
@@ -152,7 +152,7 @@ scenarios:
         consumer_values:
           baseline_scenario: "baseline"
 
-    # --- Lower stability (÷ √10 on both penalties): l1=0.02343, animals.l1=0.01740 ---
+    # --- Lower stability (/ sqrt(10) on both penalties): l1=0.17590, animals.l1=0.01269 ---
     - name: gsa-l1-low_{sample_id}
       mode: sensitivity
       samples: 4096
@@ -163,12 +163,12 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            land_l1_cost: 0.02343
-            animal_feed_l1_cost: 0.01740
+            land_l1_cost: 0.17590
+            animal_feed_l1_cost: 0.01269
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
-    # --- Higher stability (× √10 on both penalties): l1=0.23427, animals.l1=0.17398 ---
+    # --- Higher stability (* sqrt(10) on both penalties): l1=1.75896, animals.l1=0.12689 ---
     - name: gsa-l1-high_{sample_id}
       mode: sensitivity
       samples: 4096
@@ -179,8 +179,8 @@ scenarios:
         <<: *gsa_template
         validation:
           production_stability:
-            land_l1_cost: 0.23427
-            animal_feed_l1_cost: 0.17398
+            land_l1_cost: 1.75896
+            animal_feed_l1_cost: 0.12689
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
