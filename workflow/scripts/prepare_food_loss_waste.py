@@ -815,6 +815,13 @@ def apply_waste_calibration(
             continue
         old_mean = result.loc[mask, "waste_fraction"].mean()
         new_waste = 1.0 - (1.0 - result.loc[mask, "waste_fraction"]) * multiplier
+        n_clipped = int(((new_waste < 0.0) | (new_waste > 0.95)).sum())
+        if n_clipped > 0:
+            logger.warning(
+                "Waste calibration %s: clipped %d rows to [0, 0.95]",
+                group,
+                n_clipped,
+            )
         result.loc[mask, "waste_fraction"] = new_waste.clip(lower=0.0, upper=0.95)
         new_mean = result.loc[mask, "waste_fraction"].mean()
         logger.info(

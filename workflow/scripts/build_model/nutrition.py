@@ -227,14 +227,23 @@ def add_food_nutrition_links(
     links_df["bus0"] = "food:" + links_df["food"] + ":" + links_df["country"]
     links_df["food_group"] = links_df["food"].map(food_to_group)
 
-    # Per-link FLW multiplier: lookup by (country, food_group). For links
-    # without a food_group the multiplier is 1.0 (no waste accounting).
+    # Every consumable food must map to a food_group; otherwise consumer-side
+    # waste would silently default to zero and the food would slip into
+    # nutrient/group stores at full intake mass. Byproducts are filtered out
+    # upstream (consumable_foods), so any remaining NaN here is a real gap.
+    missing_group = links_df.loc[links_df["food_group"].isna(), "food"].unique()
+    if len(missing_group) > 0:
+        raise ValueError(
+            "Consumable foods missing from food_groups.csv "
+            f"(consumer FLW would not apply): {sorted(missing_group)}"
+        )
+
+    # Per-link FLW multiplier: lookup by (country, food_group).
     with_group_keys = pd.MultiIndex.from_arrays(
         [links_df["country"].values, links_df["food_group"].astype(str).values]
     )
     looked_up = multiplier_lookup.reindex(with_group_keys).to_numpy()
     flw_mult = pd.Series(looked_up, index=links_df.index)
-    flw_mult = flw_mult.where(links_df["food_group"].notna(), 1.0)
     if flw_mult.isna().any():
         missing = links_df.loc[
             flw_mult.isna(), ["country", "food_group"]

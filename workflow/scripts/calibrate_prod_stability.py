@@ -103,6 +103,11 @@ def _deviation_pcts(n_main) -> tuple[float, float]:
     )
     feed_bl = df.loc["animal_feed_use", "baseline_total"]
     feed_dev = df.loc["animal_feed_use", "abs_deviation"]
+    if land_bl <= 0 or feed_bl <= 0:
+        raise ValueError(
+            f"Calibration scenario has zero baseline totals "
+            f"(land={land_bl}, feed={feed_bl}); cannot compute deviation pct"
+        )
     return float(100 * land_dev / land_bl), float(100 * feed_dev / feed_bl)
 
 
@@ -294,8 +299,14 @@ def main() -> None:
     if prev_yaml and Path(prev_yaml).exists():
         with open(prev_yaml) as f:
             prev = yaml.safe_load(f)
-        seed_c = float(prev.get("land_l1_cost", seed_c))
-        seed_a = float(prev.get("animal_feed_l1_cost", seed_a))
+        try:
+            seed_c = float(prev["land_l1_cost"])
+            seed_a = float(prev["animal_feed_l1_cost"])
+        except KeyError as exc:
+            raise ValueError(
+                f"Previous calibration YAML at {prev_yaml} is missing key "
+                f"{exc}; delete the file to start fresh."
+            ) from exc
         logger.info(
             "Warm-starting from previous calibration: "
             "land_l1_cost=%.6g, animal_feed_l1_cost=%.6g",

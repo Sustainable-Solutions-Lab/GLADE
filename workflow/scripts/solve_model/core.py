@@ -1677,36 +1677,30 @@ def run_solve(
         # for them.  Animal costs may differ from land_l1_cost when
         # animal_feed_l1_cost is set explicitly.
         animal_l1_override = stability_cfg.get("animal_feed_l1_cost")
+        land_l1 = float(stability_cfg["land_l1_cost"])
         animal_l1 = (
-            float(animal_l1_override)
-            if animal_l1_override is not None
-            else float(stability_cfg.get("land_l1_cost", 0))
+            float(animal_l1_override) if animal_l1_override is not None else land_l1
         )
         stability_cost = 0.0
         for var_name, cost in [
-            ("crop_stability_abs_dev", float(stability_cfg.get("land_l1_cost", 0))),
-            (
-                "grassland_stability_abs_dev",
-                float(stability_cfg.get("land_l1_cost", 0)),
-            ),
+            ("crop_stability_abs_dev", land_l1),
+            ("grassland_stability_abs_dev", land_l1),
             ("animal_stability_abs_dev", animal_l1),
-            (
-                "land_conversion_stability_abs_dev",
-                float(stability_cfg.get("land_l1_cost", 0)),
-            ),
+            ("land_conversion_stability_abs_dev", land_l1),
         ]:
             if var_name in n.model.variables:
                 sol = n.model.variables[var_name].solution
                 stability_cost += cost * float(sol.sum())
-        for var_name, cost_key in [
-            ("crop_stability_dev", "quadratic_cost"),
-            ("grassland_stability_dev", "quadratic_cost"),
-            ("animal_stability_dev", "quadratic_cost"),
-            ("land_conversion_stability_dev", "quadratic_cost"),
+        quad_cost = float(stability_cfg["quadratic_cost"])
+        for var_name in [
+            "crop_stability_dev",
+            "grassland_stability_dev",
+            "animal_stability_dev",
+            "land_conversion_stability_dev",
         ]:
             if var_name in n.model.variables:
                 sol = n.model.variables[var_name].solution
-                cost = float(stability_cfg.get(cost_key, 0))
+                cost = quad_cost
                 stability_cost += 0.5 * cost * float((sol * sol).sum())
         if abs(stability_cost) > 1e-12:
             n.meta["production_stability_cost"] = stability_cost
