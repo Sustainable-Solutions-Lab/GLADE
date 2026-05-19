@@ -2146,6 +2146,14 @@ properties:
         type: number
         minimum: 0
         description: "Multiplicative factor for food loss and waste fractions on food processing links"
+      food_loss:
+        type: number
+        minimum: 0
+        description: "Multiplicative factor for food loss fractions on crop and animal production links"
+      food_waste:
+        type: number
+        minimum: 0
+        description: "Multiplicative factor for food waste fractions on food consumption links"
       feed_conversion:
         type: number
         minimum: 0

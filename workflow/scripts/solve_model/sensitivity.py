@@ -13,7 +13,7 @@ Supported adjustments:
 - Emission factors: CH4 (animal_production + rice crop_production),
   N2O (animal_production + fertilizer_distribution + residue_incorporation),
   CO2 (land_conversion)
-- Food loss and waste (efficiency on food_processing links)
+- Food loss and waste (yield/consumption efficiencies)
 - Feed conversion ratios (efficiency on animal_production links)
 - Production costs (marginal_cost on crop_production, animal_production)
 
@@ -40,7 +40,9 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
         Sensitivity configuration with optional keys:
         - crop_yields: {all: float, by_crop: {crop: float}}
         - emission_factors: {ch4: float, n2o: float, luc: float}
-        - food_loss_waste: float
+        - food_loss: float
+        - food_waste: float
+        - food_loss_waste: float (legacy key mapping to both loss and waste)
         - feed_conversion: float
         - costs: {crop: float, animal: float}
     """
@@ -55,9 +57,22 @@ def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
     if emission_cfg:
         _apply_emission_factors(n, emission_cfg)
 
-    flw_factor = sensitivity_cfg.get("food_loss_waste", 1.0)
-    if flw_factor != 1.0:
-        _apply_flw_factor(n, flw_factor)
+    food_loss_factor = sensitivity_cfg.get("food_loss", 1.0)
+    food_waste_factor = sensitivity_cfg.get("food_waste", 1.0)
+
+    # Fall back to legacy food_loss_waste if provided and new keys are not
+    legacy_flw = sensitivity_cfg.get("food_loss_waste", 1.0)
+    if legacy_flw != 1.0:
+        if "food_loss" not in sensitivity_cfg:
+            food_loss_factor = legacy_flw
+        if "food_waste" not in sensitivity_cfg:
+            food_waste_factor = legacy_flw
+
+    if food_loss_factor != 1.0:
+        _apply_food_loss_factor(n, food_loss_factor)
+
+    if food_waste_factor != 1.0:
+        _apply_food_waste_factor(n, food_waste_factor)
 
     fcr_factor = sensitivity_cfg.get("feed_conversion", 1.0)
     if fcr_factor != 1.0:
@@ -225,28 +240,75 @@ def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
             )
 
 
-def _apply_flw_factor(n: pypsa.Network, factor: float) -> None:
-    """Scale food processing efficiencies to represent FLW uncertainty.
-
-    The efficiency on food_processing links incorporates food loss and waste
-    fractions. Scaling by `factor` adjusts the effective survival rate:
-    factor < 1.0 means more loss (FLW underestimated in baseline),
-    factor > 1.0 means less loss (FLW overestimated).
+def _apply_food_loss_factor(n: pypsa.Network, factor: float) -> None:
+    """Scale food loss efficiencies on crop and animal production links.
 
     Parameters
     ----------
     n : pypsa.Network
         Network to modify.
     factor : float
-        Multiplicative factor for food_processing link efficiencies.
+        Multiplicative factor for food loss.
     """
-    mask = n.links.static["carrier"] == "food_processing"
+    # 1. Crop production links (crop_production and crop_production_multi)
+    crop_carriers = ["crop_production", "crop_production_multi"]
+    crop_mask = n.links.static["carrier"].isin(crop_carriers)
+    if crop_mask.any():
+        links = n.links.static.loc[crop_mask]
+        bus_cols = [c for c in links.columns if c.startswith("bus") and c != "bus0"]
+        scaled_count = 0
+        for bus_col in bus_cols:
+            suffix = bus_col[3:]
+            eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
+            if eff_col in links.columns:
+                is_crop_bus = links[bus_col].astype(str).str.startswith("crop:")
+                if is_crop_bus.any():
+                    n.links.static.loc[links[is_crop_bus].index, eff_col] *= factor
+                    scaled_count += is_crop_bus.sum()
+
+        logger.info(
+            "Applied food loss factor %.3f to %d crop outputs on crop production links",
+            factor,
+            scaled_count,
+        )
+
+    # 2. Animal production links (animal_production)
+    animal_mask = n.links.static["carrier"] == "animal_production"
+    if animal_mask.any():
+        n.links.static.loc[animal_mask, "efficiency"] *= factor
+        logger.info(
+            "Applied food loss factor %.3f to %d animal_production links",
+            factor,
+            animal_mask.sum(),
+        )
+
+
+def _apply_food_waste_factor(n: pypsa.Network, factor: float) -> None:
+    """Scale food waste efficiencies on food consumption links.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to modify.
+    factor : float
+        Multiplicative factor for food waste.
+    """
+    mask = n.links.static["carrier"] == "food_consumption"
     if not mask.any():
-        logger.debug("No food_processing links found for FLW adjustment")
+        logger.debug("No food_consumption links found for food waste adjustment")
         return
-    n.links.static.loc[mask, "efficiency"] *= factor
+
+    # Scale all efficiency columns on food_consumption links
+    eff_cols = [c for c in n.links.static.columns if c.startswith("efficiency")]
+    for eff_col in eff_cols:
+        n.links.static.loc[mask, eff_col] *= factor
+
+    # Scale the flw_multiplier metadata column to keep targets consistent
+    if "flw_multiplier" in n.links.static.columns:
+        n.links.static.loc[mask, "flw_multiplier"] *= factor
+
     logger.info(
-        "Applied FLW factor %.3f to %d food_processing links",
+        "Applied food waste factor %.3f to %d food_consumption links",
         factor,
         mask.sum(),
     )
