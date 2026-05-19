@@ -12,13 +12,16 @@ countries by ``_match_baseline_to_consume_links`` in
 The multiplier is derived from the global food-bus balance reported by an
 uncalibrated validation-mode solve:
 
-    multiplier = clip(consumption_mt / (consumption_mt + net_slack_mt),
+    multiplier = clip((consumption_mt - net_slack_mt) / consumption_mt,
                       [min_multiplier, max_multiplier])
 
 where ``net_slack = positive_slack - negative_slack`` aggregated over
-countries for each food. Positive net slack (LP filled a shortage with
-the slack generator) shrinks the multiplier; negative net slack (LP
-absorbed excess into the disposal slack) grows the multiplier.
+countries for each food. The food bus balances as
+``real_supply + pos_slack - neg_absorbed = consumption``, i.e.
+``real_supply = consumption - net_slack``; the multiplier rescales the
+baseline target_mt to that real supply. Positive net slack (LP filled a
+shortage with the slack generator) shrinks the multiplier; negative net
+slack (LP absorbed excess into the disposal slack) grows it.
 """
 
 import logging
@@ -116,9 +119,9 @@ def compute_calibration(
     # Foods with effectively zero consumption: no multiplier needed.
     has_demand = cons > min_consumption_mt
     raw = pd.Series(1.0, index=per_food.index)
-    raw.loc[has_demand] = cons.loc[has_demand] / (
-        cons.loc[has_demand] + net.loc[has_demand]
-    )
+    raw.loc[has_demand] = (cons.loc[has_demand] - net.loc[has_demand]) / cons.loc[
+        has_demand
+    ]
 
     clipped = raw.clip(lower=min_multiplier, upper=max_multiplier)
     per_food["multiplier"] = clipped
