@@ -53,6 +53,13 @@ validation:
 cost_calibration:
   enabled: false
 
+# food_demand calibration depends on food_loss_waste.csv, which is built
+# from this step's output. Disable to break the cycle: food_waste's slack
+# must reflect the gap *without* the demand multiplier applied (the
+# multiplier is what closes the gap downstream).
+food_demand_calibration:
+  enabled: false
+
 food_loss_waste_calibration:
   generate: true
   scenario: "uncalibrated"

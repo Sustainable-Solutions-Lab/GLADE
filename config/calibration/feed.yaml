@@ -54,6 +54,14 @@ validation:
 cost_calibration:
   enabled: false
 
+# food_demand calibration depends on food_loss_waste.csv (and thus on
+# food_waste calibration which runs after feed). Disable here so the
+# feed step can run on a fresh clone where food_demand.csv may not yet
+# exist. Feed slack is not affected by per-food demand multipliers since
+# the feed-bus mass balance is upstream of food consumption.
+food_demand_calibration:
+  enabled: false
+
 grazing:
   grassland_forage_calibration:
     generate: true
