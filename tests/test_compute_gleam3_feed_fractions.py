@@ -220,6 +220,42 @@ def test_fully_exogenous_group(
     assert result.iloc[0]["country"] == "_global"
 
 
+def test_mixed_endogenous_exogenous_preserves_exogenous_share(
+    gleam_mapping: pd.DataFrame,
+    rum_mapping: pd.DataFrame,
+    mono_mapping: pd.DataFrame,
+    crop_production: pd.DataFrame,
+) -> None:
+    """A bucket with both endogenous and exogenous items must emit an
+    exogenous row alongside the endogenous fractions; previously the
+    exogenous share was silently absorbed into the endogenous categories
+    (the real-world failure was GLEAM's 'Grass and leaves' bucket dropping
+    the LEAVES item)."""
+    # Build a Grains bucket with two endogenous items (maize, barley) and
+    # one unmapped GLEAM code that will be flagged as exogenous.
+    xlsx_items = pd.DataFrame(
+        {
+            "animal_type": ["ruminant", "ruminant", "ruminant"],
+            "raw_code": ["CORN", "GRAINS", "UNKNOWN-EXO"],
+            "gleam3_category": ["Grains", "Grains", "Grains"],
+        }
+    )
+    table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
+    # Sanity-check: the item table flags the unknown code as exogenous.
+    assert table["exogenous"].any()
+    assert (~table["exogenous"]).any()
+
+    result = _compute_fractions(table, crop_production, _EMPTY_FOOD_PROD, ["USA"])
+
+    usa = result[result["country"] == "USA"]
+    # Fractions per country must still sum to 1.
+    assert usa["fraction"].sum() == pytest.approx(1.0)
+    # An exogenous row must be present (the bug was that this row vanished).
+    exo_rows = usa[usa["exogenous"]]
+    assert not exo_rows.empty
+    assert (exo_rows["fraction"] > 0).all()
+
+
 def test_compute_food_production_sums_pathways() -> None:
     """A food entity produced by multiple pathways gets the per-country sum."""
     foods = pd.DataFrame(

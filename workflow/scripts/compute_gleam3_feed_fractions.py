@@ -32,6 +32,7 @@ Constant fractions use country='_global'.
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from workflow.scripts.logging_config import setup_script_logging
@@ -273,6 +274,18 @@ def _compute_volume_weighted_fractions(
         (e, "crop" if e in crops_in_data else "food") for e in tracked_entities
     ]
 
+    # Route exogenous items to the same catch-all category used by the
+    # all-exogenous branch in _compute_fractions so mixed buckets (e.g.
+    # GLEAM's "Grass and leaves" which contains both endogenous grass and
+    # exogenous LEAVES) still emit an exogenous fraction row.
+    catch_all = (
+        f"{animal}_low_quality" if animal == "monogastric" else f"{animal}_roughage"
+    )
+    entities = entities.copy()
+    entities["_target_category"] = np.where(
+        entities["exogenous"], catch_all, entities["model_feed_category"]
+    )
+
     records = []
     for country in countries:
         tracked_vols = [
@@ -285,30 +298,34 @@ def _compute_volume_weighted_fractions(
         ]
         mean_tracked = sum(tracked_vols) / len(tracked_vols) if tracked_vols else 1.0
 
-        cat_volumes: dict[str, float] = {}
+        # Per-category volume, split by exogenous flag so endogenous and
+        # exogenous shares of the same target category remain distinct.
+        cat_volumes: dict[tuple[str, bool], float] = {}
         for _, row in entities.iterrows():
-            cat = row["model_feed_category"]
+            cat = row["_target_category"]
+            exo = bool(row["exogenous"])
             entity = row["model_entity"]
             share = float(row["share"]) if "share" in row else 1.0
-            if row["entity_type"] == "crop" and entity in crops_in_data:
+            if exo:
+                # Exogenous items have no production-data backing; give them
+                # the same mean-tracked placeholder used for untracked
+                # endogenous entities so all items in the bucket compete on
+                # comparable scales.
+                vol = mean_tracked
+            elif row["entity_type"] == "crop" and entity in crops_in_data:
                 vol = crop_prod_lookup.get((country, entity), 0.0)
             elif row["entity_type"] == "food" and entity in foods_in_data:
                 vol = food_prod_lookup.get((country, entity), 0.0)
             else:
-                # Untracked entity (no production-data backing): use the
-                # mean of tracked entities in this group as a placeholder,
-                # so the entity gets a small non-zero weight rather than
-                # being dropped entirely.
                 vol = mean_tracked
-            # Multi-category items contribute volume * share to each
-            # category (mass balance: shares sum to 1 per entity).
-            cat_volumes[cat] = cat_volumes.get(cat, 0.0) + vol * share
+            cat_volumes[(cat, exo)] = cat_volumes.get((cat, exo), 0.0) + vol * share
 
-        for cat, vol in cat_volumes.items():
+        for (cat, exo), vol in cat_volumes.items():
             records.append(
                 {
                     "country": country,
                     "model_feed_category": cat,
+                    "exogenous": exo,
                     "volume": vol,
                 }
             )
@@ -324,24 +341,28 @@ def _compute_volume_weighted_fractions(
     )
 
     # Global fallback for countries with zero total volume
-    global_vols = vol_df.groupby("model_feed_category")["volume"].sum()
+    global_vols = vol_df.groupby(["model_feed_category", "exogenous"])["volume"].sum()
     global_sum = global_vols.sum()
-    unique_cats = entities["model_feed_category"].unique()
     if global_sum > 0:
         global_frac = (global_vols / global_sum).to_dict()
     else:
-        global_frac = {cat: 1.0 / len(unique_cats) for cat in unique_cats}
+        unique_keys = list(zip(vol_df["model_feed_category"], vol_df["exogenous"]))
+        unique_keys = list(set(unique_keys))
+        global_frac = {key: 1.0 / len(unique_keys) for key in unique_keys}
 
     zero_countries = vol_df.loc[~nonzero, "country"].unique()
     if len(zero_countries) > 0:
         mask = vol_df["country"].isin(zero_countries)
-        vol_df.loc[mask, "fraction"] = vol_df.loc[mask, "model_feed_category"].map(
-            global_frac
+        keys = list(
+            zip(
+                vol_df.loc[mask, "model_feed_category"],
+                vol_df.loc[mask, "exogenous"],
+            )
         )
+        vol_df.loc[mask, "fraction"] = [global_frac.get(key, 0.0) for key in keys]
 
     vol_df["gleam3_category"] = g3cat
     vol_df["animal_type"] = animal
-    vol_df["exogenous"] = False
     return vol_df[OUTPUT_COLS]
 
 
@@ -358,6 +379,7 @@ def _compute_fractions(
         ["gleam3_category", "animal_type"]
     ):
         endogenous = group[~group["exogenous"]]
+        exogenous = group[group["exogenous"]]
 
         if endogenous.empty:
             # Fully exogenous → single row, 100% to a catch-all category
@@ -385,7 +407,7 @@ def _compute_fractions(
 
         unique_cats = endogenous["model_feed_category"].unique()
 
-        if len(unique_cats) == 1:
+        if len(unique_cats) == 1 and exogenous.empty:
             # All endogenous items map to the same category → constant
             logger.info("%s/%s: constant → %s", g3cat, animal, unique_cats[0])
             results.append(
@@ -404,15 +426,18 @@ def _compute_fractions(
             )
             continue
 
-        # Multiple model categories → volume-weighted per-country fractions
+        # Mixed bucket (multiple endogenous categories and/or coexisting
+        # exogenous items) → volume-weighted per-country fractions; pass the
+        # full group so the exogenous share is preserved as its own row(s).
         logger.info(
-            "%s/%s: volume-weighted across %d categories",
+            "%s/%s: volume-weighted across %d endogenous + %d exogenous items",
             g3cat,
             animal,
-            len(unique_cats),
+            len(endogenous),
+            len(exogenous),
         )
         fracs = _compute_volume_weighted_fractions(
-            endogenous, crop_production, food_production, countries, g3cat, animal
+            group, crop_production, food_production, countries, g3cat, animal
         )
         results.append(fracs)
 
