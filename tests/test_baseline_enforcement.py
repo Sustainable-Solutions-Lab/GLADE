@@ -12,6 +12,7 @@ from workflow.scripts.extract_consumer_values import extract_consumer_values
 from workflow.scripts.solve_model.core import (
     _build_ratios_from_baseline,
     _match_baseline_to_consume_links,
+    _prepare_baseline_diet_for_food_constraints,
     add_food_incentives_to_objective,
     add_food_slack_generators,
     fix_food_consumption_to_baseline,
@@ -193,6 +194,49 @@ class TestBuildRatiosFromBaseline:
         result = _build_ratios_from_baseline(baseline_df)
 
         assert list(result.columns) == ["country", "food_group", "food", "ratio"]
+
+
+# ---------------------------------------------------------------------------
+# Test _prepare_baseline_diet_for_food_constraints
+# ---------------------------------------------------------------------------
+
+
+class TestPrepareBaselineDietForFoodConstraints:
+    def test_true_zero_preserved(self):
+        """A genuine zero baseline must not be lifted to the minimum floor."""
+        baseline = pd.DataFrame(
+            {
+                "food": ["wheat", "rice"],
+                "country": ["USA", "USA"],
+                "consumption_g_per_day_intake": [120.0, 0.0],
+            }
+        )
+        consume_links = pd.DataFrame(
+            {"food": ["wheat", "rice"], "country": ["USA", "USA"]}
+        )
+
+        result = _prepare_baseline_diet_for_food_constraints(baseline, consume_links)
+
+        rice = result.loc[result["food"] == "rice", "consumption_g_per_day"].iloc[0]
+        wheat = result.loc[result["food"] == "wheat", "consumption_g_per_day"].iloc[0]
+        assert rice == pytest.approx(0.0)
+        assert wheat == pytest.approx(120.0)
+
+    def test_tiny_positive_lifted_to_floor(self):
+        """Tiny-but-positive values are still lifted to the configured floor."""
+        baseline = pd.DataFrame(
+            {
+                "food": ["wheat"],
+                "country": ["USA"],
+                "consumption_g_per_day_intake": [0.03],
+            }
+        )
+        consume_links = pd.DataFrame({"food": ["wheat"], "country": ["USA"]})
+
+        result = _prepare_baseline_diet_for_food_constraints(
+            baseline, consume_links, min_consumption_g_per_day=0.1
+        )
+        assert result["consumption_g_per_day"].iloc[0] == pytest.approx(0.1)
 
 
 # ---------------------------------------------------------------------------

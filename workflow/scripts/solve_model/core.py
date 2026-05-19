@@ -531,9 +531,15 @@ def _prepare_baseline_diet_for_food_constraints(
     model_keys = set(zip(consume_links["food"], consume_links["country"]))
     df = df[df.apply(lambda r: (r["food"], r["country"]) in model_keys, axis=1)].copy()
 
-    df["consumption_g_per_day"] = df["consumption_g_per_day"].clip(
-        lower=min_consumption_g_per_day
-    )
+    # Lift only tiny-but-positive consumptions to a minimum floor so that
+    # downstream ratio derivation does not divide by near-zero values. True
+    # zeros mean the food is not eaten in the country at all; preserve them so
+    # baseline-equality and diet-stability runs do not inject artificial
+    # demand.
+    positive = df["consumption_g_per_day"] > 0
+    df.loc[positive, "consumption_g_per_day"] = df.loc[
+        positive, "consumption_g_per_day"
+    ].clip(lower=min_consumption_g_per_day)
     return df
 
 
