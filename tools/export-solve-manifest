@@ -29,6 +29,7 @@ from workflow.scripts.solve_namespace import (  # noqa: E402
     build_scenario_entry,
     default_path_roots,
     load_merged_config,
+    validate_scenario_overrides,
 )
 
 
@@ -71,6 +72,9 @@ def main():
 
     # Get scenarios (expand once, reuse for all entries)
     all_scenarios = expand_scenario_defs(config.get("scenarios") or {})
+    # All scenarios share the same built network; reject any structural
+    # overrides so manifest scenarios cannot solve against a mismatched topology.
+    validate_scenario_overrides(all_scenarios)
     scenario_defs = all_scenarios
     if args.scenarios:
         scenario_names = args.scenarios

@@ -14,6 +14,13 @@ import json
 
 from scenario_generators import expand_scenario_defs
 
+from workflow.scripts.solve_namespace import (
+    SOLVE_TIME_CONFIG_PREFIXES,
+    _is_solve_time_key,
+    _leaf_keys,
+    validate_scenario_overrides,
+)
+
 _SCENARIO_CACHE = None
 
 
@@ -60,76 +67,13 @@ def get_effective_config(scenario_name):
     return eff_config
 
 
-# Config key prefixes that are safe to vary per-scenario (solve-time only).
-# Any scenario override whose dotted key path does NOT start with one of these
-# prefixes is considered structural and will be rejected at DAG construction
-# time. This allowlist approach ensures new config keys are structural by
-# default until explicitly verified as solve-time safe.
-SOLVE_TIME_CONFIG_PREFIXES = {
-    "emissions.ghg_price",
-    "emissions.ghg_pricing_enabled",
-    "health.enabled",
-    "health.value_per_yll",
-    "validation.enforce_baseline_diet",
-    "validation.production_stability",
-    "validation.diet_stability",
-    "validation.animal_growth_cap",
-    "macronutrients",
-    "food_utility_piecewise",
-    "food_incentives",
-    "food_groups.constraints",
-    "food_groups.fix_within_group_ratios",
-    "food_groups.equal_by_country_source",
-    "food_groups.max_per_capita",
-    "biomass.marginal_values_usd_per_tonne",
-    "biomass.biofuel_demand_scale",
-    "land.regional_limit",
-    "grazing.grassland_forage_calibration.enabled",
-    "feed_protein_calibration.enabled",
-    "consumer_values",
-    "sensitivity",
-    "solving",
-    "plotting",
-    "remote_solve",
-    "netcdf",
-    "prod_stability_calibration.enabled",
-}
+# SOLVE_TIME_CONFIG_PREFIXES, _leaf_keys, _is_solve_time_key, and
+# validate_scenario_overrides are imported from workflow.scripts.solve_namespace
+# above so cluster manifest export, in-process calibration drivers, and this
+# Snakemake-time guard share a single source of truth.
 
 
-def _leaf_keys(d, prefix=""):
-    """Yield dotted key paths for leaf (non-dict) values in a nested dict."""
-    for k, v in d.items():
-        full = f"{prefix}.{k}" if prefix else k
-        if isinstance(v, dict):
-            yield from _leaf_keys(v, full)
-        else:
-            yield full
-
-
-def _is_solve_time_key(key):
-    """Return True if the key matches any allowed solve-time prefix."""
-    return any(key == p or key.startswith(p + ".") for p in SOLVE_TIME_CONFIG_PREFIXES)
-
-
-def _validate_scenario_overrides():
-    """Raise an error if any scenario overrides a structural config key."""
-    scenario_defs = load_scenario_defs()
-    errors = []
-    for scenario_name, overrides in scenario_defs.items():
-        for key in _leaf_keys(overrides):
-            if not _is_solve_time_key(key):
-                errors.append(
-                    f"  scenario '{scenario_name}' overrides structural key '{key}'"
-                )
-    if errors:
-        raise ValueError(
-            "Scenario overrides must not change model topology.\n"
-            "The following overrides affect build-time structure and must be\n"
-            "set at the base config level instead:\n" + "\n".join(errors)
-        )
-
-
-_validate_scenario_overrides()
+validate_scenario_overrides(load_scenario_defs())
 
 
 def scenario_override_hash(scenario_name):
