@@ -702,7 +702,7 @@ Biomass
 .. literalinclude:: ../config/default.yaml
    :language: yaml
    :start-after: # --- section: biomass ---
-   :end-before: # --- section: trade ---
+   :end-before: # --- section: commodities ---
 
 Per-country ``biomass`` buses track dry-matter exports to the energy sector. All foods
 listed under ``byproducts`` gain links to this bus, providing a disposal route for
