@@ -251,6 +251,23 @@ def add_land_components(
         .rename("area_ha")
     )
     total_area = total_land_area["area_ha"].astype(float)
+    # FAOSTAT-baked baseline cropland sometimes exceeds the GAEZ-derived
+    # suitable area envelope (most often in countries with extensive
+    # marginal cropping that GAEZ does not classify as suitable). Bumping
+    # total_area up to the baseline ensures cropland LP constraints don't
+    # exclude already-managed land. Log magnitude to surface unexpected
+    # data divergences.
+    bumped_mask = baseline_series > total_area
+    if bumped_mask.any():
+        bumped_diff = (baseline_series - total_area).clip(lower=0.0)
+        logger.info(
+            "Bumped total_area up to baseline cropland for %d entries "
+            "(total +%.2f Mha; max +%.2f Mha at %s)",
+            int(bumped_mask.sum()),
+            float(bumped_diff.sum()) / HA_PER_MHA,
+            float(bumped_diff.max()) / HA_PER_MHA,
+            str(bumped_diff.idxmax()),
+        )
     total_area = np.maximum(total_area, baseline_series)
     total_land_area["area_ha"] = total_area
 
