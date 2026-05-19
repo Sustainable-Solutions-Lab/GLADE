@@ -14,6 +14,7 @@ from workflow.scripts.solve_model.sensitivity import (
     _apply_cost_factors,
     _apply_crop_yield_factors,
     _apply_emission_factors,
+    _apply_fcr_factor,
     _apply_food_loss_factor,
     _apply_food_waste_factor,
     apply_sensitivity_factors,
@@ -49,6 +50,7 @@ def mock_network():
             "crop:maize:USA",
             "crop:soy:USA",
             "food:beef:USA",
+            "food:tallow:USA",
             "food:flour:USA",
             "nutrient:protein:USA",
             "emission:ch4",
@@ -61,6 +63,7 @@ def mock_network():
             "crop_maize",
             "crop_soy",
             "food_beef",
+            "food_tallow",
             "food_flour",
             "nutrient_protein",
             "ch4",
@@ -106,15 +109,19 @@ def mock_network():
         loss_multiplier2=[0.85],
     )
 
-    # Add animal production links. Beef 15% loss (mult=0.85).
+    # Add animal production links. Beef 15% loss (mult=0.85). bus5 carries
+    # a co-product (tallow) whose efficiency is structurally proportional
+    # to the primary product efficiency.
     n.links.add(
         ["animal:beef_grassfed:USA"],
         bus0=["feed:ruminant_forage:USA"],
         bus1=["food:beef:USA"],
         carrier="animal_production",
         efficiency=[0.05],
-        efficiency2=[100.0],  # CH4 (enteric/manure)
-        efficiency4=[5.0],  # N2O (manure)
+        efficiency2=[100.0],  # CH4 (enteric/manure) - per-feed-unit
+        efficiency4=[5.0],  # N2O (manure) - per-feed-unit
+        bus5=["food:tallow:USA"],
+        efficiency5=[0.01],  # Co-product, proportional to efficiency
         marginal_cost=[0.5],
         loss_multiplier=[0.85],
     )
@@ -594,6 +601,47 @@ class TestFoodLossWasteBundle:
         np.testing.assert_allclose(
             n.links.static.loc["consume:flour:USA", "efficiency"],
             orig_consume_eff * (0.7 / 0.8),
+        )
+
+
+class TestApplyFcrFactor:
+    def test_scales_primary_and_coproduct_food_outputs(self, mock_network):
+        """FCR scales every food-output bus on animal links (incl. co-products)."""
+        n = mock_network
+        orig_beef = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency"])
+        orig_tallow = float(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency5"]
+        )
+        orig_ch4 = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"])
+        orig_n2o = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"])
+
+        factor = 1.25
+        _apply_fcr_factor(n, factor)
+
+        # Primary food output and co-product scale by the same factor, so
+        # their physical ratio is preserved.
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency"],
+            orig_beef * factor,
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency5"],
+            orig_tallow * factor,
+        )
+        np.testing.assert_allclose(
+            (
+                n.links.static.loc["animal:beef_grassfed:USA", "efficiency5"]
+                / n.links.static.loc["animal:beef_grassfed:USA", "efficiency"]
+            ),
+            orig_tallow / orig_beef,
+        )
+
+        # Per-feed-unit outputs (CH4, N2O on non-food carriers) are untouched.
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"], orig_ch4
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"], orig_n2o
         )
 
 

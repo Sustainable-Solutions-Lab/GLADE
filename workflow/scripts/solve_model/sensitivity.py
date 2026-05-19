@@ -451,22 +451,58 @@ def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
 
     Higher factor means better conversion (more product per unit feed).
 
+    All food-output buses on animal_production links are scaled by the
+    same factor, including any co-product buses (bus5+, e.g. tallow or
+    lard), because the build derives their efficiencies from the same
+    ``adjusted_efficiency`` as the primary product. Per-feed-unit
+    outputs (CH4 on bus2, manure N on bus3, N2O on bus4) are not
+    proportional to product yield and are left untouched.
+
     Parameters
     ----------
     n : pypsa.Network
         Network to modify.
     factor : float
-        Multiplicative factor for animal_production link efficiencies.
+        Multiplicative factor for animal product efficiencies.
     """
     mask = n.links.static["carrier"] == "animal_production"
     if not mask.any():
         logger.debug("No animal_production links found for FCR adjustment")
         return
-    n.links.static.loc[mask, "efficiency"] *= factor
+
+    links = n.links.static.loc[mask]
+    bus_carriers = n.buses.static["carrier"]
+    bus_cols = [c for c in links.columns if c.startswith("bus") and c != "bus0"]
+
+    scaled_pairs = 0
+    for bus_col in bus_cols:
+        suffix = bus_col[len("bus") :]
+        eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
+        if eff_col not in links.columns:
+            continue
+
+        bus_names = links[bus_col].astype(str)
+        nonempty = bus_names.ne("") & bus_names.ne("None")
+        if not nonempty.any():
+            continue
+        carrier_series = bus_carriers.reindex(bus_names.where(nonempty)).fillna("")
+        is_food_output = nonempty.values & np.char.startswith(
+            carrier_series.values.astype(str), "food_"
+        )
+        if not is_food_output.any():
+            continue
+
+        target_idx = links.index[is_food_output]
+        n.links.static.loc[target_idx, eff_col] = (
+            n.links.static.loc[target_idx, eff_col].astype(float) * factor
+        )
+        scaled_pairs += int(len(target_idx))
+
     logger.info(
-        "Applied FCR factor %.3f to %d animal_production links",
+        "Applied FCR factor %.3f to %d food outputs on %d animal_production links",
         factor,
-        mask.sum(),
+        scaled_pairs,
+        int(mask.sum()),
     )
 
 
