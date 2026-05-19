@@ -54,13 +54,10 @@ if __name__ == "__main__":
     y_raw, y_src = read_raster_float(yield_path)
     conversion_overrides: dict[str, float] = {}
     if conv_csv:
-        try:
-            df_conv = pd.read_csv(conv_csv, comment="#").set_index("code")
-            conversion_overrides = (
-                df_conv["factor_to_t_per_ha"].dropna().astype(float).to_dict()
-            )
-        except Exception:
-            conversion_overrides = {}
+        df_conv = pd.read_csv(conv_csv, comment="#").set_index("code")
+        conversion_overrides = (
+            df_conv["factor_to_t_per_ha"].dropna().astype(float).to_dict()
+        )
 
     use_actual_yields = bool(getattr(snakemake.params, "use_actual_yields", False))  # type: ignore[attr-defined]
 
