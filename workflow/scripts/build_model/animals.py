@@ -480,37 +480,41 @@ def add_feed_to_animal_product_links(
             * constants.USD_TO_BNUSD
         )
 
-    # Apply cost calibration corrections, two-tier (see crops.py for the
-    # rationale): positive corrections are added additively to
-    # marginal_cost at all production levels; negative corrections are
-    # stored as a bounded subsidy and applied at solve time only up to
-    # ``baseline_feed_use_mt_dm`` per link.
+    # Apply cost calibration corrections (see crops.py for the full
+    # rationale). Both directions are bounded at
+    # ``baseline_feed_use_mt_dm`` so the corrections retain their
+    # local-gradient interpretation at baseline:
+    #   - Negative corrections stored as ``bounded_subsidy_bnusd_per_mt``
+    #     (applied on the first baseline_feed_use_mt_dm units of dispatch).
+    #   - Positive corrections stored as ``bounded_penalty_bnusd_per_mt``
+    #     (applied only on dispatch above baseline_feed_use_mt_dm).
     df["bounded_subsidy_bnusd_per_mt"] = 0.0
+    df["bounded_penalty_bnusd_per_mt"] = 0.0
     if cost_calibration is not None:
         cal_idx = pd.MultiIndex.from_arrays(
             [df["product"], df["country"]], names=["product", "country"]
         )
         cal_adj = cost_calibration.reindex(cal_idx, fill_value=0.0).to_numpy()
-        positive_mask = cal_adj >= 0
-        negative_mask = ~positive_mask
+        positive_mask = cal_adj > 0
+        negative_mask = cal_adj < 0
 
         marginal_cost = df["marginal_cost"].to_numpy().astype(float).copy()
-        # Positive corrections: additive with floor.
-        marginal_cost[positive_mask] = np.maximum(
-            marginal_cost[positive_mask] + cal_adj[positive_mask], 0.0
-        )
         # Negative corrections: bound subsidy at base cost so floored cost stays >= 0.
-        bounded = np.zeros_like(cal_adj)
-        bounded[negative_mask] = np.maximum(
+        bounded_sub = np.zeros_like(cal_adj)
+        bounded_sub[negative_mask] = np.maximum(
             cal_adj[negative_mask], -marginal_cost[negative_mask]
         )
-        df["marginal_cost"] = marginal_cost
-        df["bounded_subsidy_bnusd_per_mt"] = bounded
+        # Positive corrections: store as bounded penalty (no effect on marginal_cost).
+        bounded_pen = np.zeros_like(cal_adj)
+        bounded_pen[positive_mask] = cal_adj[positive_mask]
+        df["bounded_subsidy_bnusd_per_mt"] = bounded_sub
+        df["bounded_penalty_bnusd_per_mt"] = bounded_pen
 
         logger.info(
-            "Applied animal cost calibration: pos=%d additive, neg=%d bounded at baseline_feed_use_mt_dm",
-            int((cal_adj > 0).sum()),
-            int((cal_adj < 0).sum()),
+            "Applied animal cost calibration: pos=%d bounded above "
+            "baseline_feed_use_mt_dm, neg=%d bounded at baseline_feed_use_mt_dm",
+            int(positive_mask.sum()),
+            int(negative_mask.sum()),
         )
 
     # Per-country food *loss* multiplier (pre-retail supply-chain loss) is
@@ -592,6 +596,7 @@ def add_feed_to_animal_product_links(
         manure_ch4_share=link_df["manure_ch4_share"],
         pasture_n2o_share=link_df["pasture_n2o_share"],
         bounded_subsidy_bnusd_per_mt=link_df["bounded_subsidy_bnusd_per_mt"],
+        bounded_penalty_bnusd_per_mt=link_df["bounded_penalty_bnusd_per_mt"],
         loss_multiplier=link_df["loss_multiplier"],
         **co_product_kwargs,
     )

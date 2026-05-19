@@ -960,42 +960,55 @@ def add_bounded_subsidy_constraints(
         "animal_production",
     ),
 ) -> None:
-    """Apply negative cost-calibration corrections only up to the baseline.
+    """Apply cost-calibration corrections as locally-bounded subsidies / penalties.
 
     Cost calibration extracts duals at the ±1% hard bound, which represent
     the local marginal-cost gradient *at baseline production*. Applied as
     a flat per-Mha (or per-Mt-DM-feed) correction at any production level
-    under L1 stability, a moderate negative correction calibrated on a
-    small baseline can drive runaway expansion (the canonical olive-USA
-    case at -0.40 bnUSD/Mha calibrated on 0.04 Mha would grow olive 19x
-    if unbounded; the magnitude cap by itself doesn't help because the
-    pathological case has a moderate gradient, not a large one).
+    under L1 stability:
 
-    The two-tier resolution: positive corrections are applied additively
-    at all levels (already done in build_model). Negative corrections
-    (subsidies) are stored as a per-link
-    ``bounded_subsidy_bnusd_per_<unit>`` attribute and applied here only
-    on the first ``baseline_<...>`` units of dispatch. Beyond baseline,
-    the subsidy stops contributing — production faces uncorrected base
-    cost. This preserves the calibration's local-gradient interpretation
-    exactly and bounds the per-link subsidy budget at
-    ``correction x baseline``.
+    * a moderate **negative** correction calibrated on a small baseline
+      drives runaway expansion (the canonical olive-USA case at
+      -0.40 bnUSD/Mha calibrated on 0.04 Mha would grow olive 19x);
+    * a **positive** correction (e.g. +346 bnUSD/Mha on tomato:BEL after
+      winsorization made greenhouse tomato look cheap per tonne) becomes
+      a flat penalty that pushes the LP toward zero production, forcing
+      the L1 production-stability penalty to do the anchoring work.
 
-    Implementation: for each link with a non-zero subsidy, an auxiliary
-    variable ``aux_p ∈ [0, baseline]`` is introduced together with the
-    constraint ``aux_p <= link_p``. The objective gains
-    ``rate x aux_p`` (rate is negative, so the model maximises
-    ``aux_p`` up to ``min(p, baseline)``).
+    Symmetric two-tier resolution:
+
+    * **Negative** corrections (subsidies) are stored as
+      ``bounded_subsidy_bnusd_per_<unit>`` and applied only on the first
+      ``baseline_<...>`` units of dispatch. Beyond baseline the subsidy
+      stops contributing.
+    * **Positive** corrections (penalties) are stored as
+      ``bounded_penalty_bnusd_per_<unit>`` and applied only on dispatch
+      *above* ``baseline_<...>``. Up to baseline the penalty is zero.
+
+    Both bounds preserve the calibration's local-gradient interpretation
+    exactly and bound the per-link cost impact at
+    ``|correction| x baseline``.
+
+    Implementation: for each link with a non-zero correction an
+    auxiliary variable ``aux_p`` is introduced.
+
+    * Subsidy (negative ``rate``): ``aux_p in [0, baseline]`` with
+      ``aux_p <= link_p``. Objective gains ``rate * aux_p`` so the model
+      maximises ``aux_p`` up to ``min(p, baseline)``.
+    * Penalty (positive ``rate``): ``aux_p in [0, inf)`` with
+      ``aux_p >= link_p - baseline``. Objective gains ``rate * aux_p``
+      so the model minimises ``aux_p`` to ``max(0, p - baseline)``.
 
     Parameters
     ----------
     n : pypsa.Network
         Network containing the model. Expected to have per-link
-        attributes ``bounded_subsidy_bnusd_per_<unit>`` and a baseline
-        column matching the carrier (``baseline_area_mha`` for crop /
-        grassland; ``baseline_feed_use_mt_dm`` for animals).
+        attributes ``bounded_subsidy_bnusd_per_<unit>`` and
+        ``bounded_penalty_bnusd_per_<unit>`` plus a baseline column
+        matching the carrier (``baseline_area_mha`` for crop / grassland;
+        ``baseline_feed_use_mt_dm`` for animals).
     carriers : list[str]
-        Link carriers to scan; controls which subsidies are activated.
+        Link carriers to scan; controls which corrections are activated.
     """
     m = n.model
     link_p = m.variables["Link-p"].sel(snapshot="now")
@@ -1003,48 +1016,86 @@ def add_bounded_subsidy_constraints(
 
     for carrier in carriers:
         if carrier == "animal_production":
-            attr = "bounded_subsidy_bnusd_per_mt"
+            sub_attr = "bounded_subsidy_bnusd_per_mt"
+            pen_attr = "bounded_penalty_bnusd_per_mt"
             baseline_col = "baseline_feed_use_mt_dm"
         else:
-            attr = "bounded_subsidy_bnusd_per_mha"
+            sub_attr = "bounded_subsidy_bnusd_per_mha"
+            pen_attr = "bounded_penalty_bnusd_per_mha"
             baseline_col = "baseline_area_mha"
 
-        sub = links_df[links_df["carrier"] == carrier]
-        if attr not in sub.columns or baseline_col not in sub.columns:
-            continue
-        sub = sub[(sub[attr] < 0) & (sub[baseline_col] > 0)]
-        if sub.empty:
+        carrier_df = links_df[links_df["carrier"] == carrier]
+        if baseline_col not in carrier_df.columns:
             continue
 
-        link_names = sub.index
-        baselines = sub[baseline_col].astype(float).to_numpy()
-        rates = sub[attr].astype(float).to_numpy()
+        # --- Bounded subsidy branch (negative corrections) ---
+        if sub_attr in carrier_df.columns:
+            sub = carrier_df[
+                (carrier_df[sub_attr] < 0) & (carrier_df[baseline_col] > 0)
+            ]
+            if not sub.empty:
+                link_names = sub.index
+                baselines = sub[baseline_col].astype(float).to_numpy()
+                rates = sub[sub_attr].astype(float).to_numpy()
+                baselines_xr = xr.DataArray(
+                    baselines, coords={"name": link_names}, dims="name"
+                )
+                rates_xr = xr.DataArray(rates, coords={"name": link_names}, dims="name")
+                aux = m.add_variables(
+                    lower=0,
+                    upper=baselines_xr,
+                    coords=[link_names],
+                    dims=["name"],
+                    name=f"{carrier}_bounded_subsidy_p",
+                )
+                m.add_constraints(
+                    aux <= link_p.sel(name=link_names),
+                    name=f"GlobalConstraint-{carrier}_bounded_subsidy_le_p",
+                )
+                m.objective += (rates_xr * aux).sum()
+                logger.info(
+                    "Bounded subsidy active on %d %s links (rates min=%.4f, "
+                    "max=%.4f, total subsidy budget at baseline = %.2f bnUSD)",
+                    len(sub),
+                    carrier,
+                    rates.min(),
+                    rates.max(),
+                    float((rates * baselines).sum()),
+                )
 
-        baselines_xr = xr.DataArray(baselines, coords={"name": link_names}, dims="name")
-        rates_xr = xr.DataArray(rates, coords={"name": link_names}, dims="name")
-
-        aux = m.add_variables(
-            lower=0,
-            upper=baselines_xr,
-            coords=[link_names],
-            dims=["name"],
-            name=f"{carrier}_bounded_subsidy_p",
-        )
-        m.add_constraints(
-            aux <= link_p.sel(name=link_names),
-            name=f"GlobalConstraint-{carrier}_bounded_subsidy_le_p",
-        )
-        m.objective += (rates_xr * aux).sum()
-
-        logger.info(
-            "Bounded subsidy active on %d %s links (rates min=%.4f, max=%.4f, "
-            "total subsidy budget at baseline = %.2f bnUSD)",
-            len(sub),
-            carrier,
-            rates.min(),
-            rates.max(),
-            float((rates * baselines).sum()),
-        )
+        # --- Bounded penalty branch (positive corrections) ---
+        if pen_attr in carrier_df.columns:
+            pen = carrier_df[
+                (carrier_df[pen_attr] > 0) & (carrier_df[baseline_col] > 0)
+            ]
+            if not pen.empty:
+                link_names = pen.index
+                baselines = pen[baseline_col].astype(float).to_numpy()
+                rates = pen[pen_attr].astype(float).to_numpy()
+                baselines_xr = xr.DataArray(
+                    baselines, coords={"name": link_names}, dims="name"
+                )
+                rates_xr = xr.DataArray(rates, coords={"name": link_names}, dims="name")
+                aux = m.add_variables(
+                    lower=0,
+                    coords=[link_names],
+                    dims=["name"],
+                    name=f"{carrier}_bounded_penalty_p",
+                )
+                m.add_constraints(
+                    aux >= link_p.sel(name=link_names) - baselines_xr,
+                    name=f"GlobalConstraint-{carrier}_bounded_penalty_ge_p_minus_baseline",
+                )
+                m.objective += (rates_xr * aux).sum()
+                logger.info(
+                    "Bounded penalty active on %d %s links (rates min=%.4f, "
+                    "max=%.4f, total penalty budget at +1x baseline = %.2f bnUSD)",
+                    len(pen),
+                    carrier,
+                    rates.min(),
+                    rates.max(),
+                    float((rates * baselines).sum()),
+                )
 
 
 # ─── Crop growth caps ──────────────────────────────────────────────────────

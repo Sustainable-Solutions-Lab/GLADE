@@ -240,11 +240,13 @@ def main() -> None:
         # revenue_per_ha = price (USD/t fresh) * yield (t fresh/ha)
         merged["revenue_per_ha"] = merged["value"] * merged["yield_t_per_ha"]
 
-        # Average across years per (country)
+        # Average across years per (country). Keep yield so we can derive
+        # per-tonne cost (used for winsorization).
         avg = (
             merged.groupby("country")
             .agg(
                 revenue_per_ha=("revenue_per_ha", "mean"),
+                yield_t_per_ha=("yield_t_per_ha", "mean"),
                 n_years=("year", "nunique"),
             )
             .reset_index()
@@ -262,38 +264,60 @@ def main() -> None:
     cost_col = f"cost_usd_{base_year}_per_ha"
     costs_df[cost_col] = costs_df["revenue_per_ha"] * non_endogenous_cost_share
 
-    # Upper winsorization per crop: clip non-fallback country values above
-    # the configured quantile to that quantile. Done before fallback filling
-    # so capped values aren't picked up by the fallback median. Fallback
-    # rows added below carry is_capped=False (they already use the median).
+    # Upper winsorization per crop, on per-tonne cost (USD/t).
+    #
+    # We cap producer-price-equivalent cost rather than per-hectare cost
+    # because the original outlier pattern is greenhouse / protected-
+    # cultivation FAOSTAT data: BOTH producer price AND reported yield
+    # are elevated in those countries. Capping per-hectare cost while
+    # leaving yields untouched collapses the implied per-tonne cost
+    # (USD/ha / t/ha) to artificially low values -- e.g. tomato:BEL at
+    # the previous USD/ha cap had per-tonne cost ~$700/t versus the
+    # crop's wholesale-realistic ~$2-3k/t. That collapse then fed large
+    # positive corrections in the cost calibration (the LP wanted to
+    # over-produce greenhouse tomato), which in turn inflated the L1
+    # production-stability calibration.
+    #
+    # Capping per-tonne cost preserves the elevated implicit price but
+    # bounds it at a realistic crop-wholesale level. Per-hectare cost is
+    # then ``capped_cost_per_t * actual_yield_per_ha``, so high-yield
+    # greenhouse countries still see proportionally high per-hectare
+    # cost (consistent with their actual production cost).
     costs_df["is_capped"] = False
     if cap_quantile is not None and len(costs_df) > 0:
-        caps = costs_df.groupby("crop")[cost_col].quantile(cap_quantile)
+        cost_per_t = costs_df[cost_col] / costs_df["yield_t_per_ha"].where(
+            costs_df["yield_t_per_ha"] > 0
+        )
+        costs_df["cost_usd_per_t"] = cost_per_t
+        caps = costs_df.groupby("crop")["cost_usd_per_t"].quantile(cap_quantile)
         n_capped_total = 0
         for crop, cap in caps.items():
             if not np.isfinite(cap):
                 continue
-            mask = (costs_df["crop"] == crop) & (costs_df[cost_col] > cap)
+            mask = (costs_df["crop"] == crop) & (costs_df["cost_usd_per_t"] > cap)
             n = int(mask.sum())
             if n == 0:
                 continue
-            costs_df.loc[mask, cost_col] = cap
+            # Recompute per-ha cost from capped per-tonne cost * actual yield.
+            costs_df.loc[mask, "cost_usd_per_t"] = cap
+            costs_df.loc[mask, cost_col] = cap * costs_df.loc[mask, "yield_t_per_ha"]
             costs_df.loc[mask, "is_capped"] = True
             n_capped_total += n
             logger.info(
-                "  %s: capped %d countries at p%.0f = %.0f USD/ha",
+                "  %s: capped %d countries at p%.0f = %.0f USD/t",
                 crop,
                 n,
                 cap_quantile * 100,
                 cap,
             )
         logger.info(
-            "Outlier cap (q=%.2f): clipped %d of %d non-fallback rows (%.1f%%)",
+            "Outlier cap (q=%.2f, on USD/t): clipped %d of %d non-fallback rows (%.1f%%)",
             cap_quantile,
             n_capped_total,
             len(costs_df),
             100.0 * n_capped_total / max(len(costs_df), 1),
         )
+        costs_df = costs_df.drop(columns=["cost_usd_per_t"])
 
     # Fill missing (crop, country) with the per-crop median (post-cap)
     crop_medians = costs_df.groupby("crop")[cost_col].median()

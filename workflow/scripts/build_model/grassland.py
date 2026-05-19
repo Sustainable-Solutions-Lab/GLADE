@@ -226,30 +226,33 @@ def add_grassland_feed_links(
         marginal_cost * efficiencies * MEGATONNE_TO_TONNE * USD_TO_BNUSD
     )
 
-    # Apply cost calibration corrections, two-tier (see crops.py for the
-    # rationale): positive corrections are added additively to
-    # marginal_cost; negative corrections are stored as a bounded
-    # subsidy and applied at solve time only up to baseline area.
+    # Apply cost calibration corrections (see crops.py for the rationale).
+    # Both directions are bounded at baseline_area_mha so the corrections
+    # retain their local-gradient interpretation at baseline:
+    #   - Negative corrections stored as ``bounded_subsidy_bnusd_per_mha``
+    #     (applied on the first baseline_area_mha units of dispatch).
+    #   - Positive corrections stored as ``bounded_penalty_bnusd_per_mha``
+    #     (applied only on dispatch above baseline_area_mha).
     bounded_subsidy_bnusd_per_mha = np.zeros(len(work), dtype=float)
+    bounded_penalty_bnusd_per_mha = np.zeros(len(work), dtype=float)
     if cost_calibration is not None:
         cal_adj = work["country"].map(cost_calibration).fillna(0.0).to_numpy()
-        positive_mask = cal_adj >= 0
-        negative_mask = ~positive_mask
+        positive_mask = cal_adj > 0
+        negative_mask = cal_adj < 0
 
         cost_per_mha_bnusd = cost_per_mha_bnusd.astype(float)
-        # Positive corrections: additive with floor.
-        cost_per_mha_bnusd[positive_mask] = np.maximum(
-            cost_per_mha_bnusd[positive_mask] + cal_adj[positive_mask], 0.0
-        )
         # Negative corrections: bound subsidy at base cost so floored cost stays >= 0.
         bounded_subsidy_bnusd_per_mha[negative_mask] = np.maximum(
             cal_adj[negative_mask], -cost_per_mha_bnusd[negative_mask]
         )
+        # Positive corrections: store as bounded penalty (no effect on marginal_cost).
+        bounded_penalty_bnusd_per_mha[positive_mask] = cal_adj[positive_mask]
 
         logger.info(
-            "Applied grassland cost calibration: pos=%d additive, neg=%d bounded at baseline_area",
-            int((cal_adj > 0).sum()),
-            int((cal_adj < 0).sum()),
+            "Applied grassland cost calibration: pos=%d bounded above "
+            "baseline_area, neg=%d bounded at baseline_area",
+            int(positive_mask.sum()),
+            int(negative_mask.sum()),
         )
 
     # Compute baseline production from observed grazing area * yield.
@@ -295,6 +298,7 @@ def add_grassland_feed_links(
         "yield_per_managed_ha": yield_per_managed_ha,
         "baseline_area_mha": baseline_area_mha,
         "bounded_subsidy_bnusd_per_mha": bounded_subsidy_bnusd_per_mha,
+        "bounded_penalty_bnusd_per_mha": bounded_penalty_bnusd_per_mha,
     }
     if use_actual_production:
         params["p_nom"] = available_mha
