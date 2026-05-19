@@ -114,6 +114,9 @@ if config["solving"]["inline_analysis"]:
             animal_growth_cap=lambda w: get_effective_config(w.scenario)["validation"][
                 "animal_growth_cap"
             ],
+            crop_growth_cap=lambda w: get_effective_config(w.scenario)["validation"][
+                "crop_growth_cap"
+            ],
             food_utility_piecewise=lambda w: get_effective_config(w.scenario)[
                 "food_utility_piecewise"
             ],
