@@ -1564,6 +1564,22 @@ animal_costs:
       stocks: ["2111", "5111"]
       producing_animals: ["2313", "5318", "5313"]
 
+  # Fallbacks for animal products without USDA/FADN data. Resolution order
+  # in merge_animal_costs.py: source data -> alias -> literature -> zero.
+  # ``production`` is the non-grazing operating cost and ``grazing`` the
+  # grazed-forage cost, both in USD per tonne of product (base year),
+  # mirroring the source-data column convention. See docs/costs.rst for
+  # the source citations behind each entry.
+  fallback_aliases:
+    dairy-buffalo: dairy
+  fallback_values_usd_per_t:
+    meat-chicken:
+      production: 1300
+      grazing: 0
+    meat-sheep:
+      production: 1200
+      grazing: 2300
+
 crop_costs:
   non_endogenous_cost_share: 0.7  # Fraction of revenue (price * yield) attributed to non-endogenous production costs
   faostat:

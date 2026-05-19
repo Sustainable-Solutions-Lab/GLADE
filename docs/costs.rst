@@ -425,20 +425,94 @@ Merging Livestock Costs
 
 **Script**: ``workflow/scripts/merge_animal_costs.py``
 
-1. **Load Multiple Sources**: Combine USDA and FADN livestock cost estimates
-2. **Average Across Sources**: For products with multiple data sources, compute mean
-3. **Apply Fallback Mappings**: For products without direct data:
+1. **Load Multiple Sources**: Combine USDA and FADN livestock cost estimates.
+2. **Average Across Sources**: For products with multiple data sources, compute mean.
+3. **Resolve Fallbacks**: For products without direct source data, walk the
+   fallback chain configured under ``animal_costs`` in ``config/default.yaml``
+   (see :ref:`animal_cost_fallbacks` below for the values and sources).
 
-   * Chicken → Pork (similar intensive housed systems)
-   * Eggs → Pork (intensive production)
-   * Defined in configuration under ``animal_cost_fallbacks``
+   a. ``fallback_aliases``: copy another product's per-tonne cost verbatim.
+   b. ``fallback_values_usd_per_t``: literature-based defaults with separate
+      non-grazing ``production`` and ``grazing`` components.
+   c. Otherwise: zero cost, with a warning.
 
-4. **Maintain Separate Grazing Costs**: Keep grazing cost column distinct from general production costs
+4. **Maintain Separate Grazing Costs**: Keep grazing cost column distinct from general production costs.
 5. **Output**: ``processing/{name}/animal_costs.csv`` with columns:
 
    * ``product``: Animal product name
-   * ``cost_per_t_usd_{base_year}``: Production cost excluding grazing (USD/tonne product)
-   * ``grazing_cost_per_t_usd_{base_year}``: Grazing-specific cost (USD/tonne product)
+   * ``n_sources``: Number of source datasets averaged (0 when filled by a fallback)
+   * ``source``: How the row was resolved -- ``data``, ``alias:<proxy>``, ``literature``, or ``zero``
+   * ``cost_per_t_usd_{base_year}``: Non-grazing production cost (USD/tonne product)
+   * ``grazing_cost_per_t_usd_{base_year}``: Grazing-feed cost (USD/tonne product)
+
+.. _animal_cost_fallbacks:
+
+Fallbacks for Products Without Source Data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+USDA Commodity Costs and Returns covers cattle, hogs, dairy, and broiler
+breakouts (live weight), but does not publish ongoing cost-of-production
+series for sheep or buffalo dairy, and the broiler series alone is
+US-centric. FADN covers cattle, dairy, and sheep in the EU but is biased
+toward high-cost systems. To avoid leaving large global products with a
+zero per-tonne base cost (forcing the calibration to manufacture the
+entire cost signal), the merge step applies the following defaults.
+
+**Buffalo dairy -- alias to cow dairy**
+
+``dairy-buffalo`` is resolved by copying the cow ``dairy`` per-tonne
+cost verbatim. Buffalo milk's per-tonne production-cost structure is
+dominated by feed and labour at scales similar to cow dairy. ICAR-NDRI
+cost-of-production studies (India) report buffalo milk at roughly
+INR 25-30/L (about USD 300-360/t) versus cow milk at INR 27-32/L, so
+cow dairy is a defensible (slightly conservative) upper-bound proxy
+until product-specific source data are added.
+
+References:
+
+* ICAR-National Dairy Research Institute, *Cost of milk production studies*, https://ndri.res.in/
+* Birthal, P.S. et al. (2017), *Buffalo Production in India: Performance, Trends and Drivers*, NIAP Policy Paper.
+
+**Broiler chicken -- USD 1 300/t carcass (non-grazing only)**
+
+USDA ERS *Commodity Costs and Returns: Broilers* place broiler
+operating + ownership cost at roughly USD 0.55-0.65 per pound live
+weight (about USD 1 200-1 430/t live, USD 1 700-2 000/t carcass at
+~70 % dressing) over 2018-2023. Brazil and China together account for
+more than 40 % of global broiler meat output and produce at lower
+cost; the OECD-FAO *Agricultural Outlook 2024-2033* implied production
+cost is around USD 1 100-1 500/t carcass. A production-weighted global
+anchor of **USD 1 300/t carcass** is used here. Chickens do not graze
+in the systems represented in the model, so the grazing component is
+zero.
+
+References:
+
+* USDA Economic Research Service, *Commodity Costs and Returns -- Broilers*, https://www.ers.usda.gov/data-products/commodity-costs-and-returns/
+* OECD-FAO (2024), *Agricultural Outlook 2024-2033*, Chapter 6 -- Meat, https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2024-2033_4c5d2cfb-en.html
+
+**Sheepmeat (lamb) -- USD 3 500/t carcass total**
+
+NZ Beef + Lamb Economic Service *Sheep and Beef On-farm Inventory*
+weighted-average cost of production runs about NZD 5-6/kg carcass
+(USD 3 000-3 700/t). MLA *Cost of Production -- Lamb* (Australia) is
+about AUD 4-5/kg live weight (USD 2 700-3 500/t carcass). UK DEFRA
+*Farm Business Survey* lamb is higher (USD 5 500-6 800/t carcass) but
+the UK is a much smaller share of global production. NZ, AU, CHN and
+IND dominate global sheepmeat output, so a production-weighted
+anchor of **USD 3 500/t carcass total** is used here. Extensive
+pasture systems are the global norm; the AGRI Benchmark Beef and
+Sheep Network reports roughly 60-75 % of variable cost as
+pasture/forage on sheep farms, so the total is split as
+**USD 1 200/t non-grazing operating cost + USD 2 300/t grazed-forage
+cost** (~65 % grazing share).
+
+References:
+
+* Beef + Lamb New Zealand Economic Service, *Sheep and Beef On-farm Inventory*, https://beeflambnz.com/data-tools
+* Meat & Livestock Australia, *Cost of Production -- Lamb*, https://www.mla.com.au/prices-markets/
+* UK DEFRA, *Farm Business Survey -- Lamb enterprise*, https://www.gov.uk/government/collections/farm-business-survey
+* AGRI Benchmark (2022), *Beef and Sheep Report*, https://www.agribenchmark.org/beef-and-sheep.html
 
 Grazing Costs
 ~~~~~~~~~~~~~
@@ -657,13 +731,20 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
      grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
      animal_correction_csv: "data/curated/calibration/animal_cost.csv"
 
-**Animal cost fallback mappings**:
+**Animal cost fallbacks** (see :ref:`animal_cost_fallbacks`):
 
 .. code-block:: yaml
 
-   animal_cost_fallbacks:
-     chicken: pork
-     eggs: pork
+   animal_costs:
+     fallback_aliases:
+       dairy-buffalo: dairy
+     fallback_values_usd_per_t:
+       meat-chicken:
+         production: 1300
+         grazing: 0
+       meat-sheep:
+         production: 1200
+         grazing: 2300
 
 **Grazing cost items** (USDA):
 

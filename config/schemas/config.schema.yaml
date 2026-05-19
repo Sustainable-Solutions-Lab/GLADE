@@ -1526,9 +1526,32 @@ properties:
 
   animal_costs:
     type: object
-    required: [fadn, usda, faostat]
+    required: [fadn, usda, faostat, fallback_aliases, fallback_values_usd_per_t]
     additionalProperties: false
     properties:
+      fallback_aliases:
+        type: object
+        description: "Map product -> proxy product. The proxy's per-tonne cost is copied verbatim when no source data is available for the product."
+        patternProperties:
+          "^[a-z0-9-]+$":
+            type: string
+      fallback_values_usd_per_t:
+        type: object
+        description: "Literature-based per-product defaults, used when no source data and no alias resolve. See docs/costs.rst for sources."
+        patternProperties:
+          "^[a-z0-9-]+$":
+            type: object
+            required: [production, grazing]
+            additionalProperties: false
+            properties:
+              production:
+                type: number
+                minimum: 0
+                description: "Non-grazing production cost in USD per tonne of product (base year)."
+              grazing:
+                type: number
+                minimum: 0
+                description: "Grazed-forage cost component in USD per tonne of product (base year)."
       fadn:
         type: object
         required:

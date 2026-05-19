@@ -237,7 +237,7 @@ Costs explicitly **excluded** (modeled endogenously):
 
 **Inflation adjustment**: Costs are inflation-adjusted to the configurable base year (default: 2024) using US CPI-U data from BLS.
 
-**Note**: USDA animal cost data is merged with EU FADN livestock data via the ``merge_animal_costs`` rule. For products without direct cost data (chicken, eggs), fallback mappings are applied via ``data/animal_cost_fallbacks.yaml`` using pork costs as a proxy. When data is available from multiple sources, costs are averaged.
+**Note**: USDA animal cost data is merged with EU FADN livestock data via the ``merge_animal_costs`` rule. Products without direct source data (currently ``meat-chicken``, ``meat-sheep``, ``dairy-buffalo``) are resolved through an alias-then-literature fallback chain configured under ``animal_costs`` in ``config/default.yaml``; see :ref:`animal_cost_fallbacks` for the values and references. When data is available from multiple sources, costs are averaged.
 
 .. _bls-cpi-data:
 

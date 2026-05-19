@@ -169,6 +169,8 @@ rule merge_animal_costs:
     params:
         animal_products=config["animal_products"]["include"],
         base_year=config["currency_base_year"],
+        fallback_aliases=config["animal_costs"]["fallback_aliases"],
+        fallback_values_usd_per_t=config["animal_costs"]["fallback_values_usd_per_t"],
     output:
         costs="<processing>/{name}/animal_costs.csv",
     resources:

@@ -6,22 +6,35 @@
 Merge animal product production costs from multiple sources (USDA, FADN, etc.) into
 a single unified cost dataset.
 
-This script combines cost data from different sources, and averages costs for products
-with multiple data points.
+For products without direct source data, two fallback layers are applied
+in order:
+
+1. ``fallback_aliases``: copy another product's per-tonne cost verbatim
+   (e.g. ``dairy-buffalo -> dairy``).
+2. ``fallback_values_usd_per_t``: literature-based per-product defaults
+   with separate non-grazing ``production`` and ``grazing`` components,
+   mirroring the source-data column convention (USDA's grazing items go
+   into the grazing column; everything else into the production column).
+
+Products that remain unresolved after both layers receive zero costs
+with a logged warning. See ``config/default.yaml`` (``animal_costs``
+section) and ``docs/costs.rst`` for the source citations.
 
 Inputs
 - snakemake.input.cost_sources: List of cost CSV files from different sources (USDA, FADN, etc.)
 - snakemake.params.animal_products: List of all model animal products from config
 - snakemake.params.base_year: Base year for cost values (for column naming)
+- snakemake.params.fallback_aliases: Dict mapping product -> proxy product
+- snakemake.params.fallback_values_usd_per_t: Dict mapping product ->
+    {"production": float, "grazing": float}
 
 Output
 - snakemake.output.costs: CSV with columns:
-    product,n_sources,cost_per_t_usd_{base_year}
+    product, n_sources, source, cost_per_t_usd_{base_year},
+    grazing_cost_per_t_usd_{base_year}
 
-Notes
-- For products with data from multiple sources, costs are averaged
-- Products without data receive zero costs (logged as warnings)
-- The merging logic is source-agnostic and can accommodate additional sources
+  ``source`` annotates how each row was resolved: ``"data"`` (averaged
+  source data), ``"alias:<proxy>"``, ``"literature"``, or ``"zero"``.
 """
 
 import logging
@@ -89,11 +102,14 @@ def merge_costs(
     costs_df: pd.DataFrame,
     all_products: list[str],
     base_year: int,
+    fallback_aliases: dict[str, str],
+    fallback_values_usd_per_t: dict[str, dict[str, float]],
 ) -> pd.DataFrame:
     """
-    Merge costs from multiple sources, and ensure all products have cost data.
+    Merge costs from sources and resolve fallbacks for products without data.
 
-    Returns DataFrame with columns: product, n_sources, cost_per_t_usd_{base_year}, grazing_cost_per_t_usd_{base_year}
+    Resolution order per product: source data -> alias -> literature -> zero.
+    The ``source`` column annotates which branch was taken.
     """
     cost_column = f"cost_per_t_usd_{base_year}"
     grazing_column = f"grazing_cost_per_t_usd_{base_year}"
@@ -126,39 +142,98 @@ def merge_costs(
         [cost_column, grazing_column, "n_sources"]
     ].to_dict("index")
 
-    # Step 3: Process all products, using zero costs for missing data
+    # Step 3: Resolve per product, following the fallback chain
     results = []
 
     for product in all_products:
         if product in cost_dict:
-            # Product has direct data
             results.append(
                 {
                     "product": product,
-                    "n_sources": cost_dict[product]["n_sources"],
+                    "n_sources": int(cost_dict[product]["n_sources"]),
+                    "source": "data",
                     cost_column: cost_dict[product][cost_column],
                     grazing_column: cost_dict[product][grazing_column],
                 }
             )
-        else:
-            # No data and no fallback
-            logger.warning(f"No cost data for {product}, using zero costs")
+            continue
+
+        if product in fallback_aliases:
+            proxy = fallback_aliases[product]
+            if proxy not in cost_dict:
+                raise KeyError(
+                    f"Alias for '{product}' points to '{proxy}', which has no "
+                    "source data. Provide source data for the proxy, or remove "
+                    "the alias."
+                )
+            logger.info(
+                "  %s: aliased to %s (Prod: $%.2f/t, Grazing: $%.2f/t)",
+                product,
+                proxy,
+                cost_dict[proxy][cost_column],
+                cost_dict[proxy][grazing_column],
+            )
             results.append(
                 {
                     "product": product,
                     "n_sources": 0,
-                    cost_column: 0.0,
-                    grazing_column: 0.0,
+                    "source": f"alias:{proxy}",
+                    cost_column: cost_dict[proxy][cost_column],
+                    grazing_column: cost_dict[proxy][grazing_column],
                 }
             )
+            continue
 
-    return pd.DataFrame(results)
+        if product in fallback_values_usd_per_t:
+            entry = fallback_values_usd_per_t[product]
+            try:
+                prod_cost = float(entry["production"])
+                grazing_cost = float(entry["grazing"])
+            except KeyError as exc:
+                raise KeyError(
+                    f"fallback_values_usd_per_t entry for '{product}' must "
+                    "have 'production' and 'grazing' keys"
+                ) from exc
+            logger.info(
+                "  %s: literature fallback (Prod: $%.2f/t, Grazing: $%.2f/t)",
+                product,
+                prod_cost,
+                grazing_cost,
+            )
+            results.append(
+                {
+                    "product": product,
+                    "n_sources": 0,
+                    "source": "literature",
+                    cost_column: prod_cost,
+                    grazing_column: grazing_cost,
+                }
+            )
+            continue
+
+        logger.warning(f"No cost data for {product}, using zero costs")
+        results.append(
+            {
+                "product": product,
+                "n_sources": 0,
+                "source": "zero",
+                cost_column: 0.0,
+                grazing_column: 0.0,
+            }
+        )
+
+    columns = ["product", "n_sources", "source", cost_column, grazing_column]
+    return pd.DataFrame(results, columns=columns)
 
 
 def main():
     cost_source_paths: list[str] = list(snakemake.input.cost_sources)  # type: ignore[name-defined]
     all_products: list[str] = list(snakemake.params.animal_products)  # type: ignore[name-defined]
     base_year: int = int(snakemake.params.base_year)  # type: ignore[name-defined]
+    fallback_aliases: dict[str, str] = dict(snakemake.params.fallback_aliases)  # type: ignore[name-defined]
+    fallback_values_usd_per_t: dict[str, dict[str, float]] = dict(
+        snakemake.params.fallback_values_usd_per_t  # type: ignore[name-defined]
+    )
     out_path: str = snakemake.output.costs  # type: ignore[name-defined]
 
     logger.info(
@@ -169,7 +244,13 @@ def main():
     costs_df = load_cost_sources(cost_source_paths, base_year)
 
     # Merge and apply fallbacks
-    merged_costs = merge_costs(costs_df, all_products, base_year)
+    merged_costs = merge_costs(
+        costs_df,
+        all_products,
+        base_year,
+        fallback_aliases,
+        fallback_values_usd_per_t,
+    )
 
     # Write output
     merged_costs.to_csv(out_path, index=False)
@@ -178,14 +259,16 @@ def main():
     )
 
     # Summary statistics
-    with_direct_data = (merged_costs["n_sources"] > 0).sum()
+    source_counts = merged_costs["source"].value_counts().to_dict()
     with_zero = (merged_costs[f"cost_per_t_usd_{base_year}"] == 0).sum()
     with_zero_grazing = (merged_costs[f"grazing_cost_per_t_usd_{base_year}"] == 0).sum()
 
     logger.info(
-        f"Summary: {with_direct_data} products with direct data, "
-        f"{with_zero} with zero production costs, "
-        f"{with_zero_grazing} with zero grazing costs"
+        "Summary: resolution = %s; %d products with zero production costs, "
+        "%d with zero grazing costs",
+        source_counts,
+        int(with_zero),
+        int(with_zero_grazing),
     )
 
 
