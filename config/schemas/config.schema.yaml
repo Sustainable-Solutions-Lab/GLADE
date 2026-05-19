@@ -499,6 +499,7 @@ properties:
       - marginal_cost_usd_per_tonne
       - n_percentile
       - manure_n_to_fertilizer
+      - proxy_rates
     additionalProperties: false
     properties:
       limit:
@@ -519,6 +520,11 @@ properties:
         minimum: 0
         maximum: 1
         description: "Fraction of N excreted in confined quarters available as fertilizer"
+      proxy_rates:
+        type: object
+        additionalProperties:
+          type: string
+        description: "Map of model crop -> source crop for crops absent from FUBC; the source crop's N rate is reused."
 
   residues:
     type: object

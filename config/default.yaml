@@ -181,6 +181,13 @@ fertilizer:
   n_percentile: 80  # Use 80th percentile for high-input systems (range: 0-100)
   # Manure nitrogen management
   manure_n_to_fertilizer: 0.75 # Fraction of N excreted in confined quarters available as fertilizer (accounting for losses during storage/handling)
+  # Proxy mappings for model crops that are absent from the IFA FUBC dataset.
+  # Each mapping copies the source crop's derived N rate to the target crop
+  # so that downstream build_model.py can index every model crop without
+  # silent-zero fallbacks.
+  proxy_rates:
+    plantain: banana       # FUBC has no plantain row; banana is the closest match.
+    silage-maize: maize    # silage maize is fertilised like grain maize.
 
 # --- section: residues ---
 residues:

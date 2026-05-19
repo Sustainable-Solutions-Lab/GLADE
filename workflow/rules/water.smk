@@ -39,6 +39,7 @@ rule derive_global_fertilizer_rates:
     params:
         n_percentile=config["fertilizer"]["n_percentile"],
         crops=config["crops"],
+        proxy_rates=config["fertilizer"]["proxy_rates"],
     output:
         "<processing>/{name}/global_fertilizer_n_rates.csv",
     group:

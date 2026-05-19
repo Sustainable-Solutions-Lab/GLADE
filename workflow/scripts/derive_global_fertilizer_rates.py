@@ -41,7 +41,7 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger(__name__)
 
 
-def calculate_percentile_rates(df, percentile, crops):
+def calculate_percentile_rates(df, percentile, crops, proxy_rates):
     """
     Calculate percentile-based N application rates for each crop.
 
@@ -53,6 +53,10 @@ def calculate_percentile_rates(df, percentile, crops):
         Percentile to calculate (0-100)
     crops : list
         List of expected crops
+    proxy_rates : dict[str, str]
+        Map of model crop -> source crop for crops absent from FUBC. The
+        source crop's derived rate is copied onto the target crop so every
+        expected model crop is present in the output.
 
     Returns
     -------
@@ -68,19 +72,52 @@ def calculate_percentile_rates(df, percentile, crops):
     )
     percentile_rates.columns = ["crop", "n_rate_kg_per_ha"]
 
+    # Apply proxy mappings: every target crop in proxy_rates inherits the
+    # source crop's rate. Source crops must themselves be present in the
+    # FUBC-derived table.
+    if proxy_rates:
+        source_lookup = percentile_rates.set_index("crop")["n_rate_kg_per_ha"].to_dict()
+        missing_sources = sorted(
+            target
+            for target, source in proxy_rates.items()
+            if source not in source_lookup
+        )
+        if missing_sources:
+            raise ValueError(
+                "fertilizer.proxy_rates references source crops that are "
+                f"absent from the derived rates table: {missing_sources}"
+            )
+        proxy_rows = pd.DataFrame(
+            {
+                "crop": list(proxy_rates.keys()),
+                "n_rate_kg_per_ha": [
+                    source_lookup[source] for source in proxy_rates.values()
+                ],
+            }
+        )
+        percentile_rates = pd.concat([percentile_rates, proxy_rows], ignore_index=True)
+        logger.info(
+            "Applied %d proxy mappings: %s",
+            len(proxy_rates),
+            ", ".join(f"{t}<-{s}" for t, s in proxy_rates.items()),
+        )
+
     # Round to 2 decimal places
     percentile_rates["n_rate_kg_per_ha"] = percentile_rates["n_rate_kg_per_ha"].round(2)
 
     logger.info(f"Calculated rates for {len(percentile_rates)} crops")
 
-    # Check for missing crops
+    # Every model crop must have a rate. Silent zeros would let crops avoid
+    # synthetic-N draw and the associated N2O emissions.
     crops_with_data = set(percentile_rates["crop"])
     expected_crops = set(crops)
     missing_crops = expected_crops - crops_with_data
-
     if missing_crops:
-        logger.warning(f"Missing data for crops: {', '.join(sorted(missing_crops))}")
-        logger.warning("These crops will have no fertilizer application in the model")
+        raise ValueError(
+            "Missing N application rates for model crops: "
+            f"{sorted(missing_crops)}. Add a fertilizer.proxy_rates entry "
+            "pointing each missing crop to a similar FUBC-covered crop."
+        )
 
     # Log statistics
     logger.info("\nN application rate statistics (kg N/ha/year):")
@@ -124,7 +161,12 @@ if __name__ == "__main__":
         raise ValueError(f"Percentile must be between 0 and 100, got {percentile}")
 
     # Calculate percentile rates
-    output_df = calculate_percentile_rates(df, percentile, snakemake.params["crops"])
+    output_df = calculate_percentile_rates(
+        df,
+        percentile,
+        snakemake.params["crops"],
+        dict(snakemake.params["proxy_rates"]),
+    )
 
     # Save output
     logger.info(f"\nWriting output to {snakemake.output[0]}")

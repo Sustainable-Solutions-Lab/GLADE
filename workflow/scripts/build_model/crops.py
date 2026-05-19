@@ -138,7 +138,13 @@ def add_regional_crop_production_links(
     bus_index = n.buses.static.index
 
     for crop in crop_list:
-        fert_n_rate_kg_per_ha = float(fertilizer_n_rates.get(crop, 0.0))
+        if crop not in fertilizer_n_rates:
+            raise KeyError(
+                f"Missing fertilizer N rate for crop '{crop}'. Every model "
+                "crop must be present in global_fertilizer_n_rates.csv; add a "
+                "fertilizer.proxy_rates entry if upstream FUBC data is absent."
+            )
+        fert_n_rate_kg_per_ha = float(fertilizer_n_rates[crop])
 
         fert_efficiency = (
             -fert_n_rate_kg_per_ha * 1e6 * constants.KG_TO_MEGATONNE
@@ -585,7 +591,15 @@ def add_multi_cropping_links(
     base = base.join(cost_totals)
 
     fert_series = pd.Series({str(k): float(v) for k, v in fertilizer_n_rates.items()})
-    merged["fertilizer_rate"] = merged["crop"].map(fert_series).fillna(0.0)
+    fert_rates = merged["crop"].map(fert_series)
+    if fert_rates.isna().any():
+        missing = sorted(merged.loc[fert_rates.isna(), "crop"].unique())
+        raise KeyError(
+            f"Missing fertilizer N rate for multi-cropping crops: {missing}. "
+            "Every model crop must be present in global_fertilizer_n_rates.csv; "
+            "add a fertilizer.proxy_rates entry if upstream FUBC data is absent."
+        )
+    merged["fertilizer_rate"] = fert_rates
     fertilizer_totals = (
         merged.groupby(key_cols)["fertilizer_rate"].sum().rename("fertilizer_total")
     )
