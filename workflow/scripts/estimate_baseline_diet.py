@@ -1618,6 +1618,27 @@ def main():
     # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
+    # Clamp any negative consumption to zero. The FBS override path
+    # (_apply_fbs_overrides) subtracts supply from intake and can produce
+    # tiny negatives for niche items; consumption is unphysical below zero
+    # and would propagate as a negative p_set when baseline_diet enforcement
+    # is on, making the LP infeasible.
+    neg_mask = result["consumption_g_per_day"] < 0
+    if neg_mask.any():
+        worst = (
+            result.loc[neg_mask]
+            .nsmallest(5, "consumption_g_per_day")[
+                ["country", "food", "consumption_g_per_day"]
+            ]
+            .to_dict("records")
+        )
+        logger.warning(
+            "Clamping %d negative baseline consumption rows to zero (worst: %s)",
+            int(neg_mask.sum()),
+            worst,
+        )
+        result.loc[neg_mask, "consumption_g_per_day"] = 0.0
+
     # Summary statistics (uses internal column name)
     _log_summary_stats(result)
 

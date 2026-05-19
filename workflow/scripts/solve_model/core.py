@@ -528,6 +528,20 @@ def _prepare_baseline_diet_for_food_constraints(
         df["consumption_g_per_day"], errors="coerce"
     ).fillna(0.0)
 
+    # Negative consumption is unphysical (a data-quality artefact of upstream
+    # FBS-supply override subtraction); clamp to zero before deciding whether
+    # to lift to the floor. A negative p_set on consume links would make the
+    # baseline-equality formulation infeasible.
+    negative_mask = df["consumption_g_per_day"] < 0
+    if negative_mask.any():
+        worst = df.loc[negative_mask].nsmallest(3, "consumption_g_per_day")
+        logger.warning(
+            "Clamping %d negative baseline consumption rows to zero (worst: %s)",
+            int(negative_mask.sum()),
+            worst.to_dict("records"),
+        )
+        df.loc[negative_mask, "consumption_g_per_day"] = 0.0
+
     model_keys = set(zip(consume_links["food"], consume_links["country"]))
     df = df[df.apply(lambda r: (r["food"], r["country"]) in model_keys, axis=1)].copy()
 
