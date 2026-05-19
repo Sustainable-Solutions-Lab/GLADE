@@ -42,6 +42,22 @@ def validate_crop_food_pathways(config: dict, project_root: Path) -> None:
 
     df = FOODS_SCHEMA.validate(pd.read_csv(csv_path, comment="#"))
 
+    # Mass balance: per (pathway, crop), the sum of output factors must not
+    # exceed 1.0. Multi-output pathways (e.g. wheat -> white_flour + bran)
+    # split mass between outputs; sum > 1 would manufacture mass at the food
+    # bus when the pathway link is built. A small tolerance covers rounding.
+    pathway_sums = df.groupby(["pathway", "crop"])["factor"].sum()
+    violations = pathway_sums[pathway_sums > 1.01]
+    if not violations.empty:
+        details = ", ".join(
+            f"{pathway} ({crop}): sum={total:.3f}"
+            for (pathway, crop), total in violations.items()
+        )
+        raise ValueError(
+            f"foods.csv pathway mass-balance violations (sum of factors > 1): "
+            f"{details}"
+        )
+
     # Ensure all food crops have a pathway entry in foods.csv.
     # non_food_crops (fodder, biomass) are excluded from this check.
     config_crops = set(config["crops"])

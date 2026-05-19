@@ -56,7 +56,6 @@ def add_food_conversion_links(
 
     missing_group_foods: set[str] = set()
     byproduct_foods: set[str] = set(byproduct_list or [])
-    invalid_pathways: list[str] = []
 
     normalized_countries = [str(c).upper() for c in countries]
     countries_index = pd.Index(normalized_countries, dtype="object")
@@ -76,11 +75,6 @@ def add_food_conversion_links(
         n_outputs = len(output_rows.index)
         if n_outputs == 0:
             continue
-
-        # Verify mass balance (sum of factors should be ≤ 1.0)
-        total_factor = output_rows["factor"].sum()
-        if total_factor > 1.01:  # Allow small rounding tolerance
-            invalid_pathways.append(f"{pathway} ({crop}): sum={total_factor:.3f}")
 
         # Per-crop factor that translates dry-matter crop bus into food bus
         # mass. ``inverse_moisture`` crops apply 1/(1-moisture) so the food
@@ -155,13 +149,6 @@ def add_food_conversion_links(
             link_params[eff_key] = all_df[eff_key]
 
         n.links.add(all_df.index, **link_params)
-
-    # Warnings
-    if invalid_pathways:
-        logger.warning(
-            "Pathways with mass balance issues (sum of factors > 1.0): %s",
-            "; ".join(invalid_pathways[:5]),
-        )
 
     if missing_group_foods:
         logger.warning(
