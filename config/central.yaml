@@ -6,7 +6,7 @@
 # -------------------------------------------
 # Single (GHG, YLL) operating point used as the central case in the
 # paper's "transition to healthy & sustainable diets" subsection.
-# Round-number anchors: GHG price 50 USD/tCO2-eq, life valued at
+# Round-number anchors: GHG price 100 USD/tCO2-eq, life valued at
 # 5000 USD/YLL (the lower bound of the conventional VSL range, see
 # paper main text).
 #
@@ -42,7 +42,7 @@ scenarios:
   # Central healthy & sustainable point.
   central:
     emissions:
-      ghg_price: 50
+      ghg_price: 100
     health:
       value_per_yll: 5000
     macronutrients:

@@ -16,11 +16,17 @@ scenarios:
     health:
       value_per_yll: 0
 
-  # Explicit anchor for Figure 1's representative price (would otherwise
-  # fall between geomspace samples).
-  ghg_50:
+  # Explicit anchors for the figure's representative prices (would
+  # otherwise fall between geomspace samples).
+  ghg_20:
     emissions:
-      ghg_price: 50
+      ghg_price: 20
+    health:
+      value_per_yll: 0
+
+  ghg_100:
+    emissions:
+      ghg_price: 100
     health:
       value_per_yll: 0
 
@@ -29,7 +35,7 @@ scenarios:
       parameters:
         ghg:
           space: log
-          start: 5
+          start: 20
           stop: 500
           num: 20
           round: true
