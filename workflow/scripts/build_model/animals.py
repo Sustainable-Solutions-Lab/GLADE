@@ -472,6 +472,7 @@ def add_feed_to_animal_product_links(
         df["marginal_cost"] = df["marginal_cost"] + (
             marketing_per_t.to_numpy(dtype=float)
             * df["efficiency"].to_numpy(dtype=float)
+            * constants.MEGATONNE_TO_TONNE
             * constants.USD_TO_BNUSD
         )
 

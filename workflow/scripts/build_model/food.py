@@ -126,8 +126,14 @@ def add_food_conversion_links(
                 )
             link_marketing_usd_per_t += food_marketing_cost_usd_per_t[food] * efficiency
 
-        # bnUSD per Mt input
-        link_df["marketing_cost"] = link_marketing_usd_per_t * constants.USD_TO_BNUSD
+        # bnUSD per Mt input: link_marketing_usd_per_t is USD per tonne of
+        # input (sum of per-tonne marketing markups weighted by efficiency
+        # over outputs), so convert tonnes -> Mt and USD -> bnUSD.
+        link_df["marketing_cost"] = (
+            link_marketing_usd_per_t
+            * constants.MEGATONNE_TO_TONNE
+            * constants.USD_TO_BNUSD
+        )
 
         batched_frames.setdefault(n_outputs, []).append(link_df)
 
@@ -293,9 +299,12 @@ def add_feed_supply_links(
             expanded.loc[feed_marketing_series.isna(), "feed_category_value"].unique()
         )
         raise KeyError(f"Missing feed marketing cost for: {missing}")
+    # bnUSD per Mt input: feed_marketing_series is USD per tonne of feed
+    # output, efficiency is t-output/t-input, bus0 dispatch is Mt input.
     marketing_cost = (
         feed_marketing_series.to_numpy(dtype=float)
         * efficiency_arr
+        * constants.MEGATONNE_TO_TONNE
         * constants.USD_TO_BNUSD
     )
 
