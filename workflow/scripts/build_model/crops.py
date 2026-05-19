@@ -268,6 +268,7 @@ def add_regional_crop_production_links(
             )
             loss_mults = crop_loss_multiplier.reindex(loss_keys).fillna(1.0).to_numpy()
             row_df["efficiency"] = yield_t_per_ha * (1.0 - seed_share) * loss_mults
+            row_df["loss_multiplier"] = loss_mults
             row_df["seed_share"] = seed_share
             ha = pd.to_numeric(df["harvested_area"], errors="coerce").to_numpy(
                 dtype=float
@@ -444,6 +445,7 @@ def add_regional_crop_production_links(
         "water_supply": all_df["water_supply"],
         "baseline_area_mha": all_df["baseline_area_mha"],
         "seed_share": all_df["seed_share"],
+        "loss_multiplier": all_df["loss_multiplier"],
         "bounded_subsidy_bnusd_per_mha": all_df["bounded_subsidy_bnusd_per_mha"],
     }
 
@@ -545,6 +547,7 @@ def add_multi_cropping_links(
         [merged["crop"].astype(str).values, merged["country"].astype(str).values]
     )
     loss_mults = crop_loss_multiplier.reindex(loss_keys).fillna(1.0).to_numpy()
+    merged["loss_mult"] = loss_mults
     merged["yield_efficiency"] = (
         merged["yield_t_per_ha"] * (1.0 - seed_share) * loss_mults
     )
@@ -738,6 +741,11 @@ def add_multi_cropping_links(
         "efficiency",
         "efficiency" + offset_str,
     )
+    outputs["lm_col"] = np.where(
+        outputs["offset"].eq(1),
+        "loss_multiplier",
+        "loss_multiplier" + offset_str,
+    )
     outputs_entries = outputs[
         [
             "link_name",
@@ -745,8 +753,16 @@ def add_multi_cropping_links(
             "crop_bus",
             "eff_col",
             "yield_efficiency",
+            "lm_col",
+            "loss_mult",
         ]
-    ].rename(columns={"crop_bus": "bus_value", "yield_efficiency": "eff_value"})
+    ].rename(
+        columns={
+            "crop_bus": "bus_value",
+            "yield_efficiency": "eff_value",
+            "loss_mult": "lm_value",
+        }
+    )
 
     entry_frames = [outputs_entries]
 
@@ -852,12 +868,23 @@ def add_multi_cropping_links(
             ]
         )
 
+    # Strip per-output loss_multiplier info from outputs_entries before
+    # concatenating; it only applies to crop output buses and is pivoted
+    # separately so the lm columns line up with the eff columns.
+    lm_entries = outputs_entries[["link_name", "lm_col", "lm_value"]].copy()
+    entry_frames = [
+        df.drop(columns=["lm_col", "lm_value"], errors="ignore") for df in entry_frames
+    ]
+
     entries = pd.concat(entry_frames, ignore_index=True)
     bus_wide = entries.pivot_table(
         index="link_name", columns="bus_col", values="bus_value", aggfunc="first"
     )
     eff_wide = entries.pivot_table(
         index="link_name", columns="eff_col", values="eff_value", aggfunc="first"
+    )
+    lm_wide = lm_entries.pivot_table(
+        index="link_name", columns="lm_col", values="lm_value", aggfunc="first"
     )
 
     link_df = index_df.set_index("link_name")
@@ -882,7 +909,11 @@ def add_multi_cropping_links(
     )
     link_df["crop"] = link_df["combination"]  # combination = "maize+soybean" etc.
     link_df = link_df[component_cols + metadata_cols + ["crop"]]
-    link_df = link_df.join(bus_wide, how="left").join(eff_wide, how="left")
+    link_df = (
+        link_df.join(bus_wide, how="left")
+        .join(eff_wide, how="left")
+        .join(lm_wide, how="left")
+    )
 
     bus_cols = sorted(
         [c for c in link_df.columns if c.startswith("bus") and c != "bus0"],
@@ -899,6 +930,18 @@ def add_multi_cropping_links(
             key=lambda name: int(name[len("efficiency") :]),
         ),
     ]
+    lm_cols = [
+        "loss_multiplier",
+        *sorted(
+            [
+                c
+                for c in link_df.columns
+                if c.startswith("loss_multiplier") and c != "loss_multiplier"
+            ],
+            key=lambda name: int(name[len("loss_multiplier") :]),
+        ),
+    ]
+    lm_cols = [c for c in lm_cols if c in link_df.columns]
 
     missing_outputs = link_df["bus1"].isna() | link_df["efficiency"].isna()
     if missing_outputs.any():
@@ -915,8 +958,11 @@ def add_multi_cropping_links(
         link_df[col] = link_df[col].where(link_df[col].notna(), None)
     for col in eff_cols:
         link_df[col] = link_df[col].fillna(0.0)
+    # loss_multiplier columns are NaN for non-crop output positions; leave
+    # them NaN so the sensitivity step can distinguish "no loss data" from
+    # "loss multiplier 1.0".
 
-    all_cols = component_cols + metadata_cols + ["crop"] + bus_cols + eff_cols
+    all_cols = component_cols + metadata_cols + ["crop"] + bus_cols + eff_cols + lm_cols
     kwargs = {col: link_df[col] for col in all_cols}
     n.links.add(link_df.index, **kwargs)
 

@@ -531,6 +531,7 @@ def add_feed_to_animal_product_links(
             f"{missing.to_dict('records')[:5]}"
         )
     loss_mult = (1.0 - df["loss_frac"].astype(float)).clip(lower=0.01)
+    df["loss_multiplier"] = loss_mult
     df["adjusted_efficiency"] = df["efficiency"] * loss_mult
 
     # Build all link data with vectorized string ops
@@ -587,6 +588,7 @@ def add_feed_to_animal_product_links(
         manure_ch4_share=link_df["manure_ch4_share"],
         pasture_n2o_share=link_df["pasture_n2o_share"],
         bounded_subsidy_bnusd_per_mt=link_df["bounded_subsidy_bnusd_per_mt"],
+        loss_multiplier=link_df["loss_multiplier"],
         **co_product_kwargs,
     )
 

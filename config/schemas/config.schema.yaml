@@ -2145,15 +2145,15 @@ properties:
       food_loss_waste:
         type: number
         minimum: 0
-        description: "Multiplicative factor for food loss and waste fractions on food processing links"
+        description: "Bundle convenience key: applies the same multiplicative factor to both food_loss and food_waste. Per-component keys take precedence when both are set. factor=1.5 raises the underlying loss/waste fractions by 50%; factor=1.0 is a no-op."
       food_loss:
         type: number
         minimum: 0
-        description: "Multiplicative factor for food loss fractions on crop and animal production links"
+        description: "Multiplicative factor on the supply-chain loss_fraction baked into crop_production / crop_production_multi / animal_production efficiencies (via stored loss_multiplier columns). factor=1.5 raises a 10% loss to 15%; factor=0.5 lowers it to 5%. NOTE: mathematically indistinguishable from crop_yields on crop links and feed_conversion on animal links."
       food_waste:
         type: number
         minimum: 0
-        description: "Multiplicative factor for food waste fractions on food consumption links"
+        description: "Multiplicative factor on the consumer-side waste_fraction baked into food_consumption efficiencies (via stored flw_multiplier). factor=1.5 raises 20% waste to 30%; factor=0.5 lowers it to 10%."
       feed_conversion:
         type: number
         minimum: 0

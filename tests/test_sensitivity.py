@@ -70,7 +70,10 @@ def mock_network():
         ],
     )
 
-    # Add crop production links
+    # Add crop production links. ``loss_multiplier = 1 - loss_fraction``
+    # is stored at build time so the food_loss sensitivity can recover
+    # and rescale the underlying loss fraction. Here: wheat 10% loss
+    # (mult=0.9), maize 20% loss (mult=0.8).
     n.links.add(
         ["produce:wheat_rainfed:region1", "produce:maize_rainfed:region1"],
         bus0=["land:cropland:region1", "land:cropland:region1"],
@@ -79,9 +82,12 @@ def mock_network():
         efficiency=[2.5, 4.0],
         marginal_cost=[0.1, 0.15],
         crop=["wheat", "maize"],
+        loss_multiplier=[0.9, 0.8],
     )
 
-    # Add crop production multi links
+    # Add crop production multi links. Loss multipliers are per output
+    # bus (wheat at bus1 -> 0.9, soy at bus2 -> 0.85). Non-crop buses
+    # have no loss_multiplier (NaN) and must not be touched.
     n.links.add(
         ["produce_multi:wheat_soy_rainfed:region1"],
         bus0=["land:cropland:region1"],
@@ -96,9 +102,11 @@ def mock_network():
         efficiency4=[-0.5],
         marginal_cost=[0.2],
         crop=["wheat_soy"],
+        loss_multiplier=[0.9],
+        loss_multiplier2=[0.85],
     )
 
-    # Add animal production links
+    # Add animal production links. Beef 15% loss (mult=0.85).
     n.links.add(
         ["animal:beef_grassfed:USA"],
         bus0=["feed:ruminant_forage:USA"],
@@ -108,9 +116,10 @@ def mock_network():
         efficiency2=[100.0],  # CH4 (enteric/manure)
         efficiency4=[5.0],  # N2O (manure)
         marginal_cost=[0.5],
+        loss_multiplier=[0.85],
     )
 
-    # Add food processing links
+    # Add food processing links (intentionally have no loss/waste hooks).
     n.links.add(
         ["pathway:milling:USA"],
         bus0=["crop:wheat:USA"],
@@ -119,14 +128,15 @@ def mock_network():
         efficiency=[0.8],
     )
 
-    # Add food consumption links
+    # Add food consumption links. flw_multiplier = 1 - waste_fraction.
+    # Here 20% waste -> 0.8.
     n.links.add(
         ["consume:flour:USA"],
         bus0=["food:flour:USA"],
         bus1=["nutrient:protein:USA"],
         carrier="food_consumption",
         efficiency=[0.12],
-        flw_multiplier=[1.25],
+        flw_multiplier=[0.8],
     )
 
     # Add land conversion links (forest/nonforest split)
@@ -322,54 +332,72 @@ class TestApplyEmissionFactors:
         np.testing.assert_allclose(result_luc, original_luc * 1.5)
 
 
+def _scaled_efficiency(orig_eff: float, old_mult: float, factor: float) -> float:
+    """Expected new efficiency under flipped semantics.
+
+    new_loss = clip(factor * (1 - old_mult), 0, 0.99)
+    new_mult = 1 - new_loss
+    new_eff  = orig_eff * (new_mult / old_mult)
+    """
+    new_loss = min(max(factor * (1.0 - old_mult), 0.0), 0.99)
+    new_mult = 1.0 - new_loss
+    return orig_eff * (new_mult / old_mult)
+
+
 class TestApplyFoodLossFactor:
     def test_crop_production_losses(self, mock_network):
-        """Test applying food loss factor to crop production links."""
+        """factor multiplies the per-link loss fraction (not the efficiency)."""
         n = mock_network
-        # crop_production link: produce:wheat_rainfed:region1 (efficiency)
-        orig_wheat = n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
-        orig_maize = n.links.static.loc["produce:maize_rainfed:region1", "efficiency"]
+        # wheat link has loss_multiplier=0.9 (10% loss), maize 0.8 (20%).
+        orig_wheat = float(
+            n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
+        )
+        orig_maize = float(
+            n.links.static.loc["produce:maize_rainfed:region1", "efficiency"]
+        )
 
-        # crop_production_multi: produce_multi:wheat_soy_rainfed:region1
-        # output crops are wheat (efficiency) and soy (efficiency2)
-        # n2o emission (efficiency3) and water input (efficiency4) are secondary non-crops
-        orig_multi_wheat = n.links.static.loc[
-            "produce_multi:wheat_soy_rainfed:region1", "efficiency"
-        ]
-        orig_multi_soy = n.links.static.loc[
-            "produce_multi:wheat_soy_rainfed:region1", "efficiency2"
-        ]
-        orig_multi_n2o = n.links.static.loc[
-            "produce_multi:wheat_soy_rainfed:region1", "efficiency3"
-        ]
-        orig_multi_water = n.links.static.loc[
-            "produce_multi:wheat_soy_rainfed:region1", "efficiency4"
-        ]
+        # multi-crop link: wheat output (loss_multiplier=0.9), soy (0.85),
+        # plus non-crop n2o (bus3) / water (bus4) outputs that must not move.
+        orig_multi_wheat = float(
+            n.links.static.loc["produce_multi:wheat_soy_rainfed:region1", "efficiency"]
+        )
+        orig_multi_soy = float(
+            n.links.static.loc["produce_multi:wheat_soy_rainfed:region1", "efficiency2"]
+        )
+        orig_multi_n2o = float(
+            n.links.static.loc["produce_multi:wheat_soy_rainfed:region1", "efficiency3"]
+        )
+        orig_multi_water = float(
+            n.links.static.loc["produce_multi:wheat_soy_rainfed:region1", "efficiency4"]
+        )
 
-        factor = 0.9
+        factor = 1.5  # 50% more loss
         _apply_food_loss_factor(n, factor)
 
-        # Assert crop outputs on crop production links are scaled
+        # 10% loss * 1.5 -> 15%, mult 0.9 -> 0.85. Efficiency ratio 0.85/0.9.
         np.testing.assert_allclose(
             n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"],
-            orig_wheat * factor,
+            _scaled_efficiency(orig_wheat, 0.9, factor),
         )
+        # 20% loss * 1.5 -> 30%, mult 0.8 -> 0.7.
         np.testing.assert_allclose(
             n.links.static.loc["produce:maize_rainfed:region1", "efficiency"],
-            orig_maize * factor,
+            _scaled_efficiency(orig_maize, 0.8, factor),
         )
+        # multi-crop wheat output scaled identically to wheat single-output.
         np.testing.assert_allclose(
             n.links.static.loc["produce_multi:wheat_soy_rainfed:region1", "efficiency"],
-            orig_multi_wheat * factor,
+            _scaled_efficiency(orig_multi_wheat, 0.9, factor),
         )
+        # multi-crop soy output: 15% loss * 1.5 -> 22.5%, mult 0.85 -> 0.775.
         np.testing.assert_allclose(
             n.links.static.loc[
                 "produce_multi:wheat_soy_rainfed:region1", "efficiency2"
             ],
-            orig_multi_soy * factor,
+            _scaled_efficiency(orig_multi_soy, 0.85, factor),
         )
 
-        # Assert non-crop outputs/inputs are NOT scaled
+        # Non-crop outputs/inputs untouched (no loss_multiplierN column).
         np.testing.assert_allclose(
             n.links.static.loc[
                 "produce_multi:wheat_soy_rainfed:region1", "efficiency3"
@@ -383,25 +411,50 @@ class TestApplyFoodLossFactor:
             orig_multi_water,
         )
 
-    def test_animal_production_losses(self, mock_network):
-        """Test applying food loss factor to animal production links."""
-        n = mock_network
-        # animal_production link: animal:beef_grassfed:USA
-        # Primary product beef (efficiency). secondary CH4 (efficiency2), N2O (efficiency4)
-        orig_beef = n.links.static.loc["animal:beef_grassfed:USA", "efficiency"]
-        orig_ch4 = n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"]
-        orig_n2o = n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"]
-
-        factor = 0.85
-        _apply_food_loss_factor(n, factor)
-
-        # Primary output should be scaled
+        # Stored loss_multiplier columns are kept in sync.
         np.testing.assert_allclose(
-            n.links.static.loc["animal:beef_grassfed:USA", "efficiency"],
-            orig_beef * factor,
+            n.links.static.loc["produce:wheat_rainfed:region1", "loss_multiplier"],
+            0.85,
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["produce:maize_rainfed:region1", "loss_multiplier"],
+            0.7,
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc[
+                "produce_multi:wheat_soy_rainfed:region1", "loss_multiplier"
+            ],
+            0.85,
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc[
+                "produce_multi:wheat_soy_rainfed:region1", "loss_multiplier2"
+            ],
+            0.775,
         )
 
-        # Secondary components (emissions/manure/feed) should remain unchanged
+    def test_animal_production_losses(self, mock_network):
+        """Animal primary efficiency scales by the loss-fraction ratio."""
+        n = mock_network
+        # beef link has loss_multiplier=0.85 (15% loss).
+        orig_beef = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency"])
+        orig_ch4 = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"])
+        orig_n2o = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"])
+
+        factor = 0.5  # halve the loss fraction
+        _apply_food_loss_factor(n, factor)
+
+        # 15% * 0.5 -> 7.5%, mult 0.85 -> 0.925.
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency"],
+            _scaled_efficiency(orig_beef, 0.85, factor),
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "loss_multiplier"],
+            0.925,
+        )
+
+        # Emissions / N2O on non-food output buses untouched.
         np.testing.assert_allclose(
             n.links.static.loc["animal:beef_grassfed:USA", "efficiency2"], orig_ch4
         )
@@ -409,95 +462,138 @@ class TestApplyFoodLossFactor:
             n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"], orig_n2o
         )
 
+    def test_factor_one_is_noop(self, mock_network):
+        """factor=1.0 leaves efficiency and loss_multiplier untouched."""
+        n = mock_network
+        before = n.links.static[["efficiency", "loss_multiplier"]].copy()
+        _apply_food_loss_factor(n, 1.0)
+        after = n.links.static[["efficiency", "loss_multiplier"]]
+        pd.testing.assert_frame_equal(before, after)
+
     def test_food_processing_is_invariant_to_loss(self, mock_network):
-        """Test that food processing links are completely unaffected by loss."""
+        """food_processing has no loss_multiplier column; left alone."""
         n = mock_network
         orig_milling = n.links.static.loc["pathway:milling:USA", "efficiency"]
 
-        _apply_food_loss_factor(n, 0.9)
+        _apply_food_loss_factor(n, 1.5)
 
         np.testing.assert_allclose(
             n.links.static.loc["pathway:milling:USA", "efficiency"], orig_milling
+        )
+
+    def test_loss_fraction_clipped(self, mock_network):
+        """A very large factor clamps loss at _MAX_LOSS_FRACTION."""
+        n = mock_network
+        # maize: 20% loss * 100 = 2000%, clipped to 99% -> mult 0.01.
+        orig_maize = float(
+            n.links.static.loc["produce:maize_rainfed:region1", "efficiency"]
+        )
+        _apply_food_loss_factor(n, 100.0)
+        np.testing.assert_allclose(
+            n.links.static.loc["produce:maize_rainfed:region1", "loss_multiplier"],
+            0.01,
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["produce:maize_rainfed:region1", "efficiency"],
+            orig_maize * (0.01 / 0.8),
         )
 
 
 class TestApplyFoodWasteFactor:
     def test_food_consumption_waste(self, mock_network):
-        """Test applying food waste factor to food consumption links."""
+        """factor multiplies the waste fraction, not the efficiency directly."""
         n = mock_network
-        # food_consumption link: consume:flour:USA (efficiency and flw_multiplier)
-        orig_eff = n.links.static.loc["consume:flour:USA", "efficiency"]
-        orig_flw = n.links.static.loc["consume:flour:USA", "flw_multiplier"]
+        # consume link has flw_multiplier=0.8 (20% waste), efficiency=0.12.
+        orig_eff = float(n.links.static.loc["consume:flour:USA", "efficiency"])
 
-        factor = 0.95
+        factor = 1.5  # 20% waste -> 30% waste, mult 0.8 -> 0.7
         _apply_food_waste_factor(n, factor)
 
+        expected_mult = 0.7
+        ratio = expected_mult / 0.8
         np.testing.assert_allclose(
-            n.links.static.loc["consume:flour:USA", "efficiency"], orig_eff * factor
+            n.links.static.loc["consume:flour:USA", "flw_multiplier"], expected_mult
         )
         np.testing.assert_allclose(
-            n.links.static.loc["consume:flour:USA", "flw_multiplier"], orig_flw * factor
+            n.links.static.loc["consume:flour:USA", "efficiency"], orig_eff * ratio
+        )
+
+    def test_factor_one_is_noop(self, mock_network):
+        """factor=1.0 leaves efficiency and flw_multiplier untouched."""
+        n = mock_network
+        before_eff = float(n.links.static.loc["consume:flour:USA", "efficiency"])
+        before_mult = float(n.links.static.loc["consume:flour:USA", "flw_multiplier"])
+        _apply_food_waste_factor(n, 1.0)
+        np.testing.assert_allclose(
+            n.links.static.loc["consume:flour:USA", "efficiency"], before_eff
+        )
+        np.testing.assert_allclose(
+            n.links.static.loc["consume:flour:USA", "flw_multiplier"], before_mult
         )
 
     def test_food_processing_is_invariant_to_waste(self, mock_network):
-        """Test that food processing links are completely unaffected by waste."""
+        """food_processing links carry no waste hook; left alone."""
         n = mock_network
         orig_milling = n.links.static.loc["pathway:milling:USA", "efficiency"]
 
-        _apply_food_waste_factor(n, 0.9)
+        _apply_food_waste_factor(n, 1.5)
 
         np.testing.assert_allclose(
             n.links.static.loc["pathway:milling:USA", "efficiency"], orig_milling
         )
 
 
-class TestLegacyFoodLossWasteMapping:
-    def test_legacy_only_config(self, mock_network):
-        """Legacy food_loss_waste should map to both food_loss and food_waste."""
+class TestFoodLossWasteBundle:
+    def test_bundle_only_config(self, mock_network):
+        """food_loss_waste applies the same factor to both loss and waste."""
         n = mock_network
-        orig_crop = n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
-        orig_consume_eff = n.links.static.loc["consume:flour:USA", "efficiency"]
-        orig_consume_flw = n.links.static.loc["consume:flour:USA", "flw_multiplier"]
+        orig_wheat = float(
+            n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
+        )
+        orig_consume_eff = float(n.links.static.loc["consume:flour:USA", "efficiency"])
 
-        cfg = {"food_loss_waste": 0.9}
+        cfg = {"food_loss_waste": 1.5}
         apply_sensitivity_factors(n, cfg)
 
+        # Loss side: wheat 10% loss -> 15%, mult 0.9 -> 0.85.
         np.testing.assert_allclose(
             n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"],
-            orig_crop * 0.9,
+            _scaled_efficiency(orig_wheat, 0.9, 1.5),
+        )
+        # Waste side: 20% waste -> 30%, mult 0.8 -> 0.7.
+        np.testing.assert_allclose(
+            n.links.static.loc["consume:flour:USA", "flw_multiplier"], 0.7
         )
         np.testing.assert_allclose(
             n.links.static.loc["consume:flour:USA", "efficiency"],
-            orig_consume_eff * 0.9,
-        )
-        np.testing.assert_allclose(
-            n.links.static.loc["consume:flour:USA", "flw_multiplier"],
-            orig_consume_flw * 0.9,
+            orig_consume_eff * (0.7 / 0.8),
         )
 
-    def test_new_keys_precedence(self, mock_network):
-        """New keys food_loss and food_waste should take precedence over food_loss_waste."""
+    def test_component_keys_override_bundle(self, mock_network):
+        """food_loss / food_waste override food_loss_waste when both set."""
         n = mock_network
-        orig_crop = n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
-        orig_consume_eff = n.links.static.loc["consume:flour:USA", "efficiency"]
-        orig_consume_flw = n.links.static.loc["consume:flour:USA", "flw_multiplier"]
+        orig_wheat = float(
+            n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"]
+        )
+        orig_consume_eff = float(n.links.static.loc["consume:flour:USA", "efficiency"])
 
-        # If food_loss is specified, it overrides food_loss_waste for loss.
-        # If food_waste is NOT specified, food_waste falls back to food_loss_waste.
-        cfg = {"food_loss_waste": 0.9, "food_loss": 0.8}
+        # bundle=1.5 would scale both; explicit food_loss=2.0 overrides loss,
+        # food_waste falls through to the bundle value (1.5).
+        cfg = {"food_loss_waste": 1.5, "food_loss": 2.0}
         apply_sensitivity_factors(n, cfg)
 
+        # Wheat: 10% loss * 2.0 -> 20%, mult 0.9 -> 0.8.
         np.testing.assert_allclose(
             n.links.static.loc["produce:wheat_rainfed:region1", "efficiency"],
-            orig_crop * 0.8,
+            _scaled_efficiency(orig_wheat, 0.9, 2.0),
+        )
+        # Waste uses bundle factor 1.5.
+        np.testing.assert_allclose(
+            n.links.static.loc["consume:flour:USA", "flw_multiplier"], 0.7
         )
         np.testing.assert_allclose(
             n.links.static.loc["consume:flour:USA", "efficiency"],
-            orig_consume_eff * 0.9,
-        )
-        np.testing.assert_allclose(
-            n.links.static.loc["consume:flour:USA", "flw_multiplier"],
-            orig_consume_flw * 0.9,
+            orig_consume_eff * (0.7 / 0.8),
         )
 
 
