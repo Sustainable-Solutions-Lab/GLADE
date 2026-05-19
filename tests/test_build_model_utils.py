@@ -315,6 +315,46 @@ class TestCalculateManureNOutputs:
         assert pasture_share > 0.0
         assert n2o > 0
 
+    def test_negative_excretion_clamped_to_zero(
+        self,
+        monogastric_n_lookup,
+        product_protein_lookup,
+        manure_n2o_lookup,
+        manure_n2o_by_product_lookup,
+        default_indirect_params,
+    ):
+        """High-efficiency, low-feed-N combinations cannot push n_excreted < 0.
+
+        With low-N roughage (e.g. 8 g/kg DM) and a high-yield dairy link
+        (efficiency ~1.6 t milk per t feed DM), the raw difference
+        feed_N - product_N is negative. Without clamping this would flip the
+        fertilizer and N2O outputs into negative coefficients that the
+        optimizer could exploit. We require the clamp to make both outputs
+        non-negative.
+        """
+        low_n_ruminant = {
+            "forage": 8.0,
+            "roughage": 8.0,
+            "grain": 22.0,
+            "protein": 50.0,
+        }
+        n_fert, n2o, _ = _calculate_manure_n_outputs(
+            product="dairy",
+            feed_category="ruminant_roughage",
+            efficiency=1.6,
+            ruminant_n_lookup=low_n_ruminant,
+            monogastric_n_lookup=monogastric_n_lookup,
+            product_protein_lookup=product_protein_lookup,
+            manure_n2o_lookup=manure_n2o_lookup,
+            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
+            **default_indirect_params,
+        )
+
+        # Raw N excretion would be 0.008 - (3.5*10/6.25)/1000 * 1.6 = -0.00096
+        # After clamp: zero excretion, zero fertilizer N, zero N2O.
+        assert n_fert == pytest.approx(0.0)
+        assert n2o == pytest.approx(0.0)
+
     def test_missing_protein_data_defaults_to_zero(
         self,
         ruminant_n_lookup,

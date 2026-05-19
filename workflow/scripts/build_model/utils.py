@@ -388,8 +388,12 @@ def _calculate_manure_n_outputs(
     product_output_t_per_t_feed = efficiency  # t product/t feed
     product_n_t_per_t_feed = (product_n_g_per_kg / 1000) * product_output_t_per_t_feed
 
-    # N excreted = N in feed - N in product
-    n_excreted_t_per_t_feed = feed_n_t_per_t_feed - product_n_t_per_t_feed
+    # N excreted = N in feed - N in product, clamped at zero. High-efficiency,
+    # low-feed-N combinations (e.g. high-yield dairy on low-protein roughage)
+    # can otherwise yield negative excretion, which would flip the downstream
+    # fertilizer output and N2O emissions and let the optimizer exploit
+    # animal links as a credit on either bus.
+    n_excreted_t_per_t_feed = max(0.0, feed_n_t_per_t_feed - product_n_t_per_t_feed)
 
     # Look up MMS-based N2O factors for this product and feed category
     mms_factors = manure_n2o_lookup.get((product, feed_category))
