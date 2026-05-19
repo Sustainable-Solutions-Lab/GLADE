@@ -20,7 +20,9 @@
 #     data/curated/calibration/grassland_cost.csv \
 #     data/curated/calibration/animal_cost.csv
 
-name: "cost_calibration"
+# Shared name across all calibration configs so the expensive upstream
+# processing is built once under processing/calibration/ and reused.
+name: "calibration"
 
 scenarios:
   # Step 1: Baseline solve to extract consumer values / utility blocks.
@@ -33,7 +35,7 @@ scenarios:
   # ($5 000/t) caps the small set of foods with structural mismatches >20 %
   # (buckwheat, plantain, coffee, tea, olive-oil) at a sensible level
   # rather than the default $50 000/t slack ceiling. See docs/costs.rst.
-  baseline:
+  cost_baseline:
     validation:
       enforce_baseline_diet: true
       production_stability:
@@ -61,7 +63,7 @@ scenarios:
       value_per_yll: 0
 
   # Step 2: Calibration solve with tight production stability
-  calibration:
+  cost_calibration:
     validation:
       production_stability:
         enabled: true
@@ -97,7 +99,12 @@ food_utility_piecewise:
 cost_calibration:
   enabled: false     # Don't apply calibration (we're generating it)
   generate: true     # Generate calibration from solved model
-  scenario: "calibration"
+  scenario: "cost_calibration"
+
+# Override the default consumer_values.baseline_scenario ("baseline") to
+# point at the renamed scenario above.
+consumer_values:
+  baseline_scenario: "cost_baseline"
 
 validation:
   use_actual_yields: true

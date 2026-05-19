@@ -20,7 +20,9 @@
 #   tools/smk --configfile config/calibration/stability.yaml -- \
 #     data/curated/calibration/prod_stability_l1.yaml
 
-name: "stability_calibration"
+# Shared name across all calibration configs so the expensive upstream
+# processing is built once under processing/calibration/ and reused.
+name: "calibration"
 
 planning_horizon: 2020
 baseline_year: 2020

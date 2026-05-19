@@ -25,7 +25,9 @@
 #   tools/smk --configfile config/calibration/food_waste.yaml -- \
 #     data/curated/calibration/food_waste.yaml
 
-name: "food_waste_calibration"
+# Shared name across all calibration configs so the expensive upstream
+# processing is built once under processing/calibration/ and reused.
+name: "calibration"
 
 scenarios:
   # No scenario-level overrides needed: with food_loss_waste_calibration
@@ -33,7 +35,7 @@ scenarios:
   # calibration file. The resulting food_loss_waste.csv therefore carries
   # only the SDG/FBS defaults plus curated overrides, and the solved
   # scenario's food-bus slack reveals the GDD-vs-supply gap.
-  uncalibrated: {}
+  food_waste_uncal: {}
 
 planning_horizon: 2020
 
@@ -62,7 +64,7 @@ food_demand_calibration:
 food_loss_waste_calibration:
   enabled: false     # Don't apply calibration (we're generating it)
   generate: true     # Generate calibration from solved model
-  scenario: "uncalibrated"
+  scenario: "food_waste_uncal"
 
 health:
   value_per_yll: 0

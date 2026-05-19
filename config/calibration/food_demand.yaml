@@ -34,14 +34,16 @@
 #   tools/smk --configfile config/calibration/food_demand.yaml -- \
 #     data/curated/calibration/food_demand.csv
 
-name: "food_demand_calibration"
+# Shared name across all calibration configs so the expensive upstream
+# processing is built once under processing/calibration/ and reused.
+name: "calibration"
 
 scenarios:
   # Single uncalibrated scenario. With food_demand_calibration disabled at
   # the base level, solve_model does not read the calibration file, so the
   # food_consumption p_set values carry only the raw baseline-diet demand
   # and the slack reveals the gap.
-  uncalibrated: {}
+  food_demand_uncal: {}
 
 planning_horizon: 2020
 
@@ -64,7 +66,7 @@ cost_calibration:
 food_demand_calibration:
   enabled: false     # Don't apply calibration (we're generating it)
   generate: true     # Generate calibration from solved model
-  scenario: "uncalibrated"
+  scenario: "food_demand_uncal"
 
 health:
   value_per_yll: 0
