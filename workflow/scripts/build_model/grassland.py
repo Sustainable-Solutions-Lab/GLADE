@@ -40,7 +40,7 @@ def calculate_grazing_cost_per_tonne_dm(
     Parameters
     ----------
     animal_costs_df : pd.DataFrame
-        Animal cost data with columns: product, grazing_cost_per_mt_usd_{base_year}
+        Animal cost data with columns: product, grazing_cost_per_t_usd_{base_year}
     feed_to_products_df : pd.DataFrame
         Feed efficiency data with columns: product, feed_category, region, efficiency
     base_year : int
@@ -51,7 +51,7 @@ def calculate_grazing_cost_per_tonne_dm(
     float
         Average grazing cost per tonne of dry matter in USD/t
     """
-    grazing_col = f"grazing_cost_per_mt_usd_{base_year}"
+    grazing_col = f"grazing_cost_per_t_usd_{base_year}"
 
     # Filter for products with grazing costs
     grazing_costs = animal_costs_df[animal_costs_df[grazing_col] > 0][

@@ -1501,7 +1501,7 @@ costs:
 
 animal_costs:
   fadn:
-    high_cost_threshold_usd_per_mt: 50000
+    high_cost_threshold_usd_per_t: 50000
     livestock_specific_costs:
       SE330: "Other livestock specific costs"
     shared_farm_costs:

@@ -1058,8 +1058,8 @@ The livestock-specific sections include:
 * Output: ``processing/{name}/animal_costs.csv`` with columns:
 
   * ``product``: Animal product name
-  * ``cost_per_mt_usd_{base_year}``: Production cost excluding grazing (USD/tonne)
-  * ``grazing_cost_per_mt_usd_{base_year}``: Grazing-specific cost (USD/tonne)
+  * ``cost_per_t_usd_{base_year}``: Production cost excluding grazing (USD/tonne)
+  * ``grazing_cost_per_t_usd_{base_year}``: Grazing-specific cost (USD/tonne)
 
 Configuration Parameters
 ------------------------

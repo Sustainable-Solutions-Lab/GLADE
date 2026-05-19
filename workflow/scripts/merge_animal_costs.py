@@ -16,7 +16,7 @@ Inputs
 
 Output
 - snakemake.output.costs: CSV with columns:
-    product,n_sources,cost_per_mt_usd_{base_year}
+    product,n_sources,cost_per_t_usd_{base_year}
 
 Notes
 - For products with data from multiple sources, costs are averaged
@@ -39,10 +39,10 @@ def load_cost_sources(source_paths: list[str], base_year: int) -> pd.DataFrame:
     """
     Load and concatenate cost data from multiple sources.
 
-    Returns DataFrame with columns: product, source, cost_per_mt_usd_{base_year}, grazing_cost_per_mt_usd_{base_year}
+    Returns DataFrame with columns: product, source, cost_per_t_usd_{base_year}, grazing_cost_per_t_usd_{base_year}
     """
-    cost_column = f"cost_per_mt_usd_{base_year}"
-    grazing_column = f"grazing_cost_per_mt_usd_{base_year}"
+    cost_column = f"cost_per_t_usd_{base_year}"
+    grazing_column = f"grazing_cost_per_t_usd_{base_year}"
 
     all_costs = []
 
@@ -93,10 +93,10 @@ def merge_costs(
     """
     Merge costs from multiple sources, and ensure all products have cost data.
 
-    Returns DataFrame with columns: product, n_sources, cost_per_mt_usd_{base_year}, grazing_cost_per_mt_usd_{base_year}
+    Returns DataFrame with columns: product, n_sources, cost_per_t_usd_{base_year}, grazing_cost_per_t_usd_{base_year}
     """
-    cost_column = f"cost_per_mt_usd_{base_year}"
-    grazing_column = f"grazing_cost_per_mt_usd_{base_year}"
+    cost_column = f"cost_per_t_usd_{base_year}"
+    grazing_column = f"grazing_cost_per_t_usd_{base_year}"
 
     # Step 1: Average costs for products with multiple sources
     averaged_costs = (
@@ -118,7 +118,7 @@ def merge_costs(
         if row["n_sources"] > 1:
             logger.info(
                 f"  {row['product']}: averaged from {row['n_sources']} sources "
-                f"(Prod: ${row[cost_column]:.2f}/Mt, Grazing: ${row[grazing_column]:.2f}/Mt)"
+                f"(Prod: ${row[cost_column]:.2f}/t, Grazing: ${row[grazing_column]:.2f}/t)"
             )
 
     # Step 2: Create cost dictionary for easy lookup
@@ -179,10 +179,8 @@ def main():
 
     # Summary statistics
     with_direct_data = (merged_costs["n_sources"] > 0).sum()
-    with_zero = (merged_costs[f"cost_per_mt_usd_{base_year}"] == 0).sum()
-    with_zero_grazing = (
-        merged_costs[f"grazing_cost_per_mt_usd_{base_year}"] == 0
-    ).sum()
+    with_zero = (merged_costs[f"cost_per_t_usd_{base_year}"] == 0).sum()
+    with_zero_grazing = (merged_costs[f"grazing_cost_per_t_usd_{base_year}"] == 0).sum()
 
     logger.info(
         f"Summary: {with_direct_data} products with direct data, "

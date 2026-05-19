@@ -437,8 +437,8 @@ Merging Livestock Costs
 5. **Output**: ``processing/{name}/animal_costs.csv`` with columns:
 
    * ``product``: Animal product name
-   * ``cost_per_mt_usd_{base_year}``: Production cost excluding grazing (USD/tonne product)
-   * ``grazing_cost_per_mt_usd_{base_year}``: Grazing-specific cost (USD/tonne product)
+   * ``cost_per_t_usd_{base_year}``: Production cost excluding grazing (USD/tonne product)
+   * ``grazing_cost_per_t_usd_{base_year}``: Grazing-specific cost (USD/tonne product)
 
 Grazing Costs
 ~~~~~~~~~~~~~
@@ -457,7 +457,7 @@ During USDA and FADN livestock cost processing, grazing costs are identified usi
 These costs are:
 
 * Allocated to livestock products by output value share (same methodology as other costs)
-* Stored in separate ``grazing_cost_per_mt_usd_{base_year}`` column
+* Stored in separate ``grazing_cost_per_t_usd_{base_year}`` column
 * Expressed per tonne of animal product (not per tonne of feed)
 
 Conversion to Feed-Basis Costs
@@ -552,22 +552,27 @@ Livestock costs are applied to links that convert feed into animal products:
 
 .. code-block:: python
 
-   # Cost from animal_costs.csv (USD per Mt product)
-   cost_per_mt_product = animal_costs.loc[product]
+   # Cost from animal_costs.csv (USD per tonne of product)
+   cost_per_t_product = animal_costs.loc[product]
 
-   # Efficiency (Mt product per Mt feed DM)
+   # Efficiency (t product per t feed DM = Mt product per Mt feed DM)
    efficiency = feed_requirements.loc[product, feed_category, 'efficiency']
 
-   # Convert to cost per Mt feed input
-   cost_per_mt_feed = cost_per_mt_product / efficiency
-
-   # Convert to bnUSD per Mt (PyPSA units)
-   marginal_cost = cost_per_mt_feed * USD_TO_BNUSD
+   # bus0 dispatch is Mt feed: scale tonne -> Mt and weight by product output
+   marginal_cost = (
+       cost_per_t_product
+       * efficiency
+       * MEGATONNE_TO_TONNE
+       * USD_TO_BNUSD
+   )  # bnUSD per Mt feed
 
 **Interpretation**:
-  * The marginal cost represents the economic cost of converting feed into animal product
-  * More efficient production systems (higher efficiency) have lower costs per unit feed input
-  * The optimization accounts for both feed conversion efficiency and production costs
+  * The marginal cost penalises feed dispatch in proportion to the resulting
+    product output, so more productive feed allocations incur larger costs
+    in absolute terms.
+  * Higher feed-conversion efficiency raises the per-Mt-feed cost coefficient
+    but produces proportionally more product, so the per-tonne-product cost
+    is unchanged.
 
 Grazing Costs
 ~~~~~~~~~~~~~

@@ -1526,13 +1526,13 @@ properties:
       fadn:
         type: object
         required:
-          - high_cost_threshold_usd_per_mt
+          - high_cost_threshold_usd_per_t
           - livestock_specific_costs
           - shared_farm_costs
           - exclude_costs
         additionalProperties: false
         properties:
-          high_cost_threshold_usd_per_mt:
+          high_cost_threshold_usd_per_t:
             type: number
             minimum: 0
           livestock_specific_costs:

@@ -448,14 +448,18 @@ def add_feed_to_animal_product_links(
     df["n2o_per_t_feed"] = n2o_per_t_feed_values
     df["pasture_n2o_share"] = pasture_n2o_share_values
 
-    # Calculate marginal cost (cost per Mt feed input)
-    # animal_costs is in USD per Mt product, efficiency is Mt product per Mt feed
-    # So: cost per Mt feed = (cost per Mt product) / (Mt product per Mt feed)
+    # Calculate marginal cost (bnUSD per Mt feed input).
+    # animal_costs is USD per tonne of product. efficiency is t-product per
+    # t-feed (= Mt-product per Mt-feed). bus0 dispatch is Mt feed, so the
+    # per-Mt-feed cost is cost_per_t * efficiency * MEGATONNE_TO_TONNE in USD,
+    # then converted to bnUSD. This mirrors the canonical conversion used for
+    # crop production costs (crops.py).
     if animal_costs is not None:
         cost_series = df["product"].map(animal_costs).fillna(0.0)
         df["marginal_cost"] = (
-            cost_series.where(df["efficiency"] > 0, 0.0)
-            / df["efficiency"].where(df["efficiency"] > 0, 1.0)
+            cost_series.to_numpy(dtype=float)
+            * df["efficiency"].to_numpy(dtype=float)
+            * constants.MEGATONNE_TO_TONNE
             * constants.USD_TO_BNUSD
         )
     else:

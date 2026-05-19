@@ -23,7 +23,7 @@ Inputs
 
 Output
 - snakemake.output.costs: CSV with columns:
-    product,cost_per_mt_usd_{base_year}
+    product,cost_per_t_usd_{base_year}
 
 Notes
 - Costs included: Labor, veterinary, energy, housing, depreciation, interest
@@ -152,7 +152,7 @@ def process_fadn_animal_costs(
     """
     Extract and process FADN livestock cost data, allocating to model products.
 
-    Returns DataFrame with columns: product, cost_per_mt_usd_{base_year}, grazing_cost_per_mt_usd_{base_year}
+    Returns DataFrame with columns: product, cost_per_t_usd_{base_year}, grazing_cost_per_t_usd_{base_year}
     """
     if grazing_cost_items is None:
         grazing_cost_items = {}
@@ -298,12 +298,12 @@ def process_fadn_animal_costs(
                 if yield_t_per_head is None or yield_t_per_head <= 0:
                     continue
 
-                cost_per_mt = cost_per_head_usd / yield_t_per_head
-                grazing_cost_per_mt = grazing_cost_per_head_usd / yield_t_per_head
+                cost_per_t = cost_per_head_usd / yield_t_per_head
+                grazing_cost_per_t = grazing_cost_per_head_usd / yield_t_per_head
 
-                if cost_per_mt > high_cost_threshold and product != "eggs":
+                if cost_per_t > high_cost_threshold and product != "eggs":
                     logger.warning(
-                        f"High cost for {product} in {country_code} {year}: ${cost_per_mt:.2f}/Mt. "
+                        f"High cost for {product} in {country_code} {year}: ${cost_per_t:.2f}/t. "
                         f"Cost/LU: {cost_per_lu_eur:.2f}, Yield: {yield_t_per_head:.4f}, LU Factor: {lu_factor}"
                     )
 
@@ -313,8 +313,8 @@ def process_fadn_animal_costs(
                         "fadn_category": se_code,
                         "country": country_code,
                         "year": year,
-                        "cost_per_mt": cost_per_mt,
-                        "grazing_cost_per_mt": grazing_cost_per_mt,
+                        "cost_per_t": cost_per_t,
+                        "grazing_cost_per_t": grazing_cost_per_t,
                     }
                 )
 
@@ -328,8 +328,8 @@ def process_fadn_animal_costs(
     product_costs = (
         results_df.groupby("product")
         .agg(
-            cost_per_mt=("cost_per_mt", "mean"),
-            grazing_cost_per_mt=("grazing_cost_per_mt", "mean"),
+            cost_per_t=("cost_per_t", "mean"),
+            grazing_cost_per_t=("grazing_cost_per_t", "mean"),
             n_obs=("year", "count"),
             n_countries=("country", "nunique"),
         )
@@ -338,16 +338,16 @@ def process_fadn_animal_costs(
 
     product_costs = product_costs.rename(
         columns={
-            "cost_per_mt": f"cost_per_mt_usd_{base_year}",
-            "grazing_cost_per_mt": f"grazing_cost_per_mt_usd_{base_year}",
+            "cost_per_t": f"cost_per_t_usd_{base_year}",
+            "grazing_cost_per_t": f"grazing_cost_per_t_usd_{base_year}",
         }
     )
 
     for _, row in product_costs.iterrows():
         logger.info(
             f"  {row['product']}: "
-            f"${row[f'cost_per_mt_usd_{base_year}']:.2f}/Mt "
-            f"(Grazing: ${row[f'grazing_cost_per_mt_usd_{base_year}']:.2f}/Mt) "
+            f"${row[f'cost_per_t_usd_{base_year}']:.2f}/t "
+            f"(Grazing: ${row[f'grazing_cost_per_t_usd_{base_year}']:.2f}/t) "
             f"({row['n_countries']} countries, {row['n_obs']} obs)"
         )
 
@@ -372,7 +372,7 @@ def main():
     livestock_specific_costs = cost_params["livestock_specific_costs"]
     shared_farm_costs = cost_params["shared_farm_costs"]
     grazing_cost_items = cost_params.get("grazing_cost_items", {})
-    high_cost_threshold = float(cost_params["high_cost_threshold_usd_per_mt"])
+    high_cost_threshold = float(cost_params["high_cost_threshold_usd_per_t"])
 
     # Load mapping
     with open(mapping_path) as f:
@@ -420,8 +420,8 @@ def main():
         costs_df = pd.DataFrame(
             columns=[
                 "product",
-                f"cost_per_mt_usd_{base_year}",
-                f"grazing_cost_per_mt_usd_{base_year}",
+                f"cost_per_t_usd_{base_year}",
+                f"grazing_cost_per_t_usd_{base_year}",
             ]
         )
 

@@ -19,7 +19,7 @@ Inputs
 
 Output
 - snakemake.output.costs: CSV with columns:
-    product,cost_per_mt_usd_{base_year}
+    product,cost_per_t_usd_{base_year}
 
 Notes
 - Costs included: Labor, veterinary, energy, housing, depreciation, interest
@@ -35,7 +35,7 @@ USDA Milk Data Structure:
 
 Conversion:
 - 1 cwt (hundredweight) = 100 lbs = 45.36 kg
-- Cost per Mt = Cost per cwt * 22.05
+- Cost per tonne = Cost per cwt * (1000 kg per t) / (45.36 kg per cwt) ~= 22.05
 """
 
 import logging
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # Conversion factor: cwt to Mt
 CWT_TO_KG = 45.3592  # 1 cwt (hundredweight) = 100 lbs = 45.36 kg
-MT_PER_CWT = 1000 / CWT_TO_KG  # For converting $/cwt to $/Mt: ~22.05
+CWT_PER_TONNE = 1000 / CWT_TO_KG  # cwt per tonne (~22.05); multiplies $/cwt -> $/t
 
 
 def load_cpi_data(cpi_path: str) -> dict[int, float]:
@@ -117,7 +117,7 @@ def process_livestock_costs(
     product_name: str,
     base_year: int,
     cpi_values: dict[int, float],
-    units_to_mt_factor: float,
+    units_to_t_factor: float,
     region_filter: str,
     categories_filter: list[str],
     years: list[int],
@@ -128,7 +128,7 @@ def process_livestock_costs(
     """
     Process USDA livestock cost of production data (dairy, hogs, cattle).
 
-    Returns tuple (production_cost_per_mt, grazing_cost_per_mt) in base year USD.
+    Returns tuple (production_cost_per_t, grazing_cost_per_t) in base year USD.
     Production cost excludes feed. Grazing cost is calculated separately.
     """
     if grazing_cost_items is None:
@@ -212,17 +212,17 @@ def process_livestock_costs(
         return 0.0, 0.0
 
     avg_cost_per_unit = sum(yearly_costs) / len(yearly_costs)
-    cost_per_mt = avg_cost_per_unit * units_to_mt_factor
+    cost_per_t = avg_cost_per_unit * units_to_t_factor
 
     avg_grazing_cost_per_unit = sum(yearly_grazing_costs) / len(yearly_grazing_costs)
-    grazing_cost_per_mt = avg_grazing_cost_per_unit * units_to_mt_factor
+    grazing_cost_per_t = avg_grazing_cost_per_unit * units_to_t_factor
 
     logger.info(
         f"{product_name.capitalize()}: {len(yearly_costs)} years averaged, "
-        f"${avg_cost_per_unit:.2f}/unit -> ${cost_per_mt:.2f}/Mt (Grazing: ${grazing_cost_per_mt:.2f}/Mt)"
+        f"${avg_cost_per_unit:.2f}/unit -> ${cost_per_t:.2f}/t (Grazing: ${grazing_cost_per_t:.2f}/t)"
     )
 
-    return cost_per_mt, grazing_cost_per_mt
+    return cost_per_t, grazing_cost_per_t
 
 
 def main():
@@ -271,30 +271,30 @@ def main():
 
             # Dynamically determine conversion factor based on units
             if units == "cwt" or units == "cwt_gain":
-                # 1 cwt = 45.36 kg. Cost per Mt = Cost per cwt * (1000 / 45.36)
-                units_to_mt_factor = MT_PER_CWT
+                # 1 cwt = 45.36 kg. Cost per tonne = Cost per cwt * (1000 / 45.36)
+                units_to_t_factor = CWT_PER_TONNE
             elif units == "head":
                 weight = dressed_weight_kg.get(product)
                 if weight:
-                    # Convert $/head to $/Mt: Cost/Head * (1000 / weight_per_head)
-                    units_to_mt_factor = 1000.0 / float(weight)
+                    # Convert $/head to $/t: Cost/Head * (1000 kg/t / kg-per-head)
+                    units_to_t_factor = 1000.0 / float(weight)
                 else:
                     logger.warning(
                         f"Unknown dressed weight for '{product}', using 1.0 as conversion factor"
                     )
-                    units_to_mt_factor = 1.0  # Placeholder
+                    units_to_t_factor = 1.0  # Placeholder
             else:
                 logger.warning(
                     f"Unknown units '{units}' for product '{product}', using 1.0 as conversion factor"
                 )
-                units_to_mt_factor = 1.0  # Placeholder
+                units_to_t_factor = 1.0  # Placeholder
 
-            cost_per_mt, grazing_cost_per_mt = process_livestock_costs(
+            cost_per_t, grazing_cost_per_t = process_livestock_costs(
                 df,
                 product,
                 base_year,
                 cpi_values,
-                units_to_mt_factor,
+                units_to_t_factor,
                 region,
                 categories,
                 years,
@@ -303,17 +303,17 @@ def main():
                 grazing_cost_items,
             )
 
-            if cost_per_mt > 0 or grazing_cost_per_mt > 0:
+            if cost_per_t > 0 or grazing_cost_per_t > 0:
                 results.append(
                     {
                         "product": product,
-                        f"cost_per_mt_usd_{base_year}": cost_per_mt,
-                        f"grazing_cost_per_mt_usd_{base_year}": grazing_cost_per_mt,
+                        f"cost_per_t_usd_{base_year}": cost_per_t,
+                        f"grazing_cost_per_t_usd_{base_year}": grazing_cost_per_t,
                     }
                 )
 
                 logger.info(
-                    f"{product}: Production ${cost_per_mt:.2f}/Mt, Grazing ${grazing_cost_per_mt:.2f}/Mt"
+                    f"{product}: Production ${cost_per_t:.2f}/t, Grazing ${grazing_cost_per_t:.2f}/t"
                 )
             else:
                 logger.warning(f"No valid cost data for {product}")
@@ -331,8 +331,8 @@ def main():
         out_df = pd.DataFrame(
             columns=[
                 "product",
-                f"cost_per_mt_usd_{base_year}",
-                f"grazing_cost_per_mt_usd_{base_year}",
+                f"cost_per_t_usd_{base_year}",
+                f"grazing_cost_per_t_usd_{base_year}",
             ]
         )
         out_df.to_csv(out_path, index=False)

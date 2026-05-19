@@ -570,12 +570,13 @@ if __name__ == "__main__":
             len(animal_cost_calibration),
         )
 
-    # Read animal production costs (USD/Mt in base year dollars)
+    # Read animal production costs (USD per tonne of product). animals.py
+    # applies the tonne -> Mt scaling on the marginal_cost coefficient.
     animal_costs_df = read_csv(snakemake.input.animal_costs)
-    cost_per_mt_column = f"cost_per_mt_usd_{base_year}"
-    animal_costs_per_mt = animal_costs_df.set_index("product")[
-        cost_per_mt_column
-    ].astype(float)
+    cost_per_t_column = f"cost_per_t_usd_{base_year}"
+    animal_costs_per_t = animal_costs_df.set_index("product")[cost_per_t_column].astype(
+        float
+    )
 
     grazing_cost_per_tonne_dm = grassland.calculate_grazing_cost_per_tonne_dm(
         animal_costs_df, feed_to_products, base_year
@@ -998,7 +999,7 @@ if __name__ == "__main__":
         cfg_countries,
         food_to_group,
         food_loss_waste,
-        animal_costs_per_mt,
+        animal_costs_per_t,
         feed_baseline=feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
         cost_calibration=animal_cost_calibration,
