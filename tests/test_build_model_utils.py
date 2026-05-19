@@ -41,12 +41,15 @@ def product_protein_lookup():
 
 @pytest.fixture
 def manure_n2o_lookup():
-    """MMS N2O factors keyed by (product, feed_category)."""
+    """MMS N2O factors keyed by (product, feed_category).
+
+    Triple is (pasture_fraction, pasture_n2o_ef, storage_n2o_ef).
+    """
     return {
-        ("meat-cattle", "ruminant_forage"): (0.3, 0.02, 0.0095),
-        ("dairy", "ruminant_roughage"): (0.2, 0.02, 0.0095),
-        ("meat-pig", "monogastric_grain"): (0.0, 0.01, 0.012),
-        ("meat-chicken", "monogastric_grain"): (0.0, 0.01, 0.010),
+        ("meat-cattle", "ruminant_forage"): (0.3, 0.02, 0.005),
+        ("dairy", "ruminant_roughage"): (0.2, 0.02, 0.005),
+        ("meat-pig", "monogastric_grain"): (0.0, 0.01, 0.008),
+        ("meat-chicken", "monogastric_grain"): (0.0, 0.01, 0.006),
     }
 
 
@@ -75,6 +78,7 @@ def default_indirect_params():
         "manure_n_to_fertilizer": 0.5,
         "indirect_ef4": 0.01,
         "indirect_ef5": 0.0075,
+        "organic_n2o_factor": 0.006,
         "frac_gasm": 0.2,
         "frac_leach": 0.3,
     }
@@ -127,16 +131,17 @@ class TestCalculateManureNOutputs:
         expected_n_fert = n_managed * 0.5
         assert n_fert == pytest.approx(expected_n_fert)
 
-        # Direct N2O
+        # Direct N2O. Storage applies to all managed N; application EF1
+        # (organic_n2o_factor=0.006) applies to the actual applied flow.
         n2o_pasture_direct = n_pasture * 0.02
-        n2o_managed_direct = n_managed * 0.0095
+        n_applied = expected_n_fert
+        n2o_managed_direct = n_managed * 0.005 + n_applied * 0.006
 
         # Indirect N2O (pasture)
         n2o_pasture_vol = n_pasture * 0.2 * 0.01
         n2o_pasture_leach = n_pasture * 0.3 * 0.0075
 
         # Indirect N2O (managed) - applied to n_fertilizer portion
-        n_applied = expected_n_fert
         n2o_managed_vol = n_applied * 0.2 * 0.01
         n2o_managed_leach = n_applied * 0.3 * 0.0075
 
@@ -269,8 +274,8 @@ class TestCalculateManureNOutputs:
         n2o_pasture_vol = n_pasture * 0.2 * 0.01
         n2o_pasture_leach = n_pasture * 0.3 * 0.0075
 
-        n2o_managed_direct = n_managed * 0.0095
         n_applied = n_managed * 0.5
+        n2o_managed_direct = n_managed * 0.005 + n_applied * 0.006
         n2o_managed_vol = n_applied * 0.2 * 0.01
         n2o_managed_leach = n_applied * 0.3 * 0.0075
 

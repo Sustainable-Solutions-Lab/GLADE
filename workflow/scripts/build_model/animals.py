@@ -328,14 +328,14 @@ def add_feed_to_animal_product_links(
         "manure_ch4_kg_per_kg_DMI",
         "pasture_fraction",
         "pasture_n2o_ef",
-        "managed_n2o_ef",
+        "storage_n2o_ef",
     ]
     manure_rows = manure_emissions.loc[:, manure_cols].copy()
     for col in (
         "manure_ch4_kg_per_kg_DMI",
         "pasture_fraction",
         "pasture_n2o_ef",
-        "managed_n2o_ef",
+        "storage_n2o_ef",
     ):
         manure_rows[col] = pd.to_numeric(manure_rows[col], errors="coerce")
 
@@ -352,7 +352,7 @@ def add_feed_to_animal_product_links(
                 (country, product, feed_category), float(manure_ch4)
             )
 
-        n2o_values = (row.pasture_fraction, row.pasture_n2o_ef, row.managed_n2o_ef)
+        n2o_values = (row.pasture_fraction, row.pasture_n2o_ef, row.storage_n2o_ef)
         if all(pd.notna(v) for v in n2o_values):
             factors = (float(n2o_values[0]), float(n2o_values[1]), float(n2o_values[2]))
             manure_n2o_lookup.setdefault((product, feed_category), factors)
@@ -370,6 +370,7 @@ def add_feed_to_animal_product_links(
     manure_n_to_fert = fertilizer_config["manure_n_to_fertilizer"]
     indirect_ef4 = emissions_config["fertilizer"]["indirect_ef4"]
     indirect_ef5 = emissions_config["fertilizer"]["indirect_ef5"]
+    organic_n2o_factor = emissions_config["fertilizer"]["organic_n2o_factor"]
     frac_gasm = emissions_config["fertilizer"]["frac_gasm"]
     frac_leach = emissions_config["fertilizer"]["frac_leach"]
 
@@ -424,6 +425,7 @@ def add_feed_to_animal_product_links(
                 manure_n_to_fertilizer=manure_n_to_fert,
                 indirect_ef4=indirect_ef4,
                 indirect_ef5=indirect_ef5,
+                organic_n2o_factor=organic_n2o_factor,
                 frac_gasm=frac_gasm,
                 frac_leach=frac_leach,
                 warned_missing_protein=warned_missing_protein,

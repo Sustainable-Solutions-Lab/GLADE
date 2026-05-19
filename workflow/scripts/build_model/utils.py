@@ -312,6 +312,7 @@ def _calculate_manure_n_outputs(
     manure_n_to_fertilizer: float,
     indirect_ef4: float,
     indirect_ef5: float,
+    organic_n2o_factor: float,
     frac_gasm: float,
     frac_leach: float,
     warned_missing_protein: set[str] | None = None,
@@ -340,7 +341,7 @@ def _calculate_manure_n_outputs(
         Product protein lookup (g protein/100g product) keyed by product.
     manure_n2o_lookup : dict[tuple[str, str], tuple[float, float, float]]
         MMS N2O factors keyed by (product, feed_category) as
-        (pasture_fraction, pasture_n2o_ef, managed_n2o_ef).
+        (pasture_fraction, pasture_n2o_ef, storage_n2o_ef).
     manure_n2o_by_product_lookup : dict[str, tuple[float, float, float]]
         Fallback MMS N2O factors keyed by product only.
     manure_n_to_fertilizer : float
@@ -349,6 +350,10 @@ def _calculate_manure_n_outputs(
         kg N2O-N per kg (NH3-N + NOx-N) volatilized (indirect volatilization/deposition)
     indirect_ef5 : float
         kg N2O-N per kg N leached/runoff (indirect leaching)
+    organic_n2o_factor : float
+        kg N2O-N per kg N applied for organic amendments (IPCC EF1).
+        Multiplied with the actual applied-N flow ``n_applied`` so the
+        direct-managed N2O stays consistent with manure_n_to_fertilizer.
     frac_gasm : float
         Fraction of organic N volatilized as NH3 and NOx (FracGASM)
     frac_leach : float
@@ -407,9 +412,9 @@ def _calculate_manure_n_outputs(
         )
         pasture_fraction = 0.0
         pasture_n2o_ef = 0.02 if "cattle" in product or "dairy" in product else 0.01
-        managed_n2o_ef = 0.0095  # storage (0.005) + application (0.75 * 0.006)
+        storage_n2o_ef = 0.005
     else:
-        pasture_fraction, pasture_n2o_ef, managed_n2o_ef = mms_factors
+        pasture_fraction, pasture_n2o_ef, storage_n2o_ef = mms_factors
 
     # Split N between pasture and managed fractions
     n_pasture = n_excreted_t_per_t_feed * pasture_fraction
@@ -429,12 +434,16 @@ def _calculate_manure_n_outputs(
     n2o_pasture_leach_n = n_pasture * frac_leach * indirect_ef5
 
     # === Managed N2O emissions (storage + application) ===
-    # Direct N2O (storage + application EF)
-    # Note: managed_n2o_ef already includes storage EF + (recovery * application EF)
-    n2o_managed_direct_n = n_managed * managed_n2o_ef
+    # Storage applies to all managed N; application (IPCC EF1) applies to
+    # the actual fertilizer flow n_applied = n_managed * manure_n_to_fertilizer.
+    # Computing the application term against the actual n_applied keeps the
+    # direct-managed N2O consistent with the configured recovery fraction;
+    # otherwise a fixed recovery baked into the EF would diverge from the
+    # n_applied used for the indirect-loss terms below.
+    n_applied = n_fertilizer_t_per_t_feed
+    n2o_managed_direct_n = n_managed * storage_n2o_ef + n_applied * organic_n2o_factor
 
     # Indirect N2O (applies to the applied portion)
-    n_applied = n_fertilizer_t_per_t_feed
     n2o_managed_vol_n = n_applied * frac_gasm * indirect_ef4
     n2o_managed_leach_n = n_applied * frac_leach * indirect_ef5
 

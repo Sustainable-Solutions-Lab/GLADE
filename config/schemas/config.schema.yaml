@@ -592,6 +592,7 @@ properties:
         type: object
         required:
           - synthetic_n2o_factor
+          - organic_n2o_factor
           - indirect_ef4
           - indirect_ef5
           - frac_gasf
@@ -603,6 +604,10 @@ properties:
             type: number
             minimum: 0
             description: "kg N2O-N per kg N input (IPCC 2019)"
+          organic_n2o_factor:
+            type: number
+            minimum: 0
+            description: "kg N2O-N per kg N applied for organic amendments incl. manure (IPCC 2019 EF1, wet-climate default)"
           indirect_ef4:
             type: number
             minimum: 0

@@ -48,12 +48,10 @@ M3_CH4_TO_KG = 0.67
 EF3PRP_CATTLE = 0.02  # kg N2O-N per kg N for cattle/buffalo
 EF3PRP_OTHER = 0.01  # kg N2O-N per kg N for sheep/goats/pigs/poultry
 
-# EF1: Application of organic amendments (IPCC 2019, Table 11.1)
-EF1_APPLICATION = 0.006  # kg N2O-N per kg N applied (wet climate default)
-
-# N recovery rate for managed manure (fraction of excreted N available for application)
-# Accounts for losses during collection, storage, and handling
-MANURE_N_RECOVERY = 0.75
+# Note: the application-N2O term (IPCC EF1) is applied downstream in
+# build_model/utils.py against the actual ``n_applied`` derived from
+# config (manure_n_to_fertilizer), so this script only emits the
+# storage component of the direct-managed N2O factor.
 
 # Map animal products to urinary fraction categories
 PRODUCT_TO_URINARY_CATEGORY = {
@@ -353,16 +351,10 @@ def calculate_n2o_factors_for_feed_category(
     else:
         storage_n2o_ef = 0.0
 
-    # Calculate managed pathway EF (storage + application)
-    # For the managed fraction, N goes through storage then application
-    # N2O = storage_EF + (recovery_rate * application_EF)
-    managed_n2o_ef = storage_n2o_ef + (MANURE_N_RECOVERY * EF1_APPLICATION)
-
     return {
         "pasture_fraction": pasture_fraction,
         "pasture_n2o_ef": ef3prp,
         "storage_n2o_ef": storage_n2o_ef,
-        "managed_n2o_ef": managed_n2o_ef,
     }
 
 
@@ -498,7 +490,6 @@ if __name__ == "__main__":
                     "pasture_fraction": n2o_factors["pasture_fraction"],
                     "pasture_n2o_ef": n2o_factors["pasture_n2o_ef"],
                     "storage_n2o_ef": n2o_factors["storage_n2o_ef"],
-                    "managed_n2o_ef": n2o_factors["managed_n2o_ef"],
                 }
             )
 
@@ -519,12 +510,12 @@ if __name__ == "__main__":
         product_data = emissions[emissions["product"] == product]
         for _, row in product_data.iterrows():
             logger.info(
-                "  %s / %s: pasture=%.1f%%, EF_pasture=%.3f, EF_managed=%.4f",
+                "  %s / %s: pasture=%.1f%%, EF_pasture=%.3f, EF_storage=%.4f",
                 row["product"],
                 row["feed_category"],
                 row["pasture_fraction"] * 100,
                 row["pasture_n2o_ef"],
-                row["managed_n2o_ef"],
+                row["storage_n2o_ef"],
             )
 
     # Expand to all countries (same values for now, will be refined later)
@@ -548,7 +539,6 @@ if __name__ == "__main__":
             "pasture_fraction",
             "pasture_n2o_ef",
             "storage_n2o_ef",
-            "managed_n2o_ef",
         ]
     ]
 

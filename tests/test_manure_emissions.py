@@ -8,11 +8,9 @@ import pandas as pd
 import pytest
 
 from workflow.scripts.calculate_manure_emissions import (
-    EF1_APPLICATION,
     EF3PRP_CATTLE,
     EF3PRP_OTHER,
     M3_CH4_TO_KG,
-    MANURE_N_RECOVERY,
     MONOGASTRIC_LPS_MAPPING,
     PRODUCT_TO_EF3PRP,
     PRODUCT_TO_URINARY_CATEGORY,
@@ -44,12 +42,6 @@ class TestConstants:
     def test_ef3prp_values(self):
         assert pytest.approx(0.02) == EF3PRP_CATTLE
         assert pytest.approx(0.01) == EF3PRP_OTHER
-
-    def test_manure_n_recovery(self):
-        assert pytest.approx(0.75) == MANURE_N_RECOVERY
-
-    def test_ef1_application(self):
-        assert pytest.approx(0.006) == EF1_APPLICATION
 
     def test_product_to_ef3prp_cattle(self):
         """Cattle and buffalo products should use the higher EF3PRP."""
@@ -544,8 +536,8 @@ class TestCalculateN2oFactorsForFeedCategory:
         )
         assert result["pasture_n2o_ef"] == pytest.approx(EF3PRP_OTHER)
 
-    def test_managed_n2o_ef_formula(self, mms_fractions_df, n2o_efs_df):
-        """Managed EF = storage_ef + recovery * application_ef.
+    def test_storage_n2o_ef_formula(self, mms_fractions_df, n2o_efs_df):
+        """Storage EF is the dispatch-weighted storage component only.
 
         For Cattle Mixed LPS:
           non-pasture MMS = drylot (30%), liquid/slurry (40%), solid storage (10%)
@@ -554,7 +546,9 @@ class TestCalculateN2oFactorsForFeedCategory:
                               = (0.006 + 0.002 + 0.001) / 0.80
                               = 0.009 / 0.80
                               = 0.01125
-          managed_ef = 0.01125 + 0.75 * 0.006 = 0.01125 + 0.0045 = 0.01575
+
+        The application term (IPCC EF1) is applied downstream against the
+        actual ``n_applied`` derived from manure_n_to_fertilizer.
         """
         result = calculate_n2o_factors_for_feed_category(
             "meat-cattle",
@@ -563,9 +557,6 @@ class TestCalculateN2oFactorsForFeedCategory:
             n2o_efs_df,
         )
         assert result["storage_n2o_ef"] == pytest.approx(0.01125)
-        assert result["managed_n2o_ef"] == pytest.approx(
-            0.01125 + MANURE_N_RECOVERY * EF1_APPLICATION
-        )
 
     def test_ruminant_roughage_uses_mixed_lps(self, mms_fractions_df, n2o_efs_df):
         """Verify storage EF for Cattle Mixed LPS with roughage feed.
@@ -619,10 +610,6 @@ class TestCalculateN2oFactorsForFeedCategory:
         )
         assert result["pasture_fraction"] == pytest.approx(1.0)
         assert result["storage_n2o_ef"] == pytest.approx(0.0)
-        # managed_n2o_ef = 0 + recovery * application
-        assert result["managed_n2o_ef"] == pytest.approx(
-            MANURE_N_RECOVERY * EF1_APPLICATION
-        )
 
     def test_result_keys(self, mms_fractions_df, n2o_efs_df):
         """Result dict should have the expected keys."""
@@ -636,7 +623,6 @@ class TestCalculateN2oFactorsForFeedCategory:
             "pasture_fraction",
             "pasture_n2o_ef",
             "storage_n2o_ef",
-            "managed_n2o_ef",
         }
         assert set(result.keys()) == expected_keys
 
