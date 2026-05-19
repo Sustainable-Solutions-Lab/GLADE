@@ -21,7 +21,14 @@ processing/{name}/crop_residue_yields.csv with columns:
     region
     resource_class
     country       (ISO3)
-    residue_yield_t_per_ha (net dry-matter yield)
+    residue_yield_t_per_ha (gross dry-matter yield: all above-ground residue
+        on the field, including the portion left to decompose in situ; the
+        downstream feed-conversion link applies the field utilization
+        efficiency (FUE) so only the feed-usable portion can flow into
+        feed pools while the entire bus dispatch is available for soil
+        incorporation N2O accounting)
+    fue           (field utilization efficiency, fraction of residue
+        feed-usable per GLEAM v3 Supplement S.1)
 """
 
 import logging
@@ -185,6 +192,7 @@ OUTPUT_COLUMNS = [
     "resource_class",
     "country",
     "residue_yield_t_per_ha",
+    "fue",
 ]
 
 
@@ -270,9 +278,11 @@ def main() -> None:
                 if gross_residue_kg_per_ha <= 0:
                     continue
 
-                net_residue_t_per_ha = gross_residue_kg_per_ha * fue / 1000.0
-                if net_residue_t_per_ha <= 0:
-                    continue
+                # Export gross residue (entire above-ground biomass returned
+                # to the field). FUE is exported separately and applied
+                # downstream as a cap on feed routing, leaving the gross
+                # mass available to soil-incorporation N2O accounting.
+                gross_residue_t_per_ha = gross_residue_kg_per_ha / 1000.0
 
                 rows.append(
                     {
@@ -283,7 +293,8 @@ def main() -> None:
                         "region": region,
                         "resource_class": resource_class,
                         "country": country,
-                        "residue_yield_t_per_ha": net_residue_t_per_ha,
+                        "residue_yield_t_per_ha": gross_residue_t_per_ha,
+                        "fue": fue,
                     }
                 )
 

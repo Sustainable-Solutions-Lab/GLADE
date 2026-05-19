@@ -179,6 +179,7 @@ def add_feed_supply_links(
     residue_items: list,
     countries: list,
     feed_marketing_cost_usd_per_t: dict[str, float],
+    residue_fue_lookup: dict[str, float] | None = None,
 ) -> None:
     """Add links converting crops and foods into categorized feed pools.
 
@@ -191,6 +192,14 @@ def add_feed_supply_links(
     monogastric) appear as multiple rows whose shares sum to 1.0; the
     resulting set of links carries the input mass through to the right
     feed buses with mass conserved in aggregate.
+
+    Residue buses carry the **gross** above-ground biomass per ha so that
+    soil-incorporation N2O can be computed off the full mass. The fraction
+    of residue that can realistically reach an animal trough is bounded by
+    the field utilization efficiency (FUE, per GLEAM v3); this function
+    multiplies the feed conversion efficiency by FUE for residue items so
+    the LP can route at most ``share * FUE`` of any residue bus to feed
+    and the remainder is left for soil incorporation.
     """
     # Process ruminant feeds
     ruminant_feeds = _filter_feed_mapping(
@@ -273,6 +282,21 @@ def add_feed_supply_links(
         efficiency_arr = expanded["share"].astype(float).to_numpy()
     else:
         efficiency_arr = pd.Series(1.0, index=expanded.index).to_numpy()
+
+    # Cap residue routing at FUE (field utilization efficiency). The gross
+    # residue bus carries all above-ground biomass; only the FUE fraction
+    # can realistically be collected from the field for feed.
+    if residue_fue_lookup:
+        is_residue = (expanded["source_type"] == "residue").to_numpy()
+        fue_series = (
+            expanded.loc[is_residue, "feed_item"].map(residue_fue_lookup).astype(float)
+        )
+        if fue_series.isna().any():
+            missing = sorted(
+                expanded.loc[is_residue & fue_series.isna(), "feed_item"].unique()
+            )
+            raise ValueError(f"Missing FUE for residue feed items: {missing}")
+        efficiency_arr[is_residue] = efficiency_arr[is_residue] * fue_series.to_numpy()
     efficiency = efficiency_arr
 
     # Feed marketing cost per Mt input = marketing_cost_per_t (USD/t feed

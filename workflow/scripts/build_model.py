@@ -140,8 +140,9 @@ if __name__ == "__main__":
             residue_yield_t_per_ha=pd.to_numeric(
                 valid["residue_yield_t_per_ha"], errors="coerce"
             ),
+            fue=pd.to_numeric(valid["fue"], errors="coerce"),
         )
-        valid = valid.dropna(subset=["residue_yield_t_per_ha"])
+        valid = valid.dropna(subset=["residue_yield_t_per_ha", "fue"])
         residue_lookup: dict[tuple[str, str, str, int], dict[str, float]] = {}
         for (
             crop_name,
@@ -164,9 +165,29 @@ if __name__ == "__main__":
             if key not in residue_lookup:
                 residue_lookup[key] = {}
             residue_lookup[key][str(feed_item)] = float(residue_yield)
+
+        # Per-residue field utilization efficiency: caps the fraction of
+        # the gross residue bus that can be routed to feed conversion. The
+        # data prep guarantees a single FUE per feed_item across all rows;
+        # raise if that invariant is broken.
+        fue_per_item = (
+            valid.groupby("feed_item")["fue"].agg(["min", "max"]).reset_index()
+        )
+        mismatched = fue_per_item[
+            (fue_per_item["max"] - fue_per_item["min"]).abs() > 1e-9
+        ]
+        if not mismatched.empty:
+            raise ValueError(
+                "Residue feed items have inconsistent FUE values: "
+                f"{mismatched['feed_item'].tolist()}"
+            )
+        residue_fue_lookup: dict[str, float] = dict(
+            zip(fue_per_item["feed_item"], fue_per_item["min"].astype(float))
+        )
     else:
         residue_feed_items = []
         residue_lookup = {}
+        residue_fue_lookup = {}
 
     # Read feed baseline (per-country, per-product, per-feed-category)
     feed_baseline = read_csv(snakemake.input.feed_baseline)
@@ -948,6 +969,7 @@ if __name__ == "__main__":
         residue_feed_items,
         cfg_countries,
         feed_marketing_cost_usd_per_t=feed_marketing_usd_per_t,
+        residue_fue_lookup=residue_fue_lookup,
     )
 
     # Compute trade hub positions once (shared across crop, food, and feed trade)
