@@ -1582,6 +1582,12 @@ animal_costs:
 
 crop_costs:
   non_endogenous_cost_share: 0.7  # Fraction of revenue (price * yield) attributed to non-endogenous production costs
+  # Crop-specific upper winsorization on per-ha cost. For each crop, country
+  # values above this quantile of the non-fallback distribution are clipped
+  # to that quantile. This removes FAOSTAT greenhouse / data-quality
+  # outliers (e.g. tomato in cold-climate Europe) without distorting the
+  # bulk. Null disables the cap. See docs/costs.rst.
+  outlier_cap_quantile: 0.90
   faostat:
     price_element_code: 5532  # Producer Price (USD/tonne)
     yield_element_code: 5412  # Yield (kg/ha)

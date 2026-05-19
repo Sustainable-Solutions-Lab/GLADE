@@ -129,14 +129,58 @@ Processing steps:
 4. **Merge price and yield**: For each (crop, country, year), compute revenue per hectare = price × yield
 5. **Temporal averaging**: Average revenue per hectare across the configured period (default 2015-2022)
 6. **Apply cost share**: Multiply by ``non_endogenous_cost_share`` (default 0.7) to obtain the cost estimate
-7. **Fill gaps**: Missing (crop, country) pairs receive the global median cost for that crop as fallback
-8. **Output**: ``processing/{name}/faostat_crop_costs.csv`` with columns:
+7. **Winsorize per-crop outliers**: For each crop, clip non-fallback country
+   values above the configured ``outlier_cap_quantile`` (default p90 of the
+   non-fallback distribution) to that quantile. This addresses the
+   FAOSTAT data-quality issue described in
+   :ref:`crop_cost_outlier_cap` below. Capped rows are flagged via the
+   ``is_capped`` audit column. Set ``outlier_cap_quantile: null`` to
+   disable the cap.
+8. **Fill gaps**: Missing (crop, country) pairs receive the global median cost for that crop (computed from the post-cap distribution) as fallback.
+9. **Output**: ``processing/{name}/faostat_crop_costs.csv`` with columns:
 
    * ``crop``: Crop name
    * ``country``: ISO3 country code
    * ``cost_usd_{base_year}_per_ha``: Production cost estimate (USD/ha)
    * ``n_years``: Number of years with valid price-yield data
    * ``is_fallback``: Whether the value is a global median fallback
+   * ``is_capped``: Whether the value was winsorized in step 7
+
+.. _crop_cost_outlier_cap:
+
+Outlier Cap (Greenhouse / Cold-Climate Producers)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+FAOSTAT producer prices and yields are reported on a country basis and
+make no distinction between field and protected (greenhouse) cultivation.
+For a small group of high-value crops (tomato, carrot, mango, tea,
+cabbage, apple, banana, watermelon, sweet-potato) in cold-climate or
+high-income producers (ISL, NOR, DNK, FIN, CHE, IRL, SWE, DEU, GBR, NLD,
+BEL, AUT, JPN, GUY, BRB, etc.), virtually all reported production comes
+from greenhouses. The combined producer-price * yield product is
+1-3 orders of magnitude above the field-cultivation norm: pre-cap
+tomato cost reaches USD 1.4 million per hectare in Iceland, USD 980k in
+Norway, USD 200k+ for carrot in Iceland, USD 150k for mango in Japan.
+
+The model treats this country-aggregate value as field cost applied to
+the model's notional cropland area, so these outliers feed directly
+into ``crop_production`` link costs. They are not field cost in any
+useful sense and were forcing the cost calibration to absorb the gap.
+
+The winsorization step clips per-crop, per-country non-fallback values
+to the configured quantile (default 0.90) of that crop's non-fallback
+distribution. The cap is applied **before** the global median is
+computed for missing (crop, country) fallback rows, so the post-cap
+distribution drives both. Fallback rows are themselves never marked as
+capped.
+
+In the validation configuration the default p90 cap clips 273 of 8 400
+rows (~3.2 %). The largest reductions are concentrated in the
+greenhouse cluster above. Maximum per-hectare costs drop from
+USD 1.4M to USD 176k for tomato, USD 202k to USD 28k for carrot,
+USD 95k to USD 42k for tea, and USD 44k to USD 1.8k for wheat (a
+single ZWE data artefact). Median values per crop are unchanged by
+construction.
 
 The resulting cost estimates vary substantially across crops and countries, reflecting differences in local prices, yields, and agricultural productivity.  The map below shows the median cost per country (across all crops), while the distribution plot reveals the cross-country spread for each crop individually.
 
@@ -720,9 +764,10 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
 
    crop_costs:
      non_endogenous_cost_share: 0.7  # Fraction of revenue attributed to non-endogenous costs
+     outlier_cap_quantile: 0.90      # Crop-specific upper winsorization; null disables
      faostat:
-       price_element_code: 5532  # Producer Price (USD/tonne)
-       yield_element_code: 5412  # Yield (kg/ha)
+       price_element_code: 5532      # Producer Price (USD/tonne)
+       yield_element_code: 5412      # Yield (kg/ha)
    cost_calibration:
      enabled: false       # Apply calibration corrections
      generate: false      # Generate calibration from solved model

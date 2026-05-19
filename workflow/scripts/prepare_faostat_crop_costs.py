@@ -10,18 +10,26 @@ Cost model:
 Both price and yield come from FAOSTAT bulk downloads (PP and QCL domains).
 Prices are CPI-deflated to the configured base year before averaging.
 
+An optional per-crop upper winsorization caps non-fallback country values
+at a configured quantile of that crop's non-fallback distribution. This
+removes FAOSTAT outliers in cold-climate / greenhouse-heavy producers
+(e.g. tomato, carrot, mango in northern Europe and Japan) where producer
+prices reflect protected-cultivation systems that the model treats as
+field cost. Capped rows are flagged via the ``is_capped`` column.
+
 Inputs
 ------
 - PP.parquet : FAOSTAT Prices bulk (element 5532 = Producer Price USD/tonne)
 - QCL.parquet : FAOSTAT Production bulk (element 5412 = Yield kg/ha)
-- faostat_crop_item_map.csv : model crop → FAOSTAT item mapping
-- M49-codes.csv : M49 → ISO3 mapping
+- faostat_crop_item_map.csv : model crop -> FAOSTAT item mapping
+- M49-codes.csv : M49 -> ISO3 mapping
 - cpi_annual.csv : US CPI-U annual averages for deflation
 - faostat_cost_proxies.yaml : proxy mappings for unmapped crops
 
 Output
 ------
-- faostat_crop_costs.csv : columns (crop, country, cost_usd_{base_year}_per_ha, n_years, is_fallback)
+- faostat_crop_costs.csv : columns (crop, country, cost_usd_{base_year}_per_ha,
+  n_years, is_fallback, is_capped)
 """
 
 import logging
@@ -87,6 +95,8 @@ def main() -> None:
     avg_start = int(snakemake.params.averaging_period["start_year"])
     avg_end = int(snakemake.params.averaging_period["end_year"])
     non_endogenous_cost_share = float(snakemake.params.non_endogenous_cost_share)
+    cap_quantile_raw = snakemake.params.outlier_cap_quantile
+    cap_quantile = float(cap_quantile_raw) if cap_quantile_raw is not None else None
     price_element = int(snakemake.params.price_element_code)
     yield_element = int(snakemake.params.yield_element_code)
 
@@ -252,8 +262,40 @@ def main() -> None:
     cost_col = f"cost_usd_{base_year}_per_ha"
     costs_df[cost_col] = costs_df["revenue_per_ha"] * non_endogenous_cost_share
 
-    # Fill missing (crop, country) with global production-weighted median
-    # Use simple median per crop as fallback
+    # Upper winsorization per crop: clip non-fallback country values above
+    # the configured quantile to that quantile. Done before fallback filling
+    # so capped values aren't picked up by the fallback median. Fallback
+    # rows added below carry is_capped=False (they already use the median).
+    costs_df["is_capped"] = False
+    if cap_quantile is not None and len(costs_df) > 0:
+        caps = costs_df.groupby("crop")[cost_col].quantile(cap_quantile)
+        n_capped_total = 0
+        for crop, cap in caps.items():
+            if not np.isfinite(cap):
+                continue
+            mask = (costs_df["crop"] == crop) & (costs_df[cost_col] > cap)
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            costs_df.loc[mask, cost_col] = cap
+            costs_df.loc[mask, "is_capped"] = True
+            n_capped_total += n
+            logger.info(
+                "  %s: capped %d countries at p%.0f = %.0f USD/ha",
+                crop,
+                n,
+                cap_quantile * 100,
+                cap,
+            )
+        logger.info(
+            "Outlier cap (q=%.2f): clipped %d of %d non-fallback rows (%.1f%%)",
+            cap_quantile,
+            n_capped_total,
+            len(costs_df),
+            100.0 * n_capped_total / max(len(costs_df), 1),
+        )
+
+    # Fill missing (crop, country) with the per-crop median (post-cap)
     crop_medians = costs_df.groupby("crop")[cost_col].median()
     n_fallbacks = 0
 
@@ -281,17 +323,16 @@ def main() -> None:
                     cost_col: median_cost,
                     "n_years": 0,
                     "is_fallback": True,
+                    "is_capped": False,
                 }
             )
             n_fallbacks += 1
 
+    output_cols = ["crop", "country", cost_col, "n_years", "is_fallback", "is_capped"]
     if fallback_rows:
         fallback_df = pd.DataFrame(fallback_rows)
         costs_df = pd.concat(
-            [
-                costs_df[["crop", "country", cost_col, "n_years", "is_fallback"]],
-                fallback_df,
-            ],
+            [costs_df[output_cols], fallback_df[output_cols]],
             ignore_index=True,
         )
 
@@ -303,7 +344,7 @@ def main() -> None:
     )
 
     # Sort and write output
-    costs_df = costs_df[["crop", "country", cost_col, "n_years", "is_fallback"]]
+    costs_df = costs_df[output_cols]
     costs_df = costs_df.sort_values(["crop", "country"]).reset_index(drop=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

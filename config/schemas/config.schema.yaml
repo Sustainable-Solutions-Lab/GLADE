@@ -1643,14 +1643,21 @@ properties:
 
   crop_costs:
     type: object
-    required: [non_endogenous_cost_share, faostat]
+    required: [non_endogenous_cost_share, outlier_cap_quantile, faostat]
     additionalProperties: false
     properties:
       non_endogenous_cost_share:
         type: number
         minimum: 0
         maximum: 1
-        description: "Fraction of revenue (price × yield) attributed to non-endogenous production costs"
+        description: "Fraction of revenue (price * yield) attributed to non-endogenous production costs"
+      outlier_cap_quantile:
+        oneOf:
+          - type: "null"
+          - type: number
+            exclusiveMinimum: 0.5
+            maximum: 1.0
+        description: "Crop-specific upper winsorization quantile on per-ha cost (0.5-1.0). Null disables the cap."
       faostat:
         type: object
         required: [price_element_code, yield_element_code]

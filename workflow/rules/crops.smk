@@ -24,6 +24,7 @@ rule prepare_faostat_crop_costs:
         currency_base_year=config["currency_base_year"],
         averaging_period=config["costs"]["averaging_period"],
         non_endogenous_cost_share=config["crop_costs"]["non_endogenous_cost_share"],
+        outlier_cap_quantile=config["crop_costs"]["outlier_cap_quantile"],
         price_element_code=config["crop_costs"]["faostat"]["price_element_code"],
         yield_element_code=config["crop_costs"]["faostat"]["yield_element_code"],
     output:
