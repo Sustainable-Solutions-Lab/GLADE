@@ -124,6 +124,7 @@ def mock_network():
         efficiency5=[0.01],  # Co-product, proportional to efficiency
         marginal_cost=[0.5],
         loss_multiplier=[0.85],
+        loss_multiplier5=[0.85],
     )
 
     # Add food processing links (intentionally have no loss/waste hooks).
@@ -467,6 +468,34 @@ class TestApplyFoodLossFactor:
         )
         np.testing.assert_allclose(
             n.links.static.loc["animal:beef_grassfed:USA", "efficiency4"], orig_n2o
+        )
+
+    def test_animal_co_product_losses_scale_consistently(self, mock_network):
+        """Co-product (bus5) efficiency scales by the same loss ratio as bus1.
+
+        Mirrors the FCR co-product test: the primary product and any
+        co-product whose yield is structurally proportional to it must
+        rescale together. Otherwise food-loss sensitivity breaks the
+        physical primary:co-product mass ratio.
+        """
+        n = mock_network
+        orig_beef = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency"])
+        orig_tallow = float(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency5"]
+        )
+
+        factor = 0.5
+        _apply_food_loss_factor(n, factor)
+
+        new_beef = float(n.links.static.loc["animal:beef_grassfed:USA", "efficiency"])
+        new_tallow = float(
+            n.links.static.loc["animal:beef_grassfed:USA", "efficiency5"]
+        )
+
+        # Primary and co-product must scale by identical ratio.
+        np.testing.assert_allclose(new_beef / orig_beef, new_tallow / orig_tallow)
+        np.testing.assert_allclose(
+            n.links.static.loc["animal:beef_grassfed:USA", "loss_multiplier5"], 0.925
         )
 
     def test_factor_one_is_noop(self, mock_network):

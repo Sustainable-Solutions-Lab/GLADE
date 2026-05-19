@@ -552,6 +552,9 @@ def add_feed_to_animal_product_links(
     # animal_production link, starting at bus5. Yields are configured
     # per source product in ``animal_products.co_products``; products
     # not listed yield zero (link is inert on that co-product bus).
+    # A per-bus ``loss_multiplier{N}`` mirrors the primary product so
+    # food-loss sensitivity (sensitivity._scale_loss_on_links) rescales
+    # co-product efficiencies consistently with bus1.
     co_product_kwargs: dict[str, pd.Series | str] = {}
     co_products = co_products or {}
     for offset, (co_product_food, spec) in enumerate(sorted(co_products.items())):
@@ -564,6 +567,7 @@ def add_feed_to_animal_product_links(
         co_product_kwargs[f"efficiency{bus_idx}"] = (
             link_df["adjusted_efficiency"] * yield_series
         )
+        co_product_kwargs[f"loss_multiplier{bus_idx}"] = link_df["loss_multiplier"]
 
     # All animal production links have multiple outputs:
     # bus1: animal product, bus2: CH4, bus3: manure N fertilizer
