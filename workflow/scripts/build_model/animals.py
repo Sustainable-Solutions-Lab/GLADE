@@ -390,7 +390,6 @@ def add_feed_to_animal_product_links(
             logger.info("Skipped %d links due to missing buses", skipped_count)
         return
 
-    warned_missing_protein: set[str] = set()
     ch4_per_t_feed_values: list[float] = []
     manure_ch4_per_t_feed_values: list[float] = []
     n_fert_per_t_feed_values: list[float] = []
@@ -428,7 +427,6 @@ def add_feed_to_animal_product_links(
                 organic_n2o_factor=organic_n2o_factor,
                 frac_gasm=frac_gasm,
                 frac_leach=frac_leach,
-                warned_missing_protein=warned_missing_protein,
             )
         )
         n_fert_per_t_feed_values.append(n_fert_per_t_feed)

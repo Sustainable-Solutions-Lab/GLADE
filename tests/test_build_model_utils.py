@@ -360,7 +360,7 @@ class TestCalculateManureNOutputs:
         assert n_fert == pytest.approx(0.0)
         assert n2o == pytest.approx(0.0)
 
-    def test_missing_protein_data_defaults_to_zero(
+    def test_missing_protein_data_raises(
         self,
         ruminant_n_lookup,
         monogastric_n_lookup,
@@ -368,23 +368,20 @@ class TestCalculateManureNOutputs:
         manure_n2o_by_product_lookup,
         default_indirect_params,
     ):
-        """When product has no protein data, product N is assumed to be zero."""
-        efficiency = 0.05
-        n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
-            product="unknown-product",
-            feed_category="ruminant_forage",
-            efficiency=efficiency,
-            ruminant_n_lookup=ruminant_n_lookup,
-            monogastric_n_lookup=monogastric_n_lookup,
-            product_protein_lookup={},
-            manure_n2o_lookup=manure_n2o_lookup,
-            manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
-            **default_indirect_params,
-        )
-
-        # Verify N fertilizer matches full excretion (fallback manure_emissions)
-        assert n_fert > 0
-        assert n2o > 0
+        """Products with no protein data must raise; cannot silently dump
+        feed-N to manure (inflates N2O and manure-N fertilizer outputs)."""
+        with pytest.raises(ValueError, match="Missing protein data"):
+            _calculate_manure_n_outputs(
+                product="unknown-product",
+                feed_category="ruminant_forage",
+                efficiency=0.05,
+                ruminant_n_lookup=ruminant_n_lookup,
+                monogastric_n_lookup=monogastric_n_lookup,
+                product_protein_lookup={},
+                manure_n2o_lookup=manure_n2o_lookup,
+                manure_n2o_by_product_lookup=manure_n2o_by_product_lookup,
+                **default_indirect_params,
+            )
 
 
 # ---------------------------------------------------------------------------

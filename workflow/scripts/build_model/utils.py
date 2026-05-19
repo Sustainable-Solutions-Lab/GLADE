@@ -315,7 +315,6 @@ def _calculate_manure_n_outputs(
     organic_n2o_factor: float,
     frac_gasm: float,
     frac_leach: float,
-    warned_missing_protein: set[str] | None = None,
 ) -> tuple[float, float, float]:
     """Calculate manure N fertilizer and N₂O outputs per tonne feed intake.
 
@@ -375,14 +374,16 @@ def _calculate_manure_n_outputs(
     if feed_n_g_per_kg is None:
         raise ValueError(f"Missing feed N content for category '{feed_category}'")
 
-    # Get product protein content (g protein/100g product)
+    # Get product protein content (g protein/100g product). Missing entries
+    # would flow all feed-N to manure (no product-N retained), inflating
+    # both manure-N output and the downstream N2O on the link. Require an
+    # entry for every animal product.
     protein_g_per_100g = product_protein_lookup.get(product)
     if protein_g_per_100g is None:
-        if warned_missing_protein is None or product not in warned_missing_protein:
-            logger.warning("No protein data for %s, assuming 0 N in product", product)
-            if warned_missing_protein is not None:
-                warned_missing_protein.add(product)
-        protein_g_per_100g = 0.0
+        raise ValueError(
+            f"Missing protein data for animal product '{product}'; cannot "
+            f"compute manure-N balance"
+        )
 
     # Convert protein to N using factor 6.25 (protein = N * 6.25)
     # N (g/kg product) = protein (g/100g) * 10 / 6.25
