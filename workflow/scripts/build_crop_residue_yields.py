@@ -257,6 +257,13 @@ def main() -> None:
                     continue
 
                 crop_yield_t_per_ha = float(row["yield"])
+                # The GLEAM S.3.1 slope/intercept are applied to DM grain
+                # yield: slope values reproduce IPCC R_AG ratios (e.g.
+                # wheat 1.51, maize 1.03) which are themselves on a
+                # DM-yield basis. GAEZ yields entering this script are
+                # already DM (see build_crop_yields.py), so no moisture
+                # rescaling is required. The DM% column in Tab S.3.1 is
+                # informational only.
                 gross_residue_kg_per_ha = (
                     slope * crop_yield_t_per_ha * 1000.0 + intercept
                 )
