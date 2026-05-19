@@ -12,7 +12,7 @@ without being influenced by low-input or subsistence agriculture.
 
 Input:
     - processing/{name}/fertilizer_application_rates.csv: Country-level N rates
-        Columns: country (ISO3), crop, n_rate_kg_ha, crop_area_k_ha, n_fubc_crops
+        Columns: country (ISO3), crop, n_rate_kg_per_ha, crop_area_k_ha, n_fubc_crops
 
 Output:
     - processing/{name}/global_fertilizer_n_rates.csv: Global high-input N rates
@@ -68,9 +68,10 @@ def calculate_percentile_rates(df, percentile, crops, proxy_rates):
     # Calculate percentile for each crop
     # Use all data points (each country is one observation)
     percentile_rates = (
-        df.groupby("crop")["n_rate_kg_ha"].quantile(percentile / 100.0).reset_index()
+        df.groupby("crop")["n_rate_kg_per_ha"]
+        .quantile(percentile / 100.0)
+        .reset_index()
     )
-    percentile_rates.columns = ["crop", "n_rate_kg_per_ha"]
 
     # Apply proxy mappings: every target crop in proxy_rates inherits the
     # source crop's rate. Source crops must themselves be present in the

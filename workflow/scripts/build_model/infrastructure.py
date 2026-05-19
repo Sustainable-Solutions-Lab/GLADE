@@ -166,7 +166,8 @@ def add_carriers_and_buses(
             country=nutrient_df["country"],
         )
 
-    # Feed carriers per country (9 pools: 5 ruminant + 4 monogastric quality classes)
+    # Feed carriers per country (7 pools: 4 ruminant + 3 monogastric quality classes;
+    # see constants.FEED_CATEGORIES for the canonical list).
     feed_categories = constants.FEED_CATEGORIES
     if feed_categories:
         idx = pd.MultiIndex.from_product(

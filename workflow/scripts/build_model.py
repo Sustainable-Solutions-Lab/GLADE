@@ -584,7 +584,7 @@ if __name__ == "__main__":
     if hasattr(snakemake.input, "animal_cost_calibration"):
         cal_df = read_csv(snakemake.input.animal_cost_calibration)
         animal_cost_calibration = cal_df.set_index(["product", "country"])[
-            "correction_bnusd_per_mt"
+            "correction_bnusd_per_mt_feed"
         ]
         logger.info(
             "Loaded animal cost calibration: %d entries",

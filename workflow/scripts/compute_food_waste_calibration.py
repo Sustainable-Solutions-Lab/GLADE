@@ -14,12 +14,18 @@ applies uniformly across countries:
 The multiplier is derived from the global food-bus balance reported by an
 uncalibrated validation solve:
 
-    multiplier = consumption_mt / (consumption_mt + slack_net_mt)
+    multiplier = consumption_mt / (consumption_mt - slack_net_mt)
 
-where ``slack_net = positive_slack - negative_slack`` is the net excess on
-the food bus across all countries in the group. Positive (excess) slack
-shrinks the multiplier (more waste at consumption -> more demand);
-negative slack would inflate it.
+where ``slack_net = positive_slack - negative_slack`` aggregates the food
+bus over countries in the group; positive net slack signals an upstream
+shortage filled by the slack generator, negative signals excess absorbed
+by the disposal slack. The food bus balances as
+``supply + pos_slack - neg_absorbed = consumption`` so the actual
+sustainable supply is ``consumption - slack_net``; the retention
+multiplier rescales the SDG waste fraction toward that supply. With
+positive (shortage) slack the multiplier > 1 -- less retained waste, so
+the new SDG waste fraction shrinks. Negative (excess) slack gives
+multiplier < 1, inflating the new waste fraction.
 
 Only food groups listed in ``params.food_groups`` are calibrated; the
 output YAML keeps unaffected groups absent so the prepare step leaves

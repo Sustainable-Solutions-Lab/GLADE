@@ -20,7 +20,7 @@ Input files:
 
 Output:
     - processing/{name}/fertilizer_application_rates.csv: N application rates by crop and country
-        Columns: country (ISO3 code), crop, n_rate_kg_ha, crop_area_k_ha, n_fubc_crops
+        Columns: country (ISO3 code), crop, n_rate_kg_per_ha, crop_area_k_ha, n_fubc_crops
 
 Data source: Report 9 covers the 2017-18 period with data for 64 countries and 32 crops.
 """
@@ -132,7 +132,7 @@ def map_and_aggregate(fubc_df, mapping_df):
         .apply(
             lambda x: pd.Series(
                 {
-                    "n_rate_kg_ha": (x["N_rate_kg_ha"] * x["Crop_area_k_ha"]).sum()
+                    "n_rate_kg_per_ha": (x["N_rate_kg_ha"] * x["Crop_area_k_ha"]).sum()
                     / x["Crop_area_k_ha"].sum(),
                     "crop_area_k_ha": x["Crop_area_k_ha"].sum(),
                     "n_fubc_crops": len(x),
@@ -147,13 +147,13 @@ def map_and_aggregate(fubc_df, mapping_df):
     aggregated.columns = [
         "country",
         "crop",
-        "n_rate_kg_ha",
+        "n_rate_kg_per_ha",
         "crop_area_k_ha",
         "n_fubc_crops",
     ]
 
     # Round numeric columns
-    aggregated["n_rate_kg_ha"] = aggregated["n_rate_kg_ha"].round(2)
+    aggregated["n_rate_kg_per_ha"] = aggregated["n_rate_kg_per_ha"].round(2)
     aggregated["crop_area_k_ha"] = aggregated["crop_area_k_ha"].round(2)
 
     logger.info(f"Final aggregated data: {len(aggregated)} rows")
@@ -166,10 +166,10 @@ def map_and_aggregate(fubc_df, mapping_df):
 
     # Log summary statistics
     logger.info("\nN application rate statistics (kg/ha):")
-    logger.info(f"  Mean: {aggregated['n_rate_kg_ha'].mean():.1f}")
-    logger.info(f"  Median: {aggregated['n_rate_kg_ha'].median():.1f}")
-    logger.info(f"  Min: {aggregated['n_rate_kg_ha'].min():.1f}")
-    logger.info(f"  Max: {aggregated['n_rate_kg_ha'].max():.1f}")
+    logger.info(f"  Mean: {aggregated['n_rate_kg_per_ha'].mean():.1f}")
+    logger.info(f"  Median: {aggregated['n_rate_kg_per_ha'].median():.1f}")
+    logger.info(f"  Min: {aggregated['n_rate_kg_per_ha'].min():.1f}")
+    logger.info(f"  Max: {aggregated['n_rate_kg_per_ha'].max():.1f}")
 
     return aggregated
 
@@ -216,7 +216,7 @@ def apply_fallbacks(df):
                     .apply(
                         lambda x: pd.Series(
                             {
-                                "n_rate_kg_ha": x["n_rate_kg_ha"].mean(),
+                                "n_rate_kg_per_ha": x["n_rate_kg_per_ha"].mean(),
                                 "crop_area_k_ha": 0.0,  # Unknown area
                                 "n_fubc_crops": 0,
                             }
@@ -227,7 +227,9 @@ def apply_fallbacks(df):
                 )
 
                 fallback_data["crop"] = target_crop
-                fallback_data["n_rate_kg_ha"] = fallback_data["n_rate_kg_ha"].round(2)
+                fallback_data["n_rate_kg_per_ha"] = fallback_data[
+                    "n_rate_kg_per_ha"
+                ].round(2)
 
                 # Append to dataframe
                 df = pd.concat([df, fallback_data], ignore_index=True)

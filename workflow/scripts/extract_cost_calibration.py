@@ -17,7 +17,7 @@ correction = median(-(mu_lower + mu_upper)) per group
 Outputs three CSVs:
   - crop:      (crop, country, correction_bnusd_per_mha)
   - grassland: (country, correction_bnusd_per_mha)
-  - animal:    (product, country, correction_bnusd_per_mt)
+  - animal:    (product, country, correction_bnusd_per_mt_feed)
 """
 
 import logging
@@ -207,7 +207,7 @@ def main() -> None:
         group_cols=["product", "country"],
     )
     animal_result = animal_result.rename(
-        columns={"correction": "correction_bnusd_per_mt"}
+        columns={"correction": "correction_bnusd_per_mt_feed"}
     )
 
     animal_path = Path(snakemake.output.animal_correction)

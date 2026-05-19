@@ -131,10 +131,10 @@ def conversion_factor(
 
     Returns 1.0 when the bases match. Looks up the table named
     ``"<from>_to_<to>"`` in *factors* and returns the entry for
-    *food_or_group* (defaulting to 1.0 if absent).
+    *food_or_group*.
 
-    Raises ValueError if the requested basis pair has no table at all,
-    so silent unit drift gets caught early.
+    Raises ValueError if the requested basis pair has no table or if the
+    food/group is not present, so silent unit drift gets caught early.
     """
     if from_basis == to_basis:
         return 1.0
@@ -146,7 +146,13 @@ def conversion_factor(
             f"Add weight_conversion.{table_name} to config or align the "
             f"source/food bases."
         )
-    return float(factors[table_name].get(food_or_group, 1.0))
+    table = factors[table_name]
+    if food_or_group not in table:
+        raise ValueError(
+            f"Conversion table {table_name!r} has no entry for "
+            f"'{food_or_group}'. Add it to weight_conversion.{table_name}."
+        )
+    return float(table[food_or_group])
 
 
 def convert_intake(

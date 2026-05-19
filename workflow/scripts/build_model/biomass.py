@@ -36,8 +36,10 @@ def add_biomass_infrastructure(
     and add_biomass_byproduct_links.
     """
 
+    # USD/tonne -> bnUSD/Mt: tonnes->Mt is 1e-6 (MEGATONNE_TO_TONNE), USD->bnUSD
+    # is 1e-9, so per-Mt cost = USD_per_t * 1e6 * 1e-9 = 1e-3 * USD_per_t.
     marginal_cost = float(biomass_cfg["marginal_values_usd_per_tonne"])
-    marginal_cost *= constants.USD_TO_BNUSD / constants.TONNE_TO_MEGATONNE
+    marginal_cost *= constants.MEGATONNE_TO_TONNE * constants.USD_TO_BNUSD
     # Biomass quantities are in Mt DM throughout this module.
     biomass_carrier = "biomass"
     n.carriers.add(biomass_carrier, unit="MtDM")

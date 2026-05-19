@@ -17,7 +17,7 @@ def sample_country_rates():
         {
             "country": ["USA", "FRA", "BRA", "USA", "FRA", "BRA"],
             "crop": ["maize", "maize", "maize", "banana", "banana", "banana"],
-            "n_rate_kg_ha": [100.0, 150.0, 200.0, 50.0, 60.0, 70.0],
+            "n_rate_kg_per_ha": [100.0, 150.0, 200.0, 50.0, 60.0, 70.0],
         }
     )
 
