@@ -624,25 +624,6 @@ rule plot_yield_map:
         "../scripts/plotting/plot_yield_map.py"
 
 
-rule plot_average_yield_gap_by_country:
-    input:
-        regions="<processing>/{name}/regions.geojson",
-        csv="<processing>/{name}/yield_gap_by_country_all_crops_{water_supply}.csv",
-    output:
-        pdf="<results>/{name}/plots/yield_gap_by_country_average_{water_supply}.pdf",
-    group:
-        "analysis_plot"
-    resources:
-        runtime="2m",
-        mem_mb=1000,
-    log:
-        "<logs>/{name}/plot_average_yield_gap_by_country_{water_supply}.log",
-    benchmark:
-        "<benchmarks>/{name}/plot_average_yield_gap_by_country_{water_supply}.tsv"
-    script:
-        "../scripts/plotting/plot_yield_gap_by_country_average.py"
-
-
 rule plot_water_value_map:
     input:
         network="<results>/{name}/solved/model_scen-{scenario}.nc",

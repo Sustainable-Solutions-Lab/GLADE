@@ -72,7 +72,6 @@ include: "rules/analysis.smk"
 include: "rules/consumer_values.smk"
 include: "rules/prod_stability.smk"
 include: "rules/optimal_taxes.smk"
-include: "rules/yield_gaps.smk"
 include: "rules/luc.smk"
 include: "rules/documentation.smk"
 
