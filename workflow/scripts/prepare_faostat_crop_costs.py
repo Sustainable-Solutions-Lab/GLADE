@@ -165,7 +165,7 @@ def main() -> None:
     pp_df["value"] = pp_df["Value"].astype(float)
     logger.info("PP data: %d rows after filtering", len(pp_df))
 
-    # Filter QCL data: element 5419 = Yield (hg/ha)
+    # Filter QCL data: element 5412 = Yield (kg/ha)
     qcl_df = filter_bulk(
         qcl_bulk,
         element_codes=[yield_element],
@@ -308,12 +308,11 @@ def main() -> None:
 
         median_cost = crop_medians.get(crop)
         if median_cost is None or not np.isfinite(median_cost):
-            logger.warning(
-                "No median cost available for crop '%s'; %d countries will have zero cost",
-                crop,
-                len(missing_countries),
+            raise ValueError(
+                f"No median FAOSTAT cost available for crop '{crop}'; "
+                f"{len(missing_countries)} countries would otherwise inherit "
+                f"a zero cost. Check the input parquet for this crop."
             )
-            median_cost = 0.0
 
         for country in sorted(missing_countries):
             fallback_rows.append(
