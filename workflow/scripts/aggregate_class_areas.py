@@ -137,16 +137,19 @@ if __name__ == "__main__":
             np.maximum(result, load_scaled_fraction(path), out=result)
         return result
 
-    # Compute land area limits based on configuration
+    # Compute land area limits based on configuration. Both rainfed and
+    # irrigated frontiers describe the same physical hectares, so we must
+    # split them per pixel before aggregating to avoid double-counting:
+    # irrigation cannot exceed the rainfed suitability of the cell, and any
+    # land the irrigated bucket claims is removed from the rainfed pool.
     sr_base = scale_fraction(sr0)
     del sr0
     sr_max = (
         max_suitability(sr_files[1:], base=sr_base) if len(sr_files) > 1 else sr_base
     )
     np.multiply(sr_max, cell_area_rows[:, np.newaxis], out=sr_max)
-    area_r = sr_max
+    area_r_raw = sr_max
 
-    # Aggregate rainfed area before computing irrigated to reduce peak memory.
     def aggregate_area(area: np.ndarray, ws: str) -> pd.DataFrame:
         out = []
         valid_mask = classes >= 0
@@ -190,22 +193,30 @@ if __name__ == "__main__":
             )
         return pd.concat(out, ignore_index=True)
 
-    df_r = aggregate_area(area_r, "r")
-    del area_r
-
     if irrigated_area_source == "potential":
-        area_i = max_suitability(si_files)
-        if area_i.size:
-            np.multiply(area_i, cell_area_rows[:, np.newaxis], out=area_i)
+        area_i_raw = max_suitability(si_files)
+        if area_i_raw.size:
+            np.multiply(area_i_raw, cell_area_rows[:, np.newaxis], out=area_i_raw)
     else:  # "current"
-        area_i = load_scaled_fraction(
+        area_i_raw = load_scaled_fraction(
             irrigated_share_path,
             target_shape=(height, width),
             target_transform=transform,
             target_crs=crs,
         )
-        if area_i.size:
-            np.multiply(area_i, cell_area_rows[:, np.newaxis], out=area_i)
+        if area_i_raw.size:
+            np.multiply(area_i_raw, cell_area_rows[:, np.newaxis], out=area_i_raw)
+
+    # Disjoint split per pixel: irrigation gets min(area_i_raw, area_r_raw),
+    # rainfed gets the remainder. This keeps the model's land budget faithful
+    # to the underlying physical cell area regardless of how the two
+    # suitability rasters overlap.
+    area_i = np.minimum(area_i_raw, area_r_raw)
+    area_r = np.maximum(area_r_raw - area_i, 0.0)
+    del area_i_raw, area_r_raw
+
+    df_r = aggregate_area(area_r, "r")
+    del area_r
 
     df_i = aggregate_area(area_i, "i")
     del area_i
