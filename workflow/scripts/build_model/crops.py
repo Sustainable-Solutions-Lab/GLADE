@@ -712,12 +712,25 @@ def add_multi_cropping_links(
     water_valid = (
         index_df["water_supply"].eq("i") & np.isfinite(water_req) & (water_req > 0)
     )
+    # Irrigated rows missing a water requirement would silently get
+    # water_efficiency=0 (free irrigation on data-quality holes), letting
+    # the LP claim the higher irrigated yield without paying water. Drop
+    # those rows so they cannot be built into the network at all.
     water_invalid = index_df["water_supply"].eq("i") & ~np.isfinite(water_req)
     if water_invalid.any():
         logger.warning(
-            "Ignoring invalid irrigation requirements for %d multi-cropping links",
+            "Dropping %d irrigated multi-cropping links with missing water requirement",
             int(water_invalid.sum()),
         )
+        keep = ~water_invalid
+        index_df = index_df[keep].copy()
+        merged = merged[merged["link_name"].isin(index_df["link_name"])].copy()
+        water_req = index_df["water_requirement_m3_per_ha"].astype(float)
+        water_valid = (
+            index_df["water_supply"].eq("i") & np.isfinite(water_req) & (water_req > 0)
+        )
+        if index_df.empty:
+            return
 
     # bus0 is land in Mha, bus2 is water in Mm3, so the coefficient is
     # m3/ha (numerically equal to Mm3/Mha). water_requirement_m3_per_ha is
