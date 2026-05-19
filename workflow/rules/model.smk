@@ -283,11 +283,11 @@ def solve_model_inputs(w):
         inputs["exogenous_protein"] = pcal_cfg["exogenous_protein"]
 
     # Food demand calibration: include the per-food multiplier CSV when
-    # enabled. When generate=true (we are producing it from the same solve)
-    # the input is omitted to break the DAG cycle, and solve_model treats
-    # the calibration as absent (multiplier=1).
+    # enabled. The generation config sets enabled=false to break the DAG
+    # cycle on the source scenario; solve_model then treats the calibration
+    # as absent (multiplier=1).
     fd_cal_cfg = eff_cfg["food_demand_calibration"]
-    if fd_cal_cfg["enabled"] and not fd_cal_cfg["generate"]:
+    if fd_cal_cfg["enabled"]:
         inputs["food_demand_calibration"] = fd_cal_cfg["calibration_file"]
 
     # Production-stability L1 calibration: include the calibrated-L1 YAML

@@ -37,11 +37,10 @@
 name: "food_demand_calibration"
 
 scenarios:
-  # Single uncalibrated scenario. With food_demand_calibration.generate
-  # set true at the base level, solve_model skips reading the calibration
-  # file (the rule's input function makes it conditional on
-  # ``enabled and not generate``), so the food_consumption p_set values
-  # carry only the raw baseline-diet demand and the slack reveals the gap.
+  # Single uncalibrated scenario. With food_demand_calibration disabled at
+  # the base level, solve_model does not read the calibration file, so the
+  # food_consumption p_set values carry only the raw baseline-diet demand
+  # and the slack reveals the gap.
   uncalibrated: {}
 
 planning_horizon: 2020
@@ -63,7 +62,8 @@ cost_calibration:
   enabled: false
 
 food_demand_calibration:
-  generate: true
+  enabled: false     # Don't apply calibration (we're generating it)
+  generate: true     # Generate calibration from solved model
   scenario: "uncalibrated"
 
 health:

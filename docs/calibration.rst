@@ -17,6 +17,23 @@ The calibration artefacts live under ``data/curated/calibration/`` and
 are version-controlled so that ordinary builds don't need to re-solve
 anything.
 
+.. _calibration-enabled-generate-pattern:
+
+.. note::
+
+   **Canonical configuration pattern.** Every calibration section has two
+   flags: ``enabled`` controls whether the calibration is *applied* at
+   solve/build time, and ``generate`` controls whether the workflow
+   *produces* the calibration file from a source scenario. The canonical
+   pattern for generation is ``enabled: false, generate: true`` so that
+   ``enabled`` is the single source of truth at runtime. The alternative
+   (``enabled: true, generate: true``) is rejected by
+   ``workflow/validation/calibration.py`` to keep configurations
+   unambiguous. The same validator also checks that the named source
+   ``scenario`` is defined under ``config["scenarios"]`` when
+   ``generate: true``, and that referenced calibration files exist on
+   disk when ``enabled: true, generate: false``.
+
 .. list-table::
    :header-rows: 1
    :widths: 18 22 30 30
@@ -40,13 +57,19 @@ anything.
      - Per-food-group multiplier on the consumer-side waste fraction
        that absorbs systematic food-bus surpluses/shortages relative to
        the GDD-IA intake baseline.
+   * - :ref:`food_demand <food-demand-calibration>`
+     - ``config/calibration/food_demand.yaml``
+     - ``food_demand.csv``
+     - Per-food global multiplier on the baseline-diet ``target_mt``
+       that closes the residual per-food gap between FAOSTAT QCL supply
+       and GDD-IA demand left over after the food-waste step.
    * - :ref:`cost <cost-calibration>`
      - ``config/calibration/cost.yaml``
      - ``crop_cost.csv``,
        ``grassland_cost.csv``,
        ``animal_cost.csv``
      - Additive production-cost corrections derived from stability-
-       constraint duals (observed allocation → optimal allocation).
+       constraint duals (observed allocation -> optimal allocation).
    * - :ref:`stability <prod-stability-calibration>`
      - ``config/calibration/stability.yaml``
      - ``prod_stability_l1.yaml``
@@ -64,9 +87,16 @@ When upstream data or build logic changes, rerun in this order:
 #. :ref:`food_waste <food-waste-calibration>` — uses the calibrated
    feed behaviour so that food-bus slack is not contaminated by
    feed-side mismatches.
-#. :ref:`cost <cost-calibration>` — the cost-calibration solve uses the
-   calibrated feed and waste behaviour to extract duals that make
-   economic sense.
+#. :ref:`food_demand <food-demand-calibration>` — uses the calibrated
+   food-waste fractions so that any per-food gap that remains reflects
+   a genuine supply / demand mismatch (FAOSTAT QCL vs GDD-IA) and not
+   a waste mis-attribution.
+#. :ref:`cost <cost-calibration>` — the cost-calibration solve uses
+   the calibrated feed, waste, and demand behaviour to extract duals
+   that make economic sense. Without the food-demand step, residual
+   per-food mismatch leaks into the cost-calibration duals as spurious
+   sign (e.g. olive-oil cost driven negative, coffee/cocoa pegged at
+   the slack ceiling) and inflates the stability L1 cost downstream.
 #. :ref:`stability <prod-stability-calibration>` — the L1 Broyden
    iteration uses all previous corrections so that the observed
    deviations reflect the fully-calibrated baseline.
@@ -81,6 +111,7 @@ Everything is wrapped by ``tools/calibrate``:
    tools/calibrate              # all, in dependency order
    tools/calibrate feed         # one step (forage + protein feed slack)
    tools/calibrate food_waste
+   tools/calibrate food_demand
    tools/calibrate cost
    tools/calibrate stability
    tools/calibrate --check      # per-step staleness, no execution
@@ -107,6 +138,11 @@ workflow when their configuration blocks are enabled (the default):
   ``exogenous_protein.csv`` and injects free per-country generators on
   the monogastric/ruminant protein feed buses (see
   :ref:`exogenous-protein-feed`).
+* ``food_demand_calibration.enabled: true`` loads
+  ``data/curated/calibration/food_demand.csv`` at solve time and applies
+  each per-food multiplier uniformly to the baseline-diet ``target_mt``
+  in ``_match_baseline_to_consume_links`` (see
+  :ref:`food-demand-calibration`).
 * ``cost_calibration.enabled: true`` loads the three cost-correction
   CSVs at build time (see :ref:`cost-calibration-correction`).
 * ``prod_stability_calibration.enabled: true`` resolves the sentinel
@@ -157,22 +193,90 @@ the underlying SDG 12.3 derivation. Rule:
 ``compute_food_waste_calibration`` in ``workflow/rules/diet.smk``;
 ``generate: true`` lives in ``config/calibration/food_waste.yaml``.
 
+.. _food-demand-calibration:
+
+Food-demand calibration
+-----------------------
+
+Even after the food-waste step closes the **group-level** gap between
+FAOSTAT-derived supply and GDD-IA-derived intake, per-food residuals
+remain: foods within a group can be jointly consistent at the group
+total while individual foods are systematically over- or
+under-demanded. The food-demand calibration absorbs this residual into
+a per-food global multiplier on the baseline-diet ``target_mt``.
+
+The multiplier is derived from the global food-bus balance reported by
+an uncalibrated validation-mode solve (``scenario: uncalibrated`` in
+``config/calibration/food_demand.yaml``, with
+``food_demand_calibration.enabled: false`` and ``generate: true`` so
+the solve does not read the calibration file it is about to write,
+following the
+:ref:`canonical pattern <calibration-enabled-generate-pattern>`):
+
+.. math::
+
+   m_f = \mathrm{clip}\!\left(
+       \frac{C_f}{C_f + N_f},\ [m_{\min},\ m_{\max}]
+   \right)
+
+where :math:`C_f = \sum_c p^0_{\ell_{c,f}}` is total food-consumption
+flow for food :math:`f` and
+:math:`N_f = \mathrm{slack}^{+}_{f} - \mathrm{slack}^{-}_{f}` is the
+net food-bus slack on the two ``slack_positive_food`` /
+``slack_negative_food`` generators (positive slack = LP had to invoke a
+shortage filler, so demand was too high and the multiplier shrinks;
+negative slack = LP absorbed excess, so demand was too low and the
+multiplier grows). Both quantities are summed over countries for each
+food. The clip bounds (``min_multiplier`` / ``max_multiplier`` in the
+config) default to ``[0.5, 2.0]``; they are tight on purpose so that an
+out-of-range value flags a structural data issue rather than being
+silently absorbed.
+
+At solve time ``_match_baseline_to_consume_links`` (in
+``workflow/scripts/solve_model/core.py``) applies the multiplier
+uniformly across all countries for each food when
+``food_demand_calibration.enabled`` is true.
+
+Rule: ``compute_food_demand_calibration`` in
+``workflow/rules/diet.smk``. Script:
+``workflow/scripts/compute_food_demand_calibration.py``.
+
 .. _cost-calibration:
 
 Cost calibration
 ----------------
 
-Derived from the dual variables on hard production-stability constraints
-(±1 %; see :ref:`production-stability-bounds` for how these bounds are
-configured). When the model is forced to reproduce observed production
-levels, :math:`\mu^+_\ell - \mu^-_\ell` on each constraint indicates how
-much the link's marginal cost would need to shift for the observed
-allocation to be cost-optimal. The per-group median becomes an additive
-correction. See :ref:`cost-calibration-correction` for how the
-corrections are applied at build time.
+The cost calibration is a two-step paired solve:
+
+**Step 1 (consumer-value extraction).** A baseline solve with
+``enforce_baseline_diet: true`` extracts food-bus duals to build the
+piecewise consumer-utility blocks used downstream. Step 1 enables hard
+production-stability bounds at **+/-20 %** for crops, grassland, and
+animals; this prevents the LP from idealising supply patterns and
+pushing the consumer-value duals below realistic supply cost, which in
+earlier versions forced step 2 to absorb a large negative correction.
+The +/-20 % band is loose enough to accommodate the structural
+FAOSTAT-vs-FBS mismatch carried by most foods. For the small set of
+foods whose mismatch still exceeds the band (buckwheat, plantain,
+coffee, tea, olive-oil), a file-level
+``validation.slack_marginal_cost: 5.0`` ($5 000/t) override caps the
+slack-driven duals at the upper end of realistic wholesale prices --
+instead of the default ~$50 000/t slack ceiling -- while leaving
+enough headroom for legitimately high-value foods.
+
+**Step 2 (cost-correction extraction).** A second solve activates the
+piecewise utility built in step 1 and tightens production stability to
+**+/-1 %**. The dual :math:`\mu^+_\ell - \mu^-_\ell` on each tight
+production-stability constraint indicates how much the link's marginal
+cost would need to shift for the observed allocation to be
+cost-optimal; the per-group median becomes an additive correction. See
+:ref:`cost-calibration-correction` for how the corrections are applied
+at build time.
 
 Rule: ``extract_cost_calibration`` in ``workflow/rules/crops.smk``.
-Script: ``workflow/scripts/extract_cost_calibration.py``.
+Script: ``workflow/scripts/extract_cost_calibration.py``. The two
+scenarios (``baseline`` and ``calibration``) live in
+``config/calibration/cost.yaml``.
 
 .. _prod-stability-calibration:
 

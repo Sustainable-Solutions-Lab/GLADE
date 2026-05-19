@@ -28,12 +28,11 @@
 name: "food_waste_calibration"
 
 scenarios:
-  # No scenario-level overrides needed: with food_loss_waste_calibration.generate
-  # set true at the base level, prepare_food_loss_waste skips reading the
-  # calibration file (the rule's input function makes it conditional on
-  # `enabled and not generate`). The resulting food_loss_waste.csv therefore
-  # carries only the SDG/FBS defaults plus curated overrides, and the
-  # solved scenario's food-bus slack reveals the GDD-vs-supply gap.
+  # No scenario-level overrides needed: with food_loss_waste_calibration
+  # disabled at the base level, prepare_food_loss_waste does not read the
+  # calibration file. The resulting food_loss_waste.csv therefore carries
+  # only the SDG/FBS defaults plus curated overrides, and the solved
+  # scenario's food-bus slack reveals the GDD-vs-supply gap.
   uncalibrated: {}
 
 planning_horizon: 2020
@@ -61,7 +60,8 @@ food_demand_calibration:
   enabled: false
 
 food_loss_waste_calibration:
-  generate: true
+  enabled: false     # Don't apply calibration (we're generating it)
+  generate: true     # Generate calibration from solved model
   scenario: "uncalibrated"
 
 health:

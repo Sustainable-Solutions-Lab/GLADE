@@ -298,24 +298,35 @@ pixi run -e dev pytest -v         # verbose output
 
 ## Calibration
 
-Three calibrations feed the default workflow. Their outputs live under
+Five calibrations feed the default workflow. Their outputs live under
 `data/curated/calibration/` and are git-tracked; builds depend on them.
-When upstream data or build logic changes materially, regenerate in this
-order:
+When upstream data or build logic changes materially, regenerate in
+this order:
 
-1. **grassland** — `config/calibration/grassland.yaml` → `grassland_yield.csv`,
-   `fodder_conversion.csv`, `exogenous_forage.csv`.
-2. **cost** — `config/calibration/cost.yaml` → `crop_cost.csv`,
-   `grassland_cost.csv`, `animal_cost.csv`.
-3. **stability** — `config/calibration/stability.yaml` → `prod_stability_l1.yaml`
-   (calibrated L1 penalty costs; resolved at solve time when
-   `validation.production_stability.land_l1_cost` or `.animal_feed_l1_cost`
-   is the sentinel string `"calibrated"`).
+1. **feed** — `config/calibration/feed.yaml` → `grassland_yield.csv`,
+   `fodder_conversion.csv`, `exogenous_forage.csv`,
+   `exogenous_protein.csv`.
+2. **food_waste** — `config/calibration/food_waste.yaml` →
+   `food_waste.yaml` (per-food-group consumer-side waste multipliers).
+3. **food_demand** — `config/calibration/food_demand.yaml` →
+   `food_demand.csv` (per-food global multiplier on baseline-diet
+   `target_mt`, applied in `_match_baseline_to_consume_links` at solve
+   time).
+4. **cost** — `config/calibration/cost.yaml` → `crop_cost.csv`,
+   `grassland_cost.csv`, `animal_cost.csv`. Step 1 of the cost solve
+   now enables hard production-stability bounds at +/-20% with a
+   `slack_marginal_cost: 5.0` override for foods carrying structural
+   FAOSTAT-vs-FBS mismatch beyond the band.
+5. **stability** — `config/calibration/stability.yaml` →
+   `prod_stability_l1.yaml` (calibrated L1 penalty costs; resolved at
+   solve time when `validation.production_stability.land_l1_cost` or
+   `.animal_feed_l1_cost` is the sentinel string `"calibrated"`).
 
-Single entrypoint: `tools/calibrate` (`all` by default; `grassland`,
-`cost`, `stability`, or `--check` for staleness). `tools/smk` prints a
-one-line reminder when `data/curated/` inputs are newer than the oldest
-calibration artefact. See `docs/calibration.rst` for the full story.
+Single entrypoint: `tools/calibrate` (`all` by default; `feed`,
+`food_waste`, `food_demand`, `cost`, `stability`, or `--check` for
+staleness). `tools/smk` prints a one-line reminder when
+`data/curated/` inputs are newer than the oldest calibration artefact.
+See `docs/calibration.rst` for the full story.
 
 ## Configuration Validation
 

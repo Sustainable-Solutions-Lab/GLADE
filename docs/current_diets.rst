@@ -413,6 +413,22 @@ FBS item, so the explicit-route is already symmetric.
 **Equal split fallback.** Where total FBS supply for a food group is
 zero in a country, foods within the group are assigned equal shares.
 
+.. note::
+
+   The within-group share computation weights each food's FBS supply
+   by its **edible portion** (FAO ``edible_portion_coefficient`` looked
+   up via ``data/curated/foods.csv`` -> ``fao_edible_portion.csv``)
+   before normalising. The GDD-IA group totals are on an edible-mass
+   basis while FBS supply is reported on a fresh-whole-commodity
+   basis, so splitting an edible-mass total by fresh-mass weights
+   would over-allocate intake to low-edible-portion foods (plantain
+   0.59, watermelon 0.62, citrus 0.72). The weighting is applied in
+   both the direct-supply branch and the pooled-projection branch of
+   ``build_within_group_shares``; in pooled projections the edible
+   portion follows the recipient food (e.g. plantain FBS supply in the
+   BAN sub-projection is redistributed to ``banana`` using banana's
+   edible portion).
+
 Step 3: Per-food consumption
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

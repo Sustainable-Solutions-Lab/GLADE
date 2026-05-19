@@ -173,6 +173,67 @@ The following figure illustrates this variation, comparing rainfed wheat yields 
 
 .. Note:: Yields for individual crops need not always be better in a high resource class. This is because resource classes are determined "globally" for all crops at once, so that each grid cell is assigned a resource class independent of any crop. So while resource class 2 has better *average* yields than resource class 1 in every region, that might not be true for some individual crops (e.g. rainfed wheat in the Western USA region in the above example.)
 
+.. _yield-calibration:
+
+GAEZ-Proxy Yield Calibration
+----------------------------
+
+A handful of model crops do not have a dedicated GAEZ yield raster and
+must therefore borrow a related crop's raster as a proxy. Without
+correction, country-level production under
+``validation.use_actual_yields: true`` then systematically
+under- or over-shoots the FBS-corrected FAOSTAT total for those crops.
+The ``yield_calibration`` section of ``config/default.yaml`` lists the
+affected crops and provides a per-country multiplicative correction
+that rescales every per-cell yield in a country so that the model's
+country-level production matches FAOSTAT by construction, while
+preserving the GAEZ within-country spatial pattern.
+
+For each crop :math:`f` listed under ``yield_calibration.crops`` the
+multiplier for country :math:`c` is
+
+.. math::
+
+   m_{c,f} = \mathrm{clip}\!\left(
+       \frac{P^{\text{FBS-corrected FAOSTAT}}_{c,f}}
+            {P^{\text{model GAEZ}}_{c,f}},\
+       [m_{\min},\ m_{\max}]
+   \right)
+
+with both sides on a fresh-weight basis (the dry-matter-to-fresh
+conversion cancels in the ratio, but is applied explicitly so that the
+intermediate diagnostics in the build log are interpretable). Clip
+bounds default to ``[0.5, 3.0]``; a value outside this range is logged
+and clipped rather than silently absorbed.
+
+Initial entries (subject to change as upstream data evolves):
+
+* **plantain** — GAEZ has no plantain output, so the build pipeline
+  uses the GAEZ **banana** raster as the proxy. FAOSTAT plantain
+  yields run ~30 % higher than GAEZ-banana yields in African producers,
+  giving a global plantain under-production of about 24 % before
+  calibration.
+* **coffee** — GAEZ COC yields are systematically below FAOSTAT in
+  the major producers (BRA, VNM, COL), giving ~26 % global
+  under-production before calibration.
+* **tea** — GAEZ TEA yields overshoot in CHN; without rescaling the
+  model produces about 30 % more dried tea than the FAOSTAT fresh-leaf
+  statistics imply (after the standard 4:1 fresh-to-dry conversion).
+
+The output schema matches ``fodder_yield_corrections.csv``
+(``country, crop, yield_correction_factor``) so the
+``build_model.crops`` module applies both corrections through the same
+per-cell yield-rescaling mechanism; where they overlap they **compose
+multiplicatively**. The mechanism is intentionally inert in
+optimisation mode: the calibration is only applied when
+``validation.use_actual_yields: true``, since the GAEZ potential
+yields under the standard configuration are meant to reflect agronomic
+potential rather than current realised output and so cannot be
+anchored to historical FAOSTAT totals.
+
+Rule: ``build_yield_calibration`` in ``workflow/rules/crops.smk``.
+Script: ``workflow/scripts/build_yield_calibration.py``.
+
 Seed Reservation
 ----------------
 

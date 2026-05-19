@@ -33,12 +33,11 @@
 name: "feed_calibration"
 
 scenarios:
-  uncalibrated:
-    grazing:
-      grassland_forage_calibration:
-        enabled: false
-    feed_protein_calibration:
-      enabled: false
+  # No scenario-level overrides needed: the generated calibrations are
+  # disabled at the base level (see grazing.grassland_forage_calibration
+  # and feed_protein_calibration below), so the solved scenario's feed-bus
+  # slack reveals the supply/demand gap.
+  uncalibrated: {}
 
 planning_horizon: 2020
 
@@ -64,11 +63,13 @@ food_demand_calibration:
 
 grazing:
   grassland_forage_calibration:
-    generate: true
+    enabled: false     # Don't apply calibration (we're generating it)
+    generate: true     # Generate calibration from solved model
     scenario: uncalibrated
 
 feed_protein_calibration:
-  generate: true
+  enabled: false       # Don't apply calibration (we're generating it)
+  generate: true       # Generate calibration from solved model
   scenario: uncalibrated
 
 health:

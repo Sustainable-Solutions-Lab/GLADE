@@ -189,7 +189,7 @@ def build_scenario_entry(
         inputs["exogenous_protein"] = protein_cal_cfg["exogenous_protein"]
 
     fd_cal_cfg = eff["food_demand_calibration"]
-    if fd_cal_cfg["enabled"] and not fd_cal_cfg["generate"]:
+    if fd_cal_cfg["enabled"]:
         inputs["food_demand_calibration"] = fd_cal_cfg["calibration_file"]
 
     ps_cal_cfg = eff["prod_stability_calibration"]

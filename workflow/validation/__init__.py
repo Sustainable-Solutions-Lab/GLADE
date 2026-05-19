@@ -10,6 +10,7 @@ from typing import Callable
 
 from snakemake.logging import logger
 
+from .calibration import validate_calibration
 from .commodities import validate_commodities
 from .config_schema import validate_config_schema
 from .consumer_values import validate_consumer_values
@@ -34,6 +35,7 @@ Validator = Callable[[dict, Path], None]
 
 _CHECKS: dict[str, Validator] = {
     "config_schema": validate_config_schema,
+    "calibration": validate_calibration,
     "commodities": validate_commodities,
     "restricted_data": validate_restricted_data,
     "consumer_values": validate_consumer_values,

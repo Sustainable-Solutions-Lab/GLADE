@@ -190,7 +190,7 @@ rule merge_dietary_sources:
 
 def _food_waste_calibration_input(_w):
     cfg = config["food_loss_waste_calibration"]
-    if cfg["enabled"] and not cfg["generate"]:
+    if cfg["enabled"]:
         return cfg["calibration_file"]
     return []
 

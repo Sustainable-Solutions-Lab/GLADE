@@ -1561,7 +1561,7 @@ crop_costs:
   non_endogenous_cost_share: 0.7  # Fraction of revenue (price * yield) attributed to non-endogenous production costs
   faostat:
     price_element_code: 5532  # Producer Price (USD/tonne)
-    yield_element_code: 5412  # Yield (hg/ha)
+    yield_element_code: 5412  # Yield (kg/ha)
 
 # --- section: cost_calibration ---
 # Unified cost calibration corrections extracted from production stability duals.

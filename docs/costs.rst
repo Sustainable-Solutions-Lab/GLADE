@@ -75,7 +75,7 @@ Crop production costs are derived from FAOSTAT data, using producer prices as a 
 
 **Data characteristics**:
   * Prices from the FAOSTAT Prices (PP) domain (element 5532: Producer Price USD/tonne)
-  * Yields from the FAOSTAT Production (QCL) domain (element 5412: Yield hg/ha)
+  * Yields from the FAOSTAT Production (QCL) domain (element 5412: Yield kg/ha)
   * CPI-deflated to the configured base year before averaging
 
 **Source**:
@@ -123,12 +123,12 @@ where :math:`P` is the producer price (USD/t), :math:`Y` is yield (t/ha), and :m
 
 Processing steps:
 
-1. **Load FAOSTAT bulk data**: Producer prices from the PP domain (element 5532) and yields from the QCL domain (element 5412)
+1. **Load FAOSTAT bulk data**: Producer prices from the PP domain (element 5532, USD/tonne) and yields from the QCL domain (element 5412, kg/ha, converted to t/ha)
 2. **Map crops to FAOSTAT items**: Using ``data/curated/faostat_crop_item_map.csv``; crops without a direct mapping use proxy crops defined in ``data/curated/faostat_cost_proxies.yaml`` (e.g., alfalfa uses soybean prices, biomass-sorghum uses sorghum)
 3. **CPI deflation**: Prices are deflated to the configured base year using US CPI-U data
 4. **Merge price and yield**: For each (crop, country, year), compute revenue per hectare = price × yield
 5. **Temporal averaging**: Average revenue per hectare across the configured period (default 2015-2022)
-6. **Apply cost share**: Multiply by ``non_endogenous_cost_share`` (default 0.5) to obtain the cost estimate
+6. **Apply cost share**: Multiply by ``non_endogenous_cost_share`` (default 0.7) to obtain the cost estimate
 7. **Fill gaps**: Missing (crop, country) pairs receive the global median cost for that crop as fallback
 8. **Output**: ``processing/{name}/faostat_crop_costs.csv`` with columns:
 
@@ -162,14 +162,29 @@ The resulting cost estimates vary substantially across crops and countries, refl
 Calibration Correction
 ^^^^^^^^^^^^^^^^^^^^^^
 
-An optional additive calibration correction adjusts production costs for
-crops, grassland, and animals based on shadow prices from a model solved
-with tight production-stability constraints. The corrections are
-additive, clipped to zero (no negative costs), and applied at build time
-whenever ``cost_calibration.enabled`` is true (the default).
+An optional additive calibration correction adjusts production costs
+for crops, grassland, and animals based on shadow prices from a
+two-step paired solve:
 
-Regenerate with ``tools/calibrate cost``. See :ref:`calibration` for the
-full dependency graph and algorithm.
+* **Step 1** pins consumption to the baseline diet, enables hard
+  production-stability bounds at +/-20 %, and applies the file-level
+  ``validation.slack_marginal_cost: 5.0`` override (5 000 USD/t) to
+  cap the duals of the small set of foods whose FAOSTAT-vs-FBS
+  mismatch still exceeds the +/-20 % band (buckwheat, plantain,
+  coffee, tea, olive-oil). The food-bus duals feed the piecewise
+  consumer-utility blocks used by step 2.
+* **Step 2** activates the step-1 piecewise utility and tightens
+  production stability to +/-1 %. The duals on these tight constraints
+  become the per-group additive cost corrections.
+
+The corrections are additive, clipped to zero (no negative costs), and
+applied at build time whenever ``cost_calibration.enabled`` is true
+(the default).
+
+Regenerate with ``tools/calibrate cost``. See :ref:`calibration` for
+the full dependency graph and algorithm, including the upstream
+``food_demand`` step that closes residual per-food gaps before the
+cost solve.
 
 .. _marketing-costs:
 
@@ -625,10 +640,10 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
 .. code-block:: yaml
 
    crop_costs:
-     non_endogenous_cost_share: 0.5  # Fraction of revenue attributed to non-endogenous costs
+     non_endogenous_cost_share: 0.7  # Fraction of revenue attributed to non-endogenous costs
      faostat:
        price_element_code: 5532  # Producer Price (USD/tonne)
-       yield_element_code: 5412  # Yield (hg/ha)
+       yield_element_code: 5412  # Yield (kg/ha)
    cost_calibration:
      enabled: false       # Apply calibration corrections
      generate: false      # Generate calibration from solved model
