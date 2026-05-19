@@ -86,10 +86,12 @@ def validate_crop_food_pathways(config: dict, project_root: Path) -> None:
             raise ValueError(
                 f"{csv_name}: missing required columns {sorted(missing_cols)}"
             )
-        bad_crops = sorted(set(map_df["crop"]) - config_crops)
-        if bad_crops:
-            raise ValueError(
-                f"{csv_name}: crop values not in config.crops: {bad_crops}"
+        unused_crops = sorted(set(map_df["crop"]) - config_crops)
+        if unused_crops:
+            unused_text = ", ".join(unused_crops)
+            logger.warning(
+                f"{csv_name} references crops not in config (ignored): "
+                f"{unused_text}"
             )
         bad_foods = sorted(set(map_df["source_item"]) - foods_in_csv)
         if bad_foods:

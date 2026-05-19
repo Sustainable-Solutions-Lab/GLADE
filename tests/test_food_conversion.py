@@ -60,6 +60,7 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["wheat"],
             byproduct_list=[],
+            food_marketing_cost_usd_per_t={"flour-white": 0.0},
         )
 
         link = empty_network.links.static.loc["pathway:white_flour:USA"]
@@ -91,6 +92,7 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["tea"],
             byproduct_list=[],
+            food_marketing_cost_usd_per_t={"tea-dried": 0.0},
         )
 
         link = empty_network.links.static.loc["pathway:tea_dried_leaves:USA"]
@@ -119,6 +121,7 @@ class TestFoodConversionFactor:
             food_to_group=food_to_group,
             crop_list=["wheat", "tea"],
             byproduct_list=[],
+            food_marketing_cost_usd_per_t={"flour-white": 0.0, "tea-dried": 0.0},
         )
 
         links = empty_network.links.static

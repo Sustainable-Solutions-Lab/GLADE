@@ -664,10 +664,18 @@ def build_within_group_shares(
     # ``prepare_faostat_fbs_items.py`` (which historically defaulted such
     # codes to 0 supply and made entire pools — plantain, apples,
     # pineapples, dates — silently vanish from the projection).
+    # Only validate sub-specs whose projection_foods intersect with the
+    # included foods (the rest are no-ops anyway) so that downstream tests
+    # can exercise subsets without supplying every code.
     fetched_codes = {int(code) for (_, code) in fbs_supply}
+    included_foods_set = set(included_foods)
     referenced_codes: set[int] = set()
     for spec in POOL_PROJECTIONS:
+        if spec["food_group"] not in food_groups_included:
+            continue
         for sub in _normalise_projection_spec(spec):
+            if not (set(sub["projection_foods"]) & included_foods_set):
+                continue
             referenced_codes.update(int(c) for c in sub["pool_codes"])
     missing_codes = referenced_codes - fetched_codes
     if missing_codes:

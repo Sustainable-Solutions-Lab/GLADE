@@ -359,15 +359,21 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["vegetables"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
 
         by_food = shares.set_index("food")["share"]
-        # Residual 70 splits as 21/35/14 from OVG production shares (30/50/20).
-        # Combined with explicit 20 (onion) and 10 (tomato) gives total 100.
-        assert by_food["onion"] == pytest.approx(0.41)
-        assert by_food["cabbage"] == pytest.approx(0.35)
-        assert by_food["carrot"] == pytest.approx(0.14)
+        # Onion (2602) and Vegetables, Other (2605) are pooled symmetrically
+        # so the combined supply 20+70=90 splits across onion/cabbage/carrot
+        # by production share (30/50/20): 27/45/18. Tomato (2601) contributes
+        # its explicit 10 directly. Group total 100 -> shares 0.27/0.45/0.18/0.10.
+        assert by_food["onion"] == pytest.approx(0.27)
+        assert by_food["cabbage"] == pytest.approx(0.45)
+        assert by_food["carrot"] == pytest.approx(0.18)
         assert by_food["tomato"] == pytest.approx(0.10)
 
     def test_starchy_residual_is_projected_across_modeled_starchy_foods(self):
@@ -416,7 +422,11 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["starchy_vegetable"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
 
         by_food = shares.set_index("food")["share"]
@@ -479,7 +489,11 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["nuts_seeds"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
 
         by_food = shares.set_index("food")["share"]
@@ -504,18 +518,48 @@ class TestBuildWithinGroupShares:
                 "item_code": [2615, 2611, 2612, 2613, 2614],
             }
         )
+        # Includes zero-supply entries for pool codes (2616, 2617-2619, 2625)
+        # so the pool-code presence validator in build_within_group_shares
+        # passes for the fruits group. They do not affect the test outcome.
         fbs_items_df = pd.DataFrame(
             {
-                "item_code": [2615, 2611, 2612, 2613, 2614],
+                "item_code": [
+                    2615,
+                    2611,
+                    2612,
+                    2613,
+                    2614,
+                    2616,
+                    2617,
+                    2618,
+                    2619,
+                    2625,
+                ],
                 "item_name": [
                     "Bananas",
                     "Oranges, Mandarines",
                     "Lemons, Limes and products",
                     "Grapefruit and products",
                     "Citrus, Other",
+                    "Plantains",
+                    "Apples",
+                    "Pineapples",
+                    "Dates",
+                    "Fruits, Other",
                 ],
-                "country": ["USA"] * 5,
-                "supply_kg_per_capita_year": [100.0, 30.0, 20.0, 10.0, 40.0],
+                "country": ["USA"] * 10,
+                "supply_kg_per_capita_year": [
+                    100.0,
+                    30.0,
+                    20.0,
+                    10.0,
+                    40.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ],
             }
         )
 
@@ -528,7 +572,11 @@ class TestBuildWithinGroupShares:
             animal_production_df=pd.DataFrame(),
             food_groups_included=["fruits"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
 
         banana = shares[(shares["country"] == "USA") & (shares["food"] == "banana")]
@@ -555,7 +603,11 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["grain", "vegetables"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
         # grain group: flour-white (FBS 2511, supply=100) + rice-white (FBS 2807, supply=50)
         # flour-white share = 100/150, rice-white share = 50/150
@@ -597,7 +649,11 @@ class TestBuildWithinGroupShares:
                 "vegetables",
             ],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
         for country in ["USA", "IND"]:
             for fg in ["legumes", "dairy", "whole_grains", "grain", "vegetables"]:
@@ -628,7 +684,11 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["grain"],
             byproducts=["flour-white"],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
         assert "flour-white" not in shares["food"].values
 
@@ -651,7 +711,11 @@ class TestBuildWithinGroupShares:
             animal_production_df,
             food_groups_included=["dairy"],
             byproducts=[],
-            weight_conversion={},
+            weight_conversion={"carcass_to_fresh": {}},
+            frt_attribution_df=pd.DataFrame(
+                columns=["country", "crop", "target_production_tonnes"]
+            ),
+            edible_portion_by_food={},
         )
         ind_dairy = shares[(shares["country"] == "IND") & (shares["food"] == "dairy")][
             "share"

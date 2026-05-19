@@ -52,6 +52,9 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
         rainfed_wetland_rice_ch4_scaling_factor=1.0,
         use_actual_production=False,
         min_yield_t_per_ha=0.01,
+        seed_kg_dm_per_ha=pd.Series({"silage-maize": 0.0}),
+        crop_loss_multiplier=pd.Series(dtype=float),
+        crop_marketing_cost_usd_per_t={"silage-maize": 0.0},
     )
 
     links = n.links.static[n.links.static["crop"] == "silage-maize"]

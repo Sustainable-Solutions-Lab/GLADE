@@ -121,6 +121,7 @@ def food_network():
         food=["wheat", "rice", "beef", "wheat", "rice"],
         country=["USA", "USA", "USA", "IND", "IND"],
         food_group=["grain", "grain", "red_meat", "grain", "grain"],
+        flw_multiplier=[1.0, 1.0, 1.0, 1.0, 1.0],
     )
 
     return n
