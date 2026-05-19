@@ -104,7 +104,14 @@ def _add_trade_hubs_and_links(
     if not hub_bus_names.empty:
         hub_buses_df = pd.DataFrame(index=hub_bus_names)
         hub_buses_df["carrier"] = (carrier_prefix + pairs_df["item"]).to_numpy()
-        n.buses.add(hub_buses_df.index, carrier=hub_buses_df["carrier"])
+        # Stamp the traded item on the hub bus so downstream filters can use
+        # ``buses.static[item_column]`` instead of parsing the name.
+        hub_buses_df[item_column] = pairs_df["item"].to_numpy()
+        n.buses.add(
+            hub_buses_df.index,
+            carrier=hub_buses_df["carrier"],
+            **{item_column: hub_buses_df[item_column]},
+        )
 
     gdf_ee = regions_gdf.to_crs(6933)
     gdf_countries = gdf_ee[gdf_ee["country"].isin(countries)].dissolve(
@@ -182,6 +189,9 @@ def _add_trade_hubs_and_links(
         link_items = list(
             itertools.chain.from_iterable(zip(pairs["item"], pairs["item"]))
         )
+        link_countries = list(
+            itertools.chain.from_iterable(zip(pairs["country"], pairs["country"]))
+        )
 
     if link_names:
         # Add trade carrier if not present
@@ -192,6 +202,7 @@ def _add_trade_hubs_and_links(
         links_df["bus1"] = link_bus1
         links_df["marginal_cost"] = link_costs
         links_df[item_column] = link_items
+        links_df["country"] = link_countries
         n.links.add(
             links_df.index,
             bus0=links_df["bus0"],
@@ -199,6 +210,7 @@ def _add_trade_hubs_and_links(
             marginal_cost=links_df["marginal_cost"],
             p_nom_extendable=True,
             carrier=link_carrier,
+            country=links_df["country"],
             **{item_column: links_df[item_column]},
         )
 

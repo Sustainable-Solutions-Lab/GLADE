@@ -470,6 +470,11 @@ def fix_food_consumption_to_baseline(
     )
     existing = n.links.dynamic.get("p_set", pd.DataFrame(index=n.snapshots))
     if not existing.empty:
+        # Drop any pre-existing p_set entries for the links we are about to
+        # fix; otherwise pd.concat([existing, new_p_set], axis=1) would
+        # produce duplicate column names and PyPSA's downstream Link-p_set
+        # constraint would pick an arbitrary one.
+        existing = existing.drop(columns=list(link_names), errors="ignore")
         new_p_set = pd.concat([existing, new_p_set], axis=1)
     n.links.dynamic["p_set"] = new_p_set
 

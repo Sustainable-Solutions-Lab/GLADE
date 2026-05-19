@@ -255,6 +255,14 @@ def add_regional_crop_production_links(
                 seed_share = np.where(
                     yield_t_per_ha > 0, seed_t_per_ha / yield_t_per_ha, 0.0
                 )
+            n_seed_clipped = int(np.sum(seed_share > 0.5))
+            if n_seed_clipped > 0:
+                logger.info(
+                    "Clipped seed share to 0.5 for %d %s/%s cells where seed/yield > 0.5",
+                    n_seed_clipped,
+                    crop,
+                    ws,
+                )
             seed_share = np.clip(seed_share, 0.0, 0.5)
             # Per-country supply-chain loss multiplier (post-harvest +
             # storage + transport + processing losses); applied here so
@@ -1192,25 +1200,19 @@ def add_residue_soil_incorporation_links(
         )
         return
 
-    # Fallback N content for residues without data (g N/kg DM)
-    # Conservative estimate based on typical crop straw/stover N content
-    fallback_n_content = 8.0
-
-    # Build per-item N₂O efficiency via vectorized computation
+    # Build per-item N₂O efficiency via vectorized computation. Each residue
+    # must have a known N content from one of the feed-category lookups;
+    # otherwise the N2O efficiency would silently inherit a generic fallback
+    # and bias incorporation emissions.
     items_df = pd.DataFrame({"item": residue_feed_items})
     items_df["n_content_g_per_kg"] = items_df["item"].map(n_content_lookup)
-
-    # Log fallback usage for items without N content data
-    missing_mask = items_df["n_content_g_per_kg"].isna()
-    for item in items_df.loc[missing_mask, "item"]:
-        logger.info(
-            "No N content data for residue %s; using fallback value %.1f g N/kg DM",
-            item,
-            fallback_n_content,
+    missing = items_df.loc[items_df["n_content_g_per_kg"].isna(), "item"].tolist()
+    if missing:
+        raise ValueError(
+            "Missing N content data for residue items "
+            f"{sorted(missing)}; add an entry to the ruminant or monogastric "
+            "feed category tables (column N_g_per_kg_DM)."
         )
-    items_df["n_content_g_per_kg"] = items_df["n_content_g_per_kg"].fillna(
-        fallback_n_content
-    )
 
     # Calculate N₂O emission efficiency (direct + indirect leaching)
     # N content (kg N / kg DM)
