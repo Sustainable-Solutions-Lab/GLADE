@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -414,7 +415,7 @@ if __name__ == "__main__":
     logger = setup_script_logging(snakemake.log[0])
 
     logger.info("Loading solved network from %s", snakemake.input.network)
-    network = pypsa.Network(snakemake.input.network)
+    network = load_solved_network(snakemake.input.network)
 
     slack_df = _build_food_slack_df(network)
     demand = _aggregate_demand_by_group(network)

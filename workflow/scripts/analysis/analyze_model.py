@@ -52,6 +52,7 @@ from workflow.scripts.analysis.extract_statistics import (
     extract_luc_breakdown,
 )
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.snakemake_utils import load_solved_network
 
 
 def write_empty_outputs(output) -> None:
@@ -227,7 +228,7 @@ def main() -> None:
         return
 
     try:
-        n = pypsa.Network(snakemake.input.network)
+        n = load_solved_network(snakemake.input.network)
     except (KeyError, Exception) as e:
         logger.warning(
             "Failed to load network (%s) — likely an unsolved model. "

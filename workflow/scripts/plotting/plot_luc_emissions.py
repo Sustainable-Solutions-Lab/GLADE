@@ -22,6 +22,7 @@ import xarray as xr
 matplotlib.use("pdf")
 
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +318,7 @@ def _plot_raster_map(
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
-    network = pypsa.Network(snakemake.input.network)  # type: ignore[name-defined]
+    network = load_solved_network(snakemake.input.network)  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
     resource_classes_path: str = snakemake.input.resource_classes  # type: ignore[name-defined]
     output_bar = Path(snakemake.output.bar_pdf)  # type: ignore[name-defined]

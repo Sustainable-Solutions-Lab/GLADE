@@ -19,6 +19,7 @@ import pypsa
 matplotlib.use("pdf")
 
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,7 @@ def _plot_map(by_region: pd.DataFrame, gdf: gpd.GeoDataFrame, output_pdf: Path) 
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
 
-    network = pypsa.Network(snakemake.input.network)  # type: ignore[name-defined]
+    network = load_solved_network(snakemake.input.network)  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
     output_pdf = Path(snakemake.output.pdf)  # type: ignore[name-defined]
     output_csv = Path(snakemake.output.csv)  # type: ignore[name-defined]

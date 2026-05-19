@@ -40,6 +40,7 @@ from workflow.scripts.plotting.plot_crop_production_map import (
     _setup_regions,
     crop_groups_from_config,
 )
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -738,7 +739,7 @@ def main() -> None:
     )
 
     # Load solved network and extract trade flows
-    n = pypsa.Network(network_path)
+    n = load_solved_network(network_path)
     trade_flows = _get_top_trade_flows(n, gdf, N_TOP_FLOWS, crop_to_group)
     logger.info(
         "Selected %d trade flows (max %.1f Mt, min %.1f Mt)",

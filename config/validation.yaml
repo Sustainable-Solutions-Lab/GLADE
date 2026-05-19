@@ -28,6 +28,9 @@ validation:
 cost_calibration:
   enabled: false
 
+food_demand_calibration:
+  enabled: false
+
 health:
   value_per_yll: 0
 

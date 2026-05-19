@@ -7,12 +7,49 @@
 from pathlib import Path
 import sys
 
+import pypsa
+
 # Add workflow directory to path for imports
 _workflow_dir = Path(__file__).parent.parent
 if str(_workflow_dir) not in sys.path:
     sys.path.insert(0, str(_workflow_dir))
 
 from scenario_generators import expand_scenario_defs  # noqa: E402
+
+
+class FailedSolveError(RuntimeError):
+    """Raised when a downstream rule tries to read a solve output that is
+    actually the empty placeholder written by solve_model.py when the solve
+    failed (infeasible, unbounded, time-limited, solver error).
+
+    The placeholder behaviour is intentional - GSA / scenario sweeps want a
+    handful of failed solves to leave the rest of the DAG runnable - but
+    individual analysis or plotting rules must surface a clear error rather
+    than crash on an unreadable netcdf.
+    """
+
+
+def load_solved_network(path: str | Path) -> pypsa.Network:
+    """Load a solved PyPSA network, raising a clear error on failed solves.
+
+    A failed solve writes a zero-byte placeholder at ``path`` (see
+    ``workflow/scripts/solve_model.py``); attempting to read that with
+    ``pypsa.Network(path)`` produces an opaque netcdf parser traceback.
+    Detect the placeholder up front and raise ``FailedSolveError`` with
+    enough context for the user to find the offending solve log.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Solved network not found: {p}")
+    if p.stat().st_size == 0:
+        raise FailedSolveError(
+            f"Solved network at {p} is an empty placeholder, which means the "
+            "upstream solve failed (infeasible, unbounded, time-limited, or "
+            "solver error). Inspect the corresponding solve_model log under "
+            "logs/{name}/solve_model_scen-*.log for the IIS / solver message, "
+            "then rerun the solve once fixed."
+        )
+    return pypsa.Network(str(p))
 
 
 def _recursive_update(target: dict, source: dict) -> dict:

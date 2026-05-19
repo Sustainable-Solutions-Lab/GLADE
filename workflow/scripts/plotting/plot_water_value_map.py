@@ -25,9 +25,9 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
-import pypsa
 
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def plot_water_value_map(
     solved_network_path: Path, regions_path: Path, output_path: Path
 ) -> None:
     logger.info("Loading solved network from %s", solved_network_path)
-    n = pypsa.Network(str(solved_network_path))
+    n = load_solved_network(solved_network_path)
 
     water_buses = n.buses.static[n.buses.static["carrier"] == "water"]
     if water_buses.empty:

@@ -28,6 +28,7 @@ import pypsa
 from workflow.scripts import constants
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_health_cluster_population
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -715,7 +716,7 @@ def build_health_region_table(
 
 def main() -> None:
     logger = setup_script_logging(snakemake.log[0])
-    n = pypsa.Network(snakemake.input.network)  # type: ignore[name-defined]
+    n = load_solved_network(snakemake.input.network)  # type: ignore[name-defined]
     logger.info("Loaded network with objective %.3e", n.objective)
 
     health_inputs = HealthInputs(

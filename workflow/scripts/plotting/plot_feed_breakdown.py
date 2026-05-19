@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +211,7 @@ def _plot_feed_breakdown(wide: pd.DataFrame, output_pdf: Path) -> None:
 if __name__ == "__main__":
     logger = setup_script_logging(snakemake.log[0])
 
-    network = pypsa.Network(snakemake.input.network)
+    network = load_solved_network(snakemake.input.network)
 
     feed_long = _extract_feed_use(network)
 

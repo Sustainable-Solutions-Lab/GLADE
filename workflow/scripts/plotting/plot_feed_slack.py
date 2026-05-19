@@ -24,6 +24,7 @@ import pypsa
 
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
+from workflow.scripts.snakemake_utils import load_solved_network
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,7 @@ if __name__ == "__main__":
     logger = setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
     logger.info("Loading solved network from %s", snakemake.input.network)  # type: ignore[name-defined]
-    network = pypsa.Network(snakemake.input.network)  # type: ignore[name-defined]
+    network = load_solved_network(snakemake.input.network)  # type: ignore[name-defined]
 
     slack_df = _aggregate_slack(network)
     baseline = _aggregate_baseline_by_category(network)
