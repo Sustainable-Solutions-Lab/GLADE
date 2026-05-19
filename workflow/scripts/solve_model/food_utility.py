@@ -294,7 +294,24 @@ def add_piecewise_food_utility(
     # more attractive than any negative-utility block - causing the solver to
     # route all consumption of negative-mu foods through overflow and
     # effectively ignoring the piecewise schedule.
-    overflow_utilities = utilities.isel(block_id=-1)
+    #
+    # The overflow utility is the marginal utility of each link's *last*
+    # real block. ``utilities.isel(block_id=-1)`` would pick the last
+    # column of the padded matrix, which is 0.0 for any link with fewer
+    # blocks than the global max -- re-opening the very loophole this
+    # term exists to close.
+    last_block_utility = (
+        rows.sort_values(["name", "block_id"])
+        .groupby("name", sort=False)
+        .last()["marginal_utility_bnusd_per_mt"]
+        .reindex(link_names)
+        .astype(float)
+    )
+    overflow_utilities = xr.DataArray(
+        last_block_utility.to_numpy(),
+        coords={"name": link_names},
+        dims="name",
+    )
 
     # Combine both contributions into a single objective update.  Each
     # m.objective += <expr> merges <expr> with the full existing objective,
