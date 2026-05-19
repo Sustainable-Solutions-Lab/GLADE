@@ -47,7 +47,7 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
         allowed_countries={"USA"},
         crop_costs=crop_costs,
         global_median_cost=global_median_cost,
-        fertilizer_n_rates={},
+        fertilizer_n_rates={"silage-maize": 0.0},
         rice_methane_factor=0.0,
         rainfed_wetland_rice_ch4_scaling_factor=1.0,
         use_actual_production=False,
