@@ -67,10 +67,16 @@ def compute_gaez_country_yield(
     for ws, yield_path in yield_paths.items():
         yield_df = _load_tidy_variable(yield_path, "yield", "yield_t_per_ha")
         area_path = area_paths.get(ws)
-        if area_path:
-            area_df = _load_tidy_variable(area_path, "harvested_area", "area_ha")
-        else:
-            area_df = _load_tidy_variable(yield_path, "suitable_area", "area_ha")
+        if area_path is None:
+            # The previous behaviour silently fell back to GAEZ
+            # suitable-area weighting, which biases the country-average
+            # yield toward high-suitability cells. Require harvested-area
+            # explicitly so calibration weights are observable.
+            raise ValueError(
+                f"build_fodder_yield_corrections requires a harvested-area "
+                f"input for water_supply='{ws}'"
+            )
+        area_df = _load_tidy_variable(area_path, "harvested_area", "area_ha")
 
         merged = yield_df.merge(area_df, on=["region", "resource_class"], how="inner")
         if merged.empty:
