@@ -82,6 +82,10 @@ def add_diet_stability_constraints(
     )
 
     min_baseline = float(diet_stability_cfg["min_baseline"])
+    if min_baseline <= 0:
+        raise ValueError(
+            "validation.diet_stability.min_baseline must be > 0; " f"got {min_baseline}"
+        )
     deviation_type = diet_stability_cfg["deviation_type"]
     penalty_mode = diet_stability_cfg["penalty_mode"]
 

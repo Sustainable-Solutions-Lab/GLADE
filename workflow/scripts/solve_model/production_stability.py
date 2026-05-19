@@ -414,6 +414,11 @@ def _compute_stability_deviation(
     floor so that near-zero/zero baselines produce finite, bounded deviations.
     """
     if deviation_type == "relative":
+        if min_baseline <= 0:
+            raise ValueError(
+                "production_stability.min_baseline must be > 0 in relative mode; "
+                f"got {min_baseline}"
+            )
         denominator = xr.where(baselines > min_baseline, baselines, min_baseline)
         return (actual - baselines) / denominator
     return actual - baselines
