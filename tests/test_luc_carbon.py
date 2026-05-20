@@ -395,16 +395,16 @@ class TestCorrectSubpixelSOC:
         """A pixel with no agriculture returns observed SOC."""
         soc = np.array([[50.0]], dtype=np.float32)
         crop_f = np.array([[0.0]], dtype=np.float32)
-        grass_f = np.array([[0.0]], dtype=np.float32)
-        nonag_f = np.array([[1.0]], dtype=np.float32)
+        pasture_f = np.array([[0.0]], dtype=np.float32)
+        natural_f = np.array([[1.0]], dtype=np.float32)
         soc_fc = np.array([[0.7]], dtype=np.float32)
         soc_fp = np.array([[0.9]], dtype=np.float32)
 
         soc_c = _correct_subpixel_soc(
             soc,
             crop_f,
-            grass_f,
-            nonag_f,
+            pasture_f,
+            natural_f,
             soc_fc,
             soc_fp,
         )
@@ -418,41 +418,72 @@ class TestCorrectSubpixelSOC:
         """
         soc = np.array([[50.0]], dtype=np.float32)
         crop_f = np.array([[0.3]], dtype=np.float32)
-        grass_f = np.array([[0.3]], dtype=np.float32)
-        nonag_f = np.array([[0.4]], dtype=np.float32)
+        pasture_f = np.array([[0.3]], dtype=np.float32)
+        natural_f = np.array([[0.4]], dtype=np.float32)
         soc_fc = np.array([[0.7]], dtype=np.float32)
         soc_fp = np.array([[0.9]], dtype=np.float32)
 
         soc_c = _correct_subpixel_soc(
             soc,
             crop_f,
-            grass_f,
-            nonag_f,
+            pasture_f,
+            natural_f,
             soc_fc,
             soc_fp,
         )
         expected = 50.0 / (0.4 + 0.3 * 0.7 + 0.3 * 0.9)
         assert soc_c[0, 0] == pytest.approx(expected, rel=1e-4)
 
-    def test_zero_nonag_soc_correction(self):
-        """When nonag_frac is zero, SOC correction still applies via soc_denom."""
+    def test_zero_natural_soc_correction(self):
+        """When natural_frac is zero, SOC correction still applies via soc_denom."""
         soc = np.array([[40.0]], dtype=np.float32)
         crop_f = np.array([[0.5]], dtype=np.float32)
-        grass_f = np.array([[0.5]], dtype=np.float32)
-        nonag_f = np.array([[0.0]], dtype=np.float32)
+        pasture_f = np.array([[0.5]], dtype=np.float32)
+        natural_f = np.array([[0.0]], dtype=np.float32)
         soc_fc = np.array([[0.7]], dtype=np.float32)
         soc_fp = np.array([[0.9]], dtype=np.float32)
 
         soc_c = _correct_subpixel_soc(
             soc,
             crop_f,
-            grass_f,
-            nonag_f,
+            pasture_f,
+            natural_f,
             soc_fc,
             soc_fp,
         )
         # soc_denom = 0 + 0.5*0.7 + 0.5*0.9 = 0.8 > 0, so correction applies
         assert soc_c[0, 0] == pytest.approx(40.0 / 0.8, rel=1e-4)
+
+    def test_natural_grassland_not_depleted(self):
+        """Pixel with managed pasture AND natural grassland: only pasture depleted.
+
+        A pixel that is 0.2 cropland, 0.3 managed pasture, and 0.5
+        natural land (the remaining 0.5 = forest + natural grassland +
+        shrub). Natural grassland is part of natural_frac and must NOT
+        be assigned the pasture SOC depletion factor.
+
+        With the bug (passing total grassland_frac = 0.4 for pasture),
+        the denominator was 0.4 + 0.2*0.7 + 0.4*0.9 = 0.90, inflating
+        recovered SOC. With the fix, only pasture (0.3) is depleted:
+        natural=0.5, denom = 0.5 + 0.2*0.7 + 0.3*0.9 = 0.91.
+        """
+        soc = np.array([[50.0]], dtype=np.float32)
+        crop_f = np.array([[0.2]], dtype=np.float32)
+        pasture_f = np.array([[0.3]], dtype=np.float32)
+        natural_f = np.array([[0.5]], dtype=np.float32)
+        soc_fc = np.array([[0.7]], dtype=np.float32)
+        soc_fp = np.array([[0.9]], dtype=np.float32)
+
+        soc_c = _correct_subpixel_soc(
+            soc,
+            crop_f,
+            pasture_f,
+            natural_f,
+            soc_fc,
+            soc_fp,
+        )
+        expected = 50.0 / (0.5 + 0.2 * 0.7 + 0.3 * 0.9)
+        assert soc_c[0, 0] == pytest.approx(expected, rel=1e-4)
 
 
 class TestDecomposeAGB:
@@ -462,7 +493,7 @@ class TestDecomposeAGB:
         """A pixel that is entirely forest returns observed AGB as forest AGB."""
         agb_obs = np.array([[100.0]], dtype=np.float32)
         crop_f = np.array([[0.0]], dtype=np.float32)
-        grass_f = np.array([[0.0]], dtype=np.float32)
+        pasture_f = np.array([[0.0]], dtype=np.float32)
         forest_f = np.array([[1.0]], dtype=np.float32)
         nonforest_f = np.array([[0.0]], dtype=np.float32)
         agb_crop = np.array([[0.0]], dtype=np.float32)
@@ -472,7 +503,7 @@ class TestDecomposeAGB:
         agb_forest, agb_nf = _decompose_agb(
             agb_obs,
             crop_f,
-            grass_f,
+            pasture_f,
             forest_f,
             nonforest_f,
             agb_crop,
@@ -491,7 +522,7 @@ class TestDecomposeAGB:
         """
         agb_obs = np.array([[48.0]], dtype=np.float32)
         crop_f = np.array([[0.3]], dtype=np.float32)
-        grass_f = np.array([[0.2]], dtype=np.float32)
+        pasture_f = np.array([[0.2]], dtype=np.float32)
         forest_f = np.array([[0.3]], dtype=np.float32)
         nonforest_f = np.array([[0.2]], dtype=np.float32)
         agb_crop = np.array([[0.0]], dtype=np.float32)
@@ -501,7 +532,7 @@ class TestDecomposeAGB:
         agb_forest, agb_nf = _decompose_agb(
             agb_obs,
             crop_f,
-            grass_f,
+            pasture_f,
             forest_f,
             nonforest_f,
             agb_crop,
@@ -515,7 +546,7 @@ class TestDecomposeAGB:
         """A pixel with no forest returns zero forest AGB."""
         agb_obs = np.array([[10.0]], dtype=np.float32)
         crop_f = np.array([[0.5]], dtype=np.float32)
-        grass_f = np.array([[0.2]], dtype=np.float32)
+        pasture_f = np.array([[0.2]], dtype=np.float32)
         forest_f = np.array([[0.0]], dtype=np.float32)
         nonforest_f = np.array([[0.3]], dtype=np.float32)
         agb_crop = np.array([[0.0]], dtype=np.float32)
@@ -525,7 +556,7 @@ class TestDecomposeAGB:
         agb_forest, agb_nf = _decompose_agb(
             agb_obs,
             crop_f,
-            grass_f,
+            pasture_f,
             forest_f,
             nonforest_f,
             agb_crop,
@@ -540,7 +571,7 @@ class TestDecomposeAGB:
         # observed AGB is very low, but nonforest zone AGB explains most of it
         agb_obs = np.array([[3.0]], dtype=np.float32)
         crop_f = np.array([[0.0]], dtype=np.float32)
-        grass_f = np.array([[0.0]], dtype=np.float32)
+        pasture_f = np.array([[0.0]], dtype=np.float32)
         forest_f = np.array([[0.3]], dtype=np.float32)
         nonforest_f = np.array([[0.7]], dtype=np.float32)
         agb_crop = np.array([[0.0]], dtype=np.float32)
@@ -550,7 +581,7 @@ class TestDecomposeAGB:
         agb_forest, _ = _decompose_agb(
             agb_obs,
             crop_f,
-            grass_f,
+            pasture_f,
             forest_f,
             nonforest_f,
             agb_crop,
@@ -559,6 +590,42 @@ class TestDecomposeAGB:
         )
         # (3.0 - 0.7*10) / 0.3 = (3 - 7) / 0.3 = -13.3 → clipped to 0
         assert agb_forest[0, 0] == pytest.approx(0.0)
+
+    def test_natural_grassland_treated_as_nonforest(self):
+        """Natural grassland contributes nonforest AGB, not pasture AGB.
+
+        Pixel: 0.1 cropland (AGB=0), 0.1 managed pasture (AGB=5),
+        0.3 forest, 0.5 nonforest natural (includes natural grassland;
+        zone AGB=10).
+        Observed = 0.1*0 + 0.1*5 + 0.3*F + 0.5*10 = 0.5 + 0.3*F + 5
+                 = 5.5 + 0.3*F
+        If observed = 32.5, then 0.3*F = 27, so F = 90.
+
+        With the bug (passing total grassland_frac in place of pasture
+        for the agricultural AGB), excess pasture AGB would have been
+        attributed and forest AGB would be biased downward.
+        """
+        agb_obs = np.array([[32.5]], dtype=np.float32)
+        crop_f = np.array([[0.1]], dtype=np.float32)
+        pasture_f = np.array([[0.1]], dtype=np.float32)
+        forest_f = np.array([[0.3]], dtype=np.float32)
+        nonforest_f = np.array([[0.5]], dtype=np.float32)
+        agb_crop = np.array([[0.0]], dtype=np.float32)
+        agb_past = np.array([[5.0]], dtype=np.float32)
+        agb_nf_zone = np.array([[10.0]], dtype=np.float32)
+
+        agb_forest, agb_nf = _decompose_agb(
+            agb_obs,
+            crop_f,
+            pasture_f,
+            forest_f,
+            nonforest_f,
+            agb_crop,
+            agb_past,
+            agb_nf_zone,
+        )
+        assert agb_forest[0, 0] == pytest.approx(90.0, rel=1e-4)
+        assert agb_nf[0, 0] == pytest.approx(10.0)
 
 
 # ---------------------------------------------------------------------------

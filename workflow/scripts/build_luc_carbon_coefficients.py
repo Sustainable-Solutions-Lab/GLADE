@@ -66,8 +66,8 @@ def _zone_parameters(path: str) -> dict[str, np.ndarray]:
 def _correct_subpixel_soc(
     soc_0_30: np.ndarray,
     cropland_frac: np.ndarray,
-    grassland_frac: np.ndarray,
-    nonag_frac: np.ndarray,
+    pasture_frac: np.ndarray,
+    natural_frac: np.ndarray,
     soc_factor_crop: np.ndarray,
     soc_factor_past: np.ndarray,
 ) -> np.ndarray:
@@ -76,9 +76,13 @@ def _correct_subpixel_soc(
     The observed 0-30 cm SOC is a mixture of natural-state SOC and
     depleted agricultural SOC (``soc_natural * soc_factor``).  We
     invert the mixing to recover the natural-state SOC.
+
+    Only managed agricultural land (cropland and managed pasture)
+    carries depletion factors; natural grassland (savanna, steppe) is
+    part of ``natural_frac`` and contributes at factor 1.0.
     """
     soc_denom = (
-        nonag_frac + cropland_frac * soc_factor_crop + grassland_frac * soc_factor_past
+        natural_frac + cropland_frac * soc_factor_crop + pasture_frac * soc_factor_past
     )
     with np.errstate(divide="ignore", invalid="ignore"):
         soc_corrected = np.where(soc_denom > 0, soc_0_30 / soc_denom, soc_0_30)
@@ -89,7 +93,7 @@ def _correct_subpixel_soc(
 def _decompose_agb(
     agb_obs: np.ndarray,
     cropland_frac: np.ndarray,
-    grassland_frac: np.ndarray,
+    pasture_frac: np.ndarray,
     forest_frac: np.ndarray,
     nonforest_frac: np.ndarray,
     agb_crop: np.ndarray,
@@ -103,6 +107,10 @@ def _decompose_agb(
     then dividing by the forest fraction.  Non-forest natural AGB uses
     zone-level estimates (shrubland/savanna defaults).
 
+    Only managed agricultural land (cropland and managed pasture)
+    carries agricultural AGB values; natural grassland is part of
+    ``nonforest_frac`` and contributes the zone-level non-forest AGB.
+
     Returns
     -------
     agb_forest : np.ndarray
@@ -111,7 +119,7 @@ def _decompose_agb(
         Non-forest natural AGB (tC/ha).  Zone-level value where
         ``nonforest_frac > 0``, zero otherwise.
     """
-    ag_agb = cropland_frac * agb_crop + grassland_frac * agb_past
+    ag_agb = cropland_frac * agb_crop + pasture_frac * agb_past
     agb_nonforest = np.where(nonforest_frac > 0, agb_nonforest_zone, 0.0)
 
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -173,11 +181,14 @@ def main() -> None:
     lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
     lc_ds = xr.load_dataset(lc_masks_path)
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
-    grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
     pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
     forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
-    nonag_frac = np.clip(1.0 - cropland_frac - grassland_frac, 0.0, 1.0)
-    nonforest_frac = np.clip(nonag_frac - forest_frac, 0.0, None)
+    # Natural (convertible) land = total minus managed agriculture.
+    # Pasture is LUIcube grassland * grazing_intensity (managed pasture
+    # only); the remainder of grassland (savanna, steppe) is natural and
+    # contributes to natural_frac, not to agricultural depletion.
+    natural_frac = np.clip(1.0 - cropland_frac - pasture_frac, 0.0, 1.0)
+    nonforest_frac = np.clip(natural_frac - forest_frac, 0.0, None)
 
     bgb_ratio_nat = params["bgb_ratio_nat"][zone_idx]
     bgb_ratio_nonforest = params["bgb_ratio_nonforest"][zone_idx]
@@ -198,8 +209,8 @@ def main() -> None:
     soc_0_30_nat = _correct_subpixel_soc(
         soc_0_30,
         cropland_frac,
-        grassland_frac,
-        nonag_frac,
+        pasture_frac,
+        natural_frac,
         soc_factor_crop,
         soc_factor_past,
     )
@@ -208,7 +219,7 @@ def main() -> None:
     agb_forest, agb_nonforest = _decompose_agb(
         agb_obs,
         cropland_frac,
-        grassland_frac,
+        pasture_frac,
         forest_frac,
         nonforest_frac,
         agb_crop,
@@ -259,12 +270,15 @@ def main() -> None:
     lef_spared = -regrowth
 
     # --- Conversion shares: fraction of convertible land that is forest vs. non-forest ---
+    # Convertible = natural land (1 - cropland - pasture). Non-forest
+    # natural land now includes natural grassland (savanna, steppe),
+    # which is convertible to managed pasture or cropland.
     with np.errstate(divide="ignore", invalid="ignore"):
-        share_forest = np.where(nonag_frac > 0, forest_frac / nonag_frac, 0.0).astype(
-            np.float32
-        )
+        share_forest = np.where(
+            natural_frac > 0, forest_frac / natural_frac, 0.0
+        ).astype(np.float32)
         share_nonforest = np.where(
-            nonag_frac > 0, nonforest_frac / nonag_frac, 0.0
+            natural_frac > 0, nonforest_frac / natural_frac, 0.0
         ).astype(np.float32)
 
     pulses_ds = xr.Dataset(
@@ -434,8 +448,8 @@ def main() -> None:
             share_src = NumPyRasterSource(
                 conv_share.astype(np.float32), **raster_kwargs
             )
-            # Weight shares by nonag_frac * mask to get area-weighted mean share
-            nonag_weight = mask_float * nonag_frac
+            # Weight shares by natural_frac * mask to get area-weighted mean share
+            nonag_weight = mask_float * natural_frac
             nonag_weight_src = NumPyRasterSource(
                 nonag_weight.astype(np.float32),
                 xmin=xmin,
