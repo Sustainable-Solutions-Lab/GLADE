@@ -355,13 +355,21 @@ def _match_baseline_to_consume_links(
     matched["target_mt"] = intake_target / flw_mult
 
     if food_demand_multiplier is not None:
-        demand_mult = (
-            matched["food"]
-            .astype(str)
-            .map(food_demand_multiplier)
-            .fillna(1.0)
-            .to_numpy()
-        )
+        food_names = matched["food"].astype(str)
+        mapped = food_names.map(food_demand_multiplier)
+        missing_foods = sorted(food_names[mapped.isna()].unique())
+        if missing_foods:
+            # Foods consumed in the network but absent from the
+            # food_demand calibration: surfaces stale or incomplete
+            # calibration data. Fall back to multiplier=1.0 for these
+            # foods but record the divergence so it is not hidden.
+            logger.warning(
+                "food_demand calibration missing %d food(s); using "
+                "multiplier=1.0 for: %s",
+                len(missing_foods),
+                ", ".join(missing_foods),
+            )
+        demand_mult = mapped.fillna(1.0).to_numpy()
         matched["target_mt"] = matched["target_mt"] * demand_mult
         n_adjusted = int((demand_mult != 1.0).sum())
         logger.info(
@@ -421,6 +429,12 @@ def add_food_slack_generators(
         country=countries,
     )
 
+    # Negative slack: p in [-p_nom, 0] withdraws from the bus when
+    # supply exceeds the fixed baseline target. Objective contribution
+    # is marginal_cost * p = (-slack_cost) * (negative p) = +slack_cost
+    # * |p|, so withdrawals are correctly penalised at slack_cost per
+    # Mt. Verified that n.statistics.opex() and energy_balance() both
+    # interpret the sign correctly.
     neg_names = pd.Index(
         "slack:food_negative:" + pd.Index(foods) + ":" + pd.Index(countries),
         dtype="object",
@@ -1508,14 +1522,15 @@ def run_solve(
         add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
     # Add production stability constraints (per-link for both crops and animals).
-    # Resolve the "calibrated" sentinel before any downstream code reads
-    # l1_cost, even when stability is disabled (callers still touch
-    # stability_cfg after the optimisation, e.g. for objective breakdown).
-    calibrated_l1_yaml = getattr(smk.input, "prod_stability_calibration", None)
-    stability_cfg = resolve_calibrated_l1_costs(
-        smk.params.production_stability, calibrated_l1_yaml
-    )
+    # Resolve the "calibrated" sentinel before stability is wired into the
+    # model. When stability is disabled, leave the config unresolved: the
+    # downstream objective breakdown is also gated on `enabled` (see below),
+    # so callers can disable stability without needing the calibration
+    # file.
+    stability_cfg = smk.params.production_stability
     if stability_cfg["enabled"]:
+        calibrated_l1_yaml = getattr(smk.input, "prod_stability_calibration", None)
+        stability_cfg = resolve_calibrated_l1_costs(stability_cfg, calibrated_l1_yaml)
         slack_marginal_cost = float(smk.params.slack_marginal_cost)
         with _phase("add_production_stability_constraints"):
             add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
@@ -1678,6 +1693,11 @@ def run_solve(
         # statistics; record them in metadata so the breakdown can account
         # for them.
         #
+        # Gate on stability_cfg["enabled"]: when disabled there are no
+        # stability variables in the model, the sentinel "calibrated" may
+        # remain unresolved in the config, and the float() conversions
+        # below would crash. The breakdown is also a no-op in that case.
+        #
         # The cost coefficient used here must mirror what
         # _add_animal_l1_penalty applies in production_stability.py:
         # * animal_feed_l1_cost set: penalty uses that value directly with
@@ -1688,34 +1708,35 @@ def run_solve(
         #   Mha-equivalent units and the breakdown coefficient is land_l1.
         # In both cases, animal_l1 * sum(abs_dev.solution) reproduces the
         # actual objective contribution exactly.
-        animal_l1_override = stability_cfg["animal_feed_l1_cost"]
-        land_l1 = float(stability_cfg["land_l1_cost"])
-        animal_l1 = (
-            float(animal_l1_override) if animal_l1_override is not None else land_l1
-        )
-        stability_cost = 0.0
-        for var_name, cost in [
-            ("crop_stability_abs_dev", land_l1),
-            ("grassland_stability_abs_dev", land_l1),
-            ("animal_stability_abs_dev", animal_l1),
-            ("land_conversion_stability_abs_dev", land_l1),
-        ]:
-            if var_name in n.model.variables:
-                sol = n.model.variables[var_name].solution
-                stability_cost += cost * float(sol.sum())
-        quad_cost = float(stability_cfg["quadratic_cost"])
-        for var_name in [
-            "crop_stability_dev",
-            "grassland_stability_dev",
-            "animal_stability_dev",
-            "land_conversion_stability_dev",
-        ]:
-            if var_name in n.model.variables:
-                sol = n.model.variables[var_name].solution
-                cost = quad_cost
-                stability_cost += 0.5 * cost * float((sol * sol).sum())
-        if abs(stability_cost) > 1e-12:
-            n.meta["production_stability_cost"] = stability_cost
+        if stability_cfg["enabled"]:
+            animal_l1_override = stability_cfg["animal_feed_l1_cost"]
+            land_l1 = float(stability_cfg["land_l1_cost"])
+            animal_l1 = (
+                float(animal_l1_override) if animal_l1_override is not None else land_l1
+            )
+            stability_cost = 0.0
+            for var_name, cost in [
+                ("crop_stability_abs_dev", land_l1),
+                ("grassland_stability_abs_dev", land_l1),
+                ("animal_stability_abs_dev", animal_l1),
+                ("land_conversion_stability_abs_dev", land_l1),
+            ]:
+                if var_name in n.model.variables:
+                    sol = n.model.variables[var_name].solution
+                    stability_cost += cost * float(sol.sum())
+            quad_cost = float(stability_cfg["quadratic_cost"])
+            for var_name in [
+                "crop_stability_dev",
+                "grassland_stability_dev",
+                "animal_stability_dev",
+                "land_conversion_stability_dev",
+            ]:
+                if var_name in n.model.variables:
+                    sol = n.model.variables[var_name].solution
+                    cost = quad_cost
+                    stability_cost += 0.5 * cost * float((sol * sol).sum())
+            if abs(stability_cost) > 1e-12:
+                n.meta["production_stability_cost"] = stability_cost
 
         # Diet-stability post-hoc cost (separate from production stability so
         # the objective breakdown can show them as distinct terms).
