@@ -402,6 +402,12 @@ if __name__ == "__main__":
     )
     harvest_tidy = _build_tidy_harvested_area(harvarea_df, regions_gdf)
 
+    # A yield-less output is allowed at the per-(crop, water_supply) level
+    # (CROPGRIDS-backed crops are rainfed-only, so this only applies if a
+    # CROPGRIDS crop is configured but has no harvested area in any
+    # configured region); ``build_model`` raises a clear error if every
+    # water supply for a crop is empty.
+
     yields_out.parent.mkdir(parents=True, exist_ok=True)
     harvest_out.parent.mkdir(parents=True, exist_ok=True)
     yields_tidy.to_csv(yields_out, index=False)

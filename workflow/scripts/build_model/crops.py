@@ -159,6 +159,13 @@ def add_regional_crop_production_links(
             key = f"{crop}_yield_{ws}"
             crop_yields = yields_data[key].copy()
 
+            # When every configured region has zero/missing yield for this
+            # (crop, ws), the pivot in _load_crop_yield_table drops the
+            # "yield" column. Skip; ``build_model`` already raised at the
+            # per-crop level if every water supply was empty.
+            if "yield" not in crop_yields.columns:
+                continue
+
             df = crop_yields.reset_index()
             df["name"] = (
                 "produce:"

@@ -1378,6 +1378,56 @@ def load_direct_food_items(
     return result, direct_food_names
 
 
+def _build_producible_food_set(
+    foods_df: pd.DataFrame,
+    food_groups_df: pd.DataFrame,
+    configured_crops: set[str],
+    configured_animal_products: set[str],
+    animal_co_products: dict,
+) -> set[str]:
+    """Return the set of foods that can be produced with the configured set.
+
+    A food is producible when any of:
+      * it is listed in ``animal_products.include`` (animal-derived foods
+        like ``meat-cattle``, ``dairy``, ``eggs``), produced by
+        ``animal_production`` links rather than a crop-pathway in
+        ``foods.csv``;
+      * it is an animal co-product (``animal_products.co_products``) whose
+        ``yield_per_retail`` mapping references at least one configured
+        animal product (e.g. ``rendered-fat`` from ``meat-cattle``);
+      * ``foods.csv`` has at least one pathway with the food as output
+        and a crop in the configured ``crops`` list.
+
+    Foods that match none of the above are unreachable: their food bus has
+    no upstream producer, so any baseline-diet target for them would
+    saturate validation slack at solve time. The estimate_baseline_diet
+    output is filtered to this set; ``estimate_baseline_diet.log`` lists
+    what was dropped.
+    """
+    pathway_crops_by_food: dict[str, set[str]] = {}
+    for _, row in foods_df.iterrows():
+        food = str(row["food"])
+        crop = str(row["crop"])
+        pathway_crops_by_food.setdefault(food, set()).add(crop)
+
+    producible: set[str] = set(configured_animal_products)
+
+    # Co-products: producible if any source product is configured.
+    for co_product, spec in animal_co_products.items():
+        sources = set((spec.get("yield_per_retail") or {}).keys())
+        if sources & configured_animal_products:
+            producible.add(str(co_product))
+
+    all_known_foods = set(food_groups_df["food"].astype(str))
+    for food in all_known_foods:
+        if food in producible:
+            continue
+        crops_for_food = pathway_crops_by_food.get(food, set())
+        if crops_for_food & configured_crops:
+            producible.add(food)
+    return producible
+
+
 def main():
     dietary_intake_path = snakemake.input.dietary_intake
     gbd_exposure_path = snakemake.input.gbd_exposure
@@ -1401,6 +1451,11 @@ def main():
     food_groups_included = list(snakemake.params.food_groups_included)
     byproducts = list(snakemake.params.byproducts)
     fbs_override_foods = list(snakemake.params.fbs_override_foods)
+    configured_crops = {str(c) for c in snakemake.params.configured_crops}
+    configured_animal_products = {
+        str(p) for p in snakemake.params.configured_animal_products
+    }
+    animal_co_products = dict(snakemake.params.animal_co_products)
     # Food groups for which GBD provides intake exposure data; the
     # baseline-diet anchors to GBD for these. Sourced from
     # health.risk_factors so the diet anchor and the health-impact RR
@@ -1596,6 +1651,34 @@ def main():
     result = result.sort_values(["country", "food_group", "food"]).reset_index(
         drop=True
     )
+
+    # Drop foods whose entire production graph is unreachable given the
+    # configured crops and animal products. ``enforce_baseline_diet`` pins
+    # consumption to this table at solve time; an unreachable food (e.g.
+    # banana, coffee, cocoa in a Europe-only run) would otherwise force
+    # the LP to drag validation slack to absorb the historical intake.
+    producible_foods = _build_producible_food_set(
+        foods_df,
+        food_groups_df,
+        configured_crops,
+        configured_animal_products,
+        animal_co_products,
+    )
+    all_foods = set(result["food"].unique())
+    dropped_foods = sorted(all_foods - producible_foods)
+    if dropped_foods:
+        dropped_mt = result.loc[
+            result["food"].isin(dropped_foods), "consumption_g_per_day"
+        ].sum()
+        logger.warning(
+            "Dropping %d food(s) from baseline diet: no producing pathway "
+            "exists under configured crops + animal products. Total dropped "
+            "intake (sum across countries, g/day): %.1f. Foods: %s",
+            len(dropped_foods),
+            dropped_mt,
+            ", ".join(dropped_foods),
+        )
+        result = result[result["food"].isin(producible_foods)].reset_index(drop=True)
 
     # Validation: shares x group totals should reconstruct the group totals.
     # Run BEFORE the FBS override so that override-driven deviations from

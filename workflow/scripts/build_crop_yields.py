@@ -283,5 +283,9 @@ if __name__ == "__main__":
             ["region", "resource_class", "variable"], inplace=True, ignore_index=True
         )
 
+    # A yield-less output is allowed at the per-(crop, water_supply) level
+    # (e.g. wetland-rice rainfed in Europe); ``build_model`` raises a
+    # clear error if every water supply for a crop is empty.
+
     Path(snakemake.output[0]).parent.mkdir(parents=True, exist_ok=True)  # type: ignore[name-defined]
     tidy_df.to_csv(snakemake.output[0], index=False)  # type: ignore[name-defined]

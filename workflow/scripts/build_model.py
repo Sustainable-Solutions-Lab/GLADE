@@ -245,6 +245,32 @@ if __name__ == "__main__":
 
             yields_data[yields_key] = yields_df
 
+    # Per-crop coverage check: a crop is viable only if at least one of its
+    # configured water supplies has a positive yield in some configured
+    # region. Failing here means the build cannot place any production link
+    # for the crop, so downstream rules would silently drop it and any
+    # baseline-diet entry derived from it would saturate validation slack.
+    unviable_crops: list[str] = []
+    for crop in snakemake.params.crops:
+        any_yield = False
+        for ws in ("r", "i"):
+            key = f"{crop}_yield_{ws}"
+            df = yields_data.get(key)
+            if df is None or df.empty:
+                continue
+            if "yield" in df.columns and (df["yield"].fillna(0.0) > 0).any():
+                any_yield = True
+                break
+        if not any_yield:
+            unviable_crops.append(crop)
+    if unviable_crops:
+        raise ValueError(
+            "No configured region has positive yield (rainfed or irrigated) "
+            f"for crop(s): {sorted(unviable_crops)}. Either remove them from "
+            "`crops` in the config, or extend `countries` to include regions "
+            "where they can be grown."
+        )
+
     # Apply per-(country, crop) yield corrections. Two sources, applied
     # multiplicatively through the same per-cell rescaling:
     #   * fodder_yield_corrections: Eurostat-anchored FDD-crop corrections,

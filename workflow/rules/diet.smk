@@ -341,6 +341,18 @@ rule estimate_baseline_diet:
         gbd_anchored_groups=config["health"]["risk_factors"],
         source_basis=config["diet"]["source_basis"],
         weight_conversion=config["weight_conversion"],
+        # Used to drop foods whose entire production graph is unreachable
+        # given the configured crops and animal products (e.g. coffee/cocoa
+        # in a Europe-only run). Without this, ``enforce_baseline_diet``
+        # would force validation slack to absorb the unproducible intake.
+        configured_crops=config["crops"],
+        configured_animal_products=config["animal_products"]["include"],
+        # Animal co-products (e.g. rendered-fat from meat-cattle / meat-pig)
+        # are producible whenever at least one of their source products is
+        # configured. Without this they would be misclassified as
+        # unproducible and dropped from the baseline diet, leaving their
+        # food_consumption links uncovered by the piecewise-utility blocks.
+        animal_co_products=config["animal_products"]["co_products"],
     output:
         baseline_diet="<processing>/{name}/baseline_diet.csv",
     group:
