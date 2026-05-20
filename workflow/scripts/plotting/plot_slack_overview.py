@@ -41,34 +41,36 @@ CATEGORIES = [
 def _collect_production_slack(
     network: pypsa.Network, slack_cost: float
 ) -> list[dict[str, object]]:
-    """Extract production stability slack from network metadata."""
+    """Extract production stability slack from network metadata.
+
+    Slack data is nested as {label: {side: {link: value}}} where side is
+    "lower" or "upper". A legacy {label: {link: value}} layout (lower
+    only) is also accepted.
+    """
     records: list[dict[str, object]] = []
     slack_data = network.meta.get("production_stability_slack", {})
 
-    if "crop" in slack_data:
-        total = sum(slack_data["crop"].values())
-        if total > 1e-6:
-            records.append(
-                {
-                    "category": "Crop production (min)",
-                    "quantity": total,
-                    "unit": "Mt",
-                    "cost_bnusd": total * slack_cost,
-                }
-            )
-
-    if "animal" in slack_data:
-        total = sum(slack_data["animal"].values())
-        if total > 1e-6:
-            records.append(
-                {
-                    "category": "Animal production (min)",
-                    "quantity": total,
-                    "unit": "Mt",
-                    "cost_bnusd": total * slack_cost,
-                }
-            )
-
+    label_titles = {
+        "crop": "Crop production",
+        "grassland": "Grassland production",
+        "animal": "Animal production",
+    }
+    for label, title in label_titles.items():
+        entry = slack_data.get(label)
+        if not entry:
+            continue
+        sides = entry if isinstance(next(iter(entry.values())), dict) else {"lower": entry}
+        for side, links in sides.items():
+            total = sum(links.values())
+            if total > 1e-6:
+                records.append(
+                    {
+                        "category": f"{title} ({'min' if side == 'lower' else 'max'})",
+                        "quantity": total,
+                        "unit": "Mt",
+                        "cost_bnusd": total * slack_cost,
+                    }
+                )
     return records
 
 

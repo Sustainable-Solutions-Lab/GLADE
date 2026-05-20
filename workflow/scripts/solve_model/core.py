@@ -1665,29 +1665,30 @@ def run_solve(
         if abs(piecewise_utility_value) > 1e-12:
             n.meta["food_utility_cost"] = -piecewise_utility_value
 
-        # Extract production stability slack values if present
+        # Extract production stability slack values if present. Both lower
+        # ("_slack") and upper ("_slack_upper") variables are recorded;
+        # they are added symmetrically when hard mode enables slack.
         production_slack = {}
-        if "crop_production_slack" in n.model.variables:
-            crop_slack_sol = n.model.variables["crop_production_slack"].solution
-            # Convert tuple keys to strings for JSON serialization
-            production_slack["crop"] = {
-                str(k): v for k, v in crop_slack_sol.to_series().to_dict().items()
+        for label in ("crop", "grassland", "animal"):
+            lo_name = f"{label}_production_slack"
+            hi_name = f"{label}_production_slack_upper"
+            sols = {}
+            if lo_name in n.model.variables:
+                sols["lower"] = n.model.variables[lo_name].solution
+            if hi_name in n.model.variables:
+                sols["upper"] = n.model.variables[hi_name].solution
+            if not sols:
+                continue
+            production_slack[label] = {
+                side: {str(k): v for k, v in sol.to_series().to_dict().items()}
+                for side, sol in sols.items()
             }
-            total_crop_slack = float(crop_slack_sol.sum())
-            if total_crop_slack > 1e-6:
+            total = sum(float(sol.sum()) for sol in sols.values())
+            if total > 1e-6:
                 logger.info(
-                    "Crop production slack used: %.4f Mt total", total_crop_slack
-                )
-        if "animal_production_slack" in n.model.variables:
-            animal_slack_sol = n.model.variables["animal_production_slack"].solution
-            # Convert tuple keys to strings for JSON serialization
-            production_slack["animal"] = {
-                str(k): v for k, v in animal_slack_sol.to_series().to_dict().items()
-            }
-            total_animal_slack = float(animal_slack_sol.sum())
-            if total_animal_slack > 1e-6:
-                logger.info(
-                    "Animal production slack used: %.4f Mt total", total_animal_slack
+                    "%s production slack used: %.4f Mt total (lower+upper)",
+                    label.capitalize(),
+                    total,
                 )
         if production_slack:
             n.meta["production_stability_slack"] = production_slack
@@ -1728,17 +1729,18 @@ def run_solve(
                 if var_name in n.model.variables:
                     sol = n.model.variables[var_name].solution
                     stability_cost += cost * float(sol.sum())
-            quad_cost = float(stability_cfg["quadratic_cost"])
-            for var_name in [
+            quad_var_names = [
                 "crop_stability_dev",
                 "grassland_stability_dev",
                 "animal_stability_dev",
                 "land_conversion_stability_dev",
-            ]:
-                if var_name in n.model.variables:
-                    sol = n.model.variables[var_name].solution
-                    cost = quad_cost
-                    stability_cost += 0.5 * cost * float((sol * sol).sum())
+            ]
+            if any(name in n.model.variables for name in quad_var_names):
+                quad_cost = float(stability_cfg["quadratic_cost"])
+                for var_name in quad_var_names:
+                    if var_name in n.model.variables:
+                        sol = n.model.variables[var_name].solution
+                        stability_cost += 0.5 * quad_cost * float((sol * sol).sum())
             if abs(stability_cost) > 1e-12:
                 n.meta["production_stability_cost"] = stability_cost
 

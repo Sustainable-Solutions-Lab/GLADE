@@ -78,6 +78,12 @@ def resolve_calibrated_l1_costs(
             or cfg.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL
         )
 
+    # The L1-cost sentinel only affects penalty_mode="l1"; for hard and
+    # quadratic modes the L1 cost is unused, so loading a (possibly
+    # stale) calibration YAML would be a needless coupling.
+    if stability_cfg.get("penalty_mode") != "l1":
+        return stability_cfg
+
     if not _needs_lookup(stability_cfg):
         return stability_cfg
 
@@ -499,18 +505,28 @@ def _add_production_hard_constraints(
             coords={"name": link_names},
             dims="name",
         ).coords
-        prod_slack = m.add_variables(
+        prod_slack_lo = m.add_variables(
             lower=0,
             coords=slack_coords,
             name=f"{label}_production_slack",
         )
+        prod_slack_hi = m.add_variables(
+            lower=0,
+            coords=slack_coords,
+            name=f"{label}_production_slack_upper",
+        )
         m.add_constraints(
-            area + prod_slack >= lower_bounds,
+            area + prod_slack_lo >= lower_bounds,
             name=f"GlobalConstraint-{label}_production_min",
         )
-        m.objective += slack_marginal_cost * prod_slack.sum()
+        m.add_constraints(
+            area - prod_slack_hi <= upper_bounds,
+            name=f"GlobalConstraint-{label}_production_max",
+        )
+        m.objective += slack_marginal_cost * (prod_slack_lo.sum() + prod_slack_hi.sum())
         logger.info(
-            "Added %s production slack variables for %d links (cost=%.1f bn USD/Mha)",
+            "Added %s production slack variables (lower+upper) for %d links "
+            "(cost=%.1f bn USD/Mha)",
             label,
             len(link_names),
             slack_marginal_cost,
@@ -520,11 +536,10 @@ def _add_production_hard_constraints(
             area >= lower_bounds,
             name=f"GlobalConstraint-{label}_production_min",
         )
-
-    m.add_constraints(
-        area <= upper_bounds,
-        name=f"GlobalConstraint-{label}_production_max",
-    )
+        m.add_constraints(
+            area <= upper_bounds,
+            name=f"GlobalConstraint-{label}_production_max",
+        )
 
     n.global_constraints.add(
         [f"{label}_production_min_{name}" for name in link_names],
@@ -696,18 +711,30 @@ def _add_animal_hard_constraints(
             coords={"name": link_names},
             dims="name",
         ).coords
-        animal_slack = m.add_variables(
+        animal_slack_lo = m.add_variables(
             lower=0,
             coords=slack_coords,
             name="animal_production_slack",
         )
+        animal_slack_hi = m.add_variables(
+            lower=0,
+            coords=slack_coords,
+            name="animal_production_slack_upper",
+        )
         m.add_constraints(
-            feed_use + animal_slack >= lower_bounds,
+            feed_use + animal_slack_lo >= lower_bounds,
             name="GlobalConstraint-animal_production_min",
         )
-        m.objective += slack_marginal_cost * animal_slack.sum()
+        m.add_constraints(
+            feed_use - animal_slack_hi <= upper_bounds,
+            name="GlobalConstraint-animal_production_max",
+        )
+        m.objective += slack_marginal_cost * (
+            animal_slack_lo.sum() + animal_slack_hi.sum()
+        )
         logger.info(
-            "Added animal feed use slack variables for %d links (cost=%.1f bn USD/Mt)",
+            "Added animal feed use slack variables (lower+upper) for %d links "
+            "(cost=%.1f bn USD/Mt)",
             len(link_names),
             slack_marginal_cost,
         )
@@ -716,11 +743,10 @@ def _add_animal_hard_constraints(
             feed_use >= lower_bounds,
             name="GlobalConstraint-animal_production_min",
         )
-
-    m.add_constraints(
-        feed_use <= upper_bounds,
-        name="GlobalConstraint-animal_production_max",
-    )
+        m.add_constraints(
+            feed_use <= upper_bounds,
+            name="GlobalConstraint-animal_production_max",
+        )
 
     n.global_constraints.add(
         [f"animal_production_min_{name}" for name in link_names],
@@ -940,6 +966,12 @@ def add_animal_growth_cap_constraints(
     Constrains each animal production link to at most
     ``(1 + max_relative_increase) * baseline_feed_use_mt_dm``, preventing
     unrealistic spatial reallocation of livestock production.
+
+    All (product, feed_category, country) links are constrained. Links
+    with zero baseline (no GLEAM entry) get an upper bound of zero --
+    structurally analogous to the crop growth cap, which prevents
+    introducing new animal products in countries where they were absent
+    in the baseline.
 
     Parameters
     ----------
