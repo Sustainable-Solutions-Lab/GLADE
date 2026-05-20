@@ -98,11 +98,22 @@ def calculate_yields(
 
             if not s_rows.empty:
                 val = pd.to_numeric(s_rows["value"], errors="coerce").sum()
-                unit = str(s_rows.iloc[0]["unit"]).lower()
+                unit = str(s_rows.iloc[0]["unit"]).strip().lower()
 
-                # Handle "1000 Head" units
-                if "1000" in unit:
+                # FAOSTAT QCL livestock-stocks units in current vintages:
+                # "head", "an" (animal), "1000 head", "1000 no" (eggs by
+                # number). Anything else is a vintage we have not
+                # validated; refuse rather than silently scaling.
+                if unit in ("head", "an"):
+                    pass
+                elif unit in ("1000 head", "1000 no"):
                     val *= 1000.0
+                else:
+                    raise ValueError(
+                        f"Unrecognised FAOSTAT QCL stocks unit '{unit}' for "
+                        f"country={country}, product={product}; expected one "
+                        f"of head, an, 1000 head, 1000 no"
+                    )
 
                 stocks = val
 

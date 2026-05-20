@@ -106,26 +106,9 @@ def extract_corrections(
     min_constraints["mu_lower"] = min_constraints["mu"].fillna(0.0).astype(float)
     max_constraints["mu_upper"] = max_constraints["mu"].fillna(0.0).astype(float)
 
-    # Defensive check on linopy's signed-mu convention. The combined
-    # correction = -(mu_lower + mu_upper) only works if:
-    #   mu_lower >= 0  (binding >= gives positive dual)
-    #   mu_upper <= 0  (binding <= gives negative dual)
-    # If a future linopy/PyPSA version returns |mu| for both directions,
-    # the upper-bound corrections would flip sign silently. Fail loudly.
-    bad_lower = min_constraints.loc[min_constraints["mu_lower"] < -1e-9]
-    if not bad_lower.empty:
-        raise ValueError(
-            f"Unexpected negative mu on {prefix} lower (>=) bounds; "
-            f"linopy sign convention may have changed. Examples: "
-            f"{bad_lower['mu_lower'].head().to_dict()}"
-        )
-    bad_upper = max_constraints.loc[max_constraints["mu_upper"] > 1e-9]
-    if not bad_upper.empty:
-        raise ValueError(
-            f"Unexpected positive mu on {prefix} upper (<=) bounds; "
-            f"linopy sign convention may have changed. Examples: "
-            f"{bad_upper['mu_upper'].head().to_dict()}"
-        )
+    # Sanity-check linopy's signed-mu convention.
+    assert (min_constraints["mu_lower"] >= -1e-9).all()
+    assert (max_constraints["mu_upper"] <= 1e-9).all()
 
     # Build per-link correction: -(mu_lower + mu_upper)
     # See module docstring for the sign reasoning.

@@ -75,15 +75,19 @@ if __name__ == "__main__":
         value = float(row["Value"])
         unit = str(row["Unit"]).strip().lower()
 
-        # Normalize unit to kilotonnes (kt)
-        factor = 1.0
-        if unit in ["tonnes", "t"]:
+        # Normalize unit to kilotonnes (kt).
+        # Emission magnitudes span ~3 orders of magnitude across t/kt/Mt;
+        # silently assuming kt for an unrecognised vintage could move totals
+        # by 1000x, so refuse rather than warn.
+        if unit in ("tonnes", "t"):
             factor = 1e-3
-        elif unit in ["kilotonnes", "kt"] or unit in ["gigagrams", "gg"]:
+        elif unit in ("kilotonnes", "kt", "gigagrams", "gg"):
             factor = 1.0
         else:
-            logger.warning(
-                "Unknown unit '%s' for %s - %s. Assuming kt.", unit, item, element
+            raise ValueError(
+                f"Unrecognised FAOSTAT emissions unit '{unit}' for "
+                f"item='{item}', element='{element}'; expected one of "
+                f"tonnes/t/kilotonnes/kt/gigagrams/gg"
             )
 
         records.append(

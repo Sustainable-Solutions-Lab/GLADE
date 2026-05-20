@@ -117,7 +117,22 @@ def _load_agb(
 
     arr_tc = arr.copy()
     mask = np.isfinite(arr_tc)
-    if "tc" not in units:
+    # Detect whether the AGB raster is in carbon (tC/ha, Mg C/ha) or in
+    # biomass dry weight (Mg/ha, t/ha). A naive `"tc" not in units`
+    # substring test would mis-classify "Mg C / ha" (no adjacent "tc")
+    # as biomass and apply the 0.47 carbon conversion. Use explicit
+    # carbon markers instead.
+    cleaned = units.strip().lower().replace(" ", "")
+    carbon_markers = ("tc/ha", "mgc/ha", "tc", "gc/m2")
+    is_carbon = any(marker in cleaned for marker in carbon_markers)
+    biomass_markers = ("mg/ha", "t/ha", "kg/m2")
+    is_biomass = any(marker in cleaned for marker in biomass_markers)
+    if not is_carbon and not is_biomass:
+        raise ValueError(
+            f"Could not classify AGB units '{units}' as carbon vs biomass; "
+            f"add an explicit marker or update prepare_luc_inputs."
+        )
+    if not is_carbon:
         arr_tc[mask] = arr_tc[mask] * 0.47
 
     reproject_src = np.full(arr_tc.shape, NO_DATA, dtype=np.float32)
