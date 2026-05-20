@@ -33,7 +33,7 @@ def extract_baseline_deviation(n: pypsa.Network) -> pd.DataFrame:
         Columns: component, baseline_total, actual_total, abs_deviation, unit
     """
     links = n.links.static
-    p = n.links.dynamic["p0"].loc["now"]
+    p = n.links.dynamic["p0"].loc[n.snapshots[-1]]
 
     rows = []
     for carrier, baseline_col, label, unit in [

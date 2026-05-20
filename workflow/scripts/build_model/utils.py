@@ -399,7 +399,18 @@ def _calculate_manure_n_outputs(
     # can otherwise yield negative excretion, which would flip the downstream
     # fertilizer output and N2O emissions and let the optimizer exploit
     # animal links as a credit on either bus.
-    n_excreted_t_per_t_feed = max(0.0, feed_n_t_per_t_feed - product_n_t_per_t_feed)
+    raw_excretion = feed_n_t_per_t_feed - product_n_t_per_t_feed
+    if raw_excretion < 0.0:
+        logger.warning(
+            "Negative manure-N excretion clamped to 0 for %s / %s: "
+            "feed N %.4g t/t < product N %.4g t/t. Check feed N content and "
+            "animal yield calibration.",
+            product,
+            feed_category,
+            feed_n_t_per_t_feed,
+            product_n_t_per_t_feed,
+        )
+    n_excreted_t_per_t_feed = max(0.0, raw_excretion)
 
     # Look up MMS-based N2O factors for this product and feed category
     mms_factors = manure_n2o_lookup.get((product, feed_category))

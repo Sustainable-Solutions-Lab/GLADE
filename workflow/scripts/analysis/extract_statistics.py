@@ -599,7 +599,14 @@ def _extract_consumption(
     # Add per-capita values
     population = get_country_population(n)
 
-    # Compute per-capita factor - will raise KeyError if country missing
+    # Surface missing countries explicitly: pandas .map silently produces
+    # NaN for unmapped keys (the old "will raise KeyError" comment was
+    # wrong). NaN per-capita factor would then propagate as NaN g/day.
+    missing_countries = sorted(set(df["country"]) - set(population))
+    if missing_countries:
+        raise KeyError(
+            f"Countries missing from population data: {missing_countries[:10]}"
+        )
     df["_per_capita_factor"] = df["country"].map(population) * DAYS_PER_YEAR
 
     df["consumption_g_per_person_day"] = (

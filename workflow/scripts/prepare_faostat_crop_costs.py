@@ -129,6 +129,12 @@ def _compute_revenue_per_ha(
         iso3_codes=iso3_codes,
     )
     qcl_df = qcl_df.dropna(subset=["Value"])
+    # Element 5412 is kg/ha in modern FAOSTAT vintages; element 5419 was
+    # hg/ha in older releases. The conversion factor /1000 below assumes
+    # kg/ha, so a future swap to 5419 would silently produce a 10x error.
+    if "Unit" in qcl_df.columns:
+        unit_set = set(qcl_df["Unit"].astype(str).str.strip().unique())
+        assert unit_set <= {"kg/ha"}, f"FAOSTAT QCL yield units unexpected: {unit_set}"
     qcl_df["country"] = qcl_df["iso3"].str.upper()
     qcl_df["year"] = pd.to_numeric(qcl_df["Year"], errors="coerce").astype(int)
     qcl_df["yield_t_per_ha"] = qcl_df["Value"].astype(float) / 1_000.0

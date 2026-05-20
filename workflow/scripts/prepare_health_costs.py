@@ -985,9 +985,6 @@ def _generate_breakpoint_tables(
                 continue
 
             for cluster_id in cluster_ids:
-                log_values: list[float] = []
-                log_values_low: list[float] = []
-                log_values_high: list[float] = []
                 for intake in grid:
                     rr_val = _evaluate_rr_age_weighted(
                         rr_lookup,
@@ -1018,9 +1015,6 @@ def _generate_breakpoint_tables(
                         key="log_rr_high",
                     )
                     log_rr_high = math.log(rr_val_high)
-                    log_values.append(log_rr)
-                    log_values_low.append(log_rr_low)
-                    log_values_high.append(log_rr_high)
                     risk_breakpoint_rows.append(
                         {
                             "health_cluster": cluster_id,
@@ -1032,25 +1026,9 @@ def _generate_breakpoint_tables(
                             "log_rr_high": log_rr_high,
                         }
                     )
-                if log_values:
-                    # Use the most extreme bounds across mean, low, and high
-                    # to ensure cause breakpoints cover the full uncertainty range
-                    all_log = log_values + log_values_low + log_values_high
-                    cause_log_min[cause] = min(
-                        cause_log_min[cause],
-                        cause_log_min[cause] + min(all_log),
-                    )
-                    cause_log_max[cause] = max(
-                        cause_log_max[cause],
-                        cause_log_max[cause] + max(all_log),
-                    )
-
-    # The cause log min/max above tracked per-cluster extremes incorrectly
-    # because we accumulated across clusters. Recompute correctly: for each
-    # cause, sum the min (max) log_rr across risk factors, taking the most
-    # extreme value across all clusters.
-    cause_log_min = dict.fromkeys(relevant_causes, 0.0)
-    cause_log_max = dict.fromkeys(relevant_causes, 0.0)
+    # Aggregate per-cause log_rr bounds across risk factors and clusters.
+    # For each cause, sum the most extreme log_rr (across mean / low /
+    # high uncertainty bounds and across all clusters) over risk factors.
     if risk_breakpoint_rows:
         bp_df = pd.DataFrame(risk_breakpoint_rows)
         for cause in relevant_causes:

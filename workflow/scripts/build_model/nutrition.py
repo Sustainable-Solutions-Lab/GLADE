@@ -204,6 +204,17 @@ def add_food_nutrition_links(
     _lw = loss_waste.copy()
     _lw["waste_fraction"] = _lw["waste_fraction"].clip(0.0, 1.0)
     _lw["multiplier"] = 1.0 - _lw["waste_fraction"]
+    extreme = _lw[_lw["multiplier"] <= 0.01]
+    if not extreme.empty:
+        logger.warning(
+            "Clipped %d (country, food_group) waste multipliers at 0.01 "
+            "(waste_fraction >= 0.99). Likely upstream data issue; clipping "
+            "to keep the consume link live. Sample: %s",
+            len(extreme),
+            extreme[["country", "food_group", "waste_fraction"]]
+            .head(5)
+            .to_dict("records"),
+        )
     _lw.loc[_lw["multiplier"] <= 0, "multiplier"] = 0.01
     multiplier_lookup = _lw.set_index(["country", "food_group"])["multiplier"]
     extreme_pairs = set(

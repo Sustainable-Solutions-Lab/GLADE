@@ -16,7 +16,7 @@ Crops handled here bypass the GAEZ pipeline entirely:
     suitability available).
 
 * yield (DM, t/ha)
-    Per-country FAOSTAT QCL yield (element 5419, hg/ha, fresh weight),
+    Per-country FAOSTAT QCL yield (element 5412, kg/ha, fresh weight),
     averaged over the configured ``costs.averaging_period`` window for
     stability, converted to dry matter via ``crop_moisture_content``, and
     broadcast to every (region, resource_class) cell within the country.

@@ -112,8 +112,20 @@ def extract_food_prices(n: pypsa.Network) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
-    # Aggregate by (food, food_group, country) in case of duplicates
-    df = df.groupby(["food", "food_group", "country"], as_index=False).agg(
+    # If duplicates exist across (food, food_group, country), the price
+    # should be identical (it comes from the dual on the same food bus)
+    # while flow-quantity columns sum. agg("first") on price would
+    # silently drop divergent prices; assert uniqueness instead.
+    group_cols = ["food", "food_group", "country"]
+    if df.duplicated(subset=group_cols).any():
+        prices_per_group = df.groupby(group_cols)["price_usd_per_kg"].nunique()
+        if (prices_per_group > 1).any():
+            offenders = prices_per_group[prices_per_group > 1].head().to_dict()
+            raise ValueError(
+                "Duplicate (food, food_group, country) rows with divergent "
+                f"prices in food-price extraction: {offenders}"
+            )
+    df = df.groupby(group_cols, as_index=False).agg(
         {
             "price_usd_per_kg": "first",
             "consumption_mt": "sum",

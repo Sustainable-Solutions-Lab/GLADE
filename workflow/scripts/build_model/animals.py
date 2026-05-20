@@ -534,7 +534,17 @@ def add_feed_to_animal_product_links(
             "Missing food_loss_waste entries for animal (country, group) pairs: "
             f"{missing.to_dict('records')[:5]}"
         )
-    loss_mult = (1.0 - df["loss_frac"].astype(float)).clip(lower=0.01)
+    raw_mult = 1.0 - df["loss_frac"].astype(float)
+    extreme_mask = raw_mult < 0.01
+    if extreme_mask.any():
+        extreme = df.loc[extreme_mask, ["country", "group", "loss_frac"]].head(5)
+        logger.warning(
+            "Clipped %d animal-link loss multipliers at 0.01 (loss_fraction > 0.99). "
+            "Likely upstream data error; clipping to keep the link live. Sample: %s",
+            int(extreme_mask.sum()),
+            extreme.to_dict("records"),
+        )
+    loss_mult = raw_mult.clip(lower=0.01)
     df["loss_multiplier"] = loss_mult
     df["adjusted_efficiency"] = df["efficiency"] * loss_mult
 

@@ -156,7 +156,17 @@ def extract_net_emissions(
         pasture_mtco2eq = pasture_t_n2o * n2o_gwp * 1e-6
 
         total_mtco2eq = emissions["n2o"].get("Manure management & application", 0.0)
-        managed_mtco2eq = max(total_mtco2eq - pasture_mtco2eq, 0.0)
+        raw_managed = total_mtco2eq - pasture_mtco2eq
+        if raw_managed < -1e-3 * max(abs(total_mtco2eq), 1.0):
+            logger.warning(
+                "Manure N2O split: managed residual %.4f MtCO2eq < 0 "
+                "(total=%.4f, pasture=%.4f); clamping to 0. Check "
+                "pasture_n2o_share columns vs link-level N2O totals.",
+                raw_managed,
+                total_mtco2eq,
+                pasture_mtco2eq,
+            )
+        managed_mtco2eq = max(raw_managed, 0.0)
 
         emissions["n2o"].pop("Manure management & application", None)
         emissions["n2o"]["Manure: pasture deposition"] = pasture_mtco2eq
@@ -180,7 +190,17 @@ def extract_net_emissions(
         total_mtco2eq = emissions["ch4"].get(
             "Enteric fermentation & Manure management", 0.0
         )
-        enteric_mtco2eq = max(total_mtco2eq - manure_mtco2eq, 0.0)
+        raw_enteric = total_mtco2eq - manure_mtco2eq
+        if raw_enteric < -1e-3 * max(abs(total_mtco2eq), 1.0):
+            logger.warning(
+                "Animal CH4 split: enteric residual %.4f MtCO2eq < 0 "
+                "(total=%.4f, manure=%.4f); clamping to 0. Check "
+                "manure_ch4_share columns vs link-level CH4 totals.",
+                raw_enteric,
+                total_mtco2eq,
+                manure_mtco2eq,
+            )
+        enteric_mtco2eq = max(raw_enteric, 0.0)
 
         emissions["ch4"].pop("Enteric fermentation & Manure management", None)
         emissions["ch4"]["Enteric fermentation"] = enteric_mtco2eq
