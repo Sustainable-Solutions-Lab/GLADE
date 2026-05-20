@@ -7,8 +7,14 @@
 This module handles biomass exports to the energy sector, including
 infrastructure setup and routing from crops and byproducts. Biomass
 infrastructure is always present to provide a disposal route for
-byproducts that lack feed mappings; set marginal_values_usd_per_tonne
-to 0 for free disposal.
+byproducts that lack feed mappings.
+
+``marginal_values_usd_per_tonne`` is the market price the energy
+sector pays per tonne dry matter. With ``p_min_pu=-1, p_max_pu=0``
+the sink dispatches at p <= 0 (withdraws biomass from the bus), and
+``marginal_cost * p`` enters the objective as a negative cost
+(revenue) for positive prices. Set to 0 for free disposal; negative
+values would represent a cost paid to dispose of biomass.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -191,10 +197,20 @@ def add_biofuel_links(
     if "bus_type" not in biofuel_baseline.columns:
         biofuel_baseline = biofuel_baseline.assign(bus_type="food")
 
-    # Aggregate baseline demand by (source_item, crop, country, bus_type)
+    # Aggregate baseline demand by (source_item, crop, country, bus_type).
+    # Link names below carry only (source_item, country), so the groupby
+    # must produce a unique row per such pair; otherwise n.links.add
+    # would raise on duplicate names.
     grouped = biofuel_baseline.groupby(
         ["source_item", "crop", "country", "bus_type"], as_index=False
     )["demand_mt"].sum()
+    name_keys = grouped[["source_item", "country"]]
+    if name_keys.duplicated().any():
+        dups = name_keys[name_keys.duplicated(keep=False)].drop_duplicates()
+        raise ValueError(
+            "biofuel baseline rows collide on (source_item, country) link "
+            f"names; offending pairs:\n{dups.to_string(index=False)}"
+        )
 
     # Crops with at least one crop_production link in the network. When a
     # crop has no production anywhere (e.g. sugarcane in a Europe-only run),

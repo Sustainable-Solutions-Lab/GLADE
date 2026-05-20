@@ -108,13 +108,20 @@ def add_primary_resources(
         e_nom_min=-np.inf,
         e_min_pu=-1.0,
     )
+    # CO2 aggregator allows negative flow so spare-land sequestration
+    # credits (negative efficiency on emission:co2 from spare_land links)
+    # can propagate to emission:ghg. CH4 and N2O have no sequestration
+    # mechanism in this model - all source links write non-negative
+    # efficiencies (manure CH4, enteric CH4, manure / synthetic N2O) -
+    # so the default p_min_pu=0 is correct for the gas-specific
+    # aggregators.
     n.links.add(
         "aggregate:co2_to_ghg",
         bus0="emission:co2",
         bus1="emission:ghg",
         carrier="emission_aggregation",
         efficiency=1.0,
-        p_min_pu=-1.0,  # allow negative emissions flow
+        p_min_pu=-1.0,
         p_nom_extendable=True,
     )
     n.links.add(
