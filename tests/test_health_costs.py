@@ -18,8 +18,8 @@ from workflow.scripts.prepare_health_costs import (
     _build_intake_caps,
     _build_rr_tables,
     _derive_tmrel_from_rr,
+    _evaluate_log_rr_age_weighted,
     _evaluate_rr,
-    _evaluate_rr_age_weighted,
 )
 from workflow.scripts.prepare_relative_risks import ADULT_AGE_LABELS
 
@@ -186,62 +186,61 @@ class TestEvaluateRR:
 
 
 # ---------------------------------------------------------------------------
-# Tests: _evaluate_rr_age_weighted
+# Tests: _evaluate_log_rr_age_weighted
 # ---------------------------------------------------------------------------
 
 
-class TestEvaluateRRAgeWeighted:
-    """Tests for YLL-weighted effective RR computation."""
+class TestEvaluateLogRRAgeWeighted:
+    """Tests for YLL-weighted effective log(RR) computation."""
 
-    def test_age_constant_returns_original(self):
-        """When all ages have identical RR, age-weighting changes nothing."""
+    def test_age_constant_returns_log(self):
+        """When all ages have identical RR, age-weighting returns log(RR)."""
         table = _make_simple_rr_table()
-        # Uniform weights
         weights: AgeWeights = {
             (0, "CHD", age): 1.0 / len(ADULT_AGES) for age in ADULT_AGES
         }
-        rr_eff = _evaluate_rr_age_weighted(
+        log_rr_eff = _evaluate_log_rr_age_weighted(
             table, "fruits", "CHD", 200.0, weights, cluster_id=0
         )
-        assert rr_eff == pytest.approx(0.8)
+        assert log_rr_eff == pytest.approx(math.log(0.8))
 
-    def test_age_varying_weighted_average(self):
-        """Age-weighted RR is a proper weighted average."""
+    def test_age_varying_old_weighted(self):
+        """All weight on oldest -> log(RR_oldest)."""
         table = _make_age_varying_rr_table()
-        # Put all weight on the oldest age group
         weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
         weights[(0, "CHD", "95+")] = 1.0
 
-        rr_eff = _evaluate_rr_age_weighted(
+        log_rr_eff = _evaluate_log_rr_age_weighted(
             table, "fruits", "CHD", 200.0, weights, cluster_id=0
         )
-        # Should equal the oldest age group's RR
-        assert rr_eff == pytest.approx(0.9)
+        assert log_rr_eff == pytest.approx(math.log(0.9))
 
     def test_age_varying_young_weighted(self):
-        """When weight is on the youngest age, effective RR = youngest RR."""
+        """All weight on youngest -> log(RR_youngest)."""
         table = _make_age_varying_rr_table()
         weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
         weights[(0, "CHD", "25-29")] = 1.0
 
-        rr_eff = _evaluate_rr_age_weighted(
+        log_rr_eff = _evaluate_log_rr_age_weighted(
             table, "fruits", "CHD", 200.0, weights, cluster_id=0
         )
-        assert rr_eff == pytest.approx(0.7)
+        assert log_rr_eff == pytest.approx(math.log(0.7))
 
-    def test_age_varying_mixed_weights(self):
-        """With mixed weights, effective RR is between youngest and oldest."""
+    def test_age_varying_mixed_weights_is_log_geometric_mean(self):
+        """50/50 split: log_rr_eff = 0.5*log(0.7) + 0.5*log(0.9)
+        = log(sqrt(0.7*0.9)) (geometric mean in log space)."""
         table = _make_age_varying_rr_table()
-        # 50/50 split between youngest and oldest
         weights: AgeWeights = {(0, "CHD", age): 0.0 for age in ADULT_AGES}
         weights[(0, "CHD", "25-29")] = 0.5
         weights[(0, "CHD", "95+")] = 0.5
 
-        rr_eff = _evaluate_rr_age_weighted(
+        log_rr_eff = _evaluate_log_rr_age_weighted(
             table, "fruits", "CHD", 200.0, weights, cluster_id=0
         )
-        # Should be the average of 0.7 and 0.9
-        assert rr_eff == pytest.approx(0.8)
+        expected = 0.5 * math.log(0.7) + 0.5 * math.log(0.9)
+        assert log_rr_eff == pytest.approx(expected)
+        # And distinct from the (incorrect) arithmetic-mean approach:
+        assert log_rr_eff != pytest.approx(math.log(0.8))
 
 
 # ---------------------------------------------------------------------------

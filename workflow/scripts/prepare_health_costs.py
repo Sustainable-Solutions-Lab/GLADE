@@ -465,6 +465,27 @@ def _derive_tmrel_from_rr(
     return tmrel
 
 
+def _evaluate_log_rr(
+    table: RelativeRiskTable,
+    risk: str,
+    cause: str,
+    age: str,
+    intake: float,
+    key: str = "log_rr_mean",
+) -> float:
+    """Interpolate log(RR) for given intake using linear interpolation in log-space."""
+    data = table[(risk, cause, age)]
+    exposures: npt.NDArray[np.floating] = data["exposures"]
+    log_rr: npt.NDArray[np.floating] = data[key]
+
+    if intake <= exposures[0]:
+        return float(log_rr[0])
+    if intake >= exposures[-1]:
+        return float(log_rr[-1])
+
+    return float(np.interp(intake, exposures, log_rr))
+
+
 def _evaluate_rr(
     table: RelativeRiskTable,
     risk: str,
@@ -474,20 +495,10 @@ def _evaluate_rr(
     key: str = "log_rr_mean",
 ) -> float:
     """Interpolate relative risk for given intake using log-linear interpolation."""
-    data = table[(risk, cause, age)]
-    exposures: npt.NDArray[np.floating] = data["exposures"]
-    log_rr: npt.NDArray[np.floating] = data[key]
-
-    if intake <= exposures[0]:
-        return float(math.exp(log_rr[0]))
-    if intake >= exposures[-1]:
-        return float(math.exp(log_rr[-1]))
-
-    log_val = float(np.interp(intake, exposures, log_rr))
-    return float(math.exp(log_val))
+    return float(math.exp(_evaluate_log_rr(table, risk, cause, age, intake, key=key)))
 
 
-def _evaluate_rr_age_weighted(
+def _evaluate_log_rr_age_weighted(
     table: RelativeRiskTable,
     risk: str,
     cause: str,
@@ -496,18 +507,26 @@ def _evaluate_rr_age_weighted(
     cluster_id: int,
     key: str = "log_rr_mean",
 ) -> float:
-    """Compute YLL-weighted effective RR across age groups.
+    """Compute YLL-weighted effective log(RR) across age groups.
 
-    Returns the weighted average of age-specific RR values:
-        RR_eff(x) = Σ_a w_a x RR_a(x)
+    Standard Comparative Risk Assessment (CRA) practice combines
+    age-specific RR curves in log space:
+
+        log RR_eff(x) = Σ_a w_a * log RR_a(x)
+
+    which gives a weighted geometric mean of RRs. This is the convention
+    used by IHME GBD and most peer-reviewed dietary-CRA work. The
+    earlier arithmetic-mean variant gave log(Σ_a w_a RR_a), which
+    over-estimates log RR_eff by Jensen's inequality (log is concave),
+    inflating attributable burden.
     """
-    rr_eff = 0.0
+    log_rr_eff = 0.0
     for age in ADULT_AGES:
         w = age_weights.get((cluster_id, cause, age), 0.0)
         if w <= 0:
             continue
-        rr_eff += w * _evaluate_rr(table, risk, cause, age, intake, key=key)
-    return rr_eff
+        log_rr_eff += w * _evaluate_log_rr(table, risk, cause, age, intake, key=key)
+    return log_rr_eff
 
 
 def _load_input_data(
@@ -835,8 +854,8 @@ def _process_health_clusters(
             for cause in causes:
                 if (risk, cause, ADULT_AGES[0]) not in rr_lookup:
                     continue
-                # Age-weighted effective RR at TMREL and baseline
-                rr_ref = _evaluate_rr_age_weighted(
+                # Age-weighted effective log(RR) at TMREL and baseline
+                log_rr_ref_totals[cause] += _evaluate_log_rr_age_weighted(
                     rr_lookup,
                     risk,
                     cause,
@@ -844,9 +863,8 @@ def _process_health_clusters(
                     age_weights,
                     cluster_id,
                 )
-                log_rr_ref_totals[cause] += math.log(rr_ref)
 
-                rr_base = _evaluate_rr_age_weighted(
+                log_rr_baseline_totals[cause] += _evaluate_log_rr_age_weighted(
                     rr_lookup,
                     risk,
                     cause,
@@ -854,7 +872,6 @@ def _process_health_clusters(
                     age_weights,
                     cluster_id,
                 )
-                log_rr_baseline_totals[cause] += math.log(rr_base)
 
         for cause in relevant_causes:
             log_rr_baseline = log_rr_baseline_totals[cause]
@@ -986,7 +1003,7 @@ def _generate_breakpoint_tables(
 
             for cluster_id in cluster_ids:
                 for intake in grid:
-                    rr_val = _evaluate_rr_age_weighted(
+                    log_rr = _evaluate_log_rr_age_weighted(
                         rr_lookup,
                         risk,
                         cause,
@@ -994,8 +1011,7 @@ def _generate_breakpoint_tables(
                         age_weights,
                         cluster_id,
                     )
-                    log_rr = math.log(rr_val)
-                    rr_val_low = _evaluate_rr_age_weighted(
+                    log_rr_low = _evaluate_log_rr_age_weighted(
                         rr_lookup,
                         risk,
                         cause,
@@ -1004,8 +1020,7 @@ def _generate_breakpoint_tables(
                         cluster_id,
                         key="log_rr_low",
                     )
-                    log_rr_low = math.log(rr_val_low)
-                    rr_val_high = _evaluate_rr_age_weighted(
+                    log_rr_high = _evaluate_log_rr_age_weighted(
                         rr_lookup,
                         risk,
                         cause,
@@ -1014,7 +1029,6 @@ def _generate_breakpoint_tables(
                         cluster_id,
                         key="log_rr_high",
                     )
-                    log_rr_high = math.log(rr_val_high)
                     risk_breakpoint_rows.append(
                         {
                             "health_cluster": cluster_id,

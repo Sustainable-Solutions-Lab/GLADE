@@ -84,6 +84,10 @@ def _calibrate_blocks(
     for row in merged.itertuples(index=False):
         baseline_mt = float(row.baseline_mt_per_year)
         base_utility = float(row.value_bnusd_per_mt)
+        # Zero-baseline rows should have been filtered out by the caller
+        # so the 1e-12 floor here only catches numerical edge cases, not
+        # the bulk "no consumption in this country" pattern that would
+        # otherwise produce ill-conditioned piecewise terms.
         width_mt = max(baseline_mt * total_width_multiplier / n_blocks, 1e-12)
 
         for block_id in range(1, n_blocks + 1):
@@ -144,6 +148,24 @@ if __name__ == "__main__":
     if merged.empty:
         raise ValueError(
             "No overlapping (food, country) pairs between baseline and values"
+        )
+
+    # Drop (food, country) pairs with no meaningful baseline consumption.
+    # _calibrate_blocks clamps block width at 1e-12 Mt for these rows,
+    # which produces a sequence of microscopic blocks with effectively
+    # zero utility contribution (utility is bn USD / Mt, so 1e-12 Mt *
+    # finite USD/Mt is sub-cent). Drop them so the LP doesn't carry
+    # ill-conditioned piecewise terms.
+    zero_baseline_tol = 1e-9  # Mt/year ~ 1 kg/year nationally
+    n_before = len(merged)
+    merged = merged[merged["baseline_mt_per_year"] > zero_baseline_tol]
+    n_dropped = n_before - len(merged)
+    if n_dropped:
+        logger.info(
+            "Dropped %d (food, country) pairs with baseline <= %.1e Mt/year "
+            "from utility-block calibration",
+            n_dropped,
+            zero_baseline_tol,
         )
 
     logger.info(
