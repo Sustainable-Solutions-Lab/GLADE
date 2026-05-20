@@ -233,7 +233,7 @@ def add_production_stability_constraints(
         # that animal feed deviations (Mt DM) are converted to Mha-equivalent
         # units, making land_l1_cost/quadratic_cost comparable across
         # crop/grassland (Mha) and animal (Mt DM) components.
-        animal_l1_cost_override = stability_cfg.get("animal_feed_l1_cost")
+        animal_l1_cost_override = stability_cfg["animal_feed_l1_cost"]
         if animal_l1_cost_override is not None:
             animal_l1_cost = float(animal_l1_cost_override)
             animal_scale = 1.0

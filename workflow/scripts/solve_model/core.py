@@ -1048,10 +1048,7 @@ def _apply_health_pricing(n: pypsa.Network, value_per_yll_usd: float) -> None:
 
 def _apply_regional_limit_scaling(n: pypsa.Network, solve_limit: float) -> None:
     """Rescale land supply generator capacities if scenario regional_limit differs."""
-    build_limit = n.meta.get("land_regional_limit")
-    if build_limit is None:
-        # Pre-migration network without the metadata key; skip silently.
-        return
+    build_limit = n.meta["land_regional_limit"]
     if abs(solve_limit - build_limit) < 1e-12:
         return
 
@@ -1679,9 +1676,19 @@ def run_solve(
         # Store production stability penalty cost for objective breakdown.
         # L1/quadratic penalties are linopy-level terms not visible to PyPSA
         # statistics; record them in metadata so the breakdown can account
-        # for them.  Animal costs may differ from land_l1_cost when
-        # animal_feed_l1_cost is set explicitly.
-        animal_l1_override = stability_cfg.get("animal_feed_l1_cost")
+        # for them.
+        #
+        # The cost coefficient used here must mirror what
+        # _add_animal_l1_penalty applies in production_stability.py:
+        # * animal_feed_l1_cost set: penalty uses that value directly with
+        #   animal_scale=1.0, so abs_dev is in native Mt DM and the
+        #   breakdown coefficient is animal_l1_override.
+        # * animal_feed_l1_cost None: penalty uses land_l1_cost but
+        #   pre-multiplies the deviation by animal_scale, so abs_dev is in
+        #   Mha-equivalent units and the breakdown coefficient is land_l1.
+        # In both cases, animal_l1 * sum(abs_dev.solution) reproduces the
+        # actual objective contribution exactly.
+        animal_l1_override = stability_cfg["animal_feed_l1_cost"]
         land_l1 = float(stability_cfg["land_l1_cost"])
         animal_l1 = (
             float(animal_l1_override) if animal_l1_override is not None else land_l1
