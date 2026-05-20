@@ -642,7 +642,11 @@ def add_ghg_pricing_to_objective(n: pypsa.Network, ghg_price_usd_per_t: float) -
         ghg_price_usd_per_t / constants.TONNE_TO_MEGATONNE * constants.USD_TO_BNUSD
     )
 
-    # Add marginal storage cost to store
+    # Apply once on the GHG aggregator store. The per-gas buses
+    # (emission:co2, emission:ch4, emission:n2o) carry no stores; they
+    # only feed the aggregator links built in primary_resources.py whose
+    # efficiencies bake in the GWP factors. Pricing here is therefore
+    # the single point of GHG monetisation in the objective.
     n.stores.static.at["store:emission:ghg", "marginal_cost_storage"] = (
         ghg_price_bnusd_per_mt
     )

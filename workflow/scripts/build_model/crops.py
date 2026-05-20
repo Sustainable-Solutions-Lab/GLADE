@@ -439,6 +439,11 @@ def add_regional_crop_production_links(
         residue_eff5[i] = float(residue_yield)
 
     all_df["bus5"] = residue_bus5
+    # Residue yields come from build_crop_residue_yields.py and are
+    # derived from gross DM crop yield (pre-loss, at-harvest biomass).
+    # Don't scale by loss_mults: the crop bus carries post-loss product,
+    # but residues stay in the field and don't share the storage /
+    # transport / processing loss path of the grain.
     all_df["efficiency5"] = residue_eff5
 
     add_kwargs: dict[str, object] = {

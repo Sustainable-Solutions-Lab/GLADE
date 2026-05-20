@@ -35,16 +35,30 @@ _SOILGRIDS_PROJ4 = "+proj=igh"
 
 
 def _ensure_projection(path: Path) -> None:
-    """Assign SoilGrids projection if the downloaded GeoTIFF lacks CRS."""
+    """Assign SoilGrids projection if the downloaded GeoTIFF lacks CRS.
+
+    SoilGrids native data is always in Interrupted Goode Homolosine. If
+    the downloaded file already carries a projection that differs from
+    +proj=igh, the WCS server returned something unexpected; refuse to
+    silently use it.
+    """
 
     ds = gdal.Open(str(path), gdal.GA_Update)
     if ds is None:
         raise RuntimeError(f"Failed to open {path} for CRS assignment")
     try:
-        if ds.GetProjectionRef():
-            return
+        existing = ds.GetProjectionRef()
         srs = osr.SpatialReference()
         srs.ImportFromProj4(_SOILGRIDS_PROJ4)
+        if existing:
+            existing_srs = osr.SpatialReference()
+            existing_srs.ImportFromWkt(existing)
+            if not existing_srs.IsSame(srs):
+                raise RuntimeError(
+                    f"SoilGrids download at {path} has unexpected projection "
+                    f"(expected +proj=igh; got: {existing[:120]}...)"
+                )
+            return
         ds.SetProjection(srs.ExportToWkt())
     finally:
         ds = None
