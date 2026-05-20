@@ -1158,9 +1158,15 @@ health:
   # Health outcomes/causes to consider (must be present in IHME GBD data and relative risks)
   causes:
   - CHD              # Coronary/Ischemic Heart Disease
-  - Stroke           # Stroke (all types)
+  - Stroke           # Ischemic stroke (diet-attributable subtype)
   - T2DM             # Type 2 Diabetes Mellitus
   - CRC              # Colorectal Cancer
+  # Fraction of aggregate stroke mortality attributable to ischemic stroke,
+  # used to scale the aggregate GBD "Stroke" deaths until the dataset is
+  # re-downloaded with cause = "Ischemic stroke". GBD global value ~0.6
+  # (range ~0.5 in some Asian populations, ~0.7+ high-income). Set to 1.0
+  # once the mortality data is keyed on ischemic stroke directly.
+  ischemic_stroke_share: 0.6
   # Mapping of risk factors to the causes they affect
   risk_cause_map:
     fruits: [CHD, Stroke, T2DM]

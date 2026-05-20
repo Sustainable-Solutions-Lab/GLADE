@@ -487,11 +487,16 @@ class TestConstants:
         assert expected_causes == actual_causes
 
     def test_cause_map_maps_ihme_names(self):
-        """CAUSE_MAP maps IHME outcome names to model cause identifiers."""
+        """CAUSE_MAP maps IHME outcome names to model cause identifiers.
+
+        The model's "Stroke" cause is restricted to ischemic stroke;
+        hemorrhagic subtypes are deliberately absent (mortality side
+        scales aggregate Stroke deaths by health.ischemic_stroke_share).
+        """
         assert CAUSE_MAP["Ischemic heart disease"] == "CHD"
         assert CAUSE_MAP["Ischemic stroke"] == "Stroke"
-        assert CAUSE_MAP["Intracerebral hemorrhage"] == "Stroke"
-        assert CAUSE_MAP["Subarachnoid hemorrhage"] == "Stroke"
+        assert "Intracerebral hemorrhage" not in CAUSE_MAP
+        assert "Subarachnoid hemorrhage" not in CAUSE_MAP
         assert CAUSE_MAP["Diabetes mellitus type 2"] == "T2DM"
         assert CAUSE_MAP["Colon and rectum cancer"] == "CRC"
 

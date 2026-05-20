@@ -53,7 +53,12 @@ COUNTRY_NAME_OVERRIDES = {
     "Viet Nam": "VNM",
 }
 
-# Map IHME cause names to model cause codes
+# Map IHME cause names to model cause codes. "Stroke" maps to the model's
+# ischemic-stroke-only cause (see prepare_relative_risks.CAUSE_MAP); the
+# aggregate stroke deaths are scaled down by health.ischemic_stroke_share
+# below. When the IHME re-download with "Ischemic stroke" specifically is
+# in place, swap this entry to {"Ischemic stroke": "Stroke"} and set
+# ischemic_stroke_share to 1.0.
 CAUSE_MAP = {
     "Ischemic heart disease": "CHD",
     "Stroke": "Stroke",
@@ -117,6 +122,7 @@ def main() -> None:
     input_path = snakemake.input["gbd_mortality"]
     output_path = snakemake.output["mortality"]
     reference_year = int(snakemake.params["reference_year"])
+    ischemic_stroke_share = float(snakemake.params["ischemic_stroke_share"])
     set(snakemake.params["countries"])
     set(snakemake.params["causes"])
 
@@ -213,6 +219,24 @@ def main() -> None:
             df.groupby(["country_iso3", "cause_code", "age_code", "year"])
             .agg({"val": "mean"})
             .reset_index()
+        )
+
+    # Scale aggregate Stroke deaths down to the ischemic share. The
+    # relative-risk pipeline restricts diet-attributable stroke to the
+    # ischemic subtype (atherosclerotic pathway diet acts on; null/weak
+    # evidence for hemorrhagic subtypes); applying the diet PAF to
+    # all-stroke mortality would over-attribute burden. Default value is
+    # the GBD global ischemic share; remove after the IHME re-download
+    # with the "Ischemic stroke" cause filter lands (set the share to 1.0
+    # or drop this block entirely once CAUSE_MAP is keyed on
+    # "Ischemic stroke").
+    stroke_mask = df["cause_code"] == "Stroke"
+    if stroke_mask.any() and ischemic_stroke_share != 1.0:
+        df.loc[stroke_mask, "val"] = df.loc[stroke_mask, "val"] * ischemic_stroke_share
+        logger.info(
+            "Scaled %d aggregate Stroke rows by ischemic_stroke_share=%.3f",
+            int(stroke_mask.sum()),
+            ischemic_stroke_share,
         )
 
     # Convert rate from per 100,000 to per 1,000

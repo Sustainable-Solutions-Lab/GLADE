@@ -54,11 +54,15 @@ RISK_CONFIG = {
 
 
 # Map IHME outcome names to model causes. Any unmapped outcome is ignored.
+# The model's "Stroke" cause is restricted to ischemic stroke: CRA evidence
+# is robust for ischemic stroke (the atherosclerotic pathway diet acts on)
+# but null or weak for intracerebral and subarachnoid hemorrhage. The
+# mortality side scales aggregate "Stroke" deaths by health.ischemic_stroke_share
+# until the IHME re-download with the "Ischemic stroke" cause filter is in
+# place.
 CAUSE_MAP = {
     "Ischemic heart disease": "CHD",
     "Ischemic stroke": "Stroke",
-    "Intracerebral hemorrhage": "Stroke",
-    "Subarachnoid hemorrhage": "Stroke",
     "Diabetes mellitus type 2": "T2DM",
     "Colon and rectum cancer": "CRC",
 }
