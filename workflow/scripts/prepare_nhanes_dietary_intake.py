@@ -347,6 +347,21 @@ def main():
     food_groups_included = list(snakemake.params.food_groups_included)
     country = str(snakemake.params.country)
     baseline_age = str(snakemake.params.baseline_age)
+    configured_countries = list(snakemake.params.configured_countries)
+
+    if country not in configured_countries:
+        logger.info(
+            "Country %s not in configured countries (%d entries); emitting empty "
+            "NHANES intake file. merge_dietary_sources will fall back to GDD/FAOSTAT.",
+            country,
+            len(configured_countries),
+        )
+        empty = pd.DataFrame(
+            columns=["unit", "item", "country", "age", "year", "value"]
+        )
+        Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+        empty.to_csv(output_file, index=False)
+        return
 
     logger.info("Parsing FPED table %s", pdf_file)
     text = run_pdftotext(pdf_file)

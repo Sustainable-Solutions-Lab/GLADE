@@ -144,6 +144,7 @@ rule prepare_nhanes_dietary_intake:
         food_groups_included=config["food_groups"]["included"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
         country="USA",
+        configured_countries=config["countries"],
     output:
         diet="<processing>/{name}/nhanes_dietary_intake.csv",
     group:

@@ -80,6 +80,109 @@ def _deflate_to_base_year(
     return df
 
 
+def _compute_revenue_per_ha(
+    pp_bulk: pd.DataFrame,
+    qcl_bulk: pd.DataFrame,
+    *,
+    crops: list[str],
+    crop_to_items: dict[str, list[int]],
+    crop_to_qcl_items: dict[str, list[int]],
+    proxies: dict,
+    cpi_df: pd.DataFrame,
+    base_year: int,
+    years: list[int],
+    price_element: int,
+    yield_element: int,
+    iso3_codes: list[str] | None,
+) -> pd.DataFrame:
+    """Compute per-(crop, country) revenue_per_ha and yield from FAOSTAT bulks.
+
+    Pass ``iso3_codes=None`` to compute across all countries (used to derive
+    the global median fallback for crops absent from the configured-country
+    subset). Returns a DataFrame with columns ``crop``, ``country``,
+    ``revenue_per_ha``, ``yield_t_per_ha``, ``n_years``.
+    """
+    all_pp_item_codes = sorted(
+        {code for codes in crop_to_items.values() for code in codes}
+    )
+    all_qcl_item_codes = sorted(
+        {code for codes in crop_to_qcl_items.values() for code in codes}
+    )
+
+    pp_df = filter_bulk(
+        pp_bulk,
+        element_codes=[price_element],
+        item_codes=all_pp_item_codes,
+        years=years,
+        iso3_codes=iso3_codes,
+    )
+    pp_df = pp_df.dropna(subset=["Value"])
+    pp_df["country"] = pp_df["iso3"].str.upper()
+    pp_df["year"] = pd.to_numeric(pp_df["Year"], errors="coerce").astype(int)
+    pp_df["value"] = pp_df["Value"].astype(float)
+
+    qcl_df = filter_bulk(
+        qcl_bulk,
+        element_codes=[yield_element],
+        item_codes=all_qcl_item_codes,
+        years=years,
+        iso3_codes=iso3_codes,
+    )
+    qcl_df = qcl_df.dropna(subset=["Value"])
+    qcl_df["country"] = qcl_df["iso3"].str.upper()
+    qcl_df["year"] = pd.to_numeric(qcl_df["Year"], errors="coerce").astype(int)
+    qcl_df["yield_t_per_ha"] = qcl_df["Value"].astype(float) / 1_000.0
+
+    results = []
+    for crop in crops:
+        pp_items = crop_to_items.get(crop)
+        qcl_items = crop_to_qcl_items.get(crop)
+        if pp_items is None or qcl_items is None:
+            proxy = proxies.get(crop)
+            if proxy is None:
+                continue
+            pp_items = crop_to_items.get(proxy)
+            qcl_items = crop_to_qcl_items.get(proxy)
+            if pp_items is None or qcl_items is None:
+                continue
+
+        crop_pp = pp_df[pp_df["Item Code"].isin(pp_items)]
+        crop_qcl = qcl_df[qcl_df["Item Code"].isin(qcl_items)]
+        if crop_pp.empty or crop_qcl.empty:
+            continue
+
+        crop_pp_agg = crop_pp.groupby(["country", "year"])["value"].mean().reset_index()
+        crop_qcl_agg = (
+            crop_qcl.groupby(["country", "year"])["yield_t_per_ha"].mean().reset_index()
+        )
+        crop_pp_agg = _deflate_to_base_year(crop_pp_agg, cpi_df, base_year)
+        crop_pp_agg = crop_pp_agg.dropna(subset=["value"])
+
+        merged = crop_pp_agg.merge(crop_qcl_agg, on=["country", "year"], how="inner")
+        merged = merged[(merged["value"] > 0) & (merged["yield_t_per_ha"] > 0)]
+        if merged.empty:
+            continue
+
+        merged["revenue_per_ha"] = merged["value"] * merged["yield_t_per_ha"]
+        avg = (
+            merged.groupby("country")
+            .agg(
+                revenue_per_ha=("revenue_per_ha", "mean"),
+                yield_t_per_ha=("yield_t_per_ha", "mean"),
+                n_years=("year", "nunique"),
+            )
+            .reset_index()
+        )
+        avg["crop"] = crop
+        results.append(avg)
+
+    if not results:
+        return pd.DataFrame(
+            columns=["crop", "country", "revenue_per_ha", "yield_t_per_ha", "n_years"]
+        )
+    return pd.concat(results, ignore_index=True)
+
+
 def main() -> None:
     pp_path = snakemake.input.pp_parquet
     qcl_path = snakemake.input.qcl_parquet
@@ -144,121 +247,27 @@ def main() -> None:
     pp_bulk = add_iso3_column(pp_bulk, m49_to_iso3)
     qcl_bulk = add_iso3_column(qcl_bulk, m49_to_iso3)
 
-    all_pp_item_codes = sorted(
-        {code for codes in crop_to_items.values() for code in codes}
-    )
-    all_qcl_item_codes = sorted(
-        {code for codes in crop_to_qcl_items.values() for code in codes}
-    )
-
-    # Filter PP data: element 5531 = Producer Price (USD/tonne)
-    pp_df = filter_bulk(
+    # Per-(crop, country) revenue computed on the configured-country subset.
+    costs_df = _compute_revenue_per_ha(
         pp_bulk,
-        element_codes=[price_element],
-        item_codes=all_pp_item_codes,
-        years=years,
-        iso3_codes=countries,
-    )
-    pp_df = pp_df.dropna(subset=["Value"])
-    pp_df["country"] = pp_df["iso3"].str.upper()
-    pp_df["year"] = pd.to_numeric(pp_df["Year"], errors="coerce").astype(int)
-    pp_df["value"] = pp_df["Value"].astype(float)
-    logger.info("PP data: %d rows after filtering", len(pp_df))
-
-    # Filter QCL data: element 5412 = Yield (kg/ha)
-    qcl_df = filter_bulk(
         qcl_bulk,
-        element_codes=[yield_element],
-        item_codes=all_qcl_item_codes,
+        crops=crops,
+        crop_to_items=crop_to_items,
+        crop_to_qcl_items=crop_to_qcl_items,
+        proxies=proxies,
+        cpi_df=cpi_df,
+        base_year=base_year,
         years=years,
+        price_element=price_element,
+        yield_element=yield_element,
         iso3_codes=countries,
     )
-    qcl_df = qcl_df.dropna(subset=["Value"])
-    qcl_df["country"] = qcl_df["iso3"].str.upper()
-    qcl_df["year"] = pd.to_numeric(qcl_df["Year"], errors="coerce").astype(int)
-    # Convert kg/ha to t/ha
-    qcl_df["yield_t_per_ha"] = qcl_df["Value"].astype(float) / 1_000.0
-    logger.info("QCL yield data: %d rows after filtering", len(qcl_df))
-
-    # Build per-(crop, country, year) price and yield tables
-    results = []
-
-    for crop in crops:
-        pp_items = crop_to_items.get(crop)
-        qcl_items = crop_to_qcl_items.get(crop)
-
-        # Handle proxy crops
-        actual_crop = crop
-        if pp_items is None or qcl_items is None:
-            proxy = proxies.get(crop)
-            if proxy is None:
-                logger.warning(
-                    "No FAOSTAT mapping or proxy for crop '%s'; skipping", crop
-                )
-                continue
-            pp_items = crop_to_items.get(proxy)
-            qcl_items = crop_to_qcl_items.get(proxy)
-            if pp_items is None or qcl_items is None:
-                logger.warning(
-                    "Proxy crop '%s' for '%s' also has no FAOSTAT mapping; skipping",
-                    proxy,
-                    crop,
-                )
-                continue
-            logger.info("Using proxy '%s' for crop '%s'", proxy, crop)
-
-        # Get prices for this crop
-        crop_pp = pp_df[pp_df["Item Code"].isin(pp_items)].copy()
-        if crop_pp.empty:
-            logger.warning("No FAOSTAT prices for crop '%s'", actual_crop)
-            continue
-
-        # Get yields for this crop
-        crop_qcl = qcl_df[qcl_df["Item Code"].isin(qcl_items)].copy()
-        if crop_qcl.empty:
-            logger.warning("No FAOSTAT yields for crop '%s'", actual_crop)
-            continue
-
-        # When multiple FAOSTAT items map to one crop, average them
-        crop_pp_agg = crop_pp.groupby(["country", "year"])["value"].mean().reset_index()
-        crop_qcl_agg = (
-            crop_qcl.groupby(["country", "year"])["yield_t_per_ha"].mean().reset_index()
-        )
-
-        # CPI-deflate prices to base year
-        crop_pp_agg = _deflate_to_base_year(crop_pp_agg, cpi_df, base_year)
-        crop_pp_agg = crop_pp_agg.dropna(subset=["value"])
-
-        # Merge price and yield on (country, year)
-        merged = crop_pp_agg.merge(crop_qcl_agg, on=["country", "year"], how="inner")
-        merged = merged[(merged["value"] > 0) & (merged["yield_t_per_ha"] > 0)]
-
-        if merged.empty:
-            logger.warning("No valid price*yield pairs for crop '%s'", actual_crop)
-            continue
-
-        # revenue_per_ha = price (USD/t fresh) * yield (t fresh/ha)
-        merged["revenue_per_ha"] = merged["value"] * merged["yield_t_per_ha"]
-
-        # Average across years per (country). Keep yield so we can derive
-        # per-tonne cost (used for winsorization).
-        avg = (
-            merged.groupby("country")
-            .agg(
-                revenue_per_ha=("revenue_per_ha", "mean"),
-                yield_t_per_ha=("yield_t_per_ha", "mean"),
-                n_years=("year", "nunique"),
-            )
-            .reset_index()
-        )
-        avg["crop"] = crop
-        avg["is_fallback"] = False
-        results.append(avg)
-
-    if not results:
+    if costs_df.empty:
         raise RuntimeError("No valid FAOSTAT crop cost data produced")
-
-    costs_df = pd.concat(results, ignore_index=True)
+    costs_df["is_fallback"] = False
+    logger.info(
+        "Configured-country FAOSTAT revenue: %d (crop, country) rows", len(costs_df)
+    )
 
     # Apply non-endogenous cost share
     cost_col = f"cost_usd_{base_year}_per_ha"
@@ -319,10 +328,46 @@ def main() -> None:
         )
         costs_df = costs_df.drop(columns=["cost_usd_per_t"])
 
-    # Fill missing (crop, country) with the per-crop median (post-cap)
+    # Fill missing (crop, country) with the per-crop median (post-cap).
+    # Primary fallback: median across configured countries. For crops that
+    # have no data at all in the configured-country subset (e.g. tropical
+    # crops in a Europe-only run), fall back further to a global median
+    # computed from the unfiltered FAOSTAT data.
     crop_medians = costs_df.groupby("crop")[cost_col].median()
-    n_fallbacks = 0
+    crops_needing_global_median = [
+        c
+        for c in crops
+        if (crop_medians.get(c) is None)
+        or (not np.isfinite(crop_medians.get(c, np.nan)))
+    ]
+    if crops_needing_global_median:
+        logger.info(
+            "Computing global FAOSTAT median for crops absent from configured-country "
+            "subset: %s",
+            ", ".join(sorted(crops_needing_global_median)),
+        )
+        global_df = _compute_revenue_per_ha(
+            pp_bulk,
+            qcl_bulk,
+            crops=crops_needing_global_median,
+            crop_to_items=crop_to_items,
+            crop_to_qcl_items=crop_to_qcl_items,
+            proxies=proxies,
+            cpi_df=cpi_df,
+            base_year=base_year,
+            years=years,
+            price_element=price_element,
+            yield_element=yield_element,
+            iso3_codes=None,
+        )
+        if not global_df.empty:
+            global_df[cost_col] = (
+                global_df["revenue_per_ha"] * non_endogenous_cost_share
+            )
+            global_medians = global_df.groupby("crop")[cost_col].median()
+            crop_medians = crop_medians.combine_first(global_medians)
 
+    n_fallbacks = 0
     fallback_rows = []
     for crop in crops:
         existing_countries = set(costs_df.loc[costs_df["crop"] == crop, "country"])
@@ -333,9 +378,10 @@ def main() -> None:
         median_cost = crop_medians.get(crop)
         if median_cost is None or not np.isfinite(median_cost):
             raise ValueError(
-                f"No median FAOSTAT cost available for crop '{crop}'; "
-                f"{len(missing_countries)} countries would otherwise inherit "
-                f"a zero cost. Check the input parquet for this crop."
+                f"No median FAOSTAT cost available for crop '{crop}' (neither "
+                f"configured-country subset nor global FAOSTAT has price*yield "
+                f"data); {len(missing_countries)} countries would otherwise "
+                f"inherit a zero cost. Check the input parquet for this crop."
             )
 
         for country in sorted(missing_countries):
