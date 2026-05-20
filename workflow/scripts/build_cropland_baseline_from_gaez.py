@@ -12,8 +12,6 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.crs import CRS
-from rasterio.enums import Resampling
-from rasterio.warp import reproject
 import xarray as xr
 
 from workflow.scripts.raster_utils import (
@@ -70,19 +68,25 @@ def _load_and_align_raster(
     if needs_resample:
         if src_crs is None:
             raise ValueError(f"Raster {path} missing CRS information")
-        dst = np.full(target_shape, np.nan, dtype=np.float32)
-        reproject(
-            source=arr,
-            destination=dst,
-            src_transform=src_transform,
-            src_crs=src_crs,
-            dst_transform=target_transform,
-            dst_crs=target_crs,
-            resampling=Resampling.sum,  # Sum harvested areas when aggregating
-            src_nodata=np.nan,
-            dst_nodata=np.nan,
+        # RES06-HAR values are extensive (kha per source pixel). The target
+        # grid is built from the first RES06 yield raster in
+        # compute_resource_classes.py, so under the standard pipeline
+        # source and target are byte-identical and this branch never
+        # runs. If it does run with a CRS or transform change,
+        # Resampling.sum is not area-conserving across reprojection: it
+        # sums source pixels falling into each destination cell without
+        # weighting by fractional overlap, so totals drift. Convert kha
+        # per source-pixel to a density, resample with average, and
+        # re-multiply by the destination cell area before relying on
+        # this path.
+        raise NotImplementedError(
+            f"Raster {path} requires reprojection or grid change "
+            f"(src shape={arr.shape}, dst shape={target_shape}; "
+            f"src crs={src_crs}, dst crs={target_crs}). "
+            "Resampling extensive harvested-area values across CRS is "
+            "not area-conserving; rebuild the target grid from a "
+            "RES06 raster or implement density-based resampling."
         )
-        arr = dst
 
     return arr
 

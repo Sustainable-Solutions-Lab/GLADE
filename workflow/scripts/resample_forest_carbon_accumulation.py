@@ -73,15 +73,17 @@ def main() -> None:
         if src.crs is None:
             raise ValueError("regrowth raster missing CRS information")
 
-        # Create a virtual warped dataset with the target resolution
-        # Using bilinear resampling for performance (much faster than average)
+        # Cook-Patton regrowth is an intensity (tC/ha/yr); aggregation to a
+        # coarser grid must use average, not bilinear. Bilinear interpolation
+        # also smears finite values into NaN-bordered cells where the source
+        # has NoData outside forest, biasing the LUC sparing credit.
         with WarpedVRT(
             src,
             crs=target_crs,
             transform=target_transform,
             height=target_shape[0],
             width=target_shape[1],
-            resampling=Resampling.bilinear,
+            resampling=Resampling.average,
             src_nodata=src.nodata,
             nodata=NO_DATA,
         ) as vrt:
