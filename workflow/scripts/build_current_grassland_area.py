@@ -41,21 +41,31 @@ if __name__ == "__main__":
         raise ValueError(
             "LUIcube grassland grid does not match the resource_classes grid"
         )
+    luicube_transform = _transform_from_attrs(luicube_ds)
+    if luicube_transform != transform:
+        raise ValueError(
+            "LUIcube grassland transform does not match resource_classes transform"
+        )
 
     np.copyto(area_km2, 0.0, where=~np.isfinite(area_km2))
     np.clip(area_km2, 0.0, None, out=area_km2)
     np.copyto(gi, 0.0, where=~np.isfinite(gi))
     np.clip(gi, 0.0, 1.0, out=gi)
 
-    # Physical pasture area in hectares (1 km² = 100 ha).
-    grass_area = area_km2 * 100.0
-
-    # Weighted GI contribution for computing area-weighted mean GI per aggregate.
-    weighted_gi_area = area_km2 * gi * 100.0
+    # Physical grassland area in hectares (1 km^2 = 100 ha) and the
+    # GI-weighted (managed) area. Output `area_ha` is the managed area:
+    # the non-managed portion of LUIcube grassland (savanna, steppe) is
+    # treated as natural land elsewhere in the pipeline (LUC
+    # `natural_frac`), so including it here would double-count it as
+    # both pasture supply and convertible natural land, and would
+    # over-credit spared-pasture sequestration for land that was never
+    # under management.
+    physical_area = area_km2 * 100.0
+    managed_area = physical_area * gi
 
     valid = (
-        np.isfinite(grass_area)
-        & (grass_area > 0.0)
+        np.isfinite(managed_area)
+        & (managed_area > 0.0)
         & np.isfinite(region_id)
         & np.isfinite(resource_class)
         & (region_id >= 0)
@@ -68,8 +78,8 @@ if __name__ == "__main__":
     else:
         region_vals = region_id[valid].astype(np.int32, copy=False)
         class_vals = resource_class[valid].astype(np.int32, copy=False)
-        area_vals = grass_area[valid].astype(np.float64, copy=False)
-        weighted_gi_vals = weighted_gi_area[valid].astype(np.float64, copy=False)
+        managed_vals = managed_area[valid].astype(np.float64, copy=False)
+        physical_vals = physical_area[valid].astype(np.float64, copy=False)
 
         regions_gdf = gpd.read_file(regions_path)
         if "region" not in regions_gdf.columns:
@@ -83,18 +93,18 @@ if __name__ == "__main__":
                 {
                     "region_id": region_vals,
                     "resource_class": class_vals,
-                    "area_ha": area_vals,
-                    "weighted_gi_area": weighted_gi_vals,
+                    "area_ha": managed_vals,
+                    "physical_area_ha": physical_vals,
                 }
             )
             .groupby(["region_id", "resource_class"], as_index=False)[
-                ["area_ha", "weighted_gi_area"]
+                ["area_ha", "physical_area_ha"]
             ]
             .sum()
         )
         df["grazing_intensity"] = np.where(
-            df["area_ha"] > 0,
-            df["weighted_gi_area"] / df["area_ha"],
+            df["physical_area_ha"] > 0,
+            df["area_ha"] / df["physical_area_ha"],
             0.0,
         )
         df["region"] = df["region_id"].map(region_lookup)

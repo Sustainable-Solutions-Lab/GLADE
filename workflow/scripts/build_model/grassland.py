@@ -209,12 +209,12 @@ def add_grassland_feed_links(
 
     available_mha = work["available_area"].to_numpy() / HA_PER_MHA
 
-    # Efficiency (Mt/Mha): yields are per managed hectare, so multiply by
-    # grazing intensity to get effective yield per physical hectare.
-    # Yields are in t/ha, which equals Mt/Mha numerically.
+    # Efficiency (Mt/Mha): `area_ha` from build_current_grassland_area is
+    # already GI-weighted (managed area), so the per-managed-hectare yield
+    # is the per-Mha efficiency directly. Yields are in t/ha = Mt/Mha.
     grazing_intensity = work["grazing_intensity"].to_numpy()
     yield_per_managed_ha = work["yield"].to_numpy()
-    efficiencies = grazing_intensity * yield_per_managed_ha
+    efficiencies = yield_per_managed_ha
 
     # Calculate marginal cost per Mha (bnUSD/Mha).
     # In PyPSA, marginal_cost is per unit of bus0 (land in Mha).

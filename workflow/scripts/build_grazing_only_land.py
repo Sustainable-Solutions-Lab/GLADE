@@ -144,10 +144,13 @@ if __name__ == "__main__":
     height, width = region_id.shape
     crs_wkt = classes_ds.attrs.get("crs_wkt")
 
-    # Grassland fraction from LUIcube
+    # Grassland fraction and grazing intensity from LUIcube
     luicube_ds = xr.load_dataset(luicube_path)
     grass_frac = _safe_fraction(
         luicube_ds["grassland_fraction"].astype(np.float32).values
+    )
+    grazing_intensity = _safe_fraction(
+        luicube_ds["grazing_intensity"].astype(np.float32).values
     )
 
     # Cropland and forest fractions from ESA CCI land cover
@@ -175,9 +178,14 @@ if __name__ == "__main__":
     max_unsuited = np.clip(1.0 - suitability, 0.0, 1.0)
     grazing_only_frac = np.minimum(grass_candidate, max_unsuited)
 
+    # GI-weight to get the managed portion of grazing-only grassland;
+    # the unmanaged remainder is natural land (savanna, steppe) and is
+    # accounted for in LUC `natural_frac`, not as pasture supply.
+    grazing_only_managed_frac = grazing_only_frac * grazing_intensity
+
     dummy_raster = _build_dummy_raster(transform, width, height)
     cell_area = calculate_all_cell_areas(dummy_raster, repeat=True)
-    grazing_area = grazing_only_frac * cell_area
+    grazing_area = grazing_only_managed_frac * cell_area
 
     regions_gdf = gpd.read_file(regions_path)
     df = _aggregate_by_region_class(
