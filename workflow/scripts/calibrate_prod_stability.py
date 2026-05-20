@@ -34,6 +34,7 @@ from workflow.scripts.analysis.extract_baseline_deviation import (
 from workflow.scripts.calibrate_food_utility_blocks import (
     _calibrate_blocks,
     _load_baseline_food_consumption,
+    drop_zero_baseline_pairs,
 )
 from workflow.scripts.extract_consumer_values import extract_consumer_values
 from workflow.scripts.logging_config import setup_script_logging
@@ -81,6 +82,15 @@ def _write_utility_blocks(n_baseline, base_config: dict, blocks_path: Path) -> N
     if merged.empty:
         raise ValueError(
             "No overlapping (food, country) pairs between baseline and values"
+        )
+    # Keep the inline calibration consistent with the standalone
+    # calibrate_food_utility_blocks.py path: drop (food, country) pairs
+    # with negligible baseline consumption so _calibrate_blocks doesn't
+    # generate microscopic width-clamped blocks.
+    merged = drop_zero_baseline_pairs(merged)
+    if merged.empty:
+        raise ValueError(
+            "All (food, country) pairs have negligible baseline consumption"
         )
     utility_cfg = base_config["food_utility_piecewise"]
     blocks_df = _calibrate_blocks(
@@ -180,7 +190,7 @@ def _evaluate(
 
     land_pct, feed_pct = _deviation_pcts(n_main)
     logger.info(
-        "[iter %d] land_dev=%.3f%%  feed_dev=%.3f%%  " "(baseline_s=%.1f  main_s=%.1f)",
+        "[iter %d] land_dev=%.3f%%  feed_dev=%.3f%%  (baseline_s=%.1f  main_s=%.1f)",
         iter_id,
         land_pct,
         feed_pct,

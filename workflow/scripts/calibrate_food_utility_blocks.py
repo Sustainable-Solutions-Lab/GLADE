@@ -19,6 +19,22 @@ from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
+# Below this threshold the per-(food, country) baseline contributes no
+# meaningful utility, and _calibrate_blocks would otherwise produce a
+# sequence of microscopic blocks with sub-cent total mass that the LP
+# treats as ill-conditioned piecewise terms.
+ZERO_BASELINE_TOL_MT_PER_YEAR = 1e-9  # ~1 kg / year nationally
+
+
+def drop_zero_baseline_pairs(merged: pd.DataFrame) -> pd.DataFrame:
+    """Filter merged (food, country) baseline/value rows to non-empty pairs.
+
+    Shared between the standalone calibrate_food_utility_blocks rule and
+    the inline calibration in calibrate_prod_stability so both paths
+    produce identical utility blocks for identical inputs.
+    """
+    return merged[merged["baseline_mt_per_year"] > ZERO_BASELINE_TOL_MT_PER_YEAR]
+
 
 def _load_baseline_food_consumption(n: pypsa.Network) -> pd.DataFrame:
     """Load per-food baseline consumption (Mt/year) from p_set on consume links."""
@@ -70,7 +86,7 @@ def _calibrate_blocks(
         )
     if total_width_multiplier <= 0:
         raise ValueError(
-            "total_width_multiplier must be > 0, " f"got {total_width_multiplier}"
+            f"total_width_multiplier must be > 0, got {total_width_multiplier}"
         )
 
     rows = []
@@ -150,22 +166,15 @@ if __name__ == "__main__":
             "No overlapping (food, country) pairs between baseline and values"
         )
 
-    # Drop (food, country) pairs with no meaningful baseline consumption.
-    # _calibrate_blocks clamps block width at 1e-12 Mt for these rows,
-    # which produces a sequence of microscopic blocks with effectively
-    # zero utility contribution (utility is bn USD / Mt, so 1e-12 Mt *
-    # finite USD/Mt is sub-cent). Drop them so the LP doesn't carry
-    # ill-conditioned piecewise terms.
-    zero_baseline_tol = 1e-9  # Mt/year ~ 1 kg/year nationally
     n_before = len(merged)
-    merged = merged[merged["baseline_mt_per_year"] > zero_baseline_tol]
+    merged = drop_zero_baseline_pairs(merged)
     n_dropped = n_before - len(merged)
     if n_dropped:
         logger.info(
             "Dropped %d (food, country) pairs with baseline <= %.1e Mt/year "
             "from utility-block calibration",
             n_dropped,
-            zero_baseline_tol,
+            ZERO_BASELINE_TOL_MT_PER_YEAR,
         )
 
     logger.info(

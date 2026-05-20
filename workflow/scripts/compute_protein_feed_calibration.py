@@ -50,7 +50,7 @@ def _positive_slack_by_country(n: pypsa.Network, feed_category: str) -> pd.Serie
     if pos_slack.empty:
         return pd.Series(dtype=float, name=feed_category)
 
-    dispatch = n.generators.dynamic.p[pos_slack.index].iloc[0]
+    dispatch = n.generators.dynamic.p[pos_slack.index].loc[n.snapshots[-1]]
     countries = pos_slack["bus"].str.extract(rf"^{bus_prefix}(.+)$")[0].values
     by_country = (
         pd.DataFrame({"country": countries, "deficit": dispatch.values})

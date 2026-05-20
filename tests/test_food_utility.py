@@ -169,13 +169,23 @@ def test_non_contiguous_block_ids_raises(tmp_path):
         add_piecewise_food_utility(n, str(path), min_block_width_mt=0.0)
 
 
-def test_missing_link_coverage_raises(tmp_path):
-    # Network has two consume links; blocks file only covers one.
+def test_missing_link_coverage_logs(tmp_path, caplog):
+    # Network has two consume links; blocks file only covers one. The
+    # uncovered link earns zero utility (no piecewise variable), which
+    # is the documented semantic for foods filtered out at calibration
+    # time for negligible baseline consumption.
     blocks_path = _write_blocks(tmp_path, {"x": [(1.0, 5.0)]})
     n = _make_network(foods=("x", "y"))
     n.optimize.create_model(include_objective_constant=False)
-    with pytest.raises(ValueError, match="must cover all food_consumption links"):
+    with caplog.at_level("INFO"):
         add_piecewise_food_utility(n, blocks_path, min_block_width_mt=0.0)
+    assert any(
+        "omits 1 of 2 food_consumption links" in rec.message for rec in caplog.records
+    )
+    # `food_utility_value` should only carry the covered link.
+    names = n.model.variables["food_utility_value"].coords["name"].values.tolist()
+    assert any("consume:x:" in n_ for n_ in names)
+    assert not any("consume:y:" in n_ for n_ in names)
 
 
 # ---------------------------------------------------------------------------

@@ -815,14 +815,23 @@ def apply_waste_calibration(
             continue
         old_mean = result.loc[mask, "waste_fraction"].mean()
         new_waste = 1.0 - (1.0 - result.loc[mask, "waste_fraction"]) * multiplier
+        clipped_waste = new_waste.clip(lower=0.0, upper=0.95)
+        clip_residual = (new_waste - clipped_waste).abs().sum()
         n_clipped = int(((new_waste < 0.0) | (new_waste > 0.95)).sum())
         if n_clipped > 0:
+            # Quantify the mass-balance drift from clipping so the warning
+            # is actionable: clipping to [0, 0.95] silently undoes the
+            # calibration's intent on rows where the multiplier saturates
+            # against the per-row waste_fraction, breaking the
+            # calibration's compounded mass balance.
             logger.warning(
-                "Waste calibration %s: clipped %d rows to [0, 0.95]",
+                "Waste calibration %s: clipped %d rows to [0, 0.95]; "
+                "total clipped waste-fraction magnitude = %.4f",
                 group,
                 n_clipped,
+                float(clip_residual),
             )
-        result.loc[mask, "waste_fraction"] = new_waste.clip(lower=0.0, upper=0.95)
+        result.loc[mask, "waste_fraction"] = clipped_waste
         new_mean = result.loc[mask, "waste_fraction"].mean()
         logger.info(
             "Waste calibration %s: multiplier=%.3f, mean waste %.1f%% -> %.1f%% "

@@ -70,7 +70,12 @@ def _aggregate_forage_bus_supply_and_demand(
             continue
 
         links = n.links.static.loc[mask]
-        dispatch = -n.links.dynamic[p_col].iloc[0].reindex(links.index).fillna(0.0)
+        dispatch = (
+            -n.links.dynamic[p_col]
+            .loc[n.snapshots[-1]]
+            .reindex(links.index)
+            .fillna(0.0)
+        )
 
         is_grass = links["carrier"] == "grassland_production"
         if (~is_grass).any():
@@ -94,7 +99,12 @@ def _aggregate_forage_bus_supply_and_demand(
     gen_mask = n.generators.static["bus"].isin(forage_buses)
     if gen_mask.any():
         gens = n.generators.static.loc[gen_mask]
-        gen_dispatch = n.generators.dynamic["p"].iloc[0].reindex(gens.index).fillna(0.0)
+        gen_dispatch = (
+            n.generators.dynamic["p"]
+            .loc[n.snapshots[-1]]
+            .reindex(gens.index)
+            .fillna(0.0)
+        )
         is_slack = gens["carrier"].isin(["slack_positive_feed", "slack_negative_feed"])
         if (~is_slack).any():
             grouped = (
@@ -125,7 +135,7 @@ def _aggregate_forage_bus_supply_and_demand(
                     {
                         "country": country_by_bus.loc[demand_links["bus0"]].values,
                         "demand": n.links.dynamic["p0"]
-                        .iloc[0]
+                        .loc[n.snapshots[-1]]
                         .reindex(demand_links.index)
                         .abs()
                         .values,
@@ -196,7 +206,7 @@ def compute_grassland_calibration(
         return
 
     # Grassland dispatch is on bus0 (land, in Mha); forage output = dispatch * efficiency
-    dispatch = n.links.dynamic.p0[grass_links.index].iloc[0].abs()
+    dispatch = n.links.dynamic.p0[grass_links.index].loc[n.snapshots[-1]].abs()
     efficiency = grass_links["efficiency"].astype(float)
     forage_output = dispatch * efficiency
     grass_country = grass_links["country"].values
@@ -218,7 +228,9 @@ def compute_grassland_calibration(
         forage_mask = neg_slack_gens["bus"].str.startswith("feed:ruminant_forage:")
         neg_forage = neg_slack_gens[forage_mask]
         if not neg_forage.empty:
-            neg_dispatch = n.generators.dynamic.p[neg_forage.index].iloc[0].abs()
+            neg_dispatch = (
+                n.generators.dynamic.p[neg_forage.index].loc[n.snapshots[-1]].abs()
+            )
             neg_countries = (
                 neg_forage["bus"].str.extract(r"^feed:ruminant_forage:(.+)$")[0].values
             )
@@ -238,7 +250,7 @@ def compute_grassland_calibration(
         forage_mask = pos_slack_gens["bus"].str.startswith("feed:ruminant_forage:")
         pos_forage = pos_slack_gens[forage_mask]
         if not pos_forage.empty:
-            pos_dispatch = n.generators.dynamic.p[pos_forage.index].iloc[0]
+            pos_dispatch = n.generators.dynamic.p[pos_forage.index].loc[n.snapshots[-1]]
             pos_countries = (
                 pos_forage["bus"].str.extract(r"^feed:ruminant_forage:(.+)$")[0].values
             )
