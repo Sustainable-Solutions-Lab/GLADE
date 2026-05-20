@@ -20,6 +20,10 @@ Algorithm:
     3. Build within-group food shares from FAOSTAT FBS item-level supply
     4. Resolve shared FBS items using QCL production data
     5. Compute per-food consumption = group_total x within_group_share
+    6. Anchor-aware kcal normalisation at the food level: scale unanchored
+       foods so total kcal/day hits ``kcal_target_modelled`` from GDD-IA,
+       using food-level kcal/g (so groups with heterogeneous energy
+       densities, e.g. cassava-heavy starchy_vegetable, don't overshoot).
 
 Input:
     - dietary_intake.csv: Food group totals (GDD + FAOSTAT, waste-corrected)
@@ -333,53 +337,50 @@ def apply_cereal_residual_fix(
 
 
 def apply_kcal_normalisation(
-    group_totals: pd.DataFrame,
+    baseline_diet: pd.DataFrame,
     kcal_target_df: pd.DataFrame,
     gbd_anchored_groups: set[str],
-    kcal_per_g_group: dict[str, float],
+    kcal_per_g_food: dict[str, float],
 ) -> pd.DataFrame:
     """Anchor-aware kcal normalisation to GDD-IA's country-level target.
 
-    For each country, scale unanchored groups so that total kcal hits
-    ``kcal_target_modelled = all-fg - out-of-scope`` while leaving
-    GBD-anchored groups (and the refined-grain residual) untouched.
+    Operates on per-food consumption (not group totals). For each country,
+    scale unanchored foods by a single factor so total kcal/day hits
+    ``kcal_target_modelled = all-fg - out-of-scope``, while leaving foods
+    in GBD-anchored groups (and the refined-grain residual) untouched.
+
+    Working at the food level avoids the basis mismatch a group-mean
+    kcal/g introduces for groups with heterogeneous energy densities --
+    most importantly starchy_vegetable, where cassava-heavy diets
+    otherwise overshoot the GDD-IA target by 20-35% per country and
+    inflate Sub-Saharan Africa's per-capita intake by ~170 kcal/day.
 
     Anchored groups: those in ``gbd_anchored_groups`` plus ``grain``
     (which is set by the cereal residual fix and shouldn't be rescaled).
     """
     anchored = set(gbd_anchored_groups) | {GRAIN_GROUP}
-    totals_idx = group_totals.set_index(["country", "food_group"])[
-        "group_total_g_per_day"
-    ]
     targets = kcal_target_df.set_index("country")["kcal_target_modelled"]
 
-    rows = []
-    skipped_countries = []
-    factors = []
-    for country in totals_idx.index.get_level_values("country").unique():
+    df = baseline_diet.copy()
+    kpg = df["food"].map(kcal_per_g_food)
+    if kpg.isna().any():
+        missing = sorted(df.loc[kpg.isna(), "food"].unique())
+        raise ValueError(f"kcal/g missing from nutrition.csv for foods: {missing}")
+    df["_kcal"] = df["consumption_g_per_day"] * kpg
+    df["_anchored"] = df["food_group"].isin(anchored)
+
+    skipped_countries: list[str] = []
+    factors: list[float] = []
+    out_frames: list[pd.DataFrame] = []
+    for country, grp in df.groupby("country", sort=False):
         target = float(targets.get(country, float("nan")))
-        country_totals = totals_idx.xs(country, level="country")
         if pd.isna(target) or target <= 0:
             skipped_countries.append(country)
-            for fg, g in country_totals.items():
-                rows.append(
-                    {
-                        "country": country,
-                        "food_group": fg,
-                        "group_total_g_per_day": float(g),
-                    }
-                )
+            out_frames.append(grp.drop(columns=["_kcal", "_anchored"]))
             continue
 
-        kcal_anchored = 0.0
-        kcal_unanchored = 0.0
-        for fg, g in country_totals.items():
-            kpg = float(kcal_per_g_group.get(fg, 0.0))
-            kcal = float(g) * kpg
-            if fg in anchored:
-                kcal_anchored += kcal
-            else:
-                kcal_unanchored += kcal
+        kcal_anchored = float(grp.loc[grp["_anchored"], "_kcal"].sum())
+        kcal_unanchored = float(grp.loc[~grp["_anchored"], "_kcal"].sum())
 
         target_unanchored = target - kcal_anchored
         if kcal_unanchored <= 0 or target_unanchored <= 0:
@@ -389,11 +390,12 @@ def apply_kcal_normalisation(
             factor = max(0.1, min(5.0, factor))
         factors.append(factor)
 
-        for fg, g in country_totals.items():
-            new_g = float(g) if fg in anchored else float(g) * factor
-            rows.append(
-                {"country": country, "food_group": fg, "group_total_g_per_day": new_g}
-            )
+        scaled = grp.copy()
+        mask = ~scaled["_anchored"]
+        scaled.loc[mask, "consumption_g_per_day"] = (
+            scaled.loc[mask, "consumption_g_per_day"] * factor
+        )
+        out_frames.append(scaled.drop(columns=["_kcal", "_anchored"]))
 
     if skipped_countries:
         logger.warning(
@@ -401,7 +403,7 @@ def apply_kcal_normalisation(
             "through unchanged: %s",
             len(skipped_countries),
             ", ".join(sorted(skipped_countries)[:8])
-            + ("…" if len(skipped_countries) > 8 else ""),
+            + ("..." if len(skipped_countries) > 8 else ""),
         )
 
     if factors:
@@ -416,9 +418,15 @@ def apply_kcal_normalisation(
             len(ser),
         )
 
-    return (
-        pd.DataFrame(rows).sort_values(["country", "food_group"]).reset_index(drop=True)
-    )
+    return pd.concat(out_frames, ignore_index=True)
+
+
+def build_kcal_per_g_food(nutrition_df: pd.DataFrame) -> dict[str, float]:
+    """Per-food kcal/g from nutrition.csv."""
+    kcal_per_100g = nutrition_df[nutrition_df["nutrient"] == "cal"].set_index("food")[
+        "value"
+    ]
+    return (kcal_per_100g / 100.0).to_dict()
 
 
 def build_kcal_per_g_group(
@@ -1485,22 +1493,18 @@ def main():
     kcal_target_df = pd.read_csv(kcal_target_path)
     nutrition_df = pd.read_csv(nutrition_path)
     kcal_per_g_group = build_kcal_per_g_group(food_groups_df, nutrition_df)
+    kcal_per_g_food = build_kcal_per_g_food(nutrition_df)
     group_totals = apply_cereal_residual_fix(
         group_totals,
         kcal_target_df,
         kcal_per_g_group,
     )
 
-    # Step 1c: Anchor-aware kcal normalisation to GDD-IA's country-level
-    # target (all-fg minus out-of-scope categories). Scales unanchored
-    # groups so total kcal lands on target; GBD-anchored values and the
-    # refined-grain residual are preserved.
-    group_totals = apply_kcal_normalisation(
-        group_totals,
-        kcal_target_df,
-        gbd_anchored_groups=gbd_anchored_groups,
-        kcal_per_g_group=kcal_per_g_group,
-    )
+    # Step 1c is performed after per-food disaggregation (Step 3) so the
+    # kcal accounting uses food-level energy densities rather than a
+    # group-mean, which would otherwise overshoot the GDD-IA target for
+    # heterogeneous groups (notably starchy_vegetable / cassava-heavy
+    # diets).
 
     # Step 1a: Extract direct per-food items (e.g. coffee-green, tea-dried)
     direct_foods, direct_food_names = load_direct_food_items(
@@ -1597,6 +1601,17 @@ def main():
     # Run BEFORE the FBS override so that override-driven deviations from
     # the share-based estimate don't drown the signal.
     _validate_group_sums(result, group_totals, exclude_foods=set(fbs_override_foods))
+
+    # Step 3b: Anchor-aware kcal normalisation at the food level. Scales
+    # unanchored foods so total kcal/day hits ``kcal_target_modelled``;
+    # GBD-anchored foods and the refined-grain residual are preserved.
+    # See ``apply_kcal_normalisation`` for the basis-mismatch motivation.
+    result = apply_kcal_normalisation(
+        result,
+        kcal_target_df,
+        gbd_anchored_groups=gbd_anchored_groups,
+        kcal_per_g_food=kcal_per_g_food,
+    )
 
     # Step 4: Override specific foods with FBS-supply-anchored intake
     if fbs_override_foods:

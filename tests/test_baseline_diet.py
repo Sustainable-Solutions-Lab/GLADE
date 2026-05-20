@@ -10,6 +10,7 @@ import pytest
 from workflow.scripts.estimate_baseline_diet import (
     WITHIN_QCL_FOOD_SPLITS,
     _resolve_shared_fbs_item,
+    apply_kcal_normalisation,
     build_within_group_shares,
 )
 
@@ -726,3 +727,128 @@ class TestBuildWithinGroupShares:
         # IND has 80 cattle + 70 buffalo = 150 total
         assert ind_dairy == pytest.approx(80.0 / 150.0, abs=0.01)
         assert ind_buffalo == pytest.approx(70.0 / 150.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# kcal normalisation
+# ---------------------------------------------------------------------------
+
+
+class TestApplyKcalNormalisation:
+    """Food-level kcal normalisation hits the GDD-IA target even when the
+    intra-group food mix is far from the group-mean energy density.
+
+    Regression test: an earlier group-mean implementation undershot the
+    rescaling factor for cassava-heavy starchy_vegetable diets, leaving
+    Sub-Saharan African countries 8-35% above their GDD-IA target.
+    """
+
+    def test_food_level_kpg_hits_target_for_heterogeneous_group(self):
+        """Two countries with identical group totals but different
+        within-group food mixes should both land on the same kcal target.
+        """
+        baseline_diet = pd.DataFrame(
+            {
+                "country": ["A", "A", "A", "B", "B", "B"],
+                "food": [
+                    "cassava",
+                    "potato",
+                    "rice-white",
+                    "cassava",
+                    "potato",
+                    "rice-white",
+                ],
+                "food_group": [
+                    "starchy_vegetable",
+                    "starchy_vegetable",
+                    "grain",
+                    "starchy_vegetable",
+                    "starchy_vegetable",
+                    "grain",
+                ],
+                # Same group totals (500 g/day starchy, 100 g/day grain) but
+                # A is cassava-heavy (high kcal/g) and B is potato-heavy.
+                "consumption_g_per_day": [400.0, 100.0, 100.0, 100.0, 400.0, 100.0],
+            }
+        )
+        kpg = {"cassava": 1.59, "potato": 0.77, "rice-white": 3.65}
+        target_df = pd.DataFrame(
+            {"country": ["A", "B"], "kcal_target_modelled": [600.0, 600.0]}
+        )
+
+        result = apply_kcal_normalisation(
+            baseline_diet,
+            target_df,
+            gbd_anchored_groups=set(),
+            kcal_per_g_food=kpg,
+        )
+
+        for c in ("A", "B"):
+            sub = result[result["country"] == c]
+            kcal = float((sub["consumption_g_per_day"] * sub["food"].map(kpg)).sum())
+            assert kcal == pytest.approx(
+                600.0, abs=1e-6
+            ), f"country {c} kcal={kcal:.2f} != target 600"
+
+    def test_anchored_groups_are_not_rescaled(self):
+        """Foods in GBD-anchored groups (and the refined-grain residual)
+        must keep their consumption unchanged; only unanchored foods get
+        scaled to close the residual.
+        """
+        baseline_diet = pd.DataFrame(
+            {
+                "country": ["A", "A", "A"],
+                "food": ["red-meat-item", "cassava", "rice-white"],
+                "food_group": ["red_meat", "starchy_vegetable", "grain"],
+                "consumption_g_per_day": [50.0, 500.0, 100.0],
+            }
+        )
+        kpg = {"red-meat-item": 2.5, "cassava": 1.59, "rice-white": 3.65}
+        target_df = pd.DataFrame({"country": ["A"], "kcal_target_modelled": [1000.0]})
+
+        result = apply_kcal_normalisation(
+            baseline_diet,
+            target_df,
+            gbd_anchored_groups={"red_meat"},
+            kcal_per_g_food=kpg,
+        )
+
+        red_meat_g = float(
+            result.loc[result["food"] == "red-meat-item", "consumption_g_per_day"].iloc[
+                0
+            ]
+        )
+        grain_g = float(
+            result.loc[result["food"] == "rice-white", "consumption_g_per_day"].iloc[0]
+        )
+        cassava_g = float(
+            result.loc[result["food"] == "cassava", "consumption_g_per_day"].iloc[0]
+        )
+
+        assert red_meat_g == pytest.approx(50.0)
+        assert grain_g == pytest.approx(100.0)
+        # Unanchored cassava is rescaled: anchored kcal = 50*2.5 + 100*3.65 = 490.
+        # target_unanchored = 510. pre-scaling cassava kcal = 500*1.59 = 795.
+        # factor = 510/795 = 0.6415. post: 500 * 0.6415 = 320.75.
+        assert cassava_g == pytest.approx(320.75, rel=1e-3)
+
+    def test_missing_food_raises(self):
+        """Foods without a kcal/g entry should raise; the previous code
+        silently substituted zero.
+        """
+        baseline_diet = pd.DataFrame(
+            {
+                "country": ["A"],
+                "food": ["mystery-food"],
+                "food_group": ["starchy_vegetable"],
+                "consumption_g_per_day": [100.0],
+            }
+        )
+        target_df = pd.DataFrame({"country": ["A"], "kcal_target_modelled": [500.0]})
+        with pytest.raises(ValueError, match="mystery-food"):
+            apply_kcal_normalisation(
+                baseline_diet,
+                target_df,
+                gbd_anchored_groups=set(),
+                kcal_per_g_food={"other-food": 1.0},
+            )
