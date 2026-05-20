@@ -247,15 +247,48 @@ def add_production_stability_constraints(
             if stability_cfg["deviation_type"] == "absolute":
                 crop_links = links_df[links_df["carrier"] == "crop_production"]
                 grass_links = links_df[links_df["carrier"] == "grassland_production"]
-                total_area = (
-                    crop_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
-                    + grass_links.get("baseline_area_mha", pd.Series(dtype=float)).sum()
-                )
                 animal_links = links_df[links_df["carrier"] == "animal_production"]
-                total_feed = animal_links.get(
-                    "baseline_feed_use_mt_dm", pd.Series(dtype=float)
-                ).sum()
-                if total_feed > 0:
+                # build_model populates baseline_area_mha on crop/grassland
+                # production links and baseline_feed_use_mt_dm on
+                # animal_production links. The previous .get(...) fallback
+                # to an empty Series silently zeroed total_area when these
+                # columns were missing, which made animal_scale = 0 and
+                # disabled the L1 penalty without warning. Require the
+                # columns explicitly when the corresponding carriers are
+                # present.
+                if not crop_links.empty and "baseline_area_mha" not in crop_links:
+                    raise ValueError(
+                        "crop_production links missing baseline_area_mha; "
+                        "build_model must populate it before solve"
+                    )
+                if not grass_links.empty and "baseline_area_mha" not in grass_links:
+                    raise ValueError(
+                        "grassland_production links missing baseline_area_mha; "
+                        "build_model must populate it before solve"
+                    )
+                if (
+                    not animal_links.empty
+                    and "baseline_feed_use_mt_dm" not in animal_links
+                ):
+                    raise ValueError(
+                        "animal_production links missing baseline_feed_use_mt_dm; "
+                        "build_model must populate it before solve"
+                    )
+                total_area = (
+                    crop_links["baseline_area_mha"].sum()
+                    if not crop_links.empty
+                    else 0.0
+                ) + (
+                    grass_links["baseline_area_mha"].sum()
+                    if not grass_links.empty
+                    else 0.0
+                )
+                total_feed = (
+                    animal_links["baseline_feed_use_mt_dm"].sum()
+                    if not animal_links.empty
+                    else 0.0
+                )
+                if total_feed > 0 and total_area > 0:
                     animal_scale = total_area / total_feed
                 logger.info(
                     "Animal scaling: %.4f Mha/Mt (area=%.1f, feed=%.1f)",

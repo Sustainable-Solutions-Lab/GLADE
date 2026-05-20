@@ -9,12 +9,16 @@ per-capita g/day format for use as fixed consumption constraints in
 the Stage 2 tax extraction solve.
 """
 
+import logging
+
 import pandas as pd
 import pypsa
 
 from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.population import get_country_population
+
+logger = logging.getLogger(__name__)
 
 
 def extract_optimal_consumption(
@@ -64,8 +68,8 @@ def extract_optimal_consumption(
             level_mt = float(store_levels.get(store_name, 0.0))
 
             # Convert to g/person/day
-            population = pop_map[country]
-            g_per_day = level_mt * GRAMS_PER_MEGATONNE / (population * DAYS_PER_YEAR)
+            pop = pop_map[country]
+            g_per_day = level_mt * GRAMS_PER_MEGATONNE / (pop * DAYS_PER_YEAR)
 
             records.append(
                 {
@@ -90,7 +94,7 @@ def extract_optimal_consumption(
 
 
 if __name__ == "__main__":
-    logger = setup_script_logging(
+    setup_script_logging(
         log_file=snakemake.log[0] if snakemake.log else None  # type: ignore[name-defined]
     )
 

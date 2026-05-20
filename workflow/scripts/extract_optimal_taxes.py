@@ -23,10 +23,14 @@ Interpretation:
 Therefore: tax = -dual (positive tax discourages, negative tax = subsidy encourages)
 """
 
+import logging
+
 import pandas as pd
 import pypsa
 
 from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
 
 
 def extract_optimal_taxes(n: pypsa.Network) -> pd.DataFrame:
@@ -84,7 +88,7 @@ def extract_optimal_taxes(n: pypsa.Network) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    logger = setup_script_logging(
+    setup_script_logging(
         log_file=snakemake.log[0] if snakemake.log else None  # type: ignore[name-defined]
     )
 
