@@ -6,6 +6,7 @@
 
 import logging
 
+from linopy.constants import BREAKPOINT_DIM
 import numpy as np
 import pandas as pd
 import pypsa
@@ -13,7 +14,13 @@ import xarray as xr
 
 logger = logging.getLogger(__name__)
 
-FOOD_UTILITY_COEFFS: dict[int, tuple[xr.DataArray, xr.DataArray]] = {}
+# Sentinel x-coordinate used to extend the last utility segment past the
+# right-most real breakpoint.  Linopy's LP piecewise formulation imposes
+# a `link_p <= max(x)` domain bound; placing the sentinel far beyond any
+# plausible consumption makes this bound effectively inert while keeping
+# the last-segment slope equal to the last-block marginal utility (the
+# "overflow continuation" behaviour the model relies on).
+OVERFLOW_SENTINEL_MT: float = 1.0e6
 
 
 def _prepare_piecewise_utility_rows(
@@ -181,14 +188,78 @@ def _merge_small_width_blocks(
     return result, merged_blocks, affected_links
 
 
+def _build_cumulative_breakpoints(
+    rows: pd.DataFrame, link_names: list[str]
+) -> tuple[xr.DataArray, xr.DataArray, list[int]]:
+    """Build per-link (x, y) breakpoints for the cumulative utility curve.
+
+    For each link with non-increasing marginal utilities ``mu_1 .. mu_K``
+    and block widths ``w_1 .. w_K``:
+
+        x_0 = 0,  x_k = sum_{i=1..k} w_i
+        y_0 = 0,  y_k = sum_{i=1..k} mu_i * w_i
+
+    A final sentinel breakpoint at x = OVERFLOW_SENTINEL_MT extends the
+    last segment with slope mu_K, so consumption past the last block
+    earns the last-block marginal utility.
+
+    Returns DataArrays with dims ``(name, BREAKPOINT_DIM)`` and NaN
+    padding so per-link breakpoint counts can differ (linopy masks NaN
+    pieces in the LP method).
+    """
+    n_links = len(link_names)
+    # Pre-sort once and split via boundaries to avoid per-link groupby cost.
+    ordered = rows.sort_values(["name", "block_id"], kind="stable")
+    name_to_idx = {name: i for i, name in enumerate(link_names)}
+
+    # Collect per-link arrays.
+    x_arrays: list[np.ndarray] = [np.empty(0)] * n_links
+    y_arrays: list[np.ndarray] = [np.empty(0)] * n_links
+    block_counts: list[int] = [0] * n_links
+
+    for name, sub in ordered.groupby("name", sort=False):
+        i = name_to_idx[name]
+        w = sub["width_mt_per_year"].to_numpy(dtype=float)
+        mu = sub["marginal_utility_bnusd_per_mt"].to_numpy(dtype=float)
+        cum_x = np.concatenate(([0.0], np.cumsum(w)))
+        cum_y = np.concatenate(([0.0], np.cumsum(mu * w)))
+        last_mu = float(mu[-1])
+        sentinel_y = float(cum_y[-1] + last_mu * (OVERFLOW_SENTINEL_MT - cum_x[-1]))
+        x_arrays[i] = np.concatenate((cum_x, [OVERFLOW_SENTINEL_MT]))
+        y_arrays[i] = np.concatenate((cum_y, [sentinel_y]))
+        block_counts[i] = len(w)
+
+    # Pad to a common breakpoint dimension with NaN; trailing-NaN pieces are
+    # masked out by linopy's LP method.
+    max_len = max(arr.size for arr in x_arrays)
+    x_padded = np.full((n_links, max_len), np.nan, dtype=float)
+    y_padded = np.full((n_links, max_len), np.nan, dtype=float)
+    for i, (xs, ys) in enumerate(zip(x_arrays, y_arrays)):
+        x_padded[i, : xs.size] = xs
+        y_padded[i, : ys.size] = ys
+
+    coords = {"name": link_names, BREAKPOINT_DIM: np.arange(max_len)}
+    x_pts = xr.DataArray(x_padded, coords=coords, dims=("name", BREAKPOINT_DIM))
+    y_pts = xr.DataArray(y_padded, coords=coords, dims=("name", BREAKPOINT_DIM))
+    return x_pts, y_pts, block_counts
+
+
 def add_piecewise_food_utility(
     n: pypsa.Network, utility_blocks_path: str, min_block_width_mt: float
 ) -> None:
     """Add piecewise diminishing marginal utility for food consumption links.
 
-    Adds variables per link and block with upper bounds from
-    ``width_mt_per_year`` and constrains each link's food consumption to the sum
-    over these block variables plus a non-incentivized overflow variable.
+    Adds one auxiliary ``food_utility_value`` variable per link, bounded
+    above by the per-link concave cumulative-utility curve via linopy's
+    LP tangent-line piecewise formulation (one chord inequality per
+    segment).  The objective receives ``-sum(utility)``, so the LP
+    pushes each link's utility up to the curve value at the optimal
+    consumption level.
+
+    The last segment is extended with a sentinel breakpoint at
+    ``OVERFLOW_SENTINEL_MT`` so consumption past the last real block
+    earns the last-block marginal utility (the "overflow continuation"
+    behaviour the model relies on for negative-MU foods).
     """
     m = n.model
     if m is None:
@@ -239,126 +310,55 @@ def add_piecewise_food_utility(
             remaining_small,
         )
 
-    block_ids = sorted(rows["block_id"].unique().tolist())
     link_names = sorted(rows["name"].unique().tolist())
+    x_pts, y_pts, block_counts = _build_cumulative_breakpoints(rows, link_names)
 
-    width_matrix = (
-        rows.pivot(index="name", columns="block_id", values="width_mt_per_year")
-        .reindex(index=link_names, columns=block_ids)
-        .fillna(0.0)
-        .astype(float)
-    )
-    utility_matrix = (
-        rows.pivot(
-            index="name", columns="block_id", values="marginal_utility_bnusd_per_mt"
-        )
-        .reindex(index=link_names, columns=block_ids)
-        .fillna(0.0)
-        .astype(float)
-    )
-
-    link_p = m.variables["Link-p"].sel(snapshot="now")
-
-    widths = xr.DataArray(
-        width_matrix.to_numpy(),
-        coords={"name": link_names, "block_id": block_ids},
-        dims=("name", "block_id"),
-    )
-    utilities = xr.DataArray(
-        utility_matrix.to_numpy(),
-        coords={"name": link_names, "block_id": block_ids},
-        dims=("name", "block_id"),
-    )
-
-    block_flow = m.add_variables(
-        lower=0.0,
-        upper=widths,
-        coords=[link_names, block_ids],
-        dims=["name", "block_id"],
-        name="food_utility_block_flow",
-    )
-    overflow = m.add_variables(
-        lower=0.0,
+    # One utility variable per link.  No bounds: chord constraints pin it
+    # from above and the objective pulls it up; a negative lower bound is
+    # required because some calibrated marginal utilities are negative
+    # (in which case the integrated utility goes negative beyond the
+    # break-even point).
+    utility_var = m.add_variables(
+        lower=-np.inf,
         coords=[link_names],
         dims=["name"],
-        name="food_utility_overflow_flow",
+        name="food_utility_value",
     )
 
-    m.add_constraints(
-        link_p.sel(name=link_names) == block_flow.sum("block_id") + overflow,
-        name="GlobalConstraint-food_utility_piecewise_balance",
+    link_p = m.variables["Link-p"].sel(snapshot="now").sel(name=link_names)
+
+    # Concave curve bounded above: utility <= f(link_p), where f is the
+    # integral of the non-increasing marginal-utility schedule.  linopy's
+    # "auto" method selects the LP tangent-line formulation here.
+    m.add_piecewise_formulation(
+        (utility_var, y_pts, "<="),
+        (link_p, x_pts),
+        name="food_utility_piecewise",
     )
 
-    # Continue the utility schedule into overflow to prevent the solver from
-    # bypassing blocks.  Without this, overflow has zero utility, which is
-    # more attractive than any negative-utility block - causing the solver to
-    # route all consumption of negative-mu foods through overflow and
-    # effectively ignoring the piecewise schedule.
-    #
-    # The overflow utility is the marginal utility of each link's *last*
-    # real block. ``utilities.isel(block_id=-1)`` would pick the last
-    # column of the padded matrix, which is 0.0 for any link with fewer
-    # blocks than the global max -- re-opening the very loophole this
-    # term exists to close.
-    last_block_utility = (
-        rows.sort_values(["name", "block_id"])
-        .groupby("name", sort=False)
-        .last()["marginal_utility_bnusd_per_mt"]
-        .reindex(link_names)
-        .astype(float)
-    )
-    overflow_utilities = xr.DataArray(
-        last_block_utility.to_numpy(),
-        coords={"name": link_names},
-        dims="name",
-    )
+    m.objective += -utility_var.sum()
 
-    # Combine both contributions into a single objective update.  Each
-    # m.objective += <expr> merges <expr> with the full existing objective,
-    # so issuing two of them doubles that O(N_obj_terms) merge cost.
-    m.objective += -(
-        (utilities * block_flow).sum() + (overflow_utilities * overflow).sum()
-    )
-
-    FOOD_UTILITY_COEFFS[id(m)] = (utilities, overflow_utilities)
-
-    block_counts = rows.groupby("name")["block_id"].max()
     n.meta["food_utility_piecewise"] = {
         "links": len(link_names),
-        "blocks_per_link_max": int(block_counts.max()),
-        "blocks_per_link_min": int(block_counts.min()),
-        "total_width_mt_per_year": float(widths.sum().item()),
+        "blocks_per_link_max": int(max(block_counts)),
+        "blocks_per_link_min": int(min(block_counts)),
+        "total_width_mt_per_year": float(rows["width_mt_per_year"].sum()),
     }
 
     logger.info(
         "Applied piecewise utility to %d food consumption links (%d-%d blocks each)",
         len(link_names),
-        int(block_counts.min()),
-        int(block_counts.max()),
+        min(block_counts),
+        max(block_counts),
     )
 
 
 def pop_piecewise_food_utility_value(n: pypsa.Network) -> float:
-    """Return realized utility value and clear cached coefficients."""
+    """Return the realized piecewise food-utility value from the solved model."""
     m = n.model
-    if m is None:
+    if m is None or "food_utility_value" not in m.variables:
         return 0.0
-
-    cached = FOOD_UTILITY_COEFFS.pop(id(m), None)
-    if cached is None:
+    sol = m.variables["food_utility_value"].solution
+    if sol is None:
         return 0.0
-    block_coeffs, overflow_coeffs = cached
-    if "food_utility_block_flow" not in m.variables:
-        return 0.0
-
-    block_sol = m.variables["food_utility_block_flow"].solution
-    if block_sol is None:
-        return 0.0
-
-    total = float((block_coeffs * block_sol).sum().item())
-
-    overflow_sol = m.variables["food_utility_overflow_flow"].solution
-    if overflow_sol is not None:
-        total += float((overflow_coeffs * overflow_sol).sum().item())
-
-    return total
+    return float(sol.sum().item())
