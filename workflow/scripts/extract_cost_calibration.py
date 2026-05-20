@@ -4,15 +4,27 @@
 
 """Extract production cost calibration corrections from stability constraint duals.
 
-When the model is solved with hard production stability constraints, the dual
-variables (shadow prices) on the min/max bounds indicate how much the model
-would gain from relaxing those bounds. This script converts those duals into
-additive cost corrections per component group:
+When the model is solved with hard production stability constraints, the
+dual variables (shadow prices) on the min/max bounds indicate how much the
+model would gain from relaxing those bounds. This script converts those
+duals into additive cost corrections per component group.
 
-- mu on lower bound > 0 → model wants to produce less → cost is too low → positive correction
-- mu on upper bound > 0 → model wants to produce more → cost is too high → negative correction
+Sign convention (linopy returns signed mu):
 
-correction = median(-(mu_lower + mu_upper)) per group
+- Binding ``>=`` lower bound: mu_lower > 0. The model is forced to produce
+  MORE than it wants. To make the unrestricted model match this level we
+  must lower its cost - correction = -mu_lower (negative).
+- Binding ``<=`` upper bound: mu_upper < 0. The model is forced to produce
+  LESS than it wants. To make the unrestricted model match this level we
+  must raise its cost - correction = -mu_upper (positive).
+
+Combined: correction = -(mu_lower + mu_upper).
+
+Per-link corrections are aggregated to per-group via ``median``: groups
+with heterogeneous binding behaviour across resource classes get a
+representative central value rather than a sum (which would inflate the
+correction by the number of classes) or a mean (which would dilute it
+toward zero when only one class binds).
 
 Outputs three CSVs:
   - crop:      (crop, country, correction_bnusd_per_mha)
@@ -94,16 +106,29 @@ def extract_corrections(
     min_constraints["mu_lower"] = min_constraints["mu"].fillna(0.0).astype(float)
     max_constraints["mu_upper"] = max_constraints["mu"].fillna(0.0).astype(float)
 
+    # Defensive check on linopy's signed-mu convention. The combined
+    # correction = -(mu_lower + mu_upper) only works if:
+    #   mu_lower >= 0  (binding >= gives positive dual)
+    #   mu_upper <= 0  (binding <= gives negative dual)
+    # If a future linopy/PyPSA version returns |mu| for both directions,
+    # the upper-bound corrections would flip sign silently. Fail loudly.
+    bad_lower = min_constraints.loc[min_constraints["mu_lower"] < -1e-9]
+    if not bad_lower.empty:
+        raise ValueError(
+            f"Unexpected negative mu on {prefix} lower (>=) bounds; "
+            f"linopy sign convention may have changed. Examples: "
+            f"{bad_lower['mu_lower'].head().to_dict()}"
+        )
+    bad_upper = max_constraints.loc[max_constraints["mu_upper"] > 1e-9]
+    if not bad_upper.empty:
+        raise ValueError(
+            f"Unexpected positive mu on {prefix} upper (<=) bounds; "
+            f"linopy sign convention may have changed. Examples: "
+            f"{bad_upper['mu_upper'].head().to_dict()}"
+        )
+
     # Build per-link correction: -(mu_lower + mu_upper)
-    # Standard LP dual signs for minimization:
-    #   >= constraint: mu_lower >= 0 when binding
-    #   <= constraint: mu_upper <= 0 when binding
-    # Correction logic:
-    #   mu_lower > 0 → model forced to produce more than it wants → decrease cost
-    #     → correction = -mu_lower (negative)
-    #   mu_upper < 0 → model forced to produce less than it wants → increase cost
-    #     → correction = -mu_upper (positive)
-    # Combined: correction = -(mu_lower + mu_upper)
+    # See module docstring for the sign reasoning.
     min_duals = min_constraints.set_index("link_name")["mu_lower"]
     max_duals = max_constraints.set_index("link_name")["mu_upper"]
 
@@ -217,5 +242,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logger = setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)
+    setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)
     main()
