@@ -14,7 +14,11 @@ ROW_CHUNK_SIZE = COARSEN_FACTOR * 30
 NODATA_VALUE = 0
 
 FOREST_CLASSES: tuple[int, ...] = (50, 60, 70, 80, 90, 160, 170, 100)
-GRASSLAND_CLASSES: tuple[int, ...] = (110, 130, 140, 150)
+# Class 150 ("Sparse vegetation (tree, shrub, herbaceous cover) (<15%)") is
+# bare ground / desert margin, not grazable productive grassland. Counting
+# it would inflate grassland_fraction in arid regions and propagate to
+# pasture availability and LUC accounting.
+GRASSLAND_CLASSES: tuple[int, ...] = (110, 130, 140)
 CROPLAND_CLASSES: tuple[int, ...] = (10, 20, 30, 40)
 
 
@@ -148,6 +152,19 @@ def main() -> None:
 
     y_coords, x_coords = _target_coords(grid_path)
     fractions = _aggregate_fractions(land_cover_path)
+
+    # Aggregated counts use coarsening-only (no reprojection): the output
+    # shape is (ESA height // 30, ESA width // 30). If the target grid is
+    # not aligned with ESA's native lat/lon grid the y/x coords would be
+    # silently mislabelled. Catch the mismatch loudly.
+    expected_shape = (len(y_coords), len(x_coords))
+    for name, arr in fractions.items():
+        if arr.shape != expected_shape:
+            raise ValueError(
+                f"{name} shape {arr.shape} does not match target grid "
+                f"{expected_shape}; ESA CCI native grid and target grid "
+                "must align under 30x coarsening."
+            )
 
     ds_out = xr.Dataset(
         {

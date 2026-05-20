@@ -365,6 +365,18 @@ def process_huang_irrigation(
     lat = ds["lat"].values
     time_dim = "month"
 
+    # Huang/H08 stores grid cells as a flat list: lat and lon are
+    # parallel 1D arrays of length n_cells, and withd_irr has shape
+    # (month, n_cells). Standard NetCDFs with separate lat / lon axes
+    # would silently mis-index below (line: monthly_data[lat_idx,
+    # lon_idx] = monthly_values.ravel()).
+    if lat.ndim != 1 or lon.ndim != 1 or lat.shape != lon.shape:
+        raise ValueError(
+            "Huang irrigation NetCDF expected to use parallel 1D "
+            f"lat/lon arrays of equal length; got lat shape {lat.shape}, "
+            f"lon shape {lon.shape}."
+        )
+
     # Load regions
     regions_gdf = gpd.read_file(regions_path)[["region", "geometry"]]
     regions_list = regions_gdf["region"].tolist()
