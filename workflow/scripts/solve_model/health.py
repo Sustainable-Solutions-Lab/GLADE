@@ -650,6 +650,16 @@ def _add_stage1_delta(
         )
 
     # Intake balance: I_{c,r} = x_0 + Σ_j δ_j Δx_j
+    # delta_var is bounded to [0, 1] per segment, so intake_expr is
+    # capped at x_N (the last breakpoint, typically 1000 g/cap/day).
+    # If LP-driven consumption pushes a food group above x_N, this
+    # equality becomes infeasible globally. The cap is generous enough
+    # that this represents the LP entering physically implausible
+    # territory (a single food group exceeding 1 kg/cap/day) rather
+    # than a real-world scenario, so the infeasibility is treated as
+    # the correct failure mode. To extend the operating range,
+    # add higher-intake rows to risk_breakpoints (with constant log_rr
+    # past the TMREL plateau) before raising the LP regime.
     x_0 = float(intake_values.isel(intake_step=0).values)
     intake_expr = x_0 + (delta_var * delta_x).sum(segment_dim)
     intake_expr = intake_expr.reindex(

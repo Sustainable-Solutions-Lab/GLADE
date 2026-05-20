@@ -1042,6 +1042,12 @@ def add_spared_land_links(
         return
 
     df["lef"] = merge_lef(df, lef_df, "spared_cropland", allow_missing=True)
+    # Sparing must yield a sequestration credit (non-positive emission to
+    # emission:co2). build_luc_carbon_coefficients computes lef_spared as
+    # -regrowth * CO2_PER_C, but a future regression in that pipeline
+    # could flip the sign and quietly make sparing emit at positive GHG
+    # prices. Surface that immediately rather than at solve time.
+    assert (df["lef"] <= 1e-9).all()
 
     # Add spared-land routes for all existing cropland buses, even where the
     # spared-land LEF is zero. This keeps land accounting explicit: baseline

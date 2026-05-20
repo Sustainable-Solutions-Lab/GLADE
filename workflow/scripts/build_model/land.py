@@ -250,6 +250,11 @@ def add_land_components(
         .astype(float)
         .rename("area_ha")
     )
+    # Work on a defensive copy: the function used to mutate the caller's
+    # DataFrame in place via `total_land_area["area_ha"] = ...`. No current
+    # caller reuses the input after this call, but the side effect is
+    # invisible from the signature and a latent footgun for future code.
+    total_land_area = total_land_area.copy()
     total_area = total_land_area["area_ha"].astype(float)
     # FAOSTAT-baked baseline cropland sometimes exceeds the GAEZ-derived
     # suitable area envelope (most often in countries with extensive
@@ -805,6 +810,10 @@ def add_land_components(
                 "spared_grassland",
                 allow_missing=True,
             ).to_numpy()
+            # Sparing must be a sequestration credit (non-positive efficiency
+            # to emission:co2). Catch any future regression in
+            # build_luc_carbon_coefficients that flips the sign.
+            assert (grassland_supply["spare_lef"] <= 1e-9).all()
 
             spare_df = grassland_supply.set_index("spare_name")
             n.links.add(
