@@ -771,13 +771,6 @@ rule download_grassland_yield_data:
     The full managed-grassland yield catalogue is browsable at
     https://data.isimip.org/search/crop/mgr/variable/yield/irrigation/noirr/.
 
-    ``yield-mgr-noirr`` here is management-potential biomass (cuttable
-    yield without grazing offtake); ``merge_grassland_yields`` multiplies
-    by ``isimip_utilization_rate`` to convert to actually-grazed yield.
-    If ISIMIP ever ships a variant with different semantics under the
-    same name, the size check below and the provenance assertions in
-    ``build_grassland_yields.py`` will surface the drift.
-
     License: CC BY 4.0. ISIMIP releases agriculture-sector LPJmL output
     under CC BY 4.0; only LPJ-GUESS in that sector carries CC BY-NC 4.0.
     See https://www.isimip.org/gettingstarted/terms-of-use/licenses-publicly-available-isimip-data/.
@@ -804,8 +797,6 @@ rule download_grassland_yield_data:
         actual_size=$(stat -c%s "{output}")
         if [ "$actual_size" != "{params.expected_size_bytes}" ]; then
             echo "ISIMIP grassland file size mismatch: got $actual_size, expected {params.expected_size_bytes}." >> {log}
-            echo "Upstream may have published a new version; verify yield-mgr-noirr semantics" >> {log}
-            echo "before updating expected_size_bytes." >> {log}
             exit 1
         fi
         """

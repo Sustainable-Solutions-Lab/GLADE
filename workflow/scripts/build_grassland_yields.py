@@ -61,13 +61,8 @@ if __name__ == "__main__":
     if "yield-mgr-noirr" not in ds.data_vars:
         raise KeyError("Expected 'yield-mgr-noirr' variable in grassland dataset")
 
-    # Pin the ISIMIP provenance: the merge step multiplies this yield by
-    # isimip_utilization_rate on the assumption that "mgr" here means
-    # management-potential (cuttable biomass without grazing offtake), not
-    # actually-grazed yield. A future ISIMIP vintage that ships an
-    # already-utilized "mgr" variable would silently double-discount
-    # pasture supply. Assert the dataset metadata matches the expected
-    # ISIMIP2a / LPJmL GGCMI phase2 release so a drift surfaces here.
+    # Sanity-check the dataset provenance against the expected ISIMIP2a /
+    # LPJmL GGCMI phase2 release.
     expected_institution = "Potsdam Institute for Climate Impact Research"
     expected_title_prefix = "LPJmL simulations for Ag-GRID GGCMI"
     expected_units = "t ha-1 yr-1"
@@ -81,12 +76,8 @@ if __name__ == "__main__":
     ):
         raise ValueError(
             "ISIMIP grassland NetCDF provenance does not match the pinned "
-            f"ISIMIP2a/LPJmL GGCMI vintage. Got institution={institution!r}, "
-            f"title={title!r}, units={units!r}. If this is an intentional "
-            "data update, re-check whether yield-mgr-noirr is still the "
-            "management-potential yield (then update the assertion); the "
-            "merge step's isimip_utilization_rate assumes potential, not "
-            "actual grazed yield."
+            f"vintage. Got institution={institution!r}, title={title!r}, "
+            f"units={units!r}."
         )
 
     grass_yield = ds["yield-mgr-noirr"].astype(float)
