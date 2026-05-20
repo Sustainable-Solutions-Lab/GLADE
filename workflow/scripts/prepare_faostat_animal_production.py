@@ -132,30 +132,23 @@ def main() -> None:
             "No FAOSTAT production records matched the configured animal products"
         )
 
-    # Egg unit handling:
-    # - Preferred/expected: tonnes ("t"), no conversion required.
-    # - Legacy possibility: thousand eggs ("1000 No"), convert to tonnes
-    #   assuming 60 g/egg.
+    # Egg unit handling. Only hen eggs are mapped to the "eggs" model
+    # product (config/default.yaml), so the 60 g/egg conversion is a
+    # reasonable approximation for the legacy "1000 No" vintage. Current
+    # FAOSTAT QCL reports tonnes ("t") and the legacy branch is dormant.
     egg_mask_raw = df["product"] == "eggs"
     if egg_mask_raw.any():
         if "Unit" not in df.columns:
             raise RuntimeError("FAOSTAT production data has no 'Unit' column")
 
-        egg_units = (
-            df.loc[egg_mask_raw, "Unit"].astype(str).str.strip().str.lower().unique()
-        )
-        logger.info(
-            "Egg production units in source data: %s",
-            ", ".join(sorted(egg_units)),
-        )
-
         egg_unit_series = df["Unit"].astype(str).str.strip().str.lower()
-        thousand_eggs_mask = (
-            egg_mask_raw
-            & egg_unit_series.str.contains("1000", na=False)
-            & egg_unit_series.str.contains("no", na=False)
-        )
-        tonnes_mask = egg_mask_raw & (egg_unit_series == "t")
+        egg_units = sorted(egg_unit_series.loc[egg_mask_raw].unique())
+        logger.info("Egg production units in source data: %s", ", ".join(egg_units))
+
+        # Exact-match unit detection; avoid substring matches that could
+        # accept unexpected vintages silently.
+        thousand_eggs_mask = egg_mask_raw & egg_unit_series.isin({"1000 no"})
+        tonnes_mask = egg_mask_raw & egg_unit_series.isin({"t"})
         unknown_mask = egg_mask_raw & ~(thousand_eggs_mask | tonnes_mask)
 
         if unknown_mask.any():

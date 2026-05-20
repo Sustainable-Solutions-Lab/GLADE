@@ -145,7 +145,12 @@ def _add_trade_hubs_and_links(
         pairs["item_cost"] = pairs["item"].map(item_costs)
         pairs["cost"] = pairs["dist_km"] * pairs["item_cost"]
 
-        hub_idx_str = pairs["hub_idx"].astype(str)
+        # valid_countries filters out anything outside country_to_hub.index,
+        # so .map should never introduce NaN and the int dtype is preserved.
+        # If a NaN slipped through, astype(str) would produce "0.0" strings
+        # that no longer match the integer-suffix hub bus names.
+        assert pairs["hub_idx"].notna().all()
+        hub_idx_str = pairs["hub_idx"].astype(int).astype(str)
 
         # Build to-hub direction
         pairs["name_to"] = (
