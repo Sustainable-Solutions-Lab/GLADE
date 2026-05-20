@@ -37,6 +37,9 @@ config/secrets.yaml
 config/*.local.yaml
 /tools/snakemake-logger-plugin-compact/build/
 
+# Stray uv lock file (project uses pixi, not uv).
+uv.lock
+
 # Project-private workspace (per-investigation configs, scripts, scratch data
 # and notebooks that should not pollute the main repo). Not version-controlled.
 /tools/private/
