@@ -749,7 +749,7 @@ IHME GBD 2023 -- Mortality Rates
   * Query parameters:
 
     - Measure: Deaths (Rate per 100,000 population)
-    - Causes: Ischemic heart disease, Stroke, Diabetes mellitus, Colon and rectum cancer, Chronic respiratory diseases, All causes
+    - Causes: Ischemic heart disease, Ischemic stroke, Diabetes mellitus, Colon and rectum cancer, Chronic respiratory diseases, All causes
     - Age groups: <1 year, 12-23 months, 2-4 years, 5-9 years, ..., 95+ years (individual age bins)
     - Sex: Both
     - Year: must match ``baseline_year`` in the config (default: 2020)
@@ -765,7 +765,7 @@ IHME GBD 2023 -- Mortality Rates
 **Manual download steps**:
 
 1. Visit https://vizhub.healthdata.org/gbd-results/ and sign in with your IHME account.
-2. Reproduce the query parameters above. This permanent link is configured for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/f4c7511d159798f5b8864bc83fa06451 -- adjust the year if using a different ``baseline_year``.
+2. Reproduce the query parameters above. This permanent link is configured for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/ab3e7b526315599bf5cabbfe6c34e104 -- adjust the year if using a different ``baseline_year``.
 3. Export the results as CSV (allow some time for the IHME to process the query) and save to ``data/manually_downloaded`` as ``IHME-GBD_2023-death-rates-{year}.csv`` where ``{year}`` matches your ``baseline_year``. Consider checking the file modification time and potentially resetting it (on Linux, run ``touch`` on the file); sometimes the modification time of the downloaded file can be in the future, which confuses Snakemake.
 
 .. _ihme-relative-risks:

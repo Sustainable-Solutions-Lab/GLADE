@@ -27,7 +27,7 @@ Viewing and downloading these results requires a user account on the healthdata.
 - **Causes:**
   - All causes
   - Ischemic heart disease
-  - Stroke
+  - Ischemic stroke
   - Diabetes mellitus
   - Colon and rectum cancer
   - Chronic respiratory diseases
@@ -36,7 +36,7 @@ Viewing and downloading these results requires a user account on the healthdata.
 - **Sex:** Both
 - **Year:** Must match `baseline_year` in the config (default: 2020)
 
-The following permalink reproduces this query for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/f4c7511d159798f5b8864bc83fa06451. Adjust the year if using a different `baseline_year`.
+The following permalink reproduces this query for year 2020: https://vizhub.healthdata.org/gbd-results?params=gbd-api-2023-permalink/ab3e7b526315599bf5cabbfe6c34e104. Adjust the year if using a different `baseline_year`.
 
 **Processing:** The Snakemake workflow automatically processes this file via `workflow/scripts/prepare_gbd_mortality.py` to:
 1. Map country names to ISO3 codes
