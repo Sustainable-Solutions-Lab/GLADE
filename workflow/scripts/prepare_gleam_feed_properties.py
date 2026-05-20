@@ -107,6 +107,7 @@ def parse_gleam_monogastric_nutrition(excel_file: str) -> pd.DataFrame:
     # Convert GE and ME from kJ to MJ
     df["GE_MJ_per_kg_DM"] = df["GE_kJ_per_kg_DM"] / 1000.0
     df["ME_pigs_MJ_per_kg_DM"] = df["ME_pigs_kJ_per_kg_DM"] / 1000.0
+    df["ME_chickens_MJ_per_kg_DM"] = df["ME_chickens_kJ_per_kg_DM"] / 1000.0
 
     # Rename for consistency
     df = df.rename(columns={"Material": "gleam_code"})
@@ -116,6 +117,7 @@ def parse_gleam_monogastric_nutrition(excel_file: str) -> pd.DataFrame:
             "GE_MJ_per_kg_DM",
             "N_g_per_kg_DM",
             "ME_pigs_MJ_per_kg_DM",
+            "ME_chickens_MJ_per_kg_DM",
             "DI_pct",
         ]
     ]
@@ -210,6 +212,7 @@ def create_feed_properties(
                 "GE_MJ_per_kg_DM",
                 "N_g_per_kg_DM",
                 "ME_pigs_MJ_per_kg_DM",
+                "ME_chickens_MJ_per_kg_DM",
                 "digestibility",
             ]
         ],
@@ -222,13 +225,25 @@ def create_feed_properties(
         subset=["GE_MJ_per_kg_DM", "digestibility"]
     )
 
+    # The downstream feed-category aggregation uses a single ME value per
+    # feed; chickens and pigs have meaningfully different ME on the same
+    # feed (chickens are typically lower because they cannot digest fibre
+    # as efficiently). Without per-species disaggregation in the
+    # downstream category structure, the mean of the two is more
+    # defensible than picking one species silently.
+    monogastric_merged["ME_MJ_per_kg_DM"] = monogastric_merged[
+        ["ME_pigs_MJ_per_kg_DM", "ME_chickens_MJ_per_kg_DM"]
+    ].mean(axis=1)
+
     # Select and rename columns
     monogastric_output = monogastric_merged[
         [
             "model_entity",
             "entity_type",
             "GE_MJ_per_kg_DM",
+            "ME_MJ_per_kg_DM",
             "ME_pigs_MJ_per_kg_DM",
+            "ME_chickens_MJ_per_kg_DM",
             "N_g_per_kg_DM",
             "digestibility",
             "gleam_code",
@@ -237,7 +252,6 @@ def create_feed_properties(
         columns={
             "model_entity": "feed_item",
             "entity_type": "source_type",
-            "ME_pigs_MJ_per_kg_DM": "ME_MJ_per_kg_DM",
         }
     )
 
