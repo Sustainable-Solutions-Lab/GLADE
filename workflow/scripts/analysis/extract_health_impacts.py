@@ -5,16 +5,23 @@
 """Extract health impacts by food group and country.
 
 This script computes:
-1. Marginal YLL per unit of food consumed, based on derivatives of
-   piecewise-linear dose-response curves at current population intake levels.
+1. Marginal YLL per unit of food consumed, based on derivatives of the
+   piecewise-linear dose-response curves and the chord PWL of exp() that
+   together drive the LP's YLL store cost.
 2. Total YLL from the optimization result, read from the network's YLL stores.
+3. Attribution of total YLL to risk factors via proportional excess log(RR).
 
-Uses food_group_consumption.parquet from extract_statistics for consumption amounts,
-avoiding duplicate extraction of consumption data from the network.
+All intake values are read from the food-group store levels (post-waste,
+intake-basis), matching what Stage 1 of the LP sees in
+``solve_model.health._build_store_to_cluster_map`` and
+``evaluate_health_posthoc``. Do not substitute food-bus withdrawals here:
+those are pre-waste retail flows and are 10-30% higher than the store level
+for groups with a non-trivial consumer waste fraction.
 
 Outputs:
 - health_marginals.parquet: Marginal YLL at the food_group level (YLL/Mt, USD/t)
 - health_totals.parquet: Total YLL by health cluster (MYLL)
+- health_attribution.parquet: YLL by (cluster, cause, food_group)
 """
 
 from collections import defaultdict
@@ -85,95 +92,86 @@ def get_country_cluster_lookup(country_clusters: pd.DataFrame) -> dict[str, int]
     return clusters.set_index("country_iso3")["health_cluster"].astype(int).to_dict()
 
 
-def compute_intake_by_cluster_risk(
-    food_group_consumption: pd.DataFrame,
+def compute_store_intake_by_cluster_risk(
+    n: pypsa.Network,
     risk_factors: list[str],
     cluster_lookup: dict[str, int],
     cluster_population: dict[int, float],
 ) -> dict[tuple[int, str], float]:
-    """Compute current intake in g/capita/day by (cluster, risk_factor).
+    """Compute per-capita intake in g/capita/day from food-group store levels.
+
+    Reads the final-snapshot energy level of the ``store:group:<group>:<country>``
+    stores. These hold post-waste (intake-basis) mass, because the
+    ``food_consumption`` link applies ``efficiency = (1 - waste_fraction)`` on
+    the leg feeding the group bus (see ``build_model.nutrition``). This is the
+    exact intake basis used by ``solve_model.health._build_store_to_cluster_map``,
+    so reconstructions here stay consistent with what Stage 1 of the LP sees.
 
     Parameters
     ----------
-    food_group_consumption : DataFrame with columns food_group, country, consumption_mt
-    risk_factors : List of food groups that are health risk factors
-    cluster_lookup : Dict mapping country ISO3 to cluster ID
-    cluster_population : Dict mapping cluster ID to total population
+    n
+        Solved PyPSA network.
+    risk_factors
+        Food groups treated as GBD risk factors.
+    cluster_lookup
+        Mapping from country ISO3 to health cluster.
+    cluster_population
+        Population by health cluster (used for the g/capita/day conversion).
 
-    Returns dict mapping (cluster, risk_factor) to intake in g/capita/day
+    Returns
+    -------
+    dict
+        ``{(cluster, risk_factor): g/capita/day}``. Missing keys imply zero
+        intake (no store, or no store for that country mapped to the cluster).
     """
-    # Filter to risk factors only
-    df = food_group_consumption[
-        food_group_consumption["food_group"].isin(risk_factors)
-    ].copy()
-
-    if df.empty:
+    stores = n.stores.static
+    fg_stores = stores[stores["food_group"].isin(risk_factors)].copy()
+    if fg_stores.empty:
         return {}
 
-    # Normalize country codes
-    df["country"] = df["country"].str.upper()
+    fg_stores["cluster"] = fg_stores["country"].str.upper().map(cluster_lookup)
+    fg_stores = fg_stores[fg_stores["cluster"].notna()].copy()
+    fg_stores["cluster"] = fg_stores["cluster"].astype(int)
 
-    # Map countries to clusters
-    df["cluster"] = df["country"].map(cluster_lookup)
+    snapshot = n.snapshots[-1]
+    store_levels = n.stores.dynamic.e.loc[snapshot]
 
-    # Filter to countries with known clusters
-    df = df[df["cluster"].notna()].copy()
-    df["cluster"] = df["cluster"].astype(int)
+    fg_stores["level_mt"] = fg_stores.index.map(store_levels)
+    grouped = fg_stores.groupby(["cluster", "food_group"], as_index=False)[
+        "level_mt"
+    ].sum()
 
-    # Aggregate consumption by (cluster, food_group)
-    cluster_consumption = (
-        df.groupby(["cluster", "food_group"])["consumption_mt"].sum().reset_index()
-    )
-
-    # Convert to g/capita/day
     intake_totals: dict[tuple[int, str], float] = {}
-    for _, row in cluster_consumption.iterrows():
-        cluster = int(row["cluster"])
-        food_group = str(row["food_group"])
-        consumption_mt = float(row["consumption_mt"])
-
-        cluster_pop = cluster_population.get(cluster, 0.0)
+    for row in grouped.itertuples(index=False):
+        cluster = int(row.cluster)
+        cluster_pop = cluster_population[cluster]
         if cluster_pop <= 0:
             continue
-
-        # Convert Mt/year to g/capita/day
-        intake_g = consumption_mt * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
-        intake_totals[(cluster, food_group)] = intake_g
+        intake_g = (
+            float(row.level_mt) * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
+        )
+        intake_totals[(cluster, str(row.food_group))] = intake_g
 
     return intake_totals
 
 
-def compute_health_marginals(
-    food_group_consumption: pd.DataFrame,
-    health_data: HealthData,
-    risk_factors: list[str],
-) -> pd.DataFrame:
-    """Compute marginal YLL per Mt consumed, by food group and country.
+def build_cluster_risk_tables(
+    risk_breakpoints: pd.DataFrame,
+) -> dict[tuple[int, str], pd.DataFrame]:
+    """Pivot risk breakpoints into per-(cluster, risk_factor) lookup tables.
 
-    For each (cluster, cause), the solver's YLL store level is:
+    Risk breakpoints are cluster-specific (age-weighted effective RR curves),
+    so the table must be keyed by ``(health_cluster, risk_factor)``. Pooling
+    across clusters silently drops curves and misattributes risk.
 
-        e_{c,d}(x) = (RR_d(x) - RR_d^ref) * (YLL_{c,d} / RR_d^base) * 1e-6
-
-    where RR_d(x) = prod_r RR_{r,d}(x_r). Taking the derivative w.r.t.
-    intake of risk factor r:
-
-        d(e)/d(x_r) = (YLL_{c,d} / RR_d^base) * RR_d(x) * d(log RR_{r,d})/d(x_r) * 1e-6
-
-    This function evaluates that derivative at current intake levels,
-    sums across causes, and converts to YLL per Mt.
-
-    Returns DataFrame with columns: country, food_group, yll_per_mt
+    Returns
+    -------
+    dict
+        ``{(cluster, risk_factor): pivot}`` where ``pivot`` is indexed by
+        ``intake_g_per_day`` with one column per cause holding ``log_rr``.
     """
-    # Build lookups
-    cluster_lookup = get_country_cluster_lookup(health_data.country_clusters)
-    cluster_population = get_cluster_population(
-        health_data.country_clusters, health_data.population
-    )
-
-    # Build risk tables: (cluster, risk_factor) -> DataFrame(intake, cause -> log_rr)
-    # Risk breakpoints are cluster-specific due to age-weighted effective RR
-    risk_tables: dict[tuple[int, str], pd.DataFrame] = {}
-    for (cluster, risk), group in health_data.risk_breakpoints.groupby(
+    tables: dict[tuple[int, str], pd.DataFrame] = {}
+    for (cluster, risk), group in risk_breakpoints.groupby(
         ["health_cluster", "risk_factor"]
     ):
         pivot = (
@@ -186,24 +184,74 @@ def compute_health_marginals(
             )
             .sort_index()
         )
-        risk_tables[(int(cluster), str(risk))] = pivot
+        tables[(int(cluster), str(risk))] = pivot
+    return tables
 
-    # Cluster-cause baseline data
+
+def build_cause_chord_tables(
+    cause_log_breakpoints: pd.DataFrame,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Build per-cause (log_pts, rr_pts) arrays for chord-PWL evaluation.
+
+    The LP's Stage 2 (``_add_stage2_lp_tangent``) constrains the YLL store
+    with the chord PWL of exp() through these points; since exp is convex
+    and the YLL coefficient is non-negative, the store collapses to the
+    chord value at the optimum. Post-hoc reconstruction must therefore use
+    ``np.interp(log_total, log_pts, rr_pts)`` rather than ``exp(log_total)``.
+    """
+    tables: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for cause, grp in cause_log_breakpoints.groupby("cause"):
+        sorted_grp = grp.sort_values("log_rr_total")
+        tables[str(cause)] = (
+            sorted_grp["log_rr_total"].to_numpy(dtype=float),
+            sorted_grp["rr_total"].to_numpy(dtype=float),
+        )
+    return tables
+
+
+def compute_health_marginals(
+    n: pypsa.Network,
+    health_data: HealthData,
+    risk_factors: list[str],
+) -> pd.DataFrame:
+    """Compute marginal YLL per Mt consumed, by food group and country.
+
+    For each (cluster, cause), the LP's Stage 2 sets the YLL store to the
+    chord-PWL value
+
+        e_{c,d}(x) = (chord_PWL(log_total_d(x)) - RR_d^ref)
+                     * (YLL_{c,d} / RR_d^base) * 1e-6
+
+    where ``log_total_d(x) = sum_r log RR_{r,d}(x_r)``. The LP-effective
+    derivative w.r.t. intake_r is therefore
+
+        d(e)/d(x_r) = chord_slope_at(log_total_d) * d(log RR_{r,d})/d(x_r)
+                     * (YLL_{c,d} / RR_d^base) * 1e-6
+
+    where ``chord_slope_at(.)`` is the slope of the chord-PWL piece
+    containing ``log_total_d``. Using ``exp(log_total_d)`` here would be the
+    analytic derivative of exp(), not what the LP shadow-prices, and the two
+    differ by a few percent within a piece.
+
+    Returns DataFrame with columns: country, food_group, yll_per_mt
+    """
+    cluster_lookup = get_country_cluster_lookup(health_data.country_clusters)
+    cluster_population = get_cluster_population(
+        health_data.country_clusters, health_data.population
+    )
+    risk_tables = build_cluster_risk_tables(health_data.risk_breakpoints)
+    cause_chord = build_cause_chord_tables(health_data.cause_log_breakpoints)
     cluster_cause = health_data.cluster_cause.assign(
         health_cluster=lambda df: df["health_cluster"].astype(int)
     ).set_index(["health_cluster", "cause"])
 
-    # Compute current intake per (cluster, risk_factor) from consumption data
-    intake_totals = compute_intake_by_cluster_risk(
-        food_group_consumption, risk_factors, cluster_lookup, cluster_population
+    intake_totals = compute_store_intake_by_cluster_risk(
+        n, risk_factors, cluster_lookup, cluster_population
     )
 
-    # Precompute current log(RR) for every (cluster, risk_factor, cause)
-    # so we can sum across risk factors to get the total RR per (cluster, cause)
+    # log(RR) at current intake for every (cluster, risk_factor, cause).
     log_rr_current: dict[tuple[int, str, str], float] = {}
-    all_clusters = set(cluster_population.keys())
-
-    for cluster in all_clusters:
+    for cluster in cluster_population:
         for rf in risk_factors:
             table = risk_tables.get((cluster, rf))
             if table is None:
@@ -216,11 +264,14 @@ def compute_health_marginals(
                     np.interp(intake_g, xs, ys)
                 )
 
-    # Compute marginal YLL per g/day for each (cluster, risk_factor)
-    marginal_yll_per_g: dict[tuple[int, str], float] = {}
+    # log_total per (cluster, cause): sum across all risk factors that map
+    # to the cause. The LP's chord-PWL slope is evaluated at this point.
+    log_total: dict[tuple[int, str], float] = defaultdict(float)
+    for (cluster, _rf, cause), log_rr in log_rr_current.items():
+        log_total[(cluster, cause)] += log_rr
 
-    for cluster in all_clusters:
-        cluster_pop = cluster_population.get(cluster, 0.0)
+    marginal_yll_per_g: dict[tuple[int, str], float] = {}
+    for cluster, cluster_pop in cluster_population.items():
         if cluster_pop <= 0:
             continue
 
@@ -229,70 +280,55 @@ def compute_health_marginals(
             if risk_table is None:
                 continue
             intake_g = intake_totals.get((cluster, risk), 0.0)
+            xs = risk_table.index.to_numpy(dtype=float)
+            if len(xs) < 2:
+                continue
 
             total_marginal = 0.0
-
             for cause in risk_table.columns:
                 if (cluster, cause) not in cluster_cause.index:
                     continue
+                chord = cause_chord.get(str(cause))
+                if chord is None:
+                    continue
 
                 row = cluster_cause.loc[(cluster, cause)]
-
-                # Use total YLL rate (not attributable), matching solver
-                yll_rate = float(row["yll_rate_per_100k"])
-                yll_total = (yll_rate / PER_100K) * cluster_pop
-
-                # Divide by RR at baseline (not at TMREL), matching solver
+                yll_total = (float(row["yll_rate_per_100k"]) / PER_100K) * cluster_pop
                 rr_baseline = exp(float(row["log_rr_total_baseline"]))
-
                 if yll_total <= 0 or rr_baseline <= 0:
                     continue
 
-                # Get breakpoints for this (cluster, risk, cause)
-                xs = risk_table.index.to_numpy(dtype=float)
+                # d(log RR_r)/d(intake_r) at current intake.
                 ys = risk_table[cause].to_numpy(dtype=float)
-
-                if len(xs) < 2:
-                    continue
-
-                # Slope of log(RR_r) w.r.t. intake for this risk factor
                 d_log_rr = compute_piecewise_slope(xs, ys, intake_g)
 
-                # Total RR across ALL risk factors for this cause
-                log_rr_total = sum(
-                    log_rr_current.get((cluster, rf, cause), 0.0) for rf in risk_factors
+                # Chord-PWL slope of exp() at log_total (the LP's effective
+                # multiplier; equals exp(log_total) only at breakpoints).
+                log_pts, rr_pts = chord
+                chord_slope = compute_piecewise_slope(
+                    log_pts, rr_pts, log_total[(cluster, cause)]
                 )
-                rr_total = exp(log_rr_total)
 
-                # Chain rule:
-                # d(YLL)/d(intake_r) = (YLL_total / RR_base) * RR_total * d(log RR_r)/d(intake_r)
-                marginal_yll = (yll_total / rr_baseline) * rr_total * d_log_rr
-
+                marginal_yll = (yll_total / rr_baseline) * chord_slope * d_log_rr
                 total_marginal += marginal_yll
 
             marginal_yll_per_g[(cluster, risk)] = total_marginal
 
-    # Convert to per-country, per-food_group output
     records = []
-
     for country, cluster in cluster_lookup.items():
         cluster_pop = cluster_population[cluster]
         if cluster_pop <= 0:
             continue
-
+        # 1 Mt consumed in this country shifts the cluster's per-capita intake
+        # by GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop) g/day.
+        intake_per_mt = GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
         for risk in risk_factors:
             marginal_g = marginal_yll_per_g.get((cluster, risk), 0.0)
-
-            # Convert from YLL per (g/capita/day) to YLL per Mt
-            # Consumption of 1 Mt affects cluster intake by 1e12 / (365 * cluster_pop)
-            intake_per_mt = GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
-            yll_per_mt = marginal_g * intake_per_mt
-
             records.append(
                 {
                     "country": country,
                     "food_group": risk,
-                    "yll_per_mt": yll_per_mt,
+                    "yll_per_mt": marginal_g * intake_per_mt,
                 }
             )
 
@@ -402,140 +438,135 @@ def extract_yll_totals(n: pypsa.Network) -> pd.DataFrame:
 
 
 def compute_health_attribution(
-    food_group_consumption: pd.DataFrame,
+    n: pypsa.Network,
     health_data: HealthData,
     risk_factors: list[str],
-    n: pypsa.Network,
 ) -> pd.DataFrame:
     """Attribute YLL to each risk factor by health cluster and disease cause.
 
-    Uses proportional allocation based on excess log-relative-risk above the
-    theoretical minimum risk exposure level (TMREL).
+    Reconstructs the LP's per-(cluster, cause) YLL via the same chain the
+    solver uses, then distributes it across risk factors by proportional
+    excess log-RR over the joint TMREL:
+
+        share_r = max(0, log RR_{r,d}(x_r) - log RR_{r,d}(TMREL_r)) / sum_r' ...
+
+    To stay consistent with the solver we must:
+
+    1. Read intake from food-group store levels (post-waste), not from
+       food-bus withdrawals (pre-waste). These differ by the consumer waste
+       multiplier, typically 10-30%.
+    2. Use cluster-specific dose-response curves. ``risk_breakpoints``
+       carries a ``health_cluster`` column and must be grouped by it.
+    3. Evaluate ``RR(log_total)`` via the chord PWL of exp() through
+       ``cause_log_breakpoints``, matching ``_add_stage2_lp_tangent``.
+       Using ``exp()`` directly creates a small but systematic bias.
 
     Parameters
     ----------
-    food_group_consumption : DataFrame
-        Columns: food_group, country, consumption_mt
-    health_data : HealthData
+    n
+        Solved PyPSA network (provides food-group store levels and the
+        downstream YLL stores).
+    health_data
         Health input data including TMREL values.
-    risk_factors : list[str]
+    risk_factors
         Food groups that are health risk factors.
-    n : pypsa.Network
-        Solved network (used to read YLL store levels).
 
     Returns
     -------
-    DataFrame with columns: health_cluster, cause, food_group, yll_myll
+    DataFrame
+        Columns: ``health_cluster``, ``cause``, ``food_group``, ``yll_myll``.
+        Rows with zero or negative attributed YLL are omitted.
     """
     cluster_lookup = get_country_cluster_lookup(health_data.country_clusters)
     cluster_population = get_cluster_population(
         health_data.country_clusters, health_data.population
     )
-
-    # Build risk tables: risk_factor -> DataFrame(intake -> cause columns of log_rr)
-    risk_tables: dict[str, pd.DataFrame] = {}
-    for risk, group in health_data.risk_breakpoints.groupby("risk_factor"):
-        pivot = (
-            group.sort_values(["intake_g_per_day", "cause"])
-            .pivot_table(
-                index="intake_g_per_day",
-                columns="cause",
-                values="log_rr",
-                aggfunc="first",
-            )
-            .sort_index()
-        )
-        risk_tables[str(risk)] = pivot
-
-    # Build TMREL lookup: risk_factor -> g/day
-    tmrel_lookup = dict(
-        zip(health_data.tmrel["risk_factor"], health_data.tmrel["tmrel_g_per_day"])
-    )
-
-    # Precompute log(RR) at TMREL for each (risk_factor, cause)
-    log_rr_at_tmrel: dict[tuple[str, str], float] = {}
-    for rf, table in risk_tables.items():
-        tmrel_intake = tmrel_lookup.get(rf, 0.0)
-        xs = table.index.to_numpy(dtype=float)
-        for cause in table.columns:
-            ys = table[cause].to_numpy(dtype=float)
-            log_rr_at_tmrel[(rf, cause)] = float(np.interp(tmrel_intake, xs, ys))
-
-    # Cluster-cause baseline data
+    risk_tables = build_cluster_risk_tables(health_data.risk_breakpoints)
+    cause_chord = build_cause_chord_tables(health_data.cause_log_breakpoints)
     cluster_cause = health_data.cluster_cause.assign(
         health_cluster=lambda df: df["health_cluster"].astype(int)
     ).set_index(["health_cluster", "cause"])
 
-    # Compute current intake per (cluster, risk_factor)
-    intake_totals = compute_intake_by_cluster_risk(
-        food_group_consumption, risk_factors, cluster_lookup, cluster_population
+    tmrel_lookup = dict(
+        zip(health_data.tmrel["risk_factor"], health_data.tmrel["tmrel_g_per_day"])
     )
 
-    # Compute current log(RR) per (cluster, risk_factor, cause)
-    log_rr_values: dict[tuple[int, str, str], float] = {}
-    for (cluster, rf), intake_g in intake_totals.items():
-        table = risk_tables.get(rf)
-        if table is None:
-            continue
+    intake_totals = compute_store_intake_by_cluster_risk(
+        n, risk_factors, cluster_lookup, cluster_population
+    )
+
+    # log(RR) at current intake and at TMREL, per (cluster, risk_factor, cause).
+    # TMREL is per risk factor but the curve is cluster-specific, so log(RR)
+    # at TMREL must also be computed per cluster.
+    log_rr_current: dict[tuple[int, str, str], float] = {}
+    log_rr_at_tmrel: dict[tuple[int, str, str], float] = {}
+    for (cluster, rf), table in risk_tables.items():
         xs = table.index.to_numpy(dtype=float)
+        intake_g = intake_totals.get((cluster, rf), 0.0)
+        tmrel_intake = float(tmrel_lookup[rf]) if rf in tmrel_lookup else 0.0
         for cause in table.columns:
             ys = table[cause].to_numpy(dtype=float)
-            log_rr_values[(cluster, rf, cause)] = float(np.interp(intake_g, xs, ys))
+            log_rr_current[(cluster, rf, str(cause))] = float(
+                np.interp(intake_g, xs, ys)
+            )
+            log_rr_at_tmrel[(cluster, rf, str(cause))] = float(
+                np.interp(tmrel_intake, xs, ys)
+            )
 
-    # Attribute YLL to risk factors using proportional excess log(RR)
     records = []
-
-    for cluster in cluster_population:
-        cluster_pop = cluster_population[cluster]
+    for cluster, cluster_pop in cluster_population.items():
         if cluster_pop <= 0:
             continue
 
         for cause in cluster_cause.index.get_level_values("cause").unique():
             if (cluster, cause) not in cluster_cause.index:
                 continue
+            chord = cause_chord.get(str(cause))
+            if chord is None:
+                continue
 
             row = cluster_cause.loc[(cluster, cause)]
             rr_ref = exp(float(row["log_rr_total_ref"]))
             rr_baseline = exp(float(row["log_rr_total_baseline"]))
-            yll_rate_per_100k = float(row["yll_rate_per_100k"])
-            yll_total = (yll_rate_per_100k / PER_100K) * cluster_pop
-
+            yll_total = (float(row["yll_rate_per_100k"]) / PER_100K) * cluster_pop
             if yll_total <= 0 or rr_baseline <= 0:
                 continue
 
-            # Compute excess log(RR) for each risk factor relative to TMREL
-            excess_contributions: dict[str, float] = {}
+            # Excess log(RR) above TMREL per risk factor (clamped at zero so
+            # protective intakes above TMREL do not get "negative" attribution).
+            excess: dict[str, float] = {}
             for rf in risk_factors:
-                log_rr_current = log_rr_values.get((cluster, rf, cause), 0.0)
-                log_rr_tmrel = log_rr_at_tmrel.get((rf, cause), 0.0)
-                excess = max(0.0, log_rr_current - log_rr_tmrel)
-                excess_contributions[rf] = excess
-
-            total_excess = sum(excess_contributions.values())
+                key = (cluster, rf, str(cause))
+                if key not in log_rr_current:
+                    continue
+                excess[rf] = max(0.0, log_rr_current[key] - log_rr_at_tmrel[key])
+            total_excess = sum(excess.values())
             if total_excess <= 0:
                 continue
 
-            # Compute actual RR and YLL for this (cluster, cause)
-            log_rr_total = sum(
-                log_rr_values.get((cluster, rf, cause), 0.0) for rf in risk_factors
+            # Total log(RR) for the cause and chord-PWL evaluation. This
+            # mirrors evaluate_health_posthoc and the LP's Stage 2 exactly.
+            log_total = sum(
+                log_rr_current.get((cluster, rf, str(cause)), 0.0)
+                for rf in risk_factors
             )
-            rr_total = exp(log_rr_total)
-            yll_myll = (rr_total - rr_ref) * (yll_total / rr_baseline) * 1e-6
+            log_pts, rr_pts = chord
+            rr_total = float(np.interp(log_total, log_pts, rr_pts))
 
+            yll_myll = (rr_total - rr_ref) * (yll_total / rr_baseline) * 1e-6
             if yll_myll <= 0:
                 continue
 
-            # Proportionally allocate to risk factors
-            for rf, excess in excess_contributions.items():
-                if excess > 0:
-                    weight = excess / total_excess
-                    records.append(
-                        {
-                            "health_cluster": cluster,
-                            "cause": cause,
-                            "food_group": rf,
-                            "yll_myll": weight * yll_myll,
-                        }
-                    )
+            for rf, e in excess.items():
+                if e <= 0:
+                    continue
+                records.append(
+                    {
+                        "health_cluster": cluster,
+                        "cause": cause,
+                        "food_group": rf,
+                        "yll_myll": (e / total_excess) * yll_myll,
+                    }
+                )
 
     return pd.DataFrame(records)

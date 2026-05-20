@@ -173,17 +173,13 @@ def run_analysis(
             "derived_tmrel": derived_tmrel_path,
         }
     )
-    health_marginals = compute_health_marginals(
-        food_group_consumption, health_data, risk_factors
-    )
+    health_marginals = compute_health_marginals(n, health_data, risk_factors)
     health_marginals = add_health_monetary_value(health_marginals, value_per_yll)
     health_marginals = health_marginals.sort_values(
         ["country", "food_group"]
     ).reset_index(drop=True)
     health_totals = extract_yll_totals(n)
-    health_attribution = compute_health_attribution(
-        food_group_consumption, health_data, risk_factors, n
-    )
+    health_attribution = compute_health_attribution(n, health_data, risk_factors)
 
     # Write all outputs
     output_dir = Path(output_paths["crop_production"]).parent
