@@ -196,6 +196,15 @@ def add_biofuel_links(
         ["source_item", "crop", "country", "bus_type"], as_index=False
     )["demand_mt"].sum()
 
+    # Crops with at least one crop_production link in the network. When a
+    # crop has no production anywhere (e.g. sugarcane in a Europe-only run),
+    # there is no path that can satisfy the fixed biofuel demand, and the
+    # fixed p_min_pu=1.0 link would render the model infeasible. Skip such
+    # rows; the demand is reported by ``skipped_no_supply`` below.
+    crop_links = n.links.static
+    crop_links = crop_links[crop_links["carrier"] == "crop_production"]
+    crops_with_supply = set(crop_links["crop"].dropna().unique())
+
     names = []
     bus0s = []
     bus1s = []
@@ -203,6 +212,8 @@ def add_biofuel_links(
     countries = []
     crops = []
     skipped = 0
+    skipped_no_supply = 0
+    skipped_no_supply_demand = 0.0
 
     for _, row in grouped.iterrows():
         source_item = str(row["source_item"])
@@ -212,6 +223,11 @@ def add_biofuel_links(
         demand = float(row["demand_mt"])
 
         if demand <= 0:
+            continue
+
+        if crop not in crops_with_supply:
+            skipped_no_supply += 1
+            skipped_no_supply_demand += demand
             continue
 
         bus0 = f"{bus_type}:{source_item}:{country}"
@@ -234,6 +250,13 @@ def add_biofuel_links(
 
     if skipped:
         logger.info("Skipped %d biofuel links due to missing buses", skipped)
+    if skipped_no_supply:
+        logger.warning(
+            "Skipped %d biofuel rows (%.4f Mt total) whose source crop has no "
+            "production anywhere in the configured network",
+            skipped_no_supply,
+            skipped_no_supply_demand,
+        )
 
     # Fix each link at its baseline demand: p_nom = demand, p_min_pu = 1.0
     # forces p == p_nom == demand. No solve-time constraint needed.
