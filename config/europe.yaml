@@ -1,0 +1,187 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Europe-only proof of concept
+# ----------------------------
+# Restrict the model to ~40 European countries. Trade is automatically
+# clamped to within-region (no rest-of-world hubs are constructed for
+# countries that aren't configured). Calibration artefacts are global;
+# we inherit them as-is for now (entries for non-European countries are
+# simply ignored at load time).
+#
+# Notes on choices below:
+# - Modest spatial resolution (200 regions, 8 trade hubs, 8 health
+#   clusters) keeps the model small while still resolving sub-country
+#   gradients in big countries (FRA, DEU, ESP, UKR, ...).
+# - We do NOT enforce the historical baseline diet -- Europe imports a
+#   lot of tropical commodities (coffee, cocoa, bananas, palm oil, ...)
+#   that simply cannot be produced domestically. Pinning consumption to
+#   historical levels would force enormous validation slack. Instead we
+#   use the piecewise food-utility formulation: it pulls consumption
+#   toward the baseline but lets the model deviate where supply is
+#   genuinely constrained.
+# - Production stability is left on with default L1 calibration; the
+#   crop_growth_cap (+1000%) gives plenty of headroom for European crops
+#   to scale up where needed.
+
+name: "europe"
+
+# Crops that have zero positive GAEZ yield in every configured region
+# under BOTH rainfed and irrigated supply are dropped here. Crops that
+# work in only one supply (e.g. wetland-rice / dryland-rice are
+# irrigated-only in Europe; yam is rainfed-only) are kept; build_model
+# raises if any configured crop has no viable water supply at all, and
+# build_model/crops.py skips the empty (crop, ws) pairs internally.
+# Foods whose entire production graph dies with the removed crops
+# (cocoa, coffee, palm oil, ...) are auto-excluded from the baseline
+# diet by `estimate_baseline_diet`.
+crops:
+- wheat
+- dryland-rice
+- wetland-rice
+- maize
+- barley
+- oat
+- rye
+- sorghum
+- buckwheat
+- foxtail-millet
+- pearl-millet
+- soybean
+- dry-pea
+- chickpea
+- cowpea
+- gram
+- phaseolus-bean
+- pigeonpea
+- white-potato
+- sweet-potato
+- yam
+- plantain
+- tomato
+- carrot
+- onion
+- cabbage
+- banana
+- watermelon
+- mango
+- citrus
+- apple
+- tea
+- sunflower
+- rapeseed
+- groundnut
+- sesame
+- olive
+- sugarbeet
+- cotton
+- alfalfa
+- silage-maize
+- biomass-sorghum
+
+# The double_rice combination requires the same crop (wetland-rice) in
+# both rainfed AND irrigated, but Europe has only the irrigated variant.
+# rice_wheat: wetland-rice rainfed isn't viable either. Wipe both;
+# maize_soybean is fine in Europe and inherits unchanged.
+# (Snakemake deep-merges configs, so explicit `null` is required to
+# clear the inherited dict entries.)
+multiple_cropping:
+  double_rice: null
+  rice_wheat: null
+
+countries:
+- ALB
+- AUT
+- BEL
+- BGR
+- BIH
+- BLR
+- CHE
+- CYP
+- CZE
+- DEU
+- DNK
+- ESP
+- EST
+- FIN
+- FRA
+- GBR
+- GRC
+- HRV
+- HUN
+- IRL
+- ISL
+- ITA
+- LTU
+- LUX
+- LVA
+- MDA
+- MKD
+- MLT
+- MNE
+- NLD
+- NOR
+- POL
+- PRT
+- ROU
+- SRB
+- SVK
+- SVN
+- SWE
+- TUR
+- UKR
+
+aggregation:
+  regions:
+    target_count: 200
+
+commodities:
+  hubs: 8
+
+health:
+  region_clusters: 8
+
+scenarios:
+  # Baseline scenario with consumption pinned to the observed European
+  # diet. Used to extract consumer values (dual variables) that feed the
+  # piecewise food-utility calibration consumed by the other scenarios.
+  # Enforcing the baseline diet within Europe alone is likely to saturate
+  # validation slack on tropical commodities (coffee, cocoa, bananas,
+  # palm oil, ...) that Europe imports rather than grows; the resulting
+  # consumer values reflect that scarcity and bias the utility blocks
+  # accordingly. Acceptable for a proof of concept.
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # Reference run with no GHG/health pricing. Lets us see how the
+  # region could supply its own demand under current-day economics.
+  reference:
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # Central healthy-and-sustainable point, same prices as central.yaml.
+  central:
+    emissions:
+      ghg_price: 50
+    health:
+      value_per_yll: 5000
+
+food_utility_piecewise:
+  enabled: true
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 4
+  mem_mb: 10000
+  runtime: 60
