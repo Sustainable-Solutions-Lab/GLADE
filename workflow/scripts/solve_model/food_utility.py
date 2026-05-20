@@ -286,10 +286,11 @@ def add_piecewise_food_utility(
         name for name in consume_links.index if str(name) not in covered_links
     ]
     if missing_links:
-        sample = ", ".join(str(name) for name in missing_links[:5])
-        raise ValueError(
-            "Piecewise utility must cover all food_consumption links. "
-            f"Missing {len(missing_links)} links (examples: {sample})"
+        logger.info(
+            "Piecewise utility omits %d of %d food_consumption links "
+            "(no baseline consumption); these earn zero utility",
+            len(missing_links),
+            len(consume_links),
         )
 
     min_width = float(min_block_width_mt)
