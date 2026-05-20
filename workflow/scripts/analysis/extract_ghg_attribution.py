@@ -14,6 +14,27 @@ avoiding duplicate extraction of consumption data from the network.
 Outputs:
 - ghg_attribution.parquet: Intensity at the food level (kgCO2e/kg, USD/t)
 - ghg_attribution_totals.parquet: Total emissions by country and food_group (MtCO2eq)
+
+Sequestration scope (important)
+-------------------------------
+These outputs report **gross** consumption-attributed emissions. The
+model's spare-land sequestration credit (negative CO2 from regrowth on
+land freed by reduced cropland/pasture demand) consumes from a land
+bus and writes to a dead-end "spared" sink that no food consumes from,
+so the flow-based attribution naturally orphans the credit and it does
+NOT propagate into per-food intensities or per-(country, food_group)
+totals.
+
+Sequestration is a system-level benefit of reduced land use, not a
+property of any individual food, so any per-food allocation would be
+arbitrary. To reconcile with the model objective, read the
+"Carbon sequestration" row from ``net_emissions.parquet`` and combine
+it with these gross totals at the analysis level.
+
+The downstream consequence is that ``ghg_attribution_totals.sum()``
+will generally NOT equal ``net_emissions.sum()``: the difference is
+the (negative) carbon-sequestration credit reported separately by
+``extract_net_emissions``.
 """
 
 import logging
@@ -39,8 +60,13 @@ def compute_bus_intensities(
     - M = weighted adjacency matrix (flow fractions)
     - e = direct emission intensities
 
-    Intensities can be negative for buses that carry a net sequestration
-    credit (e.g. spare-land sinks whose links remove more CO2 than they emit).
+    Sequestration intensities are computed at the spared-land sink bus
+    (where the spare_land link writes its negative efficiency2 to
+    emission:co2), but those sink buses are terminal in the network
+    topology, so the negative intensity does NOT propagate downstream to
+    food buses. Per-food intensities returned here are therefore gross;
+    see the module docstring for how to obtain net (including
+    sequestration) values.
 
     Returns dict mapping bus name to intensity (MtCO2e/Mt = kgCO2e/kg).
     """
@@ -98,8 +124,8 @@ def build_ghg_links_dataframe(
     # Compute emissions per unit of input flow (summing bus2/3/4 contributions).
     # Positive efficiency to an emission bus = emissions (e.g. CH4 from enteric
     # fermentation); negative efficiency = sequestration (e.g. CO2 credits from
-    # spared land).  Both are included so that food intensities reflect net
-    # emissions and sequestration credits are attributed to spare-land buses.
+    # spared land).  Sequestration credits land at the spared-land sink bus
+    # and do not propagate to food buses (see module docstring).
     links["emissions_co2e"] = 0.0
 
     for bus_col, eff_col in [
