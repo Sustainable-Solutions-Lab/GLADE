@@ -641,6 +641,7 @@ if __name__ == "__main__":
     n.meta["population"] = {
         "country": population.to_dict(),
         "year": planning_year,
+        "baseline_year": baseline_year,
     }
 
     crop_list = snakemake.params.crops

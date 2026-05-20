@@ -142,6 +142,37 @@ def _load_health_data(
     # Get cluster population from network metadata (computed at build time)
     cluster_population = get_health_cluster_population(n)
 
+    # YLL rates in cluster_cause are computed against baseline-year (GBD
+    # vintage) population in prepare_health_costs, then re-applied to the
+    # planning-year cluster_population here to reconstruct absolute YLL.
+    # The implicit assumption is that age-standardised mortality rates are
+    # stable across the temporal gap. For modest gaps (< ~15 years) this
+    # is a reasonable approximation; for larger gaps demographic and
+    # epidemiological transitions (declining IHD, rising T2DM) start to
+    # matter. Fail loudly past the tolerance so anyone modelling a
+    # long-horizon scenario has to opt in explicitly.
+    pop_meta = n.meta["population"]
+    baseline_year = int(pop_meta["baseline_year"])
+    planning_year = int(pop_meta["year"])
+    gap_years = abs(planning_year - baseline_year)
+    max_health_temporal_gap = 15
+    if gap_years > max_health_temporal_gap:
+        raise ValueError(
+            f"Health cost calc mixes baseline_year={baseline_year} mortality "
+            f"rates with planning_year={planning_year} population (gap "
+            f"{gap_years}y > {MAX_HEALTH_TEMPORAL_GAP}y). Use vintage-matched "
+            "GBD rates (re-download with a closer year, or extend the "
+            "tolerance after auditing the assumption)."
+        )
+    if gap_years > 0:
+        logger.info(
+            "Health temporal gap: baseline_year=%d, planning_year=%d "
+            "(applying %d-y-old mortality rates to planning-year population)",
+            baseline_year,
+            planning_year,
+            gap_years,
+        )
+
     # Sort breakpoint tables (risk breakpoints are cluster-specific)
     risk_breakpoints = risk_breakpoints.sort_values(
         ["health_cluster", "risk_factor", "intake_g_per_day", "cause"]

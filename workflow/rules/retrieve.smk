@@ -766,10 +766,17 @@ rule extract_cropgrids_nc:
 rule download_grassland_yield_data:
     """Retrieve historical managed-grassland yield from ISIMIP2a / LPJmL.
 
-    ISIMIP2a agriculture-sector LPJmL output (``yield-mgr-noirr-default``,
-    WATCH forcing, no bias correction, variable CO2, 1971-2001, 0.5 deg).
+    Pinned to ISIMIP2a agriculture-sector LPJmL ``yield-mgr-noirr-default``
+    (WATCH forcing, no bias correction, variable CO2, 1971-2001, 0.5 deg).
     The full managed-grassland yield catalogue is browsable at
     https://data.isimip.org/search/crop/mgr/variable/yield/irrigation/noirr/.
+
+    ``yield-mgr-noirr`` here is management-potential biomass (cuttable
+    yield without grazing offtake); ``merge_grassland_yields`` multiplies
+    by ``isimip_utilization_rate`` to convert to actually-grazed yield.
+    If ISIMIP ever ships a variant with different semantics under the
+    same name, the size check below and the provenance assertions in
+    ``build_grassland_yields.py`` will surface the drift.
 
     License: CC BY 4.0. ISIMIP releases agriculture-sector LPJmL output
     under CC BY 4.0; only LPJ-GUESS in that sector carries CC BY-NC 4.0.
@@ -782,6 +789,7 @@ rule download_grassland_yield_data:
         "data/downloads/grassland_yield_historical.nc4",
     params:
         url="https://files.isimip.org/ISIMIP2a/OutputData/agriculture/LPJmL/watch/historical/lpjml_watch_nobc_hist_co2_yield-mgr-noirr-default_global_annual_1971_2001.nc4",
+        expected_size_bytes=6277071,
     resources:
         runtime="30m",
         mem_mb=500,
@@ -793,6 +801,13 @@ rule download_grassland_yield_data:
         r"""
         mkdir -p "$(dirname {output})"
         curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        actual_size=$(stat -c%s "{output}")
+        if [ "$actual_size" != "{params.expected_size_bytes}" ]; then
+            echo "ISIMIP grassland file size mismatch: got $actual_size, expected {params.expected_size_bytes}." >> {log}
+            echo "Upstream may have published a new version; verify yield-mgr-noirr semantics" >> {log}
+            echo "before updating expected_size_bytes." >> {log}
+            exit 1
+        fi
         """
 
 
