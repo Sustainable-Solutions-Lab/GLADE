@@ -1702,6 +1702,9 @@ def run_solve(
         # stability variables in the model, the sentinel "calibrated" may
         # remain unresolved in the config, and the float() conversions
         # below would crash. The breakdown is also a no-op in that case.
+        # Inside the gate, the L1 branch is further gated on
+        # penalty_mode == "l1": hard-mode solves (e.g. cost calibration)
+        # leave the L1 sentinel unresolved and contribute no L1 cost.
         #
         # The cost coefficient used here must mirror what
         # _add_animal_l1_penalty applies in production_stability.py:
@@ -1714,21 +1717,25 @@ def run_solve(
         # In both cases, animal_l1 * sum(abs_dev.solution) reproduces the
         # actual objective contribution exactly.
         if stability_cfg["enabled"]:
-            animal_l1_override = stability_cfg["animal_feed_l1_cost"]
-            land_l1 = float(stability_cfg["land_l1_cost"])
-            animal_l1 = (
-                float(animal_l1_override) if animal_l1_override is not None else land_l1
-            )
+            penalty_mode = stability_cfg.get("penalty_mode")
             stability_cost = 0.0
-            for var_name, cost in [
-                ("crop_stability_abs_dev", land_l1),
-                ("grassland_stability_abs_dev", land_l1),
-                ("animal_stability_abs_dev", animal_l1),
-                ("land_conversion_stability_abs_dev", land_l1),
-            ]:
-                if var_name in n.model.variables:
-                    sol = n.model.variables[var_name].solution
-                    stability_cost += cost * float(sol.sum())
+            if penalty_mode == "l1":
+                animal_l1_override = stability_cfg["animal_feed_l1_cost"]
+                land_l1 = float(stability_cfg["land_l1_cost"])
+                animal_l1 = (
+                    float(animal_l1_override)
+                    if animal_l1_override is not None
+                    else land_l1
+                )
+                for var_name, cost in [
+                    ("crop_stability_abs_dev", land_l1),
+                    ("grassland_stability_abs_dev", land_l1),
+                    ("animal_stability_abs_dev", animal_l1),
+                    ("land_conversion_stability_abs_dev", land_l1),
+                ]:
+                    if var_name in n.model.variables:
+                        sol = n.model.variables[var_name].solution
+                        stability_cost += cost * float(sol.sum())
             quad_var_names = [
                 "crop_stability_dev",
                 "grassland_stability_dev",
