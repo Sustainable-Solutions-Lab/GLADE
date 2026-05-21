@@ -7,43 +7,30 @@
 # Varies GHG price while keeping food consumption fixed to baseline values.
 # Since diet is fixed, food utility is irrelevant and disabled, and no
 # baseline calibration scenario is needed.
+#
+# The paper's figure 3 reads exactly the low/central/high anchors below
+# (matching plotting_config.yaml: ghg_display_range = {5, 500},
+# transition.ghg_price = 50) — no full sweep is needed.
 
 name: "ghg_sensitivity_fixed_diet"
 scenarios:
-  ghg_0:
+  ghg_5:
     emissions:
-      ghg_price: 0
+      ghg_price: 5
     health:
       value_per_yll: 0
 
-  # Explicit anchors for the figure's representative prices (would
-  # otherwise fall between geomspace samples).
-  ghg_20:
+  ghg_50:
     emissions:
-      ghg_price: 20
+      ghg_price: 50
     health:
       value_per_yll: 0
 
-  ghg_100:
+  ghg_500:
     emissions:
-      ghg_price: 100
+      ghg_price: 500
     health:
       value_per_yll: 0
-
-  _generators:
-    - name: ghg_{ghg}
-      parameters:
-        ghg:
-          space: log
-          start: 20
-          stop: 500
-          num: 20
-          round: true
-      template:
-        emissions:
-          ghg_price: "{ghg}"
-        health:
-          value_per_yll: 0
 
 # Fix diet to baseline
 validation:

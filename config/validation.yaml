@@ -6,9 +6,6 @@
 # ----------
 # Runs the model in validation mode (actual yields, enforced baseline diet
 # and feed) to compare model behaviour against observed 2020 outcomes.
-# This config does *not* regenerate the grassland forage calibration; use
-# ``config/calibration/feed.yaml`` (or ``tools/calibrate feed``)
-# for that.
 
 name: "validation"
 scenarios:
@@ -24,6 +21,8 @@ validation:
   disable_spared_cropland: true
   disable_spared_grassland: true
   slack_marginal_cost: 10
+  production_stability:
+    enabled: false
 
 cost_calibration:
   enabled: false
