@@ -228,6 +228,12 @@ def main() -> None:
             "grazing_intensity": (("y", "x"), grazing_intensity.astype(np.float32)),
         },
         coords={"y": y_coords, "x": x_coords},
+        attrs={
+            "transform": grid_ds.attrs["transform"],
+            "crs_wkt": grid_ds.attrs["crs_wkt"],
+            "height": dst_height,
+            "width": dst_width,
+        },
     )
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
