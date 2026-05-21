@@ -21,7 +21,8 @@ gurobi.log
 /.pixi/
 vendor
 /.codex/
-/.claude/
+/.claude/*
+!/.claude/skills/
 /.serena/
 /.batch/
 /.cache/
