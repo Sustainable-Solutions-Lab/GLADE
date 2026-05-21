@@ -105,11 +105,14 @@ def _add_trade_hubs_and_links(
         hub_buses_df = pd.DataFrame(index=hub_bus_names)
         hub_buses_df["carrier"] = (carrier_prefix + pairs_df["item"]).to_numpy()
         # Stamp the traded item on the hub bus so downstream filters can use
-        # ``buses.static[item_column]`` instead of parsing the name.
+        # ``buses.static[item_column]`` instead of parsing the name. Also
+        # stamp an empty country so country-keyed groupbys see an
+        # explicit non-country value rather than NaN.
         hub_buses_df[item_column] = pairs_df["item"].to_numpy()
         n.buses.add(
             hub_buses_df.index,
             carrier=hub_buses_df["carrier"],
+            country="",
             **{item_column: hub_buses_df[item_column]},
         )
 

@@ -53,8 +53,21 @@ def load_solved_network(path: str | Path) -> pypsa.Network:
 
 
 def _recursive_update(target: dict, source: dict) -> dict:
-    """Recursively update the target dictionary with the source dictionary."""
+    """Recursively update the target dictionary with the source dictionary.
+
+    Raises if a scenario override would silently replace a nested
+    dictionary subtree with ``None`` -- a common YAML mistake (writing
+    ``key:`` with no value or ``key: null``) that otherwise surfaces
+    deep in solve-time code as cryptic ``TypeError: 'NoneType' is not
+    subscriptable``.
+    """
     for key, value in source.items():
+        if value is None and key in target and isinstance(target[key], dict):
+            raise ValueError(
+                f"Scenario override sets '{key}' to null but the base "
+                "config has a dict at that key; use an empty dict ({}) "
+                "to clear the subtree or supply the intended keys."
+            )
         if isinstance(value, dict) and key in target and isinstance(target[key], dict):
             _recursive_update(target[key], value)
         else:

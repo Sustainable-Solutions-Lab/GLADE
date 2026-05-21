@@ -15,11 +15,20 @@ import xarray as xr
 logger = logging.getLogger(__name__)
 
 # Sentinel x-coordinate used to extend the last utility segment past the
-# right-most real breakpoint.  Linopy's LP piecewise formulation imposes
+# right-most real breakpoint. Linopy's LP piecewise formulation imposes
 # a `link_p <= max(x)` domain bound; placing the sentinel far beyond any
 # plausible consumption makes this bound effectively inert while keeping
 # the last-segment slope equal to the last-block marginal utility (the
 # "overflow continuation" behaviour the model relies on).
+#
+# Note: this introduces an asymmetric implicit upper bound -- links
+# covered by the piecewise utility carry an implicit `link_p <= 1e6 Mt`
+# cap; links absent from the utility table (zero-baseline pairs filtered
+# out at calibration time) have no such cap. 1e6 Mt is two orders of
+# magnitude above the largest plausible single (food, country) flow
+# (global wheat is ~770 Mt), so the cap is inert in practice. If a
+# scenario ever generates an aggregate flow approaching this magnitude,
+# raise the sentinel.
 OVERFLOW_SENTINEL_MT: float = 1.0e6
 
 
@@ -329,8 +338,15 @@ def add_piecewise_food_utility(
     link_p = m.variables["Link-p"].sel(snapshot="now").sel(name=link_names)
 
     # Concave curve bounded above: utility <= f(link_p), where f is the
-    # integral of the non-increasing marginal-utility schedule.  linopy's
-    # "auto" method selects the LP tangent-line formulation here.
+    # integral of the non-increasing marginal-utility schedule. linopy
+    # encodes this as the chord (secant) PWL through the breakpoints --
+    # one inequality per piece -- which is itself a concave PWL upper
+    # bound. Between breakpoints the chord lies strictly below the true
+    # concave curve, so the LP under-credits utility within a piece by
+    # at most piece_width * (mu_k - mu_{k+1}) / 2; the gap goes to zero
+    # at every breakpoint and shrinks with finer block widths. Picking
+    # a tangent (over-estimator) instead would over-credit utility and
+    # make the LP unbounded above the true curve at interior points.
     m.add_piecewise_formulation(
         (utility_var, y_pts, "<="),
         (link_p, x_pts),
