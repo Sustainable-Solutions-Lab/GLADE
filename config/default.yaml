@@ -83,6 +83,13 @@ validation:
     # Regenerate the calibration with `tools/calibrate stability`.
     land_l1_cost: "calibrated"  # bn USD per Mha deviation (crops + grassland, shared)
     animal_feed_l1_cost: "calibrated"  # bn USD per Mt DM deviation (animal feed use). Set to null to fall back to automatic Mha-equivalent scaling from land_l1_cost.
+    # Multiplicative factors applied to the resolved L1 costs (after the
+    # "calibrated" sentinel is substituted). Use these to scan around the
+    # calibrated central value without having to update absolute numbers
+    # whenever the calibration is refreshed (e.g. the lower/higher regimes
+    # in config/gsa.yaml).
+    land_l1_cost_factor: 1.0
+    animal_feed_l1_cost_factor: 1.0
     deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
     crops:
       enabled: true

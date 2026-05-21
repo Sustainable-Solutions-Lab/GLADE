@@ -60,16 +60,23 @@ CALIBRATED_SENTINEL = "calibrated"
 def resolve_calibrated_l1_costs(
     stability_cfg: dict, calibrated_l1_yaml: str | None
 ) -> dict:
-    """Return ``stability_cfg`` with the ``"calibrated"`` sentinel resolved.
+    """Return ``stability_cfg`` with L1 costs resolved and factors applied.
 
-    ``validation.production_stability.land_l1_cost`` and
-    ``validation.production_stability.animal_feed_l1_cost`` may each be set
-    to the string ``"calibrated"``; when they are, we look up the calibrated
-    numeric values in ``calibrated_l1_yaml`` (produced by
-    ``calibrate_prod_stability``).
+    Two transformations happen here, in order:
 
-    The input dict is not mutated. If no sentinel is present, returns the
-    input unchanged.
+    1. ``validation.production_stability.land_l1_cost`` and
+       ``.animal_feed_l1_cost`` may each be set to the string
+       ``"calibrated"``; when they are, we substitute the numeric values
+       from ``calibrated_l1_yaml`` (produced by
+       ``calibrate_prod_stability``).
+    2. ``land_l1_cost_factor`` and ``animal_feed_l1_cost_factor`` are
+       multiplied into the resolved values. This lets scenarios scan
+       around the calibrated central value (e.g. gsa.yaml's low/high
+       regimes) without hard-coding absolute numbers that drift whenever
+       the calibration is refreshed.
+
+    The input dict is not mutated. When no sentinel is present and both
+    factors are 1.0, the input is returned unchanged.
     """
 
     def _needs_lookup(cfg: dict) -> bool:
@@ -78,45 +85,64 @@ def resolve_calibrated_l1_costs(
             or cfg.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL
         )
 
-    # The L1-cost sentinel only affects penalty_mode="l1"; for hard and
-    # quadratic modes the L1 cost is unused, so loading a (possibly
-    # stale) calibration YAML would be a needless coupling.
+    # The L1-cost sentinel and factors only affect penalty_mode="l1"; for
+    # hard and quadratic modes the L1 cost is unused, so loading a
+    # (possibly stale) calibration YAML would be a needless coupling.
     if stability_cfg.get("penalty_mode") != "l1":
         return stability_cfg
 
-    if not _needs_lookup(stability_cfg):
+    land_factor = float(stability_cfg["land_l1_cost_factor"])
+    animal_factor = float(stability_cfg["animal_feed_l1_cost_factor"])
+
+    if not _needs_lookup(stability_cfg) and land_factor == 1.0 and animal_factor == 1.0:
         return stability_cfg
 
-    if calibrated_l1_yaml is None:
-        raise ValueError(
-            "validation.production_stability contains the sentinel "
-            f"'{CALIBRATED_SENTINEL}' but no calibrated-L1 YAML was provided "
-            "to the solve. Check that prod_stability_calibration.enabled is "
-            "true and that the file exists."
-        )
-
-    path = Path(calibrated_l1_yaml)
-    with path.open() as f:
-        calibrated = yaml.safe_load(f)
-    land_val = float(calibrated["land_l1_cost"])
-    animal_feed_val = float(calibrated["animal_feed_l1_cost"])
-
     resolved = copy.deepcopy(stability_cfg)
-    if resolved.get("land_l1_cost") == CALIBRATED_SENTINEL:
-        resolved["land_l1_cost"] = land_val
+
+    if _needs_lookup(resolved):
+        if calibrated_l1_yaml is None:
+            raise ValueError(
+                "validation.production_stability contains the sentinel "
+                f"'{CALIBRATED_SENTINEL}' but no calibrated-L1 YAML was provided "
+                "to the solve. Check that prod_stability_calibration.enabled is "
+                "true and that the file exists."
+            )
+        path = Path(calibrated_l1_yaml)
+        with path.open() as f:
+            calibrated = yaml.safe_load(f)
+        if resolved["land_l1_cost"] == CALIBRATED_SENTINEL:
+            resolved["land_l1_cost"] = float(calibrated["land_l1_cost"])
+            logger.info(
+                "Resolved production_stability.land_l1_cost='calibrated' -> %.6f (from %s)",
+                resolved["land_l1_cost"],
+                path,
+            )
+        if resolved["animal_feed_l1_cost"] == CALIBRATED_SENTINEL:
+            resolved["animal_feed_l1_cost"] = float(calibrated["animal_feed_l1_cost"])
+            logger.info(
+                "Resolved production_stability.animal_feed_l1_cost='calibrated' -> %.6f "
+                "(from %s)",
+                resolved["animal_feed_l1_cost"],
+                path,
+            )
+
+    if land_factor != 1.0:
+        resolved["land_l1_cost"] = float(resolved["land_l1_cost"]) * land_factor
         logger.info(
-            "Resolved production_stability.land_l1_cost='calibrated' -> %.6f (from %s)",
-            land_val,
-            path,
+            "Applied land_l1_cost_factor=%.6g -> land_l1_cost=%.6f",
+            land_factor,
+            resolved["land_l1_cost"],
         )
-    if resolved.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL:
-        resolved["animal_feed_l1_cost"] = animal_feed_val
+    if animal_factor != 1.0 and resolved["animal_feed_l1_cost"] is not None:
+        resolved["animal_feed_l1_cost"] = (
+            float(resolved["animal_feed_l1_cost"]) * animal_factor
+        )
         logger.info(
-            "Resolved production_stability.animal_feed_l1_cost='calibrated' -> %.6f "
-            "(from %s)",
-            animal_feed_val,
-            path,
+            "Applied animal_feed_l1_cost_factor=%.6g -> animal_feed_l1_cost=%.6f",
+            animal_factor,
+            resolved["animal_feed_l1_cost"],
         )
+
     return resolved
 
 

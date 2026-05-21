@@ -239,6 +239,14 @@ properties:
                 enum: ["calibrated"]
               - type: "null"
             description: "L1 penalty on animal feed-use deviation (bn USD per Mt DM). Set to \"calibrated\" to resolve at solve time; a number overrides; null falls back to automatic Mha-equivalent scaling from land_l1_cost."
+          land_l1_cost_factor:
+            type: number
+            minimum: 0
+            description: "Multiplicative factor applied to land_l1_cost after the \"calibrated\" sentinel is resolved. Default 1.0. Lets scenarios scan around the calibrated value (e.g. gsa.yaml low/high regimes) without hard-coding absolute numbers that drift when the calibration is refreshed."
+          animal_feed_l1_cost_factor:
+            type: number
+            minimum: 0
+            description: "Multiplicative factor applied to animal_feed_l1_cost after the \"calibrated\" sentinel is resolved. Default 1.0. Ignored when animal_feed_l1_cost is null (automatic Mha-equivalent scaling)."
           deviation_type:
             type: string
             enum: ["absolute", "relative"]
