@@ -348,8 +348,11 @@ if __name__ == "__main__":
         raise RuntimeError(f"cropgrids_crop_mapping.csv has no row for crop '{crop}'")
     qcl_item_code = int(row.iloc[0]["faostat_qcl_item_code"])
 
-    moisture_df = pd.read_csv(moisture_path, comment="#").set_index("crop")
-    moisture_fraction = float(moisture_df.loc[crop, "moisture_fraction"])
+    moisture_fraction = float(
+        pd.read_csv(moisture_path, comment="#")
+        .set_index("crop")
+        .loc[crop, "moisture_fraction"]
+    )
 
     logger.info(
         "Building %s yields/harvested area from CROPGRIDS (item %d, moisture %.2f, "

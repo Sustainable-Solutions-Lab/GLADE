@@ -87,7 +87,7 @@ if __name__ == "__main__":
         foods["crop"] = foods["crop"].astype(str).str.strip()
         foods["factor"] = pd.to_numeric(foods["factor"], errors="coerce")
     edible_portion_df = read_csv(snakemake.input.edible_portion)
-    moisture_df = read_csv(snakemake.input.moisture_content)
+    moisture_df = read_csv(snakemake.input.moisture_content).set_index("crop")
 
     # Read food groups data
     food_groups = read_csv(snakemake.input.food_groups)
@@ -581,10 +581,9 @@ if __name__ == "__main__":
     # see their seed share massively inflated and clip against the 50% cap,
     # halving their effective yield.
     seed_rates_df = read_csv(snakemake.input.seed_rates, comment="#")
-    moisture_by_crop = moisture_df.set_index("crop")["moisture_fraction"].astype(float)
     seed_kg_dm_per_ha = seed_rates_df.set_index("crop")["seed_kg_per_ha"].astype(
         float
-    ) * (1.0 - moisture_by_crop)
+    ) * (1.0 - moisture_df["moisture_fraction"])
 
     # Optional cost calibration corrections (crops, grassland, animals)
     crop_cost_calibration = None
@@ -734,9 +733,7 @@ if __name__ == "__main__":
     # bus would account fresh food as DM, over-crediting moisture-heavy
     # foods. Uses the source crop's moisture as a first-order
     # approximation; foods with multiple pathways take the first crop.
-    moisture_by_crop = (
-        moisture_df.set_index("crop")["moisture_fraction"].astype(float).to_dict()
-    )
+    moisture_by_crop = moisture_df["moisture_fraction"].to_dict()
     food_dm_factor: dict[str, float] = {}
     for food_name, grp in foods.groupby("food"):
         source_crops = grp["crop"].dropna().astype(str).tolist()

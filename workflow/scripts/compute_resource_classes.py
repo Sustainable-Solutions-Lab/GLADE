@@ -47,11 +47,6 @@ def load_yield_conversions(path: str) -> dict[str, float]:
     return df["factor_to_t_per_ha"].dropna().astype(float).to_dict()
 
 
-def load_moisture_content(path: str) -> dict[str, float]:
-    df = pd.read_csv(path, comment="#").set_index("crop")
-    return df["moisture_fraction"].astype(float).to_dict()
-
-
 def yield_multiplier(
     crop: str,
     *,
@@ -291,7 +286,11 @@ if __name__ == "__main__":
         1.0,
     ]  # type: ignore[name-defined]
     conversions = load_yield_conversions(snakemake.input.yield_unit_conversions)  # type: ignore[attr-defined]
-    moisture = load_moisture_content(snakemake.input.moisture_content)  # type: ignore[attr-defined]
+    moisture = (
+        pd.read_csv(snakemake.input.moisture_content, comment="#")  # type: ignore[attr-defined]
+        .set_index("crop")["moisture_fraction"]
+        .to_dict()
+    )
 
     # Read regions and use first raster as reference for grid/CRS
     regions_gdf = gpd.read_file(regions_path)

@@ -27,7 +27,7 @@ CROP_MOISTURE_SCHEMA = DataFrameSchema(
             coerce=True,
             checks=Check.isin(VALID_FOOD_CONVERSIONS),
         ),
-        "source": Column(str, nullable=True, coerce=True),
+        "source": Column(str, nullable=False, coerce=True),
         "note": Column(str, nullable=True, coerce=True),
     },
     strict=True,

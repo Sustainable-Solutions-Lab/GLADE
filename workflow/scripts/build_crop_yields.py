@@ -63,8 +63,11 @@ if __name__ == "__main__":
 
     moisture_lookup: dict[str, float] = {}
     if moisture_csv:
-        moisture_df = pd.read_csv(moisture_csv, comment="#").set_index("crop")
-        moisture_lookup = moisture_df["moisture_fraction"].astype(float).to_dict()
+        moisture_lookup = (
+            pd.read_csv(moisture_csv, comment="#")
+            .set_index("crop")["moisture_fraction"]
+            .to_dict()
+        )
 
     def _yield_multiplier(crop: str) -> float:
         # GAEZ publishes RES05 potential yields in kg/ha but the historical

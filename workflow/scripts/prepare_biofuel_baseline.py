@@ -63,8 +63,11 @@ def main():
     logger.info("Found %d biofuel FBS item codes to fetch", len(item_codes))
 
     # Load moisture content for dry-matter conversion
-    moisture_df = pd.read_csv(moisture_path, comment="#")
-    moisture_lookup = moisture_df.set_index("crop")["moisture_fraction"].to_dict()
+    moisture_lookup = (
+        pd.read_csv(moisture_path, comment="#")
+        .set_index("crop")["moisture_fraction"]
+        .to_dict()
+    )
 
     # Load and filter FBS bulk data
     logger.info("Loading FAOSTAT FBS bulk data")

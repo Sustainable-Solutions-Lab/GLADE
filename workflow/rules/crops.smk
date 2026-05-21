@@ -388,18 +388,12 @@ def _yield_calibration_moisture(_wildcards):
     """Per-crop moisture fractions needed to convert GAEZ DM yields to fresh."""
     import pandas as pd
 
-    df = pd.read_csv("data/curated/crop_moisture_content.csv", comment="#").set_index(
-        "crop"
-    )
-    out = {}
-    for crop in config["yield_calibration"]["crops"]:
-        if crop not in df.index:
-            raise KeyError(
-                f"yield_calibration: no moisture entry for {crop} in "
-                "data/curated/crop_moisture_content.csv"
-            )
-        out[crop] = float(df.loc[crop, "moisture_fraction"])
-    return out
+    moisture = pd.read_csv(
+        "data/curated/crop_moisture_content.csv", comment="#"
+    ).set_index("crop")["moisture_fraction"]
+    return {
+        crop: float(moisture.loc[crop]) for crop in config["yield_calibration"]["crops"]
+    }
 
 
 rule build_yield_calibration:
@@ -520,15 +514,12 @@ def _yield_weighted_outputs(crop: str) -> dict[str, str]:
 
 
 def _crop_moisture(crop: str) -> float:
-    import csv
-    import pathlib
+    import pandas as pd
 
-    moisture_path = pathlib.Path("data/curated/crop_moisture_content.csv")
-    with open(moisture_path, newline="") as f:
-        for row in csv.DictReader(filter(lambda x: not x.startswith("#"), f)):
-            if row["crop"].strip() == crop:
-                return float(row["moisture_fraction"])
-    raise ValueError(f"Crop '{crop}' not found in {moisture_path}")
+    moisture = pd.read_csv(
+        "data/curated/crop_moisture_content.csv", comment="#"
+    ).set_index("crop")["moisture_fraction"]
+    return float(moisture.loc[crop])
 
 
 rule build_harvested_area_yield_weighted:

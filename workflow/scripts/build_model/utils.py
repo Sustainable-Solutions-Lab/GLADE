@@ -106,6 +106,9 @@ def _fresh_mass_conversion_factors(
 ) -> dict[str, float]:
     """Compute crop-to-food conversion factors.
 
+    ``moisture_df`` is expected to be indexed by ``crop`` (its schema and
+    completeness are guaranteed by ``validation/crop_moisture_content.py``).
+
     For each crop in ``crops`` this returns the factor that
     ``build_model/food.py`` multiplies into every food_processing pathway
     efficiency to translate dry-matter crop bus mass into food bus mass:
@@ -131,15 +134,7 @@ def _fresh_mass_conversion_factors(
         df["edible_portion_coefficient"], errors="coerce"
     )
 
-    moisture = moisture_df.copy()
-    moisture["crop"] = moisture["crop"].astype(str).str.strip()
-    moisture = moisture.set_index("crop")
-    moisture["moisture_fraction"] = pd.to_numeric(
-        moisture["moisture_fraction"], errors="coerce"
-    )
-
-    sorted_crops = sorted(crops)
-    crop_idx = pd.Index(sorted_crops, name="crop")
+    crop_idx = pd.Index(sorted(crops), name="crop")
 
     missing_edible = crop_idx.difference(df.index).tolist()
     if missing_edible:
@@ -148,15 +143,8 @@ def _fresh_mass_conversion_factors(
             + ", ".join(sorted(missing_edible))
         )
 
-    missing_moisture = crop_idx.difference(moisture.index).tolist()
-    if missing_moisture:
-        raise ValueError(
-            "Missing moisture fraction data for crops: "
-            + ", ".join(sorted(missing_moisture))
-        )
-
     joined = df.loc[crop_idx, ["edible_portion_coefficient"]].join(
-        moisture.loc[crop_idx, ["moisture_fraction", "food_conversion"]]
+        moisture_df.loc[crop_idx, ["moisture_fraction", "food_conversion"]]
     )
 
     na_edible = joined["edible_portion_coefficient"].isna()
@@ -164,22 +152,6 @@ def _fresh_mass_conversion_factors(
         raise ValueError(
             "Missing edible portion data for crops: "
             + ", ".join(sorted(joined.index[na_edible].tolist()))
-        )
-
-    na_moisture = joined["moisture_fraction"].isna()
-    if na_moisture.any():
-        raise ValueError(
-            "Missing moisture fraction data for crops: "
-            + ", ".join(sorted(joined.index[na_moisture].tolist()))
-        )
-
-    valid = {"inverse_moisture", "identity"}
-    bad = joined[~joined["food_conversion"].isin(valid)]
-    if not bad.empty:
-        raise ValueError(
-            "Invalid food_conversion values in crop_moisture_content.csv "
-            f"(must be one of {sorted(valid)}): "
-            + ", ".join(f"{c}={v!r}" for c, v in bad["food_conversion"].items())
         )
 
     dry_fraction = 1 - joined["moisture_fraction"]
