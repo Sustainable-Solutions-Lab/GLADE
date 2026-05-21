@@ -2,35 +2,27 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Production stability constraints and penalties for the food systems model.
+"""Production-side deviation penalty constraints (land + feed).
 
-This module provides constraint builders that limit production deviation from
-baseline levels. Three penalty modes are supported:
+This module implements the land-side (crop + grassland area, Mha) and
+feed-side (animal feed use, Mt DM) portions of the model's
+``deviation_penalty`` block. Three penalty modes are supported:
 
-- **hard**: Inequality bounds constraining production to within ±delta of baseline
-- **l1**: Linear absolute-value penalty via linopy variables added to the objective
-- **quadratic**: Quadratic penalty via linopy variables added to the objective
+- **hard**: Inequality bounds constraining each link to (1 +/- delta) * baseline.
+- **l1**: Linear absolute-value penalty via linopy variables added to objective.
+- **quadratic**: Quadratic penalty via linopy variables added to objective.
 
-Crop and grassland stability operate at the **per-link** level: each production
-link is individually constrained to stay near its own baseline area (observed
-harvested area, computed during model building and stored as ``baseline_area_mha``).
-Deviations are measured in Mha so that each hectare is penalized equally
-regardless of yield.
+Land penalties anchor each crop/grassland production link to its own
+``baseline_area_mha``; deviations are in Mha so each hectare is penalised
+equally regardless of yield. Feed penalties anchor each animal_production
+link to its ``baseline_feed_use_mt_dm``. Land-conversion penalties anchor
+links that route land between uses (conversion, pasture routing, sparing)
+toward zero (their baseline).
 
-Animal stability operates at the **per-link** level: each animal production link
-is individually constrained to stay near its GLEAM feed-use baseline (stored as
-``baseline_feed_use_mt_dm`` during model building). Feed use is constrained
-directly (no efficiency multiplication needed).
-
-Land conversion stability penalizes deviations from zero on links that route
-land between uses: cropland-to-pasture, new land conversion, and spare land.
-These links have zero baseline (no conversion in the reference year), so any
-flow incurs a stability cost.
-
-Hard constraints apply to all links, so zero-baseline links are constrained to
-stay exactly at zero production/feed use. Penalty modes (L1/quadratic) also
-apply to all links, so zero-baseline links incur a stability cost when
-activated.
+Diet-side penalties (food_consumption) live in
+:mod:`workflow.scripts.solve_model.diet_stability`. The L1-cost resolver
+:func:`resolve_calibrated_l1_costs` here also resolves the diet sentinel
+so all three components share a single calibration artefact.
 """
 
 import copy
@@ -57,135 +49,127 @@ LAND_CONVERSION_CARRIERS = [
 CALIBRATED_SENTINEL = "calibrated"
 
 
-def resolve_calibrated_l1_costs(
-    stability_cfg: dict, calibrated_l1_yaml: str | None
-) -> dict:
-    """Return ``stability_cfg`` with L1 costs resolved and factors applied.
+def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> dict:
+    """Resolve ``"calibrated"`` sentinels and apply per-component factors.
 
-    Two transformations happen here, in order:
+    For each component in ``{land, feed, diet}`` whose ``l1_cost`` is the
+    string ``"calibrated"``, the numeric value is substituted from
+    ``calibrated_yaml`` (produced by ``calibrate_deviation_penalty``). The
+    per-component ``l1_cost_factor`` is then multiplied in so scenarios can
+    scan around the calibrated central value without hard-coding absolute
+    numbers that drift whenever the calibration is refreshed.
 
-    1. ``validation.production_stability.land_l1_cost`` and
-       ``.animal_feed_l1_cost`` may each be set to the string
-       ``"calibrated"``; when they are, we substitute the numeric values
-       from ``calibrated_l1_yaml`` (produced by
-       ``calibrate_prod_stability``).
-    2. ``land_l1_cost_factor`` and ``animal_feed_l1_cost_factor`` are
-       multiplied into the resolved values. This lets scenarios scan
-       around the calibrated central value (e.g. gsa.yaml's low/high
-       regimes) without hard-coding absolute numbers that drift whenever
-       the calibration is refreshed.
-
-    The input dict is not mutated. When no sentinel is present and both
-    factors are 1.0, the input is returned unchanged.
+    The input dict is not mutated. When ``penalty_mode != "l1"`` the L1
+    costs are unused and the input is returned unchanged.
     """
+    if dp_cfg.get("penalty_mode") != "l1":
+        return dp_cfg
 
-    def _needs_lookup(cfg: dict) -> bool:
-        return (
-            cfg.get("land_l1_cost") == CALIBRATED_SENTINEL
-            or cfg.get("animal_feed_l1_cost") == CALIBRATED_SENTINEL
-        )
+    components = ("land", "feed", "diet")
 
-    # The L1-cost sentinel and factors only affect penalty_mode="l1"; for
-    # hard and quadratic modes the L1 cost is unused, so loading a
-    # (possibly stale) calibration YAML would be a needless coupling.
-    if stability_cfg.get("penalty_mode") != "l1":
-        return stability_cfg
+    def _needs_lookup() -> bool:
+        return any(dp_cfg[c]["l1_cost"] == CALIBRATED_SENTINEL for c in components)
 
-    land_factor = float(stability_cfg["land_l1_cost_factor"])
-    animal_factor = float(stability_cfg["animal_feed_l1_cost_factor"])
+    def _any_nontrivial_factor() -> bool:
+        return any(float(dp_cfg[c]["l1_cost_factor"]) != 1.0 for c in components)
 
-    if not _needs_lookup(stability_cfg) and land_factor == 1.0 and animal_factor == 1.0:
-        return stability_cfg
+    if not _needs_lookup() and not _any_nontrivial_factor():
+        return dp_cfg
 
-    resolved = copy.deepcopy(stability_cfg)
-
-    if _needs_lookup(resolved):
-        if calibrated_l1_yaml is None:
+    resolved = copy.deepcopy(dp_cfg)
+    calibrated: dict | None = None
+    if _needs_lookup():
+        if calibrated_yaml is None:
             raise ValueError(
-                "validation.production_stability contains the sentinel "
-                f"'{CALIBRATED_SENTINEL}' but no calibrated-L1 YAML was provided "
-                "to the solve. Check that prod_stability_calibration.enabled is "
-                "true and that the file exists."
+                "deviation_penalty contains the sentinel "
+                f"'{CALIBRATED_SENTINEL}' but no calibrated YAML was provided "
+                "to the solve. Check that deviation_penalty.calibration.enabled "
+                "is true and that the file exists."
             )
-        path = Path(calibrated_l1_yaml)
+        path = Path(calibrated_yaml)
         with path.open() as f:
             calibrated = yaml.safe_load(f)
-        if resolved["land_l1_cost"] == CALIBRATED_SENTINEL:
-            resolved["land_l1_cost"] = float(calibrated["land_l1_cost"])
+        cal_components = set(calibrated.get("components", []))
+        cal_l1 = calibrated.get("l1_costs", {})
+        for component in components:
+            if resolved[component]["l1_cost"] != CALIBRATED_SENTINEL:
+                continue
+            if component not in cal_components or component not in cal_l1:
+                raise ValueError(
+                    f"deviation_penalty.{component}.l1_cost='calibrated' but the "
+                    f"calibrated YAML at {path} did not calibrate '{component}' "
+                    f"(components: {sorted(cal_components)}). Either remove the "
+                    "sentinel, set an explicit numeric value, or regenerate the "
+                    "calibration including this component."
+                )
+            resolved[component]["l1_cost"] = float(cal_l1[component])
             logger.info(
-                "Resolved production_stability.land_l1_cost='calibrated' -> %.6f (from %s)",
-                resolved["land_l1_cost"],
-                path,
-            )
-        if resolved["animal_feed_l1_cost"] == CALIBRATED_SENTINEL:
-            resolved["animal_feed_l1_cost"] = float(calibrated["animal_feed_l1_cost"])
-            logger.info(
-                "Resolved production_stability.animal_feed_l1_cost='calibrated' -> %.6f "
-                "(from %s)",
-                resolved["animal_feed_l1_cost"],
+                "Resolved deviation_penalty.%s.l1_cost='calibrated' -> %.6f (from %s)",
+                component,
+                resolved[component]["l1_cost"],
                 path,
             )
 
-    if land_factor != 1.0:
-        resolved["land_l1_cost"] = float(resolved["land_l1_cost"]) * land_factor
-        logger.info(
-            "Applied land_l1_cost_factor=%.6g -> land_l1_cost=%.6f",
-            land_factor,
-            resolved["land_l1_cost"],
-        )
-    if animal_factor != 1.0 and resolved["animal_feed_l1_cost"] is not None:
-        resolved["animal_feed_l1_cost"] = (
-            float(resolved["animal_feed_l1_cost"]) * animal_factor
-        )
-        logger.info(
-            "Applied animal_feed_l1_cost_factor=%.6g -> animal_feed_l1_cost=%.6f",
-            animal_factor,
-            resolved["animal_feed_l1_cost"],
-        )
+    for component in components:
+        factor = float(resolved[component]["l1_cost_factor"])
+        value = resolved[component]["l1_cost"]
+        if factor != 1.0 and value is not None:
+            resolved[component]["l1_cost"] = float(value) * factor
+            logger.info(
+                "Applied deviation_penalty.%s.l1_cost_factor=%.6g -> l1_cost=%.6f",
+                component,
+                factor,
+                resolved[component]["l1_cost"],
+            )
 
     return resolved
 
 
 def add_production_stability_constraints(
     n: pypsa.Network,
-    stability_cfg: dict,
+    dp_cfg: dict,
     slack_marginal_cost: float,
 ) -> None:
-    """Add constraints limiting production deviation from baseline levels.
+    """Add land + feed deviation penalty constraints.
 
-    For crops/grassland: per-link bounds using ``baseline_area_mha``.
-    For animals: per-link bounds using ``baseline_feed_use_mt_dm``.
+    Reads from the unified ``deviation_penalty`` block:
+    - ``dp_cfg["land"]`` covers crop_production, grassland_production and
+      land_conversion carriers (anchored to ``baseline_area_mha``).
+    - ``dp_cfg["feed"]`` covers animal_production feed use (anchored to
+      ``baseline_feed_use_mt_dm``).
 
-    Three penalty modes are supported:
-    - hard: inequality bounds ``(1 ± delta) * baseline``
-    - l1: linear penalty via linopy abs-deviation variables
-    - quadratic: quadratic penalty via linopy deviation variables
-
-    Hard mode and penalty modes apply to all links. Penalty modes use a
-    denominator floor for relative deviations.
+    The diet component is handled separately by
+    :func:`workflow.scripts.solve_model.diet_stability.add_diet_stability_constraints`.
 
     Parameters
     ----------
     n : pypsa.Network
         The network containing the model.
-    stability_cfg : dict
-        Configuration with enabled, penalty_mode, l1_cost, quadratic_cost,
-        deviation_type, crops.max_relative_deviation, etc.
+    dp_cfg : dict
+        The resolved ``deviation_penalty`` block. ``l1_cost`` values must
+        already be numeric (see :func:`resolve_calibrated_l1_costs`).
     slack_marginal_cost : float
-        Penalty cost in bn USD per Mt for production stability slack.
+        Penalty cost in bn USD per Mt for hard-mode production-stability slack.
     """
-    if not stability_cfg["enabled"]:
+    if not dp_cfg["enabled"]:
         return
 
     m = n.model
     link_p = m.variables["Link-p"].sel(snapshot="now")
     links_df = n.links.static
 
-    penalty_mode = stability_cfg["penalty_mode"]
+    penalty_mode = dp_cfg["penalty_mode"]
+    deviation_type = dp_cfg["deviation_type"]
+    quadratic_cost = dp_cfg["quadratic_cost"]
+
+    land_cfg = dp_cfg["land"]
+    feed_cfg = dp_cfg["feed"]
+    land_enabled = land_cfg["enabled"]
+    feed_enabled = feed_cfg["enabled"]
 
     # --- CROP PRODUCTION ---
-    crops_cfg = stability_cfg["crops"]
-    if crops_cfg["enabled"]:
+    crops_cfg = land_cfg["crops"]
+    if land_enabled and crops_cfg["enabled"]:
         if penalty_mode == "hard":
             _add_production_hard_constraints(
                 n,
@@ -203,8 +187,8 @@ def add_production_stability_constraints(
                 links_df,
                 "crop_production",
                 "crop",
-                stability_cfg["deviation_type"],
-                stability_cfg["land_l1_cost"],
+                deviation_type,
+                land_cfg["l1_cost"],
                 crops_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -214,14 +198,14 @@ def add_production_stability_constraints(
                 links_df,
                 "crop_production",
                 "crop",
-                stability_cfg["deviation_type"],
-                stability_cfg["quadratic_cost"],
+                deviation_type,
+                quadratic_cost,
                 crops_cfg["min_baseline"],
             )
 
     # --- GRASSLAND PRODUCTION ---
-    grassland_cfg = stability_cfg["grassland"]
-    if grassland_cfg["enabled"]:
+    grassland_cfg = land_cfg["grassland"]
+    if land_enabled and grassland_cfg["enabled"]:
         if penalty_mode == "hard":
             _add_production_hard_constraints(
                 n,
@@ -240,8 +224,8 @@ def add_production_stability_constraints(
                 links_df,
                 "grassland_production",
                 "grassland",
-                stability_cfg["deviation_type"],
-                stability_cfg["land_l1_cost"],
+                deviation_type,
+                land_cfg["l1_cost"],
                 grassland_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -251,47 +235,37 @@ def add_production_stability_constraints(
                 links_df,
                 "grassland_production",
                 "grassland",
-                stability_cfg["deviation_type"],
-                stability_cfg["quadratic_cost"],
+                deviation_type,
+                quadratic_cost,
                 grassland_cfg["min_baseline"],
             )
 
     # --- ANIMAL FEED USE ---
-    animals_cfg = stability_cfg["animals"]
-    if animals_cfg["enabled"]:
-        # Determine animal L1/quadratic cost and scaling (only meaningful
-        # outside hard mode; hard mode adds box constraints and ignores
-        # both values).
-        # If animal_feed_l1_cost is set, use it directly in native Mt DM units
-        # (no scaling). Otherwise, compute a dynamic scaling coefficient so
-        # that animal feed deviations (Mt DM) are converted to Mha-equivalent
-        # units, making land_l1_cost/quadratic_cost comparable across
-        # crop/grassland (Mha) and animal (Mt DM) components.
+    if feed_enabled:
+        # Determine animal L1 cost and scaling (only meaningful outside hard
+        # mode; hard mode adds box constraints and ignores both values).
+        # If feed.l1_cost is set, use it directly in native Mt DM units
+        # (no scaling). Otherwise (null), compute a dynamic scaling so
+        # that feed deviations (Mt DM) are converted to Mha-equivalent
+        # units, making land.l1_cost comparable across crop/grassland
+        # (Mha) and animal (Mt DM) components.
         animal_l1_cost = None
         animal_scale = 1.0
-        animal_l1_cost_override = stability_cfg["animal_feed_l1_cost"]
+        feed_l1_cost = feed_cfg["l1_cost"]
         if penalty_mode == "hard":
-            pass  # animal_l1_cost / animal_scale unused
-        elif animal_l1_cost_override is not None:
-            animal_l1_cost = float(animal_l1_cost_override)
+            pass
+        elif feed_l1_cost is not None:
+            animal_l1_cost = float(feed_l1_cost)
             logger.info(
-                "Using animal_feed_l1_cost directly: %.4f bn USD/Mt DM (no scaling)",
+                "Using feed.l1_cost directly: %.4f bn USD/Mt DM (no scaling)",
                 animal_l1_cost,
             )
         else:
-            animal_l1_cost = stability_cfg["land_l1_cost"]
-            if stability_cfg["deviation_type"] == "absolute":
+            animal_l1_cost = land_cfg["l1_cost"]
+            if deviation_type == "absolute":
                 crop_links = links_df[links_df["carrier"] == "crop_production"]
                 grass_links = links_df[links_df["carrier"] == "grassland_production"]
                 animal_links = links_df[links_df["carrier"] == "animal_production"]
-                # build_model populates baseline_area_mha on crop/grassland
-                # production links and baseline_feed_use_mt_dm on
-                # animal_production links. The previous .get(...) fallback
-                # to an empty Series silently zeroed total_area when these
-                # columns were missing, which made animal_scale = 0 and
-                # disabled the L1 penalty without warning. Require the
-                # columns explicitly when the corresponding carriers are
-                # present.
                 if not crop_links.empty and "baseline_area_mha" not in crop_links:
                     raise ValueError(
                         "crop_production links missing baseline_area_mha; "
@@ -335,16 +309,16 @@ def add_production_stability_constraints(
 
         if penalty_mode == "hard":
             _add_animal_hard_constraints(
-                n, link_p, links_df, animals_cfg, slack_marginal_cost
+                n, link_p, links_df, feed_cfg, slack_marginal_cost
             )
         elif penalty_mode == "l1":
             _add_animal_l1_penalty(
                 n,
                 link_p,
                 links_df,
-                stability_cfg["deviation_type"],
+                deviation_type,
                 animal_l1_cost,
-                animals_cfg["min_baseline"],
+                feed_cfg["min_baseline"],
                 animal_scale,
             )
         elif penalty_mode == "quadratic":
@@ -352,33 +326,33 @@ def add_production_stability_constraints(
                 n,
                 link_p,
                 links_df,
-                stability_cfg["deviation_type"],
-                stability_cfg["quadratic_cost"],
-                animals_cfg["min_baseline"],
+                deviation_type,
+                quadratic_cost,
+                feed_cfg["min_baseline"],
                 animal_scale,
             )
 
     # --- LAND CONVERSION ---
-    land_conversion_cfg = stability_cfg["land_conversion"]
-    if land_conversion_cfg["enabled"]:
+    land_conversion_cfg = land_cfg["land_conversion"]
+    if land_enabled and land_conversion_cfg["enabled"]:
         if penalty_mode == "hard":
             logger.warning(
-                "Hard mode is not supported for land conversion stability "
-                "(zero baselines would forbid all conversion); skipping"
+                "Hard mode is not supported for land-conversion deviation "
+                "penalty (zero baselines would forbid all conversion); skipping"
             )
         elif penalty_mode == "l1":
             _add_land_conversion_l1_penalty(
                 n,
                 link_p,
                 links_df,
-                stability_cfg["land_l1_cost"],
+                land_cfg["l1_cost"],
             )
         elif penalty_mode == "quadratic":
             _add_land_conversion_quadratic_penalty(
                 n,
                 link_p,
                 links_df,
-                stability_cfg["quadratic_cost"],
+                quadratic_cost,
             )
 
 

@@ -133,7 +133,7 @@ objective.
    reading: even at ``baseline``, this tutorial's model uses less land
    than the real world and produces net-negative emissions by default.
    Serious studies "coerce" the model toward observed production using
-   ``validation.production_stability`` (see ``config/sensitivity.yaml``
+   ``deviation_penalty`` (see ``config/sensitivity.yaml``
    and ``config/gsa.yaml``) or hard constraints (see
    ``config/validation.yaml``). The tutorial omits both to keep the
    config short.

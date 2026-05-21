@@ -10,7 +10,7 @@
 #   2. food_waste  → data/curated/calibration/food_waste.yaml
 #   3. food_demand → data/curated/calibration/food_demand.csv
 #   4. cost        → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
-#   5. stability   → data/curated/calibration/prod_stability_l1.yaml
+#   5. stability   → data/curated/calibration/deviation_penalty.yaml
 #
 # Usage:
 #   tools/calibrate                # run all in order
@@ -52,7 +52,7 @@ COST_TARGETS=(
   data/curated/calibration/animal_cost.csv
 )
 STABILITY_TARGETS=(
-  data/curated/calibration/prod_stability_l1.yaml
+  data/curated/calibration/deviation_penalty.yaml
 )
 
 # All three calibration configs use gurobi; default the pixi env accordingly.

@@ -366,101 +366,73 @@ according to ``food_utility_piecewise.decline_factor``.
 
 .. _production-stability-bounds:
 
-Production Stability Bounds
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Deviation Penalty
+^^^^^^^^^^^^^^^^^
 
-The ``validation.production_stability`` section allows constraining how much crop and
-animal product production can deviate from current (baseline) levels. This is useful for
-investigating what positive changes (e.g., improved health outcomes, reduced emissions)
-can be achieved with limited disruption to existing production patterns.
+The ``deviation_penalty`` section anchors three independent quantities to
+their observed baseline-year levels:
+
+* **land** -- crop + grassland production area (Mha).
+* **feed** -- animal_production feed use (Mt DM).
+* **diet** -- per-(food, country) food consumption (Mt).
+
+Together they let the model investigate what changes (improved health,
+reduced emissions, etc.) can be achieved with limited disruption to
+existing production and consumption patterns. The default profile
+calibrates land + feed via ``tools/calibrate stability``; diet is off
+by default and is intended for specific investigations where the priced
+optimum would otherwise reshuffle the diet substantially while leaving
+land use approximately unchanged.
 
 Three penalty modes are available, selected via ``penalty_mode``:
 
-* **``hard``** (default): Inequality bounds. Per-(product, country) production is bounded by:
+* **``hard``**: inequality bounds. Per-link production / feed use is
+  bounded by :math:`(1 - \delta) \cdot \text{baseline}` to
+  :math:`(1 + \delta) \cdot \text{baseline}` where :math:`\delta` is the
+  per-component ``max_relative_deviation``. Supported for land and feed
+  only.
+* **``l1``** (default): linear absolute-value penalty per link. Each unit
+  of deviation costs ``deviation_penalty.<component>.l1_cost`` bn USD
+  (per Mha for land, per Mt DM for feed, per Mt for diet).
+* **``quadratic``**: ``0.5 * quadratic_cost * sum(deviation^2)``.
 
-  .. math::
-
-     (1 - \delta) \times \text{baseline} \le \text{production} \le (1 + \delta) \times \text{baseline}
-
-  where :math:`\delta` is the ``max_relative_deviation`` parameter (e.g., 0.2 for ±20%).
-
-* **``l1``**: Soft L1 (linear absolute-value) penalty on deviations from baseline production.
-  Each unit of absolute deviation incurs a cost of ``l1_cost`` (bn USD per Mha for
-  crops/grassland, or Mha-equivalent for animals). An L1 cost of approximately 1.0 is
-  roughly the lowest value that induces the model to replicate current production patterns.
-
-* **``quadratic``**: Soft quadratic penalty on deviations, with cost ``quadratic_cost``
-  (bn USD per deviation² unit).
-
-The ``deviation_type`` option (``absolute`` or ``relative``) controls whether deviations
-are measured in absolute units or relative to the baseline.
+The ``deviation_type`` option (``absolute`` or ``relative``) is shared
+across components.
 
 **Configuration options**:
 
-* ``production_stability.enabled``: Master switch for the feature (default: ``false``)
-* ``production_stability.penalty_mode``: ``hard``, ``l1``, or ``quadratic`` (default: ``hard``)
-* ``production_stability.l1_cost``: L1 penalty cost (default: 0.22, only used when ``penalty_mode`` is ``l1``)
-* ``production_stability.quadratic_cost``: Quadratic penalty cost (default: 1.0, only used when ``penalty_mode`` is ``quadratic``)
-* ``production_stability.deviation_type``: ``absolute`` or ``relative`` (default: ``absolute``)
-* ``production_stability.crops.enabled``: Apply to crop production
-* ``production_stability.crops.max_relative_deviation``: Maximum relative deviation for crops (0-1, ``hard`` mode only)
-* ``production_stability.animals.enabled``: Apply to animal product production
-* ``production_stability.animals.max_relative_deviation``: Maximum relative deviation for animal products (0-1, ``hard`` mode only)
+* ``deviation_penalty.enabled``: master switch (default: ``true``).
+* ``deviation_penalty.penalty_mode``: ``hard``, ``l1``, or ``quadratic``.
+* ``deviation_penalty.deviation_type``: ``absolute`` or ``relative``.
+* ``deviation_penalty.quadratic_cost``: shared coefficient for quadratic mode.
+* ``deviation_penalty.land.enabled`` / ``feed.enabled`` / ``diet.enabled``:
+  per-component switches.
+* ``deviation_penalty.<component>.l1_cost``: L1 penalty coefficient (or the
+  string ``"calibrated"`` to resolve from the calibration YAML).
+* ``deviation_penalty.<component>.l1_cost_factor``: multiplicative factor
+  applied after sentinel resolution; lets scenarios scan around the
+  calibrated central value without hard-coding absolute numbers.
+* ``deviation_penalty.land.crops.max_relative_deviation`` /
+  ``land.grassland.max_relative_deviation`` /
+  ``feed.max_relative_deviation``: hard-mode bounds.
 
 **Behavior notes**:
 
-* Products with zero baseline production are constrained to zero (no new products introduced)
-* Products missing baseline data are skipped with a warning
-* Multi-cropping is automatically disabled when production stability is enabled
+* Per-link bounds with zero baseline are constrained to zero (no new
+  products introduced) under hard mode.
+* The L1 penalty also applies to links with zero baseline.
+* Multi-cropping is automatically disabled when ``deviation_penalty.land``
+  is enabled.
+* The diet penalty has no effect when ``enforce_baseline_diet`` is true
+  (consumption is already pinned via ``p_set``).
+* Costs land in three separate columns of the per-scenario
+  ``analysis/.../objective_breakdown.parquet``: production stability
+  (land + feed L1) and diet stability.
 
-.. _diet-stability:
-
-Diet Stability
-^^^^^^^^^^^^^^
-
-The ``validation.diet_stability`` section adds a per-(food, country) soft anchor on
-**food consumption** toward the observed baseline diet (the same per-(food, country)
-``target_mt`` derived from ``baseline_year``-resolved data that
-``enforce_baseline_diet`` consumes). It is independent of ``production_stability``
-and **off by default**.
-
-Production stability constrains *what is produced* (and how much land/feed it uses)
-but leaves the model free to reroute the same hectares into a very different *diet*
-(e.g. converting feed-grain area to direct-food legumes/whole-grains). Under priced
-regimes (positive ``ghg_price`` / ``value_per_yll``) this rerouting can be substantial
-even when total cropland and pasture deviate by only a few percent. Diet stability
-attaches an explicit currency cost to every Mt that consumption of a food deviates
-from baseline, restoring a knob to anchor *consumption* close to current levels.
-
-Two penalty modes are available, selected via ``penalty_mode``:
-
-* **``l1``** (default): linear absolute-value penalty on consumption deviation.
-  Each Mt of absolute deviation costs ``food_l1_cost`` bn USD.
-* **``quadratic``**: soft quadratic penalty on consumption deviation,
-  ``0.5 * quadratic_cost * sum((p - baseline)^2)``.
-
-**Configuration options**:
-
-* ``diet_stability.enabled``: Master switch (default: ``false``).
-* ``diet_stability.penalty_mode``: ``l1`` (default) or ``quadratic``.
-* ``diet_stability.deviation_type``: ``absolute`` or ``relative`` (default: ``absolute``).
-* ``diet_stability.food_l1_cost``: Linear penalty (bn USD per Mt deviation), used when ``penalty_mode`` is ``l1``.
-* ``diet_stability.quadratic_cost``: Quadratic penalty (bn USD per Mt²), used when ``penalty_mode`` is ``quadratic``.
-* ``diet_stability.min_baseline``: Mt floor for relative-mode denominators.
-
-**Interaction with other features**:
-
-* The penalty is added on top of any piecewise consumer-values utility
-  (``food_utility_piecewise``); the two compose linearly.
-* Diet stability has no effect when ``enforce_baseline_diet`` is true
-  (the diet is already pinned via ``p_set``).
-* The cost shows up as a separate ``diet_stability`` column in the
-  per-scenario ``analysis/.../objective_breakdown.parquet``.
-
-A typical use is reproducing the current observed diet (per ``baseline_year``)
-under a priced GHG/YLL regime as the high-stability anchor of a transition study;
-the appropriate ``food_l1_cost`` is calibration-specific (analogous to
-``land_l1_cost`` for production_stability).
+The default calibration (land + feed) is regenerated with
+``tools/calibrate stability`` and lands at
+``data/curated/calibration/deviation_penalty.yaml`` (see
+:doc:`calibration`).
 
 .. _growth-caps:
 
@@ -472,7 +444,7 @@ production-stability penalty above. They act as structural backstops
 against runaway expansion in either direction (animals or crops) under
 L1 stability, *without* depending on the L1 penalty being well-tuned.
 
-Both caps are independent of ``production_stability.enabled`` and are
+Both caps are independent of ``deviation_penalty.enabled`` and are
 configured under ``validation.animal_growth_cap`` and
 ``validation.crop_growth_cap`` respectively.
 

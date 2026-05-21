@@ -72,7 +72,7 @@ anything.
        constraint duals (observed allocation -> optimal allocation).
    * - :ref:`stability <prod-stability-calibration>`
      - ``config/calibration/stability.yaml``
-     - ``prod_stability_l1.yaml``
+     - ``deviation_penalty.yaml``
      - The L1 penalty pair :math:`(\ell^c_1, \ell^a_1)` that brings both
        land-use and animal-feed deviations to ~5 % of observed totals.
 
@@ -145,14 +145,15 @@ workflow when their configuration blocks are enabled (the default):
   :ref:`food-demand-calibration`).
 * ``cost_calibration.enabled: true`` loads the three cost-correction
   CSVs at build time (see :ref:`cost-calibration-correction`).
-* ``prod_stability_calibration.enabled: true`` resolves the sentinel
-  ``"calibrated"`` in
-  ``validation.production_stability.land_l1_cost`` and
-  ``.animal_feed_l1_cost`` from
-  ``data/curated/calibration/prod_stability_l1.yaml`` at solve time
+* ``deviation_penalty.calibration.enabled: true`` resolves the sentinel
+  ``"calibrated"`` on any of
+  ``deviation_penalty.{land,feed,diet}.l1_cost`` from
+  ``data/curated/calibration/deviation_penalty.yaml`` at solve time
   (see :ref:`production-stability-bounds` for the config reference).
   Scenarios that want an explicit numeric value simply override the
-  sentinel with a number.
+  sentinel with a number; scenarios that want to scan around the
+  calibrated value can leave the sentinel in place and set the
+  matching ``l1_cost_factor``.
 
 .. _calibration-feed-step:
 
@@ -379,24 +380,32 @@ log-log slope for a relationship of the form
 :math:`\text{dev} \propto 1/\ell_1`.
 
 Convergence target: :math:`\lvert \log(\text{dev}/t) \rvert_\infty
-< 0.02`, i.e. both deviations within ±2 % of the target. The
-calibrated pair is written to
-``data/curated/calibration/prod_stability_l1.yaml`` and resolved at
-solve time wherever the sentinel ``"calibrated"`` appears in
-``validation.production_stability.land_l1_cost`` or
-``.animal_feed_l1_cost`` (see :ref:`production-stability-bounds`).
+< 0.02`, i.e. all calibrated deviations within +/-2 % of the target.
+The calibrated coefficients are written to
+``data/curated/calibration/deviation_penalty.yaml`` under
+``l1_costs.<component>`` and resolved at solve time wherever the
+sentinel ``"calibrated"`` appears in
+``deviation_penalty.{land,feed,diet}.l1_cost`` (see
+:ref:`production-stability-bounds`).
 
 A per-iteration diagnostic CSV is written to
-``results/{name}/calibration/prod_stability_trace.csv`` with the
-:math:`(\ell^c_1, \ell^a_1)` iterate, achieved deviations, and residual
-norm for each step.
+``results/{name}/calibration/deviation_penalty_trace.csv`` with the
+per-component iterate, achieved deviations, and residual norm for each
+step.
+
+The set of components driven simultaneously is configured via
+``deviation_penalty.calibration.components`` (default
+``[land, feed]``). Diet calibration is available as an opt-in
+``components: [land, feed, diet]`` profile for specific investigations
+where the priced optimum would otherwise reshuffle the diet
+substantially.
 
 Implementation
 ~~~~~~~~~~~~~~
 
-Rule: ``calibrate_prod_stability`` in
-``workflow/rules/prod_stability.smk``. Script:
-``workflow/scripts/calibrate_prod_stability.py``.
+Rule: ``calibrate_deviation_penalty`` in
+``workflow/rules/deviation_penalty.smk``. Script:
+``workflow/scripts/calibrate_deviation_penalty.py``.
 
 The calibrated L1 cost is also used as a slice parameter in the
 sensitivity analysis; see :ref:`sensitivity-prod-stability-cost` for the

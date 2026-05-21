@@ -73,56 +73,6 @@ validation:
   slack_marginal_cost: 50. # bn USD per Mt/Mha for validation slack (food groups, feed, land)
   feed_slack_cost_factor: 0.1 # Feed slack cost as fraction of slack_marginal_cost (lower separates feed from food slack)
   grassland_yield_multiplier: 1.0 # Multiplier applied to effective grassland feed yields before building grassland links
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"  # "hard" = inequality bounds, "quadratic" = soft QP penalty, "l1" = linear absolute value penalty
-    quadratic_cost: 1.0  # bn USD per deviation² unit (only used when penalty_mode is "quadratic")
-    # L1 penalty costs live directly under production_stability with scope-
-    # specific names. String "calibrated" resolves at solve time from
-    # data/curated/calibration/prod_stability_l1.yaml; a number overrides.
-    # Regenerate the calibration with `tools/calibrate stability`.
-    land_l1_cost: "calibrated"  # bn USD per Mha deviation (crops + grassland, shared)
-    animal_feed_l1_cost: "calibrated"  # bn USD per Mt DM deviation (animal feed use). Set to null to fall back to automatic Mha-equivalent scaling from land_l1_cost.
-    # Multiplicative factors applied to the resolved L1 costs (after the
-    # "calibrated" sentinel is substituted). Use these to scan around the
-    # calibrated central value without having to update absolute numbers
-    # whenever the calibration is refreshed (e.g. the lower/higher regimes
-    # in config/gsa.yaml).
-    land_l1_cost_factor: 1.0
-    animal_feed_l1_cost_factor: 1.0
-    deviation_type: "absolute"  # "absolute" or "relative" deviation from baseline
-    crops:
-      enabled: true
-      max_relative_deviation: 0.2  # ±20%
-      enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline: 0.000001  # Mha denominator floor for relative penalty modes.
-    grassland:
-      enabled: true
-      max_relative_deviation: 0.2
-      enable_slack: false
-      min_baseline: 0.000001  # Mha denominator floor for relative penalty modes.
-    animals:
-      enabled: true
-      max_relative_deviation: 0.2
-      enable_slack: false  # Allow violating minimum production bounds at penalty cost
-      min_baseline: 0.00001  # Mt DM denominator floor for relative penalty modes.
-    land_conversion:
-      enabled: true  # Penalize land-use transitions (conversion, pasture routing, sparing) from zero baseline
-  diet_stability:
-    # Per-(food, country) deviation penalty on food_consumption links, anchored
-    # to the observed baseline-year diet (the same matched_baseline used by
-    # enforce_baseline_diet). Land/animal-feed production_stability does NOT
-    # constrain how the same hectares are routed into different foods, so a
-    # priced regime (GHG/YLL > 0) can leave land use ~unchanged while shifting
-    # the diet substantially. This block adds an explicit currency cost on diet
-    # deviation; off by default so it does not affect the calibration runs or
-    # any existing scenario.
-    enabled: false
-    penalty_mode: "l1"  # "l1" = linear |dev|, "quadratic" = 0.5 * c * dev^2
-    deviation_type: "absolute"  # "absolute" = Mt, "relative" = (Mt-baseline)/baseline
-    food_l1_cost: 0.0  # bn USD per Mt deviation (used when penalty_mode == "l1")
-    quadratic_cost: 0.0  # bn USD per Mt^2 (used when penalty_mode == "quadratic")
-    min_baseline: 0.000001  # Mt floor for relative-mode denominator
   animal_growth_cap:
     enabled: true  # Cap animal production growth to prevent unrealistic spatial reallocation
     max_relative_increase: 0.5  # Maximum relative increase from baseline (0.1 = +10%)
@@ -134,6 +84,79 @@ validation:
     # bounding total country-level expansion of any single crop.
     enabled: true
     max_relative_increase: 10.0  # +1000%
+
+# --- section: deviation_penalty ---
+# Per-component deviation penalties anchoring the optimum to observed
+# baseline-year levels. Each enabled component adds a hard inequality bound
+# or an L1/quadratic penalty per link, summed into the objective:
+#   - land: crop_production + grassland_production area (Mha)
+#   - feed: animal_production feed-use (Mt DM)
+#   - diet: food_consumption dispatch toward the matched baseline diet (Mt)
+# The L1 penalty coefficients can each be set to the string "calibrated",
+# which resolves at solve time from ``calibration.calibrated_yaml`` produced
+# by ``tools/calibrate stability``. Per-component ``l1_cost_factor`` lets
+# scenarios scan around the calibrated central value without hard-coding
+# absolute numbers (e.g. gsa.yaml's lower/higher regimes).
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"  # "hard" | "l1" | "quadratic" (hard supported for land + feed only)
+  deviation_type: "absolute"  # "absolute" or "relative"
+  quadratic_cost: 1.0  # Shared coefficient for quadratic mode (bn USD per deviation^2)
+  land:
+    enabled: true
+    l1_cost: "calibrated"  # bn USD per Mha deviation; "calibrated" resolves from calibrated_yaml
+    l1_cost_factor: 1.0
+    crops:
+      enabled: true
+      max_relative_deviation: 0.2  # +/-20% (hard mode only)
+      enable_slack: false
+      min_baseline: 0.000001  # Mha denominator floor for relative mode
+    grassland:
+      enabled: true
+      max_relative_deviation: 0.2
+      enable_slack: false
+      min_baseline: 0.000001
+    land_conversion:
+      enabled: true  # Penalise land-use transitions (conversion, pasture routing, sparing) from zero baseline
+  feed:
+    enabled: true
+    # bn USD per Mt DM deviation; "calibrated" resolves from calibrated_yaml,
+    # null falls back to automatic Mha-equivalent scaling from land.l1_cost.
+    l1_cost: "calibrated"
+    l1_cost_factor: 1.0
+    max_relative_deviation: 0.2
+    enable_slack: false
+    min_baseline: 0.00001  # Mt DM denominator floor for relative mode
+  diet:
+    # Per-(food, country) penalty on food_consumption link dispatch toward
+    # the observed baseline diet. Off by default; complements land+feed
+    # bounds when the diet itself must stay near baseline (e.g. under a
+    # priced regime that would otherwise reshuffle consumption while leaving
+    # land use ~unchanged).
+    enabled: false
+    l1_cost: 0.0  # bn USD per Mt deviation; numeric or "calibrated"
+    l1_cost_factor: 1.0
+    min_baseline: 0.000001  # Mt floor for relative-mode denominator
+  calibration:
+    # Iterative Broyden calibration of the L1 coefficients listed under
+    # ``components``. Each iteration is one paired baseline+main solve;
+    # converges in ~5-8 iterations from a warm start. The default subset
+    # is [land, feed], reproducing the production-stability calibration of
+    # the project's main workflow; diet calibration is opt-in for specific
+    # investigations.
+    enabled: true       # Resolve the "calibrated" sentinel at solve time from calibrated_yaml
+    generate: false     # Generate the calibrated file via the Broyden iteration (breaks DAG cycle when true)
+    components: ["land", "feed"]  # Non-empty subset of {land, feed, diet}
+    target_deviation_pct: 5.0
+    tolerance: 0.02
+    max_iter: 8
+    trust_region_log: 0.693  # log(2): caps |dx|_inf in log-coords per iteration
+    calibrated_yaml: "data/curated/calibration/deviation_penalty.yaml"
+    trace_csv: "<results>/{name}/calibration/deviation_penalty_trace.csv"
+    seeds:
+      land: 0.1
+      feed: 0.03
+      diet: 3.0
 
 # --- section: food_incentives ---
 food_incentives:
@@ -1611,29 +1634,6 @@ cost_calibration:
   crop_correction_csv: "data/curated/calibration/crop_cost.csv"
   grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
   animal_correction_csv: "data/curated/calibration/animal_cost.csv"
-
-# --- section: prod_stability_calibration ---
-# Calibrated L1 production-stability penalty costs (land vs. animal feed).
-# Read at solve time whenever ``validation.production_stability.land_l1_cost``
-# or ``.animal_feed_l1_cost`` is set to the sentinel string ``"calibrated"``.
-# Generated by an in-process Broyden iteration; see
-# config/calibration/stability.yaml and tools/calibrate stability.
-prod_stability_calibration:
-  enabled: true       # Resolve the "calibrated" sentinel at solve time from the file below
-  generate: false     # Generate the file (breaks DAG cycle when true)
-  target_deviation_pct: 5.0  # Target deviation (% of baseline)
-  calibrated_l1_yaml: "data/curated/calibration/prod_stability_l1.yaml"
-  # Seed used when no previous calibrated YAML is wired in. With a warm-start
-  # input the seed is overridden by the previous land/animal_feed_l1_cost.
-  seed_land_l1_cost: 0.1
-  seed_animal_feed_l1_cost: 0.03
-  # |log(d/target)|_inf < tolerance -> converged. 0.02 = ±2% relative.
-  tolerance: 0.02
-  max_iter: 8
-  # Per-iteration cap on |Δx|_inf in log-coords. log(2) limits steps to
-  # at most doubling/halving lambda per iteration.
-  trust_region_log: 0.693
-  trace_csv: "<results>/{name}/calibration/prod_stability_trace.csv"
 
 # --- section: solving ---
 solving:

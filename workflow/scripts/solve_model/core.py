@@ -1384,8 +1384,9 @@ def run_solve(
             "Cannot combine enforce_baseline_diet with food_groups.equal_by_country_source"
         )
     matched_baseline: pd.DataFrame | None = None
-    diet_stability_cfg = smk.params.diet_stability
-    needs_baseline_match = enforce_baseline or diet_stability_cfg["enabled"]
+    dp_cfg = smk.params.deviation_penalty
+    diet_enabled = dp_cfg["enabled"] and dp_cfg["diet"]["enabled"]
+    needs_baseline_match = enforce_baseline or diet_enabled
     if needs_baseline_match:
         food_demand_multiplier: dict[str, float] | None = None
         fd_cal_path = getattr(smk.input, "food_demand_calibration", None)
@@ -1403,6 +1404,14 @@ def run_solve(
             population_map,
             food_demand_multiplier=food_demand_multiplier,
         )
+        # Stamp the per-link Mt baseline onto food_consumption links so
+        # extract_baseline_deviation can compute a diet-deviation row
+        # without re-running the (population, FLW) matching.
+        if matched_baseline is not None and not matched_baseline.empty:
+            targets = matched_baseline.set_index("name")["target_mt"]
+            n.links.static.loc[targets.index, "baseline_consumption_mt"] = (
+                targets.astype(float)
+            )
     if enforce_baseline and matched_baseline is not None:
         slack_cost = float(smk.params.slack_marginal_cost)
         add_food_slack_generators(n, matched_baseline, slack_cost)
@@ -1525,27 +1534,22 @@ def run_solve(
     with _phase("add_residue_feed_constraints"):
         add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
 
-    # Add production stability constraints (per-link for both crops and animals).
-    # Resolve the "calibrated" sentinel before stability is wired into the
-    # model. When stability is disabled, leave the config unresolved: the
-    # downstream objective breakdown is also gated on `enabled` (see below),
-    # so callers can disable stability without needing the calibration
-    # file.
-    stability_cfg = smk.params.production_stability
-    if stability_cfg["enabled"]:
-        calibrated_l1_yaml = getattr(smk.input, "prod_stability_calibration", None)
-        stability_cfg = resolve_calibrated_l1_costs(stability_cfg, calibrated_l1_yaml)
+    # Deviation penalty constraints (land + feed via production_stability;
+    # diet via diet_stability). Resolve the "calibrated" sentinel once;
+    # downstream objective-breakdown bookkeeping is also gated on `enabled`,
+    # so callers can disable the feature without needing a calibration file.
+    if dp_cfg["enabled"]:
+        calibrated_yaml = getattr(smk.input, "deviation_penalty_calibration", None)
+        dp_cfg = resolve_calibrated_l1_costs(dp_cfg, calibrated_yaml)
         slack_marginal_cost = float(smk.params.slack_marginal_cost)
         with _phase("add_production_stability_constraints"):
-            add_production_stability_constraints(n, stability_cfg, slack_marginal_cost)
-
-    # Diet stability: per-(food, country) L1 (or quadratic) penalty anchoring
-    # consumption to the baseline diet. Independent of production_stability;
-    # only applies when validation.diet_stability.enabled is true and the
-    # diet is not already pinned via enforce_baseline_diet.
-    if diet_stability_cfg["enabled"] and not enforce_baseline:
-        with _phase("add_diet_stability_constraints"):
-            add_diet_stability_constraints(n, matched_baseline, diet_stability_cfg)
+            add_production_stability_constraints(n, dp_cfg, slack_marginal_cost)
+        # Diet penalty: per-(food, country) L1 (or quadratic) penalty anchoring
+        # consumption to the baseline diet. Only applies when diet.enabled is
+        # true and the diet is not already pinned via enforce_baseline_diet.
+        if dp_cfg["diet"]["enabled"] and not enforce_baseline:
+            with _phase("add_diet_stability_constraints"):
+                add_diet_stability_constraints(n, matched_baseline, dp_cfg)
 
     # Add animal growth cap constraints (independent of production stability)
     animal_growth_cap_cfg = smk.params.animal_growth_cap
@@ -1698,34 +1702,25 @@ def run_solve(
         # statistics; record them in metadata so the breakdown can account
         # for them.
         #
-        # Gate on stability_cfg["enabled"]: when disabled there are no
-        # stability variables in the model, the sentinel "calibrated" may
-        # remain unresolved in the config, and the float() conversions
-        # below would crash. The breakdown is also a no-op in that case.
-        # Inside the gate, the L1 branch is further gated on
-        # penalty_mode == "l1": hard-mode solves (e.g. cost calibration)
-        # leave the L1 sentinel unresolved and contribute no L1 cost.
+        # Gate on dp_cfg["enabled"]: when disabled there are no deviation
+        # variables in the model, the sentinel "calibrated" may remain
+        # unresolved in the config, and the float() conversions below would
+        # crash. The breakdown is also a no-op in that case.
         #
-        # The cost coefficient used here must mirror what
-        # _add_animal_l1_penalty applies in production_stability.py:
-        # * animal_feed_l1_cost set: penalty uses that value directly with
-        #   animal_scale=1.0, so abs_dev is in native Mt DM and the
-        #   breakdown coefficient is animal_l1_override.
-        # * animal_feed_l1_cost None: penalty uses land_l1_cost but
-        #   pre-multiplies the deviation by animal_scale, so abs_dev is in
-        #   Mha-equivalent units and the breakdown coefficient is land_l1.
-        # In both cases, animal_l1 * sum(abs_dev.solution) reproduces the
-        # actual objective contribution exactly.
-        if stability_cfg["enabled"]:
-            penalty_mode = stability_cfg.get("penalty_mode")
+        # The L1 coefficient mirrors what _add_animal_l1_penalty applies in
+        # production_stability.py: when feed.l1_cost is set, the penalty
+        # uses that value directly (animal_scale=1.0) and abs_dev is in
+        # native Mt DM; when null, the penalty uses land.l1_cost on
+        # Mha-equivalent units. In both cases the per-component coefficient
+        # times sum(abs_dev.solution) reproduces the actual objective term.
+        if dp_cfg["enabled"]:
+            penalty_mode = dp_cfg.get("penalty_mode")
             stability_cost = 0.0
             if penalty_mode == "l1":
-                animal_l1_override = stability_cfg["animal_feed_l1_cost"]
-                land_l1 = float(stability_cfg["land_l1_cost"])
+                land_l1 = float(dp_cfg["land"]["l1_cost"])
+                feed_l1_override = dp_cfg["feed"]["l1_cost"]
                 animal_l1 = (
-                    float(animal_l1_override)
-                    if animal_l1_override is not None
-                    else land_l1
+                    float(feed_l1_override) if feed_l1_override is not None else land_l1
                 )
                 for var_name, cost in [
                     ("crop_stability_abs_dev", land_l1),
@@ -1743,7 +1738,7 @@ def run_solve(
                 "land_conversion_stability_dev",
             ]
             if any(name in n.model.variables for name in quad_var_names):
-                quad_cost = float(stability_cfg["quadratic_cost"])
+                quad_cost = float(dp_cfg["quadratic_cost"])
                 for var_name in quad_var_names:
                     if var_name in n.model.variables:
                         sol = n.model.variables[var_name].solution
@@ -1751,13 +1746,11 @@ def run_solve(
             if abs(stability_cost) > 1e-12:
                 n.meta["production_stability_cost"] = stability_cost
 
-        # Diet-stability post-hoc cost (separate from production stability so
-        # the objective breakdown can show them as distinct terms).
-        diet_cost = evaluate_diet_stability_cost(
-            n, matched_baseline, diet_stability_cfg
-        )
-        if abs(diet_cost) > 1e-12:
-            n.meta["diet_stability_cost"] = diet_cost
+            # Diet deviation post-hoc cost (separate so the objective
+            # breakdown can show production and diet as distinct terms).
+            diet_cost = evaluate_diet_stability_cost(n, matched_baseline, dp_cfg)
+            if abs(diet_cost) > 1e-12:
+                n.meta["diet_stability_cost"] = diet_cost
 
         # Post-hoc health evaluation when value_per_yll == 0
         if health_enabled and value_per_yll == 0:

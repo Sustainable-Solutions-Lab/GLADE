@@ -49,10 +49,11 @@ food_utility_piecewise:
 
 validation:
   use_actual_yields: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
+
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"
+  deviation_type: "absolute"
 
 water:
   supply_scenario: "current_use"

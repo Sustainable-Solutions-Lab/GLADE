@@ -28,7 +28,7 @@ companion: when to run, how to run, what to expect, what to watch out for.
 | food_waste | `config/calibration/food_waste.yaml` | `food_waste.yaml` | Per-food-group consumer-side waste multiplier (FBS supply vs GDD-IA intake) |
 | food_demand | `config/calibration/food_demand.yaml` | `food_demand.csv` | Per-food residual mismatch left over after food_waste |
 | cost | `config/calibration/cost.yaml` | `crop_cost.csv`, `grassland_cost.csv`, `animal_cost.csv` | Additive production-cost corrections from stability-constraint duals |
-| stability | `config/calibration/stability.yaml` | `prod_stability_l1.yaml` | The L1 penalty pair (lambda_c, lambda_a) that gives ~5% deviation on each axis |
+| stability | `config/calibration/stability.yaml` | `deviation_penalty.yaml` | The L1 penalty triple over the configured components (default: land + feed) that gives ~5% deviation on each axis |
 
 The order is strict (next section explains why). All five configs share
 `name: "calibration"` so the expensive upstream processing under
@@ -156,22 +156,25 @@ sequential (each Broyden iteration depends on the previous solve).
 - `data/curated/calibration/*` -- the five artefacts, **git-tracked**. Commit them together as a refresh; mixed-vintage artefacts are the most common cause of confusing downstream solves.
 - `processing/calibration/*` -- shared upstream prep, NOT committed.
 - `results/calibration/*` -- per-iteration solve logs, NOT committed.
-- `results/calibration/prod_stability_trace.csv` -- per-iter Broyden trace (lambda_c, lambda_a, achieved deviations, residual norm). Inspect when stability behaves oddly.
+- `results/calibration/calibration/deviation_penalty_trace.csv` -- per-iter Broyden trace (per-component lambda, achieved deviations, residual norm). Inspect when stability behaves oddly.
 
 The currently calibrated L1 centre lives in
-`data/curated/calibration/prod_stability_l1.yaml`. Solves that set
-`validation.production_stability.land_l1_cost: "calibrated"` (or
-`animal_feed_l1_cost`) resolve the sentinel from this file at solve time.
+`data/curated/calibration/deviation_penalty.yaml` under
+`l1_costs.<component>`. Solves that set
+`deviation_penalty.{land,feed,diet}.l1_cost: "calibrated"` resolve the
+sentinel from this file at solve time. Per-component
+`l1_cost_factor` lets scenarios scan around the calibrated value
+without hard-coding absolute numbers.
 
 ## Gotchas and pitfalls
 
 ### The big one: inflated production-stability L1 cost as a mismatch signal
 
-**Symptom.** After `tools/calibrate stability` finishes, `land_l1_cost`
-and/or `animal_feed_l1_cost` in `prod_stability_l1.yaml` are several-fold
-larger than the previously calibrated centre (current centre: ~0.10 crop,
-~0.03 animal). Or Broyden refuses to converge at the 5 % deviation target
-and oscillates / hits max iterations.
+**Symptom.** After `tools/calibrate stability` finishes,
+`l1_costs.land` and/or `l1_costs.feed` in `deviation_penalty.yaml` are
+several-fold larger than the previously calibrated centre (current
+centre: ~0.10 land, ~0.03 feed). Or Broyden refuses to converge at the
+5 % deviation target and oscillates / hits max iterations.
 
 **Mechanism.** A pure cost-minimisation solve is free to reorganise
 production arbitrarily; the L1 penalty is what coerces the LP back into
@@ -227,14 +230,24 @@ historical centre once the chain absorbs its gaps cleanly.
   where inconsistency starts. Don't commit them piecemeal.
 
 - **Sentinel `"calibrated"` fails loudly when the yaml is stale or
-  missing.** `validation.production_stability.land_l1_cost: "calibrated"`
-  resolves from `prod_stability_l1.yaml` at solve time. Scenarios that
+  missing.** `deviation_penalty.{land,feed,diet}.l1_cost: "calibrated"`
+  resolves from `deviation_penalty.yaml` at solve time. Scenarios that
   want a fixed numeric value should override the sentinel directly.
 
 - **`penalty_mode` and the sentinel are coupled.** The sentinel resolves
-  only under `penalty_mode: "l1"` (see commit `c9fae81`). If a scenario
-  sets `penalty_mode: "hard"`, drop the sentinel and pass an explicit
-  numeric L1 cost (or omit -- hard mode doesn't use L1).
+  only under `penalty_mode: "l1"`. If a scenario sets `penalty_mode:
+  "hard"`, drop the sentinel and pass an explicit numeric L1 cost (or
+  omit -- hard mode doesn't use L1).
+
+- **Calibration components are configurable.** The default subset is
+  `deviation_penalty.calibration.components: [land, feed]`, reproducing
+  the historical 2D calibration. A separate config with
+  `components: [land, feed, diet]` adds diet as a third axis (used for
+  specific investigations where the priced optimum reshuffles the diet
+  while leaving land use approximately unchanged). The calibrator
+  iterates Broyden over the listed components; the output yaml only
+  contains keys for the calibrated subset, and the sentinel resolver
+  raises if a scenario uses `"calibrated"` on an uncalibrated component.
 
 - **`slack_marginal_cost: 7.5` in `cost.yaml` caps slack-driven duals.**
   Touch with care: raising it masks data errors; lowering it makes the
@@ -250,7 +263,7 @@ historical centre once the chain absorbs its gaps cleanly.
   calibrated yaml is auto-detected as the Broyden seed. But if upstream
   changed materially, the warm start can mislead the Jacobian. If
   Broyden takes >5 iterations or oscillates, delete (or rename)
-  `prod_stability_l1.yaml` and start cold with the seeds from
+  `deviation_penalty.yaml` and start cold with the seeds from
   `config/calibration/stability.yaml`.
 
 - **The canonical `enabled: false, generate: true` pattern.** Every
@@ -276,8 +289,8 @@ tools/smk --configfile config/validation.yaml -- \
     results/validation/solved/model_scen-default.nc
 
 # Current calibrated L1 centre
-cat data/curated/calibration/prod_stability_l1.yaml
+cat data/curated/calibration/deviation_penalty.yaml
 
 # Per-iter Broyden trace (after a stability run)
-cat results/calibration/prod_stability_trace.csv
+cat results/calibration/calibration/deviation_penalty_trace.csv
 ```

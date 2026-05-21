@@ -4,11 +4,12 @@
 
 name: "constrained"
 scenarios:
-  # Production Stability Sensitivity Scenarios
-  # ----------------------------------------
-  # Each scenario relaxes production stability bounds (max_relative_deviation)
-  # from near-baseline production toward unconstrained optimization.
-  # The final scenario disables production stability entirely.
+  # Deviation-penalty Sensitivity Scenarios
+  # ---------------------------------------
+  # Each scenario relaxes the hard-mode land + feed bounds
+  # (max_relative_deviation) from near-baseline production toward
+  # unconstrained optimization. The final scenario disables the
+  # deviation penalty entirely.
 
   _generators:
     - name: ps_{deviation}
@@ -17,46 +18,41 @@ scenarios:
           values: [0.00, 0.05, 0.10, 0.20, 0.40, 0.80, 1.00]
           name_format: "lambda x: f'{int(x*100):03d}'"
       template:
-        validation:
-          production_stability:
+        deviation_penalty:
+          enabled: true
+          land:
             enabled: true
             crops:
               enabled: true
               max_relative_deviation: "{deviation}"
-            animals:
-              enabled: true
-              max_relative_deviation: "{deviation}"
+          feed:
+            enabled: true
+            max_relative_deviation: "{deviation}"
 
   ps_unconstrained:
-    validation:
-      production_stability:
-        enabled: false
-        crops:
-          enabled: true
-          max_relative_deviation: 0.20
-        animals:
-          enabled: true
-          max_relative_deviation: 0.20
+    deviation_penalty:
+      enabled: false
 
 plotting:
   comparison_scenarios: "all"
 
-# Scenario presets loosen production stability bounds from "today" toward
-# unconstrained optimization.
-
-# Enable production stability at base level so input files are included for all
-# scenarios (Snakemake input functions run before scenario overrides apply).
-# Enable land slack to allow minor exceedance of regional land limits.
+# Enable deviation penalty at base level so input files are included for
+# all scenarios (Snakemake input functions run before scenario overrides
+# apply). Enable land slack to allow minor exceedance of regional land
+# limits.
 validation:
   land_slack: true
-  production_stability:
+deviation_penalty:
+  enabled: true
+  penalty_mode: "hard"
+  land:
     enabled: true
     crops:
       enabled: true
       enable_slack: true
-    animals:
-      enabled: true
-      enable_slack: true
+  feed:
+    enabled: true
+    enable_slack: true
 
 water:
   supply_scenario: current_use

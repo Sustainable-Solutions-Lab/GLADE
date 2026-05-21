@@ -13,7 +13,7 @@
 #   lower  (factor 1/sqrt(10) ~ 0.3162):  half an order of magnitude below central
 #   higher (factor sqrt(10) ~ 3.1623):    half an order of magnitude above central
 # The lower/higher variants apply a multiplicative factor on top of the
-# calibrated central values via land_l1_cost_factor / animal_feed_l1_cost_factor,
+# calibrated central values via deviation_penalty.{land,feed}.l1_cost_factor,
 # so they automatically track the calibration when it is refreshed.
 # Each regime has its own baseline scenario for consumer-values calibration.
 
@@ -57,17 +57,21 @@ scenarios:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
-      production_stability:
-        land_l1_cost_factor: 0.31623   # 1 / sqrt(10)
-        animal_feed_l1_cost_factor: 0.31623
+    deviation_penalty:
+      land:
+        l1_cost_factor: 0.31623   # 1 / sqrt(10)
+      feed:
+        l1_cost_factor: 0.31623
 
   baseline_l1_high:
     <<: *baseline_template
     validation:
       enforce_baseline_diet: true
-      production_stability:
-        land_l1_cost_factor: 3.16228   # sqrt(10)
-        animal_feed_l1_cost_factor: 3.16228
+    deviation_penalty:
+      land:
+        l1_cost_factor: 3.16228   # sqrt(10)
+      feed:
+        l1_cost_factor: 3.16228
 
   # Default scenario for reference (no sensitivity adjustments)
   default: {}
@@ -161,10 +165,11 @@ scenarios:
       parameters: *gsa_parameters
       template:
         <<: *gsa_template
-        validation:
-          production_stability:
-            land_l1_cost_factor: 0.31623
-            animal_feed_l1_cost_factor: 0.31623
+        deviation_penalty:
+          land:
+            l1_cost_factor: 0.31623
+          feed:
+            l1_cost_factor: 0.31623
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -177,10 +182,11 @@ scenarios:
       parameters: *gsa_parameters
       template:
         <<: *gsa_template
-        validation:
-          production_stability:
-            land_l1_cost_factor: 3.16228
-            animal_feed_l1_cost_factor: 3.16228
+        deviation_penalty:
+          land:
+            l1_cost_factor: 3.16228
+          feed:
+            l1_cost_factor: 3.16228
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 

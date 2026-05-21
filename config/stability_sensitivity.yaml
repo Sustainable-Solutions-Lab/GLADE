@@ -2,17 +2,17 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Alternative production-stability regimes for GHG/YLL sensitivity
-# ----------------------------------------------------------------
+# Alternative deviation-penalty regimes for GHG/YLL sensitivity
+# -------------------------------------------------------------
 # Replicates the scenarios from sensitivity.yaml at two additional
-# production-stability regimes in addition to the calibrated default:
+# deviation-penalty regimes in addition to the calibrated default:
 #
-#   default (calibrated):   land_l1_cost/animal_feed_l1_cost from calibration file
-#   lower  (÷ √10 each):    land_l1_cost=0.038, animal_feed_l1_cost=0.010
-#   higher (× √10 each):    land_l1_cost=0.38,  animal_feed_l1_cost=0.10
+#   default (calibrated):   land/feed L1 costs from calibration file
+#   lower  (/ sqrt(10) each):  land.l1_cost=0.038, feed.l1_cost=0.010
+#   higher (* sqrt(10) each):  land.l1_cost=0.38,  feed.l1_cost=0.10
 #
-# The lower/higher numeric values are hand-scaled ±½ order of magnitude
-# around the calibrated central values (~0.12 crop, ~0.033 animal). If the
+# The lower/higher numeric values are hand-scaled +/-0.5 order of magnitude
+# around the calibrated central values (~0.12 land, ~0.033 feed). If the
 # calibrated values drift meaningfully after regenerating via
 # ``tools/calibrate stability``, rescale the numeric variants below to match.
 #
@@ -26,9 +26,11 @@ scenarios:
   baseline_l1_low: &baseline_low
     validation:
       enforce_baseline_diet: true
-      production_stability:
-        land_l1_cost: 0.038
-        animal_feed_l1_cost: 0.010
+    deviation_penalty:
+      land:
+        l1_cost: 0.038
+      feed:
+        l1_cost: 0.010
     food_utility_piecewise:
       enabled: false
     emissions:
@@ -40,9 +42,11 @@ scenarios:
     <<: *baseline_low
     validation:
       enforce_baseline_diet: true
-      production_stability:
-        land_l1_cost: 0.38
-        animal_feed_l1_cost: 0.10
+    deviation_penalty:
+      land:
+        l1_cost: 0.38
+      feed:
+        l1_cost: 0.10
 
   _generators:
     # --- Zero-point scenarios at alternative stability regimes -------------
@@ -58,10 +62,11 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-        validation:
-          production_stability:
-            land_l1_cost: 0.038
-            animal_feed_l1_cost: 0.010
+        deviation_penalty:
+          land:
+            l1_cost: 0.038
+          feed:
+            l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -71,10 +76,11 @@ scenarios:
           values: ["ghg_0", "yll_0", "ghg_yll_0"]
       template:
         <<: *zero_low
-        validation:
-          production_stability:
-            land_l1_cost: 0.38
-            animal_feed_l1_cost: 0.10
+        deviation_penalty:
+          land:
+            l1_cost: 0.38
+          feed:
+            l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -95,10 +101,11 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-        validation:
-          production_stability:
-            land_l1_cost: 0.038
-            animal_feed_l1_cost: 0.010
+        deviation_penalty:
+          land:
+            l1_cost: 0.038
+          feed:
+            l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -107,10 +114,11 @@ scenarios:
         ghg: *ghg_range
       template:
         <<: *ghg_low
-        validation:
-          production_stability:
-            land_l1_cost: 0.38
-            animal_feed_l1_cost: 0.10
+        deviation_penalty:
+          land:
+            l1_cost: 0.38
+          feed:
+            l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -131,10 +139,11 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-        validation:
-          production_stability:
-            land_l1_cost: 0.038
-            animal_feed_l1_cost: 0.010
+        deviation_penalty:
+          land:
+            l1_cost: 0.038
+          feed:
+            l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -143,10 +152,11 @@ scenarios:
         yll: *yll_range
       template:
         <<: *yll_low
-        validation:
-          production_stability:
-            land_l1_cost: 0.38
-            animal_feed_l1_cost: 0.10
+        deviation_penalty:
+          land:
+            l1_cost: 0.38
+          feed:
+            l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -164,10 +174,11 @@ scenarios:
         macronutrients:
           cal:
             equal_to_baseline: true
-        validation:
-          production_stability:
-            land_l1_cost: 0.038
-            animal_feed_l1_cost: 0.010
+        deviation_penalty:
+          land:
+            l1_cost: 0.038
+          feed:
+            l1_cost: 0.010
         consumer_values:
           baseline_scenario: "baseline_l1_low"
 
@@ -178,10 +189,11 @@ scenarios:
         yll: *yll_range
       template:
         <<: *ghg_yll_low
-        validation:
-          production_stability:
-            land_l1_cost: 0.38
-            animal_feed_l1_cost: 0.10
+        deviation_penalty:
+          land:
+            l1_cost: 0.38
+          feed:
+            l1_cost: 0.10
         consumer_values:
           baseline_scenario: "baseline_l1_high"
 
@@ -191,16 +203,16 @@ baseline_year: 2020
 food_utility_piecewise:
   enabled: true
 
-# Top-level stability uses the calibrated pair (resolved at solve time from
-# data/curated/calibration/prod_stability_l1.yaml). Alternative regimes above
-# override with explicit (crop, animal) pairs scaled by ±half an order of
-# magnitude around the calibration point.
+# Top-level deviation_penalty uses the calibrated pair (resolved at solve
+# time from data/curated/calibration/deviation_penalty.yaml). Alternative
+# regimes above override with explicit (land, feed) pairs scaled by +/-half
+# an order of magnitude around the calibration point.
 validation:
   use_actual_yields: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"
+  deviation_type: "absolute"
 
 plotting:
   comparison_scenarios: "all"

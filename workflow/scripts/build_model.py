@@ -935,10 +935,14 @@ if __name__ == "__main__":
         land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
     )
 
-    # Multi-cropping is disabled when running with actual production
+    # Multi-cropping is disabled when running with actual production or when
+    # the land deviation penalty is active (penalty anchors land area to
+    # baseline; extra harvested area from multi-cropping would bias the
+    # deviation accounting).
+    dp_cfg = snakemake.params.deviation_penalty
+    land_deviation_active = dp_cfg["enabled"] and dp_cfg["land"]["enabled"]
     enable_multiple_cropping = bool(snakemake.params.multiple_cropping) and (
-        not use_actual_production
-        and not validation_cfg["production_stability"]["enabled"]
+        not use_actual_production and not land_deviation_active
     )
     if enable_multiple_cropping:
         crops.add_multi_cropping_links(

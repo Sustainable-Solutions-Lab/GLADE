@@ -202,7 +202,7 @@ rule build_model:
         grazing=config["grazing"],
         baseline_year=config["baseline_year"],
         validation=config["validation"],
-        production_stability=config["validation"]["production_stability"],
+        deviation_penalty=config["deviation_penalty"],
         netcdf=config["netcdf"],
     output:
         network="<results>/{name}/build/model.nc",
@@ -290,18 +290,18 @@ def solve_model_inputs(w):
     if fd_cal_cfg["enabled"]:
         inputs["food_demand_calibration"] = fd_cal_cfg["calibration_file"]
 
-    # Production-stability L1 calibration: include the calibrated-L1 YAML
-    # when the scenario's stability config contains the "calibrated" sentinel
-    # on either l1 cost key. Resolution happens in
-    # solve_model/production_stability.py at solve time.
-    ps_cal_cfg = eff_cfg["prod_stability_calibration"]
-    if ps_cal_cfg["enabled"]:
-        stab = eff_cfg["validation"]["production_stability"]
-        if (
-            stab.get("land_l1_cost") == "calibrated"
-            or stab.get("animal_feed_l1_cost") == "calibrated"
+    # Deviation-penalty L1 calibration: include the calibrated YAML when
+    # any component's l1_cost is set to the "calibrated" sentinel. The
+    # solve resolves the sentinel via
+    # solve_model/production_stability.resolve_calibrated_l1_costs.
+    dp_cfg = eff_cfg["deviation_penalty"]
+    dp_cal_cfg = dp_cfg["calibration"]
+    if dp_cal_cfg["enabled"]:
+        if any(
+            dp_cfg[component]["l1_cost"] == "calibrated"
+            for component in ("land", "feed", "diet")
         ):
-            inputs["prod_stability_calibration"] = ps_cal_cfg["calibrated_l1_yaml"]
+            inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
 
     return inputs
 
@@ -392,11 +392,8 @@ rule solve_model:
         enforce_baseline=lambda w: get_effective_config(w.scenario)["validation"][
             "enforce_baseline_diet"
         ],
-        production_stability=lambda w: get_effective_config(w.scenario)["validation"][
-            "production_stability"
-        ],
-        diet_stability=lambda w: get_effective_config(w.scenario)["validation"][
-            "diet_stability"
+        deviation_penalty=lambda w: get_effective_config(w.scenario)[
+            "deviation_penalty"
         ],
         animal_growth_cap=lambda w: get_effective_config(w.scenario)["validation"][
             "animal_growth_cap"

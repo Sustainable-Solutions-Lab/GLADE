@@ -5,8 +5,8 @@
 # Combined Sensitivity Analysis Configuration
 # -------------------------------------------
 # GHG price, YLL value, and joint GHG+YLL sensitivity at the calibrated
-# default production-stability regime (land_l1_cost / animal_feed_l1_cost
-# resolved from data/curated/calibration/prod_stability_l1.yaml; see
+# default deviation-penalty regime (land + feed L1 costs resolved from
+# data/curated/calibration/deviation_penalty.yaml; see
 # docs/calibration.rst).
 #
 # Alternative stability regimes (0.05 / 0.5) live in
@@ -106,10 +106,11 @@ food_utility_piecewise:
 
 validation:
   use_actual_yields: true
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
+
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"
+  deviation_type: "absolute"
 
 # Compare all scenarios in plots
 plotting:

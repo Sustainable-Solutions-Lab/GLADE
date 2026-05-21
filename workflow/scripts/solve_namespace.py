@@ -6,7 +6,7 @@
 
 Centralises the manifest-entry / namespace machinery used by
 ``tools/export-solve-manifest``, ``tools/cluster-solve``, and the in-process
-iterative calibration drivers (e.g. ``calibrate_prod_stability.py``).
+iterative calibration drivers (e.g. ``calibrate_deviation_penalty.py``).
 
 The functions here are pure: they translate an effective scenario config into
 the inputs/params/outputs structure expected by ``run_solve`` /
@@ -32,9 +32,8 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "health.enabled",
     "health.value_per_yll",
     "validation.enforce_baseline_diet",
-    "validation.production_stability",
-    "validation.diet_stability",
     "validation.animal_growth_cap",
+    "deviation_penalty",
     "macronutrients",
     "food_utility_piecewise",
     "food_incentives",
@@ -53,7 +52,6 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "plotting",
     "remote_solve",
     "netcdf",
-    "prod_stability_calibration.enabled",
 }
 
 
@@ -265,14 +263,13 @@ def build_scenario_entry(
     if fd_cal_cfg["enabled"]:
         inputs["food_demand_calibration"] = fd_cal_cfg["calibration_file"]
 
-    ps_cal_cfg = eff["prod_stability_calibration"]
-    if ps_cal_cfg["enabled"]:
-        stab = eff["validation"]["production_stability"]
-        if (
-            stab.get("land_l1_cost") == "calibrated"
-            or stab.get("animal_feed_l1_cost") == "calibrated"
-        ):
-            inputs["prod_stability_calibration"] = ps_cal_cfg["calibrated_l1_yaml"]
+    dp_cfg = eff["deviation_penalty"]
+    dp_cal_cfg = dp_cfg["calibration"]
+    if dp_cal_cfg["enabled"] and any(
+        dp_cfg[component]["l1_cost"] == "calibrated"
+        for component in ("land", "feed", "diet")
+    ):
+        inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
 
     if inline_analysis:
         inputs["population"] = rp("<processing>/{name}/population.csv")
@@ -291,8 +288,7 @@ def build_scenario_entry(
         "macronutrients": macronutrient_cfg,
         "food_group_constraints": eff["food_groups"]["constraints"],
         "enforce_baseline": eff["validation"]["enforce_baseline_diet"],
-        "production_stability": eff["validation"]["production_stability"],
-        "diet_stability": eff["validation"]["diet_stability"],
+        "deviation_penalty": eff["deviation_penalty"],
         "animal_growth_cap": eff["validation"]["animal_growth_cap"],
         "crop_growth_cap": eff["validation"]["crop_growth_cap"],
         "food_utility_piecewise": utility_cfg,

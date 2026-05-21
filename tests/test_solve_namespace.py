@@ -15,7 +15,7 @@ class TestValidateScenarioOverrides:
         defs = {
             "low_ghg": {"emissions": {"ghg_price": 50.0}},
             "no_health": {"health": {"enabled": False}},
-            "stability": {"validation": {"diet_stability": {"enabled": True}}},
+            "stability": {"deviation_penalty": {"diet": {"enabled": True}}},
         }
         validate_scenario_overrides(defs)
 

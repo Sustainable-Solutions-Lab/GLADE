@@ -144,8 +144,8 @@ configuration looks the way it does (see ``docs/config/doc_figures.yaml`` and
    from a baseline solve where their dual sat at the slack price or had a
    strongly negative median across countries.
 
-2. **The L1 production-stability penalty pulls in the same direction.** When
-   ``validation.production_stability`` is enabled with ``penalty_mode: "l1"``
+2. **The L1 deviation penalty pulls in the same direction.** When
+   ``deviation_penalty`` is enabled with ``penalty_mode: "l1"``
    (typical for the central and GSA configurations), the objective gains a
    term :math:`l_1 \cdot \sum |a - a_{\mathrm{baseline}}|` on harvested area
    per crop. If the modelled outlets for some crop's production cannot

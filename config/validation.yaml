@@ -21,8 +21,9 @@ validation:
   disable_spared_cropland: true
   disable_spared_grassland: true
   slack_marginal_cost: 10
-  production_stability:
-    enabled: false
+
+deviation_penalty:
+  enabled: false
 
 cost_calibration:
   enabled: false

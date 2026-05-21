@@ -63,9 +63,9 @@ _CALIBRATION_SECTIONS = [
         "has_scenario": True,
     },
     {
-        "name": "prod_stability_calibration",
-        "path": ("prod_stability_calibration",),
-        "files": ["calibrated_l1_yaml"],
+        "name": "deviation_penalty.calibration",
+        "path": ("deviation_penalty", "calibration"),
+        "files": ["calibrated_yaml"],
         "has_scenario": False,
     },
 ]
@@ -116,22 +116,21 @@ def validate_calibration(config: dict, project_root: Path | None = None) -> None
 
     # The L1 calibration in tools/calibrate stability fits the coefficients
     # against the (penalty_mode='l1', deviation_type='absolute') regime,
-    # see workflow/scripts/calibrate_prod_stability.py:_stability_overrides.
-    # In that regime the L1 coefficient has units of bn USD per Mha (or
-    # per Mt DM). Under any other regime the same number has the wrong
-    # physical interpretation, so gate the calibrated sentinel to the
-    # mode it was fit in.
-    prod_stab = config["validation"]["production_stability"]
-    land_l1 = prod_stab.get("land_l1_cost")
-    animal_l1 = prod_stab.get("animal_feed_l1_cost")
-    uses_calibrated = land_l1 == "calibrated" or animal_l1 == "calibrated"
+    # see workflow/scripts/calibrate_deviation_penalty.py. Under any other
+    # regime the same number has the wrong physical interpretation, so gate
+    # the calibrated sentinel to the mode it was fit in.
+    dp_cfg = config["deviation_penalty"]
+    uses_calibrated = any(
+        dp_cfg[component]["l1_cost"] == "calibrated"
+        for component in ("land", "feed", "diet")
+    )
     if uses_calibrated:
-        penalty_mode = prod_stab.get("penalty_mode")
-        deviation_type = prod_stab.get("deviation_type")
+        penalty_mode = dp_cfg.get("penalty_mode")
+        deviation_type = dp_cfg.get("deviation_type")
         if penalty_mode != "l1" or deviation_type != "absolute":
             errors.append(
-                "production_stability: land_l1_cost / animal_feed_l1_cost "
-                "set to \"calibrated\" requires penalty_mode='l1' and "
+                "deviation_penalty: a component l1_cost is set to "
+                "\"calibrated\" which requires penalty_mode='l1' and "
                 f"deviation_type='absolute' (got penalty_mode={penalty_mode!r}, "
                 f"deviation_type={deviation_type!r}). Either set explicit "
                 "numeric coefficients or rerun tools/calibrate stability "

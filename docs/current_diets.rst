@@ -501,8 +501,8 @@ multipliers, so the diet mass-balances against the food bus.
       total for red meat sat ~24 Mt/yr above what total world supply
       (production net of feed/non-food/exports, after post-loss and
       consumer waste) can deliver — physically impossible — and
-      previously inflated the calibrated ``animal_feed_l1_cost`` ninefold
-      because the production-stability calibration was forced to fight
+      previously inflated the calibrated ``feed`` L1 cost ninefold
+      because the deviation-penalty calibration was forced to fight
       intake-derived consumer values that were structurally above supply.
 
    2. **Trade is handled implicitly.** FBS supply per country already

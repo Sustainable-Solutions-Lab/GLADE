@@ -30,7 +30,7 @@ def drop_zero_baseline_pairs(merged: pd.DataFrame) -> pd.DataFrame:
     """Filter merged (food, country) baseline/value rows to non-empty pairs.
 
     Shared between the standalone calibrate_food_utility_blocks rule and
-    the inline calibration in calibrate_prod_stability so both paths
+    the inline calibration in calibrate_deviation_penalty so both paths
     produce identical utility blocks for identical inputs.
     """
     return merged[merged["baseline_mt_per_year"] > ZERO_BASELINE_TOL_MT_PER_YEAR]

@@ -2,23 +2,23 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-# Production-stability L1 calibration
-# -----------------------------------
-# Drives the land-use deviation and animal-feed deviation simultaneously to
+# Deviation-penalty L1 calibration
+# --------------------------------
+# Drives the land and animal-feed deviation simultaneously to
 # `target_deviation_pct` (default 5% of observed 2020 totals) by running
 # Broyden's quasi-Newton iteration in log-log coordinates. Each iteration is
 # one paired solve (baseline with `enforce_baseline_diet=true` to derive
 # consumer values, then main with piecewise utility active).
 #
 # Warm-starts from the previously calibrated YAML when one exists on disk;
-# otherwise uses the seed values in `prod_stability_calibration`.
+# otherwise uses the seed values in `deviation_penalty.calibration.seeds`.
 #
 # Usage:
 #   tools/calibrate stability
 #
 # Or equivalently:
 #   tools/smk --configfile config/calibration/stability.yaml -- \
-#     data/curated/calibration/prod_stability_l1.yaml
+#     data/curated/calibration/deviation_penalty.yaml
 
 # Shared name across all calibration configs so the expensive upstream
 # processing is built once under processing/calibration/ and reused.
@@ -39,20 +39,26 @@ consumer_values:
 
 validation:
   use_actual_yields: true
-  # Numeric defaults; per-iteration scenarios override these with the
-  # current iterate's lambda values.
-  production_stability:
-    enabled: true
-    penalty_mode: "l1"
-    deviation_type: "absolute"
-    land_l1_cost: 0.1
-    animal_feed_l1_cost: 0.03
 
-# Trigger the calibrate_prod_stability rule. The script writes the
-# calibrated_l1_yaml; don't try to resolve the sentinel at solve time.
-prod_stability_calibration:
-  enabled: false
-  generate: true
+# Per-iteration scenarios override these; the baseline iteration disables
+# the penalty entirely via enforce_baseline_diet + l1_cost overrides.
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"
+  deviation_type: "absolute"
+  land:
+    l1_cost: 0.1
+    l1_cost_factor: 1.0
+  feed:
+    l1_cost: 0.03
+    l1_cost_factor: 1.0
+  diet:
+    enabled: false
+    l1_cost: 3.0
+    l1_cost_factor: 1.0
+  calibration:
+    enabled: false   # solves resolve l1_cost from the params, not the YAML
+    generate: true   # trigger the calibrate_deviation_penalty rule
 
 solving:
   solver: "gurobi"

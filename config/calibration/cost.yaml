@@ -38,9 +38,11 @@ scenarios:
   cost_baseline:
     validation:
       enforce_baseline_diet: true
-      production_stability:
+    deviation_penalty:
+      enabled: true
+      penalty_mode: "hard"
+      land:
         enabled: true
-        penalty_mode: "hard"
         crops:
           enabled: true
           max_relative_deviation: 0.05
@@ -49,12 +51,14 @@ scenarios:
           enabled: true
           max_relative_deviation: 0.05
           enable_slack: true
-        animals:
-          enabled: true
-          max_relative_deviation: 0.05
-          enable_slack: true
         land_conversion:
           enabled: false
+      feed:
+        enabled: true
+        max_relative_deviation: 0.05
+        enable_slack: true
+      diet:
+        enabled: false
     food_utility_piecewise:
       enabled: false
     emissions:
@@ -64,10 +68,11 @@ scenarios:
 
   # Step 2: Calibration solve with tight production stability
   cost_calibration:
-    validation:
-      production_stability:
+    deviation_penalty:
+      enabled: true
+      penalty_mode: "hard"
+      land:
         enabled: true
-        penalty_mode: "hard"
         crops:
           enabled: true
           max_relative_deviation: 0.01
@@ -76,12 +81,14 @@ scenarios:
           enabled: true
           max_relative_deviation: 0.01
           enable_slack: true
-        animals:
-          enabled: true
-          max_relative_deviation: 0.01
-          enable_slack: true
         land_conversion:
           enabled: false
+      feed:
+        enabled: true
+        max_relative_deviation: 0.01
+        enable_slack: true
+      diet:
+        enabled: false
     food_utility_piecewise:
       enabled: true
     emissions:
