@@ -644,32 +644,27 @@ both a group key and an individual key for the same risk factor raises an error.
 
 .. _sensitivity-prod-stability-cost:
 
-Production stability cost (``prod_stability_cost``: 0.05–0.5, slice parameter)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Deviation-penalty regime (``gsa-l1-low`` / ``gsa-l1-high`` scenario groups)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This parameter controls the L1 penalty cost applied to deviations of crop and
-animal product production from their current (baseline) levels. In the model's
-production stability mode (``penalty_mode: "l1"``), each unit of absolute
-deviation incurs a cost of ``l1_cost`` (bn USD per Mha for crops/grassland, or
-Mha-equivalent for animals). The penalty induces the optimizer to replicate
-current production patterns rather than radically restructuring the food system.
+The L1 deviation-penalty regime is a structural modelling choice rather than
+an empirical uncertainty, so it is not sampled as a Sobol parameter. Instead,
+``config/gsa.yaml`` runs three independent scenario groups at fixed L1
+regimes:
 
-The range 0.05–0.5 spans the behavioural transition zone: below ~0.05 the
-penalty is too weak to prevent large production shifts; by ~0.5 deviations have
-largely flattened to a residual floor. The central calibrated value of 0.22
-pushes cropland deviation to approximately 5%.
+* ``gsa`` -- the calibrated central regime
+  (``deviation_penalty.{land,feed}.l1_cost: "calibrated"``).
+* ``gsa-l1-low`` -- ``l1_cost_factor = 1/sqrt(10) ~ 0.316`` on both land and
+  feed, i.e. roughly half an order of magnitude below the calibrated centre.
+* ``gsa-l1-high`` -- ``l1_cost_factor = sqrt(10) ~ 3.162``, half an order of
+  magnitude above.
 
-**Distribution.** A ``uniform`` distribution is used because the range reflects
-a modelling choice (how strongly to penalise production deviations) rather than
-an empirically grounded uncertainty estimate.
-
-**Slice parameter.** Because the production stability cost is a structural
-modelling choice rather than an empirical uncertainty, it is designated as a
-**slice parameter** alongside the policy axes. This separates the effect of the
-modeller's regularisation choice from the variance attributable to physical
-parameter uncertainties. Conditional Sobol indices are reported at specific L1
-cost values (0.05, 0.22, 0.5), showing how sensitivity structure shifts with
-regularisation strength.
+Each group has its own consumer-values baseline so that the piecewise food
+utility blocks are calibrated against the matching L1 regime. The three groups
+share the rest of the GSA design (parameters, sampling, slice parameters).
+Comparing Sobol indices across groups shows how sensitivity structure shifts
+with the stability regime, without spending Sobol degrees of freedom on a
+non-empirical axis.
 
 Policy slice parameters
 ~~~~~~~~~~~~~~~~~~~~~~~

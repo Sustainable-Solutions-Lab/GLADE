@@ -407,9 +407,9 @@ Rule: ``calibrate_deviation_penalty`` in
 ``workflow/rules/deviation_penalty.smk``. Script:
 ``workflow/scripts/calibrate_deviation_penalty.py``.
 
-The calibrated L1 cost is also used as a slice parameter in the
-sensitivity analysis; see :ref:`sensitivity-prod-stability-cost` for the
-range, distribution, and rationale.
+The calibrated L1 centre also defines the reference regime for the GSA
+scenario groups (``gsa``, ``gsa-l1-low``, ``gsa-l1-high``); see
+:ref:`sensitivity-prod-stability-cost`.
 
 Staleness detection
 -------------------
