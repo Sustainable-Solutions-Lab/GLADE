@@ -66,10 +66,7 @@ def load_m49_to_iso3(m49_csv_path: str | object) -> dict[int, str]:
     comment lines starting with ``#``).
     """
     df = pd.read_csv(str(m49_csv_path), sep=";", encoding="utf-8-sig", comment="#")
-    valid = df.dropna(subset=["ISO-alpha3 Code", "M49 Code"])
-    keys = valid["M49 Code"].apply(lambda x: int(float(x)))
-    values = valid["ISO-alpha3 Code"].astype(str)
-    return dict(zip(keys, values))
+    return dict(zip(df["M49 Code"].astype(int), df["ISO-alpha3 Code"].astype(str)))
 
 
 def add_iso3_column(df: pd.DataFrame, m49_to_iso3: dict[int, str]) -> pd.DataFrame:

@@ -33,15 +33,8 @@ def main() -> None:
     production_year = int(snakemake.params.production_year)  # type: ignore[name-defined]
 
     mapping_df = pd.read_csv(mapping_path)
-    if mapping_df.empty:
-        raise RuntimeError("FAOSTAT item mapping table is empty")
 
-    mapping_df["crop"] = mapping_df["crop"].astype(str).str.strip()
-    mapping_df["faostat_item"] = mapping_df["faostat_item"].astype(str).str.strip()
-
-    missing_item_mask = mapping_df["faostat_item"].eq("") | mapping_df[
-        "faostat_item"
-    ].str.lower().eq("nan")
+    missing_item_mask = mapping_df["faostat_item"].isna()
     if missing_item_mask.any():
         skipped = mapping_df.loc[missing_item_mask, "crop"].tolist()
         logger.warning(
@@ -50,11 +43,6 @@ def main() -> None:
             ", ".join(skipped[:5]) + ("..." if len(skipped) > 5 else ""),
         )
         mapping_df = mapping_df.loc[~missing_item_mask].copy()
-
-    if mapping_df.empty:
-        raise RuntimeError(
-            "All FAOSTAT item mappings are empty after filtering missing entries"
-        )
 
     # Load bulk data and extract metadata
     logger.info("Loading FAOSTAT QCL bulk data")

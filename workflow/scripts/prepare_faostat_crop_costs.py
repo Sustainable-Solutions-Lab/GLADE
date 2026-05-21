@@ -52,13 +52,9 @@ logger = logging.getLogger(__name__)
 
 
 def _load_crop_mapping(mapping_path: str) -> pd.DataFrame:
-    """Load and clean the FAOSTAT crop item mapping."""
+    """Load FAOSTAT crop item mapping, dropping crops without an FAOSTAT item."""
     df = pd.read_csv(mapping_path)
-    df["crop"] = df["crop"].astype(str).str.strip()
-    df["faostat_item"] = df["faostat_item"].astype(str).str.strip()
-    # Drop crops without FAOSTAT mapping (e.g. alfalfa, biomass-sorghum)
-    valid = ~(df["faostat_item"].eq("") | df["faostat_item"].str.lower().eq("nan"))
-    return df[valid].copy()
+    return df.loc[df["faostat_item"].notna()].copy()
 
 
 def _deflate_to_base_year(

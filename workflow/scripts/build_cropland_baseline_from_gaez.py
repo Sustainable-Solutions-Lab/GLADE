@@ -91,25 +91,6 @@ def _load_and_align_raster(
     return arr
 
 
-def _get_unique_res06_modules(crop_mapping_path: str, crops: list[str]) -> set[str]:
-    """Get unique RES06 module codes for the given crops."""
-    mapping_df = pd.read_csv(crop_mapping_path)
-    mapping_df["crop_name"] = mapping_df["crop_name"].astype(str).str.strip()
-    mapping_df["res06_code"] = (
-        mapping_df["res06_code"].astype(str).str.strip().str.upper()
-    )
-
-    unique_modules = set()
-    for crop in crops:
-        row = mapping_df[mapping_df["crop_name"] == crop]
-        if row.empty:
-            raise ValueError(f"Crop '{crop}' not found in GAEZ crop code mapping")
-        module = str(row.iloc[0]["res06_code"])
-        unique_modules.add(module)
-
-    return unique_modules
-
-
 if __name__ == "__main__":
     classes_path: str = snakemake.input.classes  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]

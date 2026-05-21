@@ -20,10 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_mapping(mapping_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(mapping_path)
-    df["crop_name"] = df["crop_name"].astype(str).str.strip()
-    df["res06_code"] = df["res06_code"].astype(str).str.strip().str.upper()
-    return df
+    return pd.read_csv(mapping_path)
 
 
 def shares_for_crop(
@@ -37,15 +34,11 @@ def shares_for_crop(
     row = mapping_df[mapping_df["crop_name"] == crop]
     if row.empty:
         raise ValueError(f"Crop '{crop}' missing from RES06 mapping table")
-    module_code = str(row.iloc[0]["res06_code"]).upper()
+    module_code = row.iloc[0]["res06_code"]
 
-    crops_in_module: list[str] = (
-        mapping_df[mapping_df["res06_code"].str.upper() == module_code]["crop_name"]
-        .astype(str)
-        .str.strip()
-        .tolist()
+    crops_in_module = sorted(
+        set(mapping_df.loc[mapping_df["res06_code"] == module_code, "crop_name"])
     )
-    crops_in_module = sorted(set(crops_in_module))
     if crop not in crops_in_module:
         crops_in_module.append(crop)
 
