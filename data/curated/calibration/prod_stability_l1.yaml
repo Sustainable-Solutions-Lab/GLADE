@@ -9,8 +9,8 @@
 target_deviation_pct: 5.0
 penalty_mode: l1
 deviation_type: absolute
-land_l1_cost: 0.0947770923775289
-animal_feed_l1_cost: 0.03127806072097655
-iterations: 2
+land_l1_cost: 0.810478659640618
+animal_feed_l1_cost: 0.019882011418635263
+iterations: 8
 converged: true
-final_residual_log_inf: 0.007355508559691242
+final_residual_log_inf: 0.015560980443051473
