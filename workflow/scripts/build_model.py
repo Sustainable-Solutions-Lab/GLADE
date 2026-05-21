@@ -729,15 +729,37 @@ if __name__ == "__main__":
     # wheat-germ, rice-bran). Set biomass.marginal_values_usd_per_tonne to 0 to
     # make biomass export free.
     biomass.add_biomass_infrastructure(n, cfg_countries, biomass_cfg)
+    # Build a per-food (1 - moisture) factor to convert food bus mass
+    # (fresh) into biomass bus mass (Mt DM). Without this, the biomass
+    # bus would account fresh food as DM, over-crediting moisture-heavy
+    # foods. Uses the source crop's moisture as a first-order
+    # approximation; foods with multiple pathways take the first crop.
+    moisture_by_crop = (
+        moisture_df.set_index("crop")["moisture_fraction"].astype(float).to_dict()
+    )
+    food_dm_factor: dict[str, float] = {}
+    for food_name, grp in foods.groupby("food"):
+        source_crops = grp["crop"].dropna().astype(str).tolist()
+        if not source_crops or source_crops[0] not in moisture_by_crop:
+            food_dm_factor[food_name] = 1.0
+        else:
+            food_dm_factor[food_name] = 1.0 - moisture_by_crop[source_crops[0]]
+
     # Filter fiber-managed items out of biomass byproduct routing: when fiber
     # demand is enforced, these items must flow to fiber stores instead.
     biomass_byproducts = [b for b in byproduct_list if b not in fiber_items]
-    biomass.add_biomass_byproduct_links(n, cfg_countries, biomass_byproducts)
+    biomass.add_biomass_byproduct_links(
+        n, cfg_countries, biomass_byproducts, food_dm_factor=food_dm_factor
+    )
     biomass.add_biomass_crop_links(n, cfg_countries, biomass_crop_targets)
     biomass_disposal_foods = list(biomass_cfg["disposal_foods"])
-    biomass.add_biomass_disposal_links(n, cfg_countries, biomass_disposal_foods)
+    biomass.add_biomass_disposal_links(
+        n, cfg_countries, biomass_disposal_foods, food_dm_factor=food_dm_factor
+    )
     if biofuel_baseline_df is not None:
-        biomass.add_biofuel_links(n, biofuel_baseline_df)
+        biomass.add_biofuel_links(
+            n, biofuel_baseline_df, crop_moisture=moisture_by_crop
+        )
     if enforce_fiber_demand:
         biomass.add_fiber_demand_infrastructure(n, fiber_baseline_df, cfg_countries)
 

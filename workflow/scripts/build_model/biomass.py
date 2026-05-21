@@ -67,9 +67,18 @@ def add_biomass_infrastructure(
 
 
 def add_biomass_byproduct_links(
-    n: pypsa.Network, countries: Iterable[str], byproducts: Iterable[str]
+    n: pypsa.Network,
+    countries: Iterable[str],
+    byproducts: Iterable[str],
+    food_dm_factor: dict[str, float] | None = None,
 ) -> None:
-    """Allow food byproducts to be routed to biomass buses."""
+    """Allow food byproducts to be routed to biomass buses.
+
+    ``food_dm_factor`` maps each food item to ``(1 - moisture_fraction)``
+    of its source crop so the food bus (fresh weight) is correctly
+    deflated to MtDM at the biomass bus. Defaults to 1.0 for any food
+    missing from the map.
+    """
     combos = pd.MultiIndex.from_product(
         [byproducts, countries], names=["item", "country"]
     ).to_frame(index=False)
@@ -83,6 +92,10 @@ def add_biomass_byproduct_links(
     combos["name"] = "biomass:byproduct_" + combos["item"] + ":" + combos["country"]
     combos = combos.set_index("name")
 
+    if food_dm_factor is None:
+        food_dm_factor = {}
+    combos["efficiency"] = combos["item"].map(food_dm_factor).fillna(1.0).astype(float)
+
     carrier = "biomass_byproduct"
     if carrier not in n.carriers.static.index:
         n.carriers.add(carrier, unit="MtDM")
@@ -92,6 +105,7 @@ def add_biomass_byproduct_links(
         bus0=combos["bus0"],
         bus1=combos["bus1"],
         carrier=carrier,
+        efficiency=combos["efficiency"],
         p_nom_extendable=True,
         country=combos["country"],
         food=combos["item"],
@@ -99,7 +113,10 @@ def add_biomass_byproduct_links(
 
 
 def add_biomass_disposal_links(
-    n: pypsa.Network, countries: Iterable[str], foods: Iterable[str]
+    n: pypsa.Network,
+    countries: Iterable[str],
+    foods: Iterable[str],
+    food_dm_factor: dict[str, float] | None = None,
 ) -> None:
     """Allow human-consumed foods to be routed to biomass for disposal.
 
@@ -110,6 +127,11 @@ def add_biomass_disposal_links(
     this route, the model can only dispose of surplus via food slack at the
     validation slack price, which both inflates the objective and biases the
     consumer-value duals on the diet-equality constraints.
+
+    ``food_dm_factor`` maps each food item to ``(1 - moisture_fraction)``
+    of its source crop so the food bus (fresh weight) is correctly
+    deflated to MtDM at the biomass bus. Defaults to 1.0 for any food
+    missing from the map.
     """
     combos = pd.MultiIndex.from_product(
         [foods, countries], names=["item", "country"]
@@ -124,6 +146,10 @@ def add_biomass_disposal_links(
     combos["name"] = "biomass:disposal_" + combos["item"] + ":" + combos["country"]
     combos = combos.set_index("name")
 
+    if food_dm_factor is None:
+        food_dm_factor = {}
+    combos["efficiency"] = combos["item"].map(food_dm_factor).fillna(1.0).astype(float)
+
     carrier = "biomass_disposal"
     if carrier not in n.carriers.static.index:
         n.carriers.add(carrier, unit="MtDM")
@@ -133,6 +159,7 @@ def add_biomass_disposal_links(
         bus0=combos["bus0"],
         bus1=combos["bus1"],
         carrier=carrier,
+        efficiency=combos["efficiency"],
         p_nom_extendable=True,
         country=combos["country"],
         food=combos["item"],
@@ -173,19 +200,26 @@ def add_biomass_crop_links(
 def add_biofuel_links(
     n: pypsa.Network,
     biofuel_baseline: pd.DataFrame,
+    crop_moisture: dict[str, float] | None = None,
 ) -> None:
     """Add biofuel/industrial demand links from food or crop buses to biomass.
 
     Most biofuel demand is routed via food buses. For grain/sugar crops,
-    the food processing pathways in foods.csv handle the crop→food
+    the food processing pathways in foods.csv handle the crop->food
     conversion and byproduct generation; this function only creates the
-    final food→biomass link. For oil crops the same pattern applies.
+    final food->biomass link. For oil crops the same pattern applies.
 
     Biogas crop demand (e.g. silage maize) is routed directly from crop
     buses when the ``bus_type`` column is set to ``"crop"``.
 
-    Each link is fixed at its baseline demand level: ``p_nom`` is set to
-    the demand and ``p_min_pu = 1.0`` forces the flow to equal ``p_nom``.
+    ``crop_moisture`` (crop -> moisture_fraction) is required to keep the
+    food-bus path mass-consistent: ``prepare_biofuel_baseline`` outputs
+    demand in MtDM, and routing from a fresh-weight food bus needs
+    ``efficiency = (1 - moisture)`` plus a fresh-equivalent ``p_nom``.
+
+    Each link is fixed at its baseline demand level: ``p_nom`` is set so
+    the link's biomass-side (DM) flow equals the configured demand at
+    ``p_min_pu = 1.0``.
     """
     carrier = "biofuel"
     if carrier not in n.carriers.static.index:
@@ -224,12 +258,15 @@ def add_biofuel_links(
     names = []
     bus0s = []
     bus1s = []
-    demands = []
+    p_noms = []
+    efficiencies = []
+    demands_dm = []
     countries = []
     crops = []
     skipped = 0
     skipped_no_supply = 0
     skipped_no_supply_demand = 0.0
+    crop_moisture = crop_moisture or {}
 
     for _, row in grouped.iterrows():
         source_item = str(row["source_item"])
@@ -253,10 +290,23 @@ def add_biofuel_links(
             skipped += 1
             continue
 
+        # Crop bus is MtDM, food bus is Mt fresh; biomass bus is MtDM.
+        # For food-bus routing, deflate by (1 - moisture) so the link's
+        # bus1 flow equals the configured DM demand.
+        if bus_type == "food":
+            moisture = float(crop_moisture.get(crop, 0.0))
+            efficiency = max(1.0 - moisture, 1e-6)
+            p_nom = demand / efficiency
+        else:
+            efficiency = 1.0
+            p_nom = demand
+
         names.append(f"biofuel:{source_item}:{country}")
         bus0s.append(bus0)
         bus1s.append(bus1)
-        demands.append(demand)
+        p_noms.append(p_nom)
+        efficiencies.append(efficiency)
+        demands_dm.append(demand)
         countries.append(country)
         crops.append(crop)
 
@@ -274,24 +324,25 @@ def add_biofuel_links(
             skipped_no_supply_demand,
         )
 
-    # Fix each link at its baseline demand: p_nom = demand, p_min_pu = 1.0
-    # forces p == p_nom == demand. No solve-time constraint needed.
+    # Fix each link at its baseline demand: p_min_pu = 1.0 forces
+    # p == p_nom; with the per-link efficiency this yields the
+    # configured DM demand at bus1. No solve-time constraint needed.
     n.links.add(
         names,
         bus0=bus0s,
         bus1=bus1s,
         carrier=carrier,
-        efficiency=1.0,
-        p_nom=demands,
+        efficiency=efficiencies,
+        p_nom=p_noms,
         p_min_pu=1.0,
         country=countries,
         crop=crops,
     )
 
     logger.info(
-        "Added %d biofuel links (%.1f Mt total baseline demand)",
+        "Added %d biofuel links (%.1f MtDM total baseline demand)",
         len(names),
-        sum(demands),
+        sum(demands_dm),
     )
 
 
