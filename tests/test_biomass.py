@@ -53,7 +53,9 @@ def test_biofuel_skips_crops_without_production(caplog):
     n.add("Bus", "food:sugarcane:USA", carrier="food")
 
     with caplog.at_level("WARNING"):
-        biomass.add_biofuel_links(n, df, crop_moisture={"wheat": 0.13, "sugarcane": 0.7})
+        biomass.add_biofuel_links(
+            n, df, crop_moisture={"wheat": 0.13, "sugarcane": 0.7}
+        )
 
     names = n.links.static.index.tolist()
     assert any("biofuel:wheat:" in s for s in names)

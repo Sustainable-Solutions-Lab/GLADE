@@ -97,7 +97,9 @@ AGE_MAP = {
 }
 
 
-def scale_stroke_to_ischemic(df: pd.DataFrame, ischemic_stroke_share: float) -> pd.DataFrame:
+def scale_stroke_to_ischemic(
+    df: pd.DataFrame, ischemic_stroke_share: float
+) -> pd.DataFrame:
     """Scale aggregate Stroke `val` rows by the ischemic-stroke share.
 
     The relative-risk pipeline restricts diet-attributable stroke to the
