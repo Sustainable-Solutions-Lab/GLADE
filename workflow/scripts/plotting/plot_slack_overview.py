@@ -59,7 +59,9 @@ def _collect_production_slack(
         entry = slack_data.get(label)
         if not entry:
             continue
-        sides = entry if isinstance(next(iter(entry.values())), dict) else {"lower": entry}
+        sides = (
+            entry if isinstance(next(iter(entry.values())), dict) else {"lower": entry}
+        )
         for side, links in sides.items():
             total = sum(links.values())
             if total > 1e-6:
