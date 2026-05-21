@@ -92,10 +92,16 @@ def expand_scenario_defs(raw_defs: dict) -> dict:
 
     result = {}
 
-    # Copy static scenarios (everything except _generators)
+    # Copy static scenarios (everything except _generators). A null value
+    # suppresses an inherited scenario from default.yaml -- e.g. a user
+    # config can write ``default: null`` to drop the implicit ``default``
+    # scenario without having to redefine the entire scenarios block.
     for key, value in raw_defs.items():
-        if key != "_generators":
-            result[key] = value
+        if key == "_generators":
+            continue
+        if value is None:
+            continue
+        result[key] = value
 
     # Process generators
     generators = raw_defs.get("_generators", [])

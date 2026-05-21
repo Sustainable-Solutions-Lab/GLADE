@@ -18,6 +18,9 @@
 
 name: "central"
 scenarios:
+  # Suppress the implicit "default" scenario inherited from default.yaml.
+  default: null
+
   # Baseline scenario for calibrating piecewise food utility blocks
   # (dual variables). Identical structure to ghg_yll_grid's baseline.
   baseline:
