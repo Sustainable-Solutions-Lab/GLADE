@@ -42,11 +42,6 @@ def weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
     return float(values[np.searchsorted(np.cumsum(weights), midpoint, side="left")])
 
 
-def load_yield_conversions(path: str) -> dict[str, float]:
-    df = pd.read_csv(path, comment="#").set_index("code")
-    return df["factor_to_t_per_ha"].dropna().astype(float).to_dict()
-
-
 def yield_multiplier(
     crop: str,
     *,
@@ -285,7 +280,11 @@ if __name__ == "__main__":
         *list(snakemake.params.resource_class_quantiles),
         1.0,
     ]  # type: ignore[name-defined]
-    conversions = load_yield_conversions(snakemake.input.yield_unit_conversions)  # type: ignore[attr-defined]
+    conversions = (
+        pd.read_csv(snakemake.input.yield_unit_conversions, comment="#")  # type: ignore[attr-defined]
+        .set_index("code")["factor_to_t_per_ha"]
+        .to_dict()
+    )
     moisture = (
         pd.read_csv(snakemake.input.moisture_content, comment="#")  # type: ignore[attr-defined]
         .set_index("crop")["moisture_fraction"]

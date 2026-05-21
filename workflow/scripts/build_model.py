@@ -82,10 +82,6 @@ if __name__ == "__main__":
 
     # Read food conversion data
     foods = read_csv(snakemake.input.foods)
-    if not foods.empty:
-        foods["food"] = foods["food"].astype(str).str.strip()
-        foods["crop"] = foods["crop"].astype(str).str.strip()
-        foods["factor"] = pd.to_numeric(foods["factor"], errors="coerce")
     edible_portion_df = read_csv(snakemake.input.edible_portion)
     moisture_df = read_csv(snakemake.input.moisture_content).set_index("crop")
 
@@ -686,14 +682,7 @@ if __name__ == "__main__":
     food_marketing_usd_per_t = commodity_costs.marketing_costs_per_t(
         commodities_cfg["foods"], food_list
     )
-    food_groups_clean = food_groups.dropna(subset=["food", "group"]).copy()
-    food_groups_clean["food"] = food_groups_clean["food"].astype(str).str.strip()
-    food_groups_clean["group"] = food_groups_clean["group"].astype(str).str.strip()
-    food_to_group = (
-        food_groups_clean.drop_duplicates(subset=["food"])
-        .set_index("food")["group"]
-        .to_dict()
-    )
+    food_to_group = food_groups.set_index("food")["group"].to_dict()
     food_group_list = list(snakemake.params.food_groups)
 
     macronutrient_cfg = snakemake.params.macronutrients

@@ -297,7 +297,7 @@ if __name__ == "__main__":
 
     def conversion_factor(crop: str) -> float:
         base_scale = 1.0 if use_actual_yields else KG_TO_TONNE
-        if crop in conv_df.index and pd.notna(conv_df.at[crop, "factor_to_t_per_ha"]):
+        if crop in conv_df.index:
             override = float(conv_df.at[crop, "factor_to_t_per_ha"])
             return base_scale * (override / KG_TO_TONNE)
         return base_scale

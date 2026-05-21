@@ -25,11 +25,13 @@ from .food_groups import validate_food_groups
 from .gaez_crop_mapping import validate_gaez_crop_mapping
 from .health_map import validate_health_map
 from .multi_cropping import validate_multi_cropping
+from .nutrition import validate_nutrition
 from .optimal_taxes import validate_optimal_taxes
 from .restricted_data import validate_restricted_data
 from .secrets import load_secrets_with_env_fallback
 from .seed_rates import validate_seed_rates
 from .sensitivity_generator import validate_sensitivity_generator
+from .yield_unit_conversions import validate_yield_unit_conversions
 
 Validator = Callable[[dict, Path], None]
 
@@ -52,7 +54,9 @@ _CHECKS: dict[str, Validator] = {
     "seed_rates": validate_seed_rates,
     "health_map": validate_health_map,
     "multi_cropping": validate_multi_cropping,
+    "nutrition": validate_nutrition,
     "sensitivity_generator": validate_sensitivity_generator,
+    "yield_unit_conversions": validate_yield_unit_conversions,
 }
 
 

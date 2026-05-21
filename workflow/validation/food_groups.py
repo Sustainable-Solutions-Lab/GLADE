@@ -11,7 +11,7 @@ from pandera.pandas import Column, DataFrameSchema
 
 FOOD_GROUP_SCHEMA = DataFrameSchema(
     {
-        "food": Column(str, nullable=False, coerce=True),
+        "food": Column(str, nullable=False, unique=True, coerce=True),
         "group": Column(str, nullable=False, coerce=True),
     },
     strict=True,
