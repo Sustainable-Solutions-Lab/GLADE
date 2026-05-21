@@ -97,6 +97,26 @@ AGE_MAP = {
 }
 
 
+def scale_stroke_to_ischemic(df: pd.DataFrame, ischemic_stroke_share: float) -> pd.DataFrame:
+    """Scale aggregate Stroke `val` rows by the ischemic-stroke share.
+
+    The relative-risk pipeline restricts diet-attributable stroke to the
+    ischemic subtype; applying the diet PAF to all-stroke mortality
+    would over-attribute burden. ``ischemic_stroke_share == 1.0`` is a
+    no-op (e.g. once the IHME download is filtered to "Ischemic stroke"
+    directly). Non-stroke causes are never modified.
+    """
+    if ischemic_stroke_share == 1.0:
+        return df
+    if "cause_code" not in df.columns:
+        return df
+    out = df.copy()
+    mask = out["cause_code"] == "Stroke"
+    if mask.any():
+        out.loc[mask, "val"] = out.loc[mask, "val"] * ischemic_stroke_share
+    return out
+
+
 def map_country_name_to_iso3(name: str) -> str | None:
     """Map IHME country name to ISO3 code using pycountry + manual overrides."""
     # Check manual overrides first
@@ -241,21 +261,16 @@ def main() -> None:
             .reset_index()
         )
 
-    # Scale aggregate Stroke deaths down to the ischemic share. The
-    # relative-risk pipeline restricts diet-attributable stroke to the
-    # ischemic subtype (atherosclerotic pathway diet acts on; null/weak
-    # evidence for hemorrhagic subtypes); applying the diet PAF to
-    # all-stroke mortality would over-attribute burden. Default value is
-    # the GBD global ischemic share; remove after the IHME re-download
-    # with the "Ischemic stroke" cause filter lands (set the share to 1.0
-    # or drop this block entirely once CAUSE_MAP is keyed on
-    # "Ischemic stroke").
-    stroke_mask = df["cause_code"] == "Stroke"
-    if stroke_mask.any() and ischemic_stroke_share != 1.0:
-        df.loc[stroke_mask, "val"] = df.loc[stroke_mask, "val"] * ischemic_stroke_share
+    # Scale aggregate Stroke deaths down to the ischemic share. See
+    # docstring on `scale_stroke_to_ischemic` and CAUSE_MAP above; this
+    # block goes away once the IHME download is filtered to "Ischemic
+    # stroke" directly.
+    n_stroke = int((df["cause_code"] == "Stroke").sum())
+    df = scale_stroke_to_ischemic(df, ischemic_stroke_share)
+    if n_stroke and ischemic_stroke_share != 1.0:
         logger.info(
             "Scaled %d aggregate Stroke rows by ischemic_stroke_share=%.3f",
-            int(stroke_mask.sum()),
+            n_stroke,
             ischemic_stroke_share,
         )
 
