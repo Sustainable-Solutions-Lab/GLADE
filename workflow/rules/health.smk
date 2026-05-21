@@ -17,7 +17,6 @@ rule prepare_gbd_mortality:
         countries=config["countries"],
         causes=config["health"]["causes"],
         reference_year=config["baseline_year"],
-        ischemic_stroke_share=config["health"]["ischemic_stroke_share"],
     output:
         mortality="<processing>/{name}/health/gbd_mortality_rates.csv",
     group:

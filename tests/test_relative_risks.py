@@ -490,8 +490,7 @@ class TestConstants:
         """CAUSE_MAP maps IHME outcome names to model cause identifiers.
 
         The model's "Stroke" cause is restricted to ischemic stroke;
-        hemorrhagic subtypes are deliberately absent (mortality side
-        scales aggregate Stroke deaths by health.ischemic_stroke_share).
+        hemorrhagic subtypes are deliberately absent.
         """
         assert CAUSE_MAP["Ischemic heart disease"] == "CHD"
         assert CAUSE_MAP["Ischemic stroke"] == "Stroke"

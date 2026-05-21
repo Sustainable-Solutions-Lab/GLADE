@@ -57,9 +57,8 @@ RISK_CONFIG = {
 # The model's "Stroke" cause is restricted to ischemic stroke: CRA evidence
 # is robust for ischemic stroke (the atherosclerotic pathway diet acts on)
 # but null or weak for intracerebral and subarachnoid hemorrhage. The
-# mortality side scales aggregate "Stroke" deaths by health.ischemic_stroke_share
-# until the IHME re-download with the "Ischemic stroke" cause filter is in
-# place.
+# mortality dataset is also filtered to "Ischemic stroke" directly (see
+# prepare_gbd_mortality.CAUSE_MAP).
 CAUSE_MAP = {
     "Ischemic heart disease": "CHD",
     "Ischemic stroke": "Stroke",

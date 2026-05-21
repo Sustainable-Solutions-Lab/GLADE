@@ -1290,11 +1290,6 @@ properties:
           type: string
           pattern: "^[A-Za-z0-9]+$"
         description: "Health outcomes/causes to consider (IHME GBD codes)"
-      ischemic_stroke_share:
-        type: number
-        minimum: 0
-        maximum: 1
-        description: "Fraction of aggregate stroke mortality attributable to ischemic stroke"
       risk_cause_map:
         type: object
         description: "Explicit mapping from risk_factor to list of causes it affects"
