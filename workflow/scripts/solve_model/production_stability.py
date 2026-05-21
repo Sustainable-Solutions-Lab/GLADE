@@ -459,8 +459,8 @@ def _compute_stability_deviation(
     if deviation_type == "relative":
         if min_baseline <= 0:
             raise ValueError(
-                "production_stability.min_baseline must be > 0 in relative mode; "
-                f"got {min_baseline}"
+                "deviation_penalty <component>.min_baseline must be > 0 in "
+                f"relative mode; got {min_baseline}"
             )
         denominator = xr.where(baselines > min_baseline, baselines, min_baseline)
         return (actual - baselines) / denominator
