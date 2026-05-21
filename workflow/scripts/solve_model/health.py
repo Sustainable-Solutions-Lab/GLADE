@@ -1095,40 +1095,36 @@ def _apply_rr_quantiles(
     return risk_breakpoints
 
 
-def _recompute_rr_ref(
+def _recompute_log_rr_totals(
     risk_breakpoints: pd.DataFrame,
-    tmrel: dict[str, float],
+    intakes: dict[str, float] | dict[tuple[int, str], float],
     risk_cause_map: dict[str, list[str]],
     cluster_cause_metadata: pd.DataFrame,
+    target_col: str,
 ) -> pd.DataFrame:
-    """Recompute log_rr_total_ref from interpolated breakpoints at TMREL.
+    """Recompute a sum-of-log-RR column from (possibly shifted) breakpoints.
 
-    After quantile interpolation changes the log_rr values, the reference
-    RR at TMREL must be recomputed to maintain consistency.
+    Iterates over (cluster, risk_factor, cause) and accumulates
+    ``log_rr`` at the given intake per cluster, writing the per-cause
+    sum back to ``target_col``.
 
-    Parameters
-    ----------
-    risk_breakpoints
-        DataFrame with columns: risk_factor, cause, intake_g_per_day, log_rr.
-    tmrel
-        TMREL intake per risk factor (g/day).
-    risk_cause_map
-        Mapping from risk factor to list of affected causes.
-    cluster_cause_metadata
-        DataFrame indexed by (health_cluster, cause) with log_rr_total_ref column.
-
-    Returns
-    -------
-    pd.DataFrame
-        Modified cluster_cause_metadata with recomputed log_rr_total_ref.
+    ``intakes`` may either be a flat ``{risk_factor: intake}`` map
+    (e.g. TMREL, shared across clusters) or a per-cluster
+    ``{(cluster, risk_factor): intake}`` map (e.g. observed baseline).
     """
     cluster_cause_metadata = cluster_cause_metadata.copy()
 
-    # Compute log_rr at TMREL for each (cluster, risk_factor, cause)
-    # Breakpoints are cluster-specific due to age-weighted effective RR
-    log_rr_at_tmrel: dict[tuple[int, str, str], float] = {}
+    def _intake_for(cluster: int, risk: str) -> float:
+        per_cluster = (
+            intakes.get((cluster, risk)) if isinstance(intakes, dict) else None
+        )
+        if per_cluster is not None:
+            return float(per_cluster)
+        flat = intakes.get(risk) if isinstance(intakes, dict) else None
+        return float(flat) if flat is not None else 0.0
+
+    log_rr_at: dict[tuple[int, str, str], float] = {}
     for risk, causes in risk_cause_map.items():
-        tmrel_intake = tmrel.get(risk, 0.0)
         for cause in causes:
             for cluster, _ in cluster_cause_metadata.index:
                 cluster = int(cluster)
@@ -1139,24 +1135,22 @@ def _recompute_rr_ref(
                 ].sort_values("intake_g_per_day")
                 if bp.empty:
                     continue
-                log_rr_val = float(
+                log_rr_at[(cluster, risk, cause)] = float(
                     np.interp(
-                        tmrel_intake,
+                        _intake_for(cluster, risk),
                         bp["intake_g_per_day"].values,
                         bp["log_rr"].values,
                     )
                 )
-                log_rr_at_tmrel[(cluster, risk, cause)] = log_rr_val
 
-    # Sum per (cluster, cause)
     for cluster, cause in cluster_cause_metadata.index:
         cluster = int(cluster)
         cause = str(cause)
         total = 0.0
         for risk, causes in risk_cause_map.items():
             if cause in causes:
-                total += log_rr_at_tmrel.get((cluster, risk, cause), 0.0)
-        cluster_cause_metadata.at[(cluster, cause), "log_rr_total_ref"] = total
+                total += log_rr_at.get((cluster, risk, cause), 0.0)
+        cluster_cause_metadata.at[(cluster, cause), target_col] = total
 
     return cluster_cause_metadata
 
@@ -1268,18 +1262,38 @@ def add_health_objective(
         raise ValueError(f"Risk breakpoints missing required pairs: {text}")
 
     # --- Apply RR Quantile Interpolation (Sensitivity) ---
+    # Load baseline intakes early so the shifted-RR recompute below can
+    # update both log_rr_total_ref (at TMREL) and log_rr_total_baseline
+    # (at observed cluster intake). Without the latter, the
+    # scale_factor = yll_total / rr_baseline used in Stage 2 mixes
+    # shifted curve values with the original-quantile baseline anchor.
+    crb = pd.read_csv(cluster_risk_baseline_path)
+    baseline_intakes = {
+        (int(r.health_cluster), r.risk_factor): r.baseline_intake_g_per_day
+        for r in crb.itertuples()
+    }
     if rr_quantiles:
         if tmrel_path is None:
             raise ValueError("tmrel_path is required when rr_quantiles is provided")
         risk_breakpoints = _apply_rr_quantiles(risk_breakpoints, rr_quantiles)
 
-        # Load TMREL and recompute rr_ref in cluster_cause_metadata
         tmrel_df = pd.read_csv(tmrel_path)
         tmrel = dict(
             zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"].astype(float))
         )
-        cluster_cause_metadata = _recompute_rr_ref(
-            risk_breakpoints, tmrel, risk_cause_map, cluster_cause_metadata
+        cluster_cause_metadata = _recompute_log_rr_totals(
+            risk_breakpoints,
+            tmrel,
+            risk_cause_map,
+            cluster_cause_metadata,
+            target_col="log_rr_total_ref",
+        )
+        cluster_cause_metadata = _recompute_log_rr_totals(
+            risk_breakpoints,
+            baseline_intakes,
+            risk_cause_map,
+            cluster_cause_metadata,
+            target_col="log_rr_total_baseline",
         )
 
     # --- Build Store Map ---
@@ -1304,12 +1318,8 @@ def add_health_objective(
         store_map["cluster"].nunique(),
     )
 
-    # --- Load Baseline Intakes for MIP Start ---
-    crb = pd.read_csv(cluster_risk_baseline_path)
-    baseline_intakes = {
-        (int(r.health_cluster), r.risk_factor): r.baseline_intake_g_per_day
-        for r in crb.itertuples()
-    }
+    # `baseline_intakes` was loaded above for the RR-quantile recompute
+    # and is reused here for the MIP start.
 
     # --- Stage 1: Store Level → log(RR) ---
     intake_data = _build_intake_breakpoints(risk_breakpoints)
@@ -1376,6 +1386,7 @@ def evaluate_health_posthoc(
     cluster_cause_path: str,
     cause_log_path: str,
     clusters_path: str,
+    cluster_risk_baseline_path: str,
     risk_factors: list[str],
     risk_cause_map: dict[str, list[str]],
     rr_quantiles: dict[str, float] | None = None,
@@ -1432,7 +1443,15 @@ def evaluate_health_posthoc(
         r: causes for r, causes in risk_cause_map.items() if r in available_risks
     }
 
-    # Apply RR quantile interpolation if requested
+    # Apply RR quantile interpolation if requested. Both log_rr_total_ref
+    # (anchored at TMREL) and log_rr_total_baseline (anchored at observed
+    # cluster intake) must be recomputed against the shifted breakpoints
+    # so the scale_factor in the analysis remains internally consistent.
+    crb = pd.read_csv(cluster_risk_baseline_path)
+    baseline_intakes = {
+        (int(r.health_cluster), r.risk_factor): r.baseline_intake_g_per_day
+        for r in crb.itertuples()
+    }
     if rr_quantiles:
         if tmrel_path is None:
             raise ValueError("tmrel_path is required when rr_quantiles is provided")
@@ -1441,8 +1460,19 @@ def evaluate_health_posthoc(
         tmrel = dict(
             zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"].astype(float))
         )
-        cluster_cause_metadata = _recompute_rr_ref(
-            risk_breakpoints, tmrel, risk_cause_map, cluster_cause_metadata
+        cluster_cause_metadata = _recompute_log_rr_totals(
+            risk_breakpoints,
+            tmrel,
+            risk_cause_map,
+            cluster_cause_metadata,
+            target_col="log_rr_total_ref",
+        )
+        cluster_cause_metadata = _recompute_log_rr_totals(
+            risk_breakpoints,
+            baseline_intakes,
+            risk_cause_map,
+            cluster_cause_metadata,
+            target_col="log_rr_total_baseline",
         )
 
     # --- Step 1: Get per-capita intake by (cluster, risk_factor) ---

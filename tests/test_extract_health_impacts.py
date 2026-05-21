@@ -238,6 +238,20 @@ def _write_csvs(tmp_path):
     tmrel_path = tmp_path / "tmrel.csv"
     tmrel.to_csv(tmrel_path, index=False)
 
+    # cluster_risk_baseline -- only consumed by evaluate_health_posthoc
+    # to anchor log_rr_total_baseline under quantile shifts. A zero
+    # baseline intake reproduces the pre-shift behaviour for these
+    # tests (which do not exercise rr_quantiles).
+    crb = pd.DataFrame(
+        {
+            "health_cluster": [1, 2],
+            "risk_factor": [RISK_FACTOR, RISK_FACTOR],
+            "baseline_intake_g_per_day": [0.0, 0.0],
+        }
+    )
+    crb_path = tmp_path / "cluster_risk_baseline.csv"
+    crb.to_csv(crb_path, index=False)
+
     # cluster_summary not used by the analysis code path, but
     # evaluate_health_posthoc indirectly needs nothing from it; we still
     # return its path for symmetry with the production interface.
@@ -248,6 +262,7 @@ def _write_csvs(tmp_path):
         "clusters": str(clusters_path),
         "population": str(population_path),
         "tmrel": str(tmrel_path),
+        "cluster_risk_baseline": str(crb_path),
     }
 
 
@@ -304,6 +319,7 @@ def test_attribution_sums_to_store_levels(tmp_path):
         cluster_cause_path=paths["cluster_cause"],
         cause_log_path=paths["cause_log"],
         clusters_path=paths["clusters"],
+        cluster_risk_baseline_path=paths["cluster_risk_baseline"],
         risk_factors=[RISK_FACTOR],
         risk_cause_map={RISK_FACTOR: [CAUSE]},
     )
@@ -354,6 +370,7 @@ def test_attribution_uses_cluster_specific_dose_response(tmp_path):
         cluster_cause_path=paths["cluster_cause"],
         cause_log_path=paths["cause_log"],
         clusters_path=paths["clusters"],
+        cluster_risk_baseline_path=paths["cluster_risk_baseline"],
         risk_factors=[RISK_FACTOR],
         risk_cause_map={RISK_FACTOR: [CAUSE]},
     )
@@ -415,6 +432,7 @@ def test_attribution_uses_chord_not_exp(tmp_path):
         cluster_cause_path=paths["cluster_cause"],
         cause_log_path=paths["cause_log"],
         clusters_path=paths["clusters"],
+        cluster_risk_baseline_path=paths["cluster_risk_baseline"],
         risk_factors=[RISK_FACTOR],
         risk_cause_map={RISK_FACTOR: [CAUSE]},
     )

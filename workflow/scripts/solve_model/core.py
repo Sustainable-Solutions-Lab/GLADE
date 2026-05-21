@@ -1762,6 +1762,7 @@ def run_solve(
                 cluster_cause_path=smk.input.health_cluster_cause,
                 cause_log_path=smk.input.health_cause_log,
                 clusters_path=smk.input.health_clusters,
+                cluster_risk_baseline_path=smk.input.health_cluster_risk_baseline,
                 risk_factors=smk.params.health_risk_factors,
                 risk_cause_map=smk.params.health_risk_cause_map,
                 rr_quantiles=rr_quantiles,

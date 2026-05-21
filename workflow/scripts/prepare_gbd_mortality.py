@@ -197,21 +197,41 @@ def main() -> None:
 
     df = df[df["age_code"].notna()].copy()
 
-    # Check for multiple IHME age buckets mapping to same model bucket (e.g., 1-4)
-    # We need to aggregate them by taking population-weighted average
-    # For death rates, we'll compute a simple average as an approximation
-    # (ideally would weight by age-specific population, but we don't have that here)
+    # Check for multiple IHME age buckets mapping to same model bucket
+    # (currently only "1-4", combining "12-23 months" and "2-4 years").
+    # IHME reports per-100k death rates that we average across the sub-
+    # buckets; ideally we would weight by the sub-band populations, but
+    # the per-band populations are not loaded here. For diet-attributable
+    # mortality (adult-dominated) the resulting bias is small, but it is
+    # a known systematic error in the under-5 portion of YLL.
     logger.info("Checking for age bucket aggregation needs...")
     duplicate_keys = df.groupby(["country_iso3", "cause_code", "age_code"]).size()
     needs_aggregation = duplicate_keys[duplicate_keys > 1]
 
     if len(needs_aggregation) > 0:
-        logger.info(
-            "Found %d age buckets needing aggregation (multiple IHME ages -> single model age)",
-            len(needs_aggregation),
+        # Surface any unexpected multi-bucket case so we notice if IHME
+        # changes its age-band breakdown.
+        expected = {"1-4"}
+        unexpected_aggregations = (
+            set(
+                df.loc[
+                    df.duplicated(["country_iso3", "cause_code", "age_code"]),
+                    "age_code",
+                ].unique()
+            )
+            - expected
         )
+        if unexpected_aggregations:
+            raise ValueError(
+                "Unexpected age-code aggregation requested for "
+                f"{sorted(unexpected_aggregations)}; only {sorted(expected)} "
+                "is currently a documented multi-bucket model age. Verify "
+                "the IHME age_name -> model age_code mapping in AGE_CODE_MAP."
+            )
         logger.info(
-            "Aggregating by simple average (assumes roughly equal population in sub-buckets)"
+            "Found %d age buckets needing aggregation (1-4 combines "
+            "12-23 months and 2-4 years via unweighted mean)",
+            len(needs_aggregation),
         )
 
         # Group and average
