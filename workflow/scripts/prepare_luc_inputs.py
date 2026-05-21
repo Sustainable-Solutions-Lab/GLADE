@@ -297,6 +297,17 @@ def main() -> None:
     # This distinguishes managed pasture from natural grassland (savanna, tundra,
     # steppe) so that only actively grazed pixels contribute to spared-land
     # sequestration potential.
+    #
+    # KNOWN ASYMMETRY: this LUC pasture_frac is GI-weighted (managed
+    # only), while the LP's pasture supply pool (built from
+    # ``build_current_grassland_area``) is the FULL physical area. The
+    # two pools intentionally differ -- see ``docs/land_use.rst``,
+    # section "Pasture supply vs LUC pasture fraction", for the
+    # rationale and the small overcrediting it implies on spared-pasture
+    # regrowth. If you change either side, you almost certainly need to
+    # rerun the full ``tools/calibrate`` cascade and confirm the
+    # stability L1 cost remains balanced (land vs animal-feed friction
+    # of similar magnitude) rather than collapsing onto one axis.
     luicube_path: str = snakemake.input.luicube  # type: ignore[name-defined]
     luicube_ds = xr.load_dataset(luicube_path)
     luicube_grass_frac = luicube_ds["grassland_fraction"].astype(np.float32).values

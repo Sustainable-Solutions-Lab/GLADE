@@ -1,4 +1,33 @@
-"""
+"""Aggregate LUIcube grassland to (region, resource_class).
+
+Output schema: ``region, resource_class, area_ha, grazing_intensity``.
+
+``area_ha`` is the **physical** grassland area (km^2 -> ha, summed across
+every pixel that overlaps the (region, class) cell), NOT the GI-weighted
+managed area. This is intentional and load-bearing:
+
+* The LP's pasture supply pool downstream consumes this as
+  ``observed_area``; restricting the pool to GI-weighted managed area
+  collapses pasture flexibility and shifts dietary adjustments onto
+  cropland deviations, which inflates the calibrated land L1 cost by
+  roughly an order of magnitude and pushes the animal-feed L1 cost
+  toward zero. See ``docs/land_use.rst``, section "Pasture supply vs
+  LUC pasture fraction".
+* ``grazing_intensity`` is exported separately as an area-weighted mean
+  per aggregate. Downstream, ``build_model/grassland.py`` multiplies the
+  per-managed-hectare yield by this GI so the effective per-Mha
+  efficiency is ``GI * yield`` -- i.e. total feed capacity is
+  ``sum(physical_area * GI * yield)``, matching the underlying managed
+  forage productivity even though the LP can choose where within the
+  physical pool to allocate that capacity.
+
+This deliberately mismatches the LUC ``pasture_fraction`` (which is
+GI-weighted in ``prepare_luc_inputs.py``). The trade-off is documented
+in ``docs/land_use.rst``; do NOT "fix" this asymmetry by GI-weighting
+``area_ha`` without rerunning the full calibration (``tools/calibrate``)
+and confirming the stability L1 cost lands in a balanced regime rather
+than spiking land friction.
+
 SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later

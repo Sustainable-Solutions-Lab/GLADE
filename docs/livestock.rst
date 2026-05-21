@@ -87,7 +87,7 @@ Pasture Utilization
 
 The model assumes that only a portion of the total grassland biomass production is available for grazing livestock. This reflects the need to leave biomass for regrowth, soil protection, and ecosystem function ("take half, leave half" principle). The correction is applied upstream in the ``merge_grassland_yields`` step so that the ``yield`` column in the merged output is already effective feed yield:
 
-* **LUIcube rows**: yield is multiplied by the per-cell ``grazing_intensity`` from LUIcube data.
+* **LUIcube rows**: yield is multiplied by the per-cell ``grazing_intensity`` from LUIcube data. Crucially, this multiplication is applied at the efficiency step so the LP can still see the full physical pasture area as available supply -- see :doc:`land_use` ("Pasture supply vs LUC pasture fraction") for the rationale and the calibration consequences if the GI weighting is moved into the area variable instead.
 * **ISIMIP rows**: yield is multiplied by a fixed utilization rate (default 50%).
 * **Parameter**: ``grazing.isimip_utilization_rate`` in configuration (applied to ISIMIP fallback yields).
 

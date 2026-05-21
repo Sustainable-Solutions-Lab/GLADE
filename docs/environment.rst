@@ -737,7 +737,7 @@ Per-pixel LEFs are aggregated to region/resource-class coefficients using ``exac
 * **Forest conversion LEFs** (cropland_forest, pasture_forest) are weighted by the **forest fraction** of each pixel.
 * **Non-forest conversion LEFs** (cropland_nonforest, pasture_nonforest) are weighted by the **non-forest natural fraction** (nonag − forest).
 * **Spared cropland LEFs** are weighted by the **cropland fraction**, so only pixels currently under crops contribute to the sequestration potential of sparing cropland.
-* **Spared grassland LEFs** are weighted by the **managed pasture fraction** (LUIcube grassland fraction × grazing intensity), so only pixels with active grazing contribute to the sequestration potential. Natural grassland (savanna, tundra, steppe) with near-zero grazing intensity is excluded.
+* **Spared grassland LEFs** are weighted by the **managed pasture fraction** (LUIcube grassland fraction × grazing intensity), so only pixels with active grazing contribute to the sequestration potential. Natural grassland (savanna, tundra, steppe) with near-zero grazing intensity is excluded. The LP's pasture *supply* pool is built on the full physical grassland area rather than this GI-weighted fraction; the asymmetry and the slight overcrediting it implies on spared-pasture regrowth are documented in :doc:`land_use` ("Pasture supply vs LUC pasture fraction").
 
 Alongside each conversion LEF, the aggregation also computes the area-weighted **conversion share** — the fraction of non-agricultural land that is forest vs. non-forest. This share is used in the model builder to split the total new-land capacity between forest and non-forest conversion links.
 

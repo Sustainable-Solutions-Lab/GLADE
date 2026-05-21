@@ -184,9 +184,17 @@ def main() -> None:
     pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
     forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
     # Natural (convertible) land = total minus managed agriculture.
-    # Pasture is LUIcube grassland * grazing_intensity (managed pasture
-    # only); the remainder of grassland (savanna, steppe) is natural and
-    # contributes to natural_frac, not to agricultural depletion.
+    # Here ``pasture_frac`` is the GI-weighted (managed-only) fraction
+    # written by ``prepare_luc_inputs.py``; the remainder of grassland
+    # (savanna, steppe, lightly-grazed) is natural and contributes to
+    # natural_frac with its own AGB/SOC carbon coefficients.
+    #
+    # NOTE: this is the LUC-side definition of pasture. The LP's pasture
+    # supply pool downstream is built from FULL physical grassland area
+    # (not GI-weighted) so the optimization retains enough flexibility
+    # to keep the production-stability calibration well-behaved. The
+    # asymmetry is documented in ``docs/land_use.rst``, section
+    # "Pasture supply vs LUC pasture fraction".
     natural_frac = np.clip(1.0 - cropland_frac - pasture_frac, 0.0, 1.0)
     nonforest_frac = np.clip(natural_frac - forest_frac, 0.0, None)
 

@@ -1,4 +1,17 @@
-"""
+"""Estimate marginal (grazing-only) grassland area per (region, resource_class).
+
+The marginal pool is grassland that lies on land NOT suitable for crop
+growth (low GAEZ suitability), so it cannot be re-purposed for cropland
+and only feeds the pasture pool.
+
+Like ``build_current_grassland_area``, the area returned here is
+**physical** grassland area, not GI-weighted. See that module's
+docstring and ``docs/land_use.rst`` (section "Pasture supply vs LUC
+pasture fraction") for the rationale. Keeping both flows on the same
+(physical) basis ensures that ``land_cap_series + marginal_cap_series``
+in ``build_model/grassland.py`` represents the LP's total grassland
+land budget consistently.
+
 SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later

@@ -188,8 +188,8 @@ The model splits current grassland into two explicit pools within each ``(region
 
 Data sources and split:
 
-- ``build_current_grassland_area`` provides total current grassland from ESA CCI land-cover fractions
-- ``build_grazing_only_land`` estimates the marginal (grazing-only) subset
+- ``build_current_grassland_area`` provides total current grassland (physical area) from LUIcube grassland rasters, plus a per-aggregate mean grazing intensity used downstream for forage efficiency. See "Pasture supply vs LUC pasture fraction" below for why the area is physical rather than GI-weighted.
+- ``build_grazing_only_land`` estimates the marginal (grazing-only) subset on the same physical basis.
 - Cropland-suitable current grassland is computed as ``max(current_grassland - grazing_only, 0)``
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/grazing_only_land_fraction.png
@@ -207,6 +207,65 @@ This separation ensures that:
 - Ruminant feed has a realistic existing grassland supply without depleting cropland
 - Every hectare is accounted for exactly once
 - Sparing decisions reflect the actual opportunity cost of each land type
+
+Pasture supply vs LUC pasture fraction
+---------------------------------------
+
+The model uses **two different definitions of pasture area** on
+purpose, and the asymmetry is load-bearing for calibration:
+
+1. **LP pasture supply pool** (``build_current_grassland_area``,
+   ``build_grazing_only_land``): the **full physical** grassland area
+   from LUIcube, summed across every grassland pixel that overlaps each
+   ``(region, resource_class)`` cell. Per-pixel grazing intensity (GI)
+   is exported separately and applied at the *efficiency* step in
+   ``build_model/grassland.py``: per-Mha forage output equals
+   ``GI * yield``. Total feed capacity is therefore
+   ``sum(physical_area * GI * yield)``, matching real managed-forage
+   productivity even though the LP sees the full physical pool as the
+   area it may allocate between pasture, sparing, or (where land is
+   GAEZ-suitable) cropland conversion.
+
+2. **LUC pasture fraction** (``prepare_luc_inputs``,
+   ``build_luc_carbon_coefficients``): the **GI-weighted** managed
+   fraction. Carbon-stock and SOC accounting uses this so that only
+   actively grazed pixels carry the AGB/SOC profile of managed pasture;
+   the unmanaged remainder (savanna, steppe, lightly-grazed) is folded
+   into ``natural_frac`` with its own carbon coefficients.
+
+This intentional mismatch implies a small known overcrediting: if the
+LP spares more grassland than the GI-weighted managed area in a cell,
+the spared-pasture regrowth credit covers slightly more area than is
+truly "managed-pasture-like" in carbon-stock terms. We accept this for
+two reasons:
+
+* **Calibration stability.** Forcing the LP pool itself to GI-weighted
+  managed area collapses pasture flexibility, pushing dietary
+  adjustments onto cropland deviations. The production-stability L1
+  calibration then has to spike land friction by roughly an order of
+  magnitude (and animal-feed friction toward zero) to hit the 5%
+  deviation target. The balanced regime, with physical area in the LP
+  pool and GI applied in efficiency, leaves both land and animal-feed
+  L1 lambdas at similar, economically plausible magnitudes.
+* **Magnitude of the overcredit.** Spared-pasture regrowth credits
+  apply only to grassland the LP actively chooses to retire; the
+  carbon difference between managed-pasture regrowth and
+  natural-grassland regrowth in those same cells is modest compared to
+  the cropland/pasture decisions the calibration governs.
+
+A cleaner long-term fix would preserve the physical pasture pool but
+split spared-pasture credits between managed and natural portions
+explicitly in ``build_luc_carbon_coefficients``, so the LP pays the
+correct carbon coefficient for whichever fraction it ends up sparing.
+
+**If you change either definition** -- e.g. by GI-weighting the LP
+pool, or by switching the LUC side to a different managed-fraction
+proxy -- you must rerun the full calibration cascade
+(``tools/calibrate``) and confirm the stability L1 cost stays in a
+balanced regime. A previous attempt to align the two on the managed
+fraction (commit ``4cada27``, reverted) caused the land L1 cost to
+jump roughly an order of magnitude and forced an undesirable rescale
+of the GSA L1 sensitivity bounds.
 
 Land Use Change
 ---------------

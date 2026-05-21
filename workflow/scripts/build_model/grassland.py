@@ -209,9 +209,16 @@ def add_grassland_feed_links(
 
     available_mha = work["available_area"].to_numpy() / HA_PER_MHA
 
-    # Efficiency (Mt/Mha): yields are per managed hectare, so multiply by
-    # grazing intensity to get effective yield per physical hectare.
-    # Yields are in t/ha, which equals Mt/Mha numerically.
+    # Efficiency (Mt/Mha): yields are per managed hectare. ``area_ha``
+    # from build_current_grassland_area is the **physical** grassland
+    # area (NOT GI-weighted), so multiply by grazing intensity here to
+    # get effective yield per physical hectare. Total feed capacity is
+    # therefore ``sum(physical_area * GI * yield)``, matching real
+    # managed-forage productivity while giving the LP the full physical
+    # pool to deviate within. See ``docs/land_use.rst``, section
+    # "Pasture supply vs LUC pasture fraction", for why we deliberately
+    # keep the pool physical despite the LUC pasture_frac being
+    # GI-weighted. Yields are in t/ha, which equals Mt/Mha numerically.
     grazing_intensity = work["grazing_intensity"].to_numpy()
     yield_per_managed_ha = work["yield"].to_numpy()
     efficiencies = grazing_intensity * yield_per_managed_ha
