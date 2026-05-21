@@ -233,23 +233,27 @@ def add_production_stability_constraints(
     # --- ANIMAL FEED USE ---
     animals_cfg = stability_cfg["animals"]
     if animals_cfg["enabled"]:
-        # Determine animal L1/quadratic cost and scaling.
+        # Determine animal L1/quadratic cost and scaling (only meaningful
+        # outside hard mode; hard mode adds box constraints and ignores
+        # both values).
         # If animal_feed_l1_cost is set, use it directly in native Mt DM units
         # (no scaling). Otherwise, compute a dynamic scaling coefficient so
         # that animal feed deviations (Mt DM) are converted to Mha-equivalent
         # units, making land_l1_cost/quadratic_cost comparable across
         # crop/grassland (Mha) and animal (Mt DM) components.
+        animal_l1_cost = None
+        animal_scale = 1.0
         animal_l1_cost_override = stability_cfg["animal_feed_l1_cost"]
-        if animal_l1_cost_override is not None:
+        if penalty_mode == "hard":
+            pass  # animal_l1_cost / animal_scale unused
+        elif animal_l1_cost_override is not None:
             animal_l1_cost = float(animal_l1_cost_override)
-            animal_scale = 1.0
             logger.info(
                 "Using animal_feed_l1_cost directly: %.4f bn USD/Mt DM (no scaling)",
                 animal_l1_cost,
             )
         else:
             animal_l1_cost = stability_cfg["land_l1_cost"]
-            animal_scale = 1.0
             if stability_cfg["deviation_type"] == "absolute":
                 crop_links = links_df[links_df["carrier"] == "crop_production"]
                 grass_links = links_df[links_df["carrier"] == "grassland_production"]
