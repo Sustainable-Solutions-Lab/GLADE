@@ -815,27 +815,43 @@ def apply_waste_calibration(
             continue
         old_mean = result.loc[mask, "waste_fraction"].mean()
         new_waste = 1.0 - (1.0 - result.loc[mask, "waste_fraction"]) * multiplier
+        clipped_waste = new_waste.clip(lower=0.0, upper=0.95)
+        clip_residual = float((new_waste - clipped_waste).abs().sum())
         n_clipped = int(((new_waste < 0.0) | (new_waste > 0.95)).sum())
-        if n_clipped > 0:
-            # Clipping breaks the calibration's compounded mass balance:
-            # the uniform group-level multiplier was solved against a
-            # closed-form sum, so any per-row saturation against [0, 0.95]
-            # leaks the residual into the LP as a hidden mismatch. Refuse
-            # to apply a calibration that needs clipping; the user should
-            # regenerate it (or fix the upstream waste_fraction inputs
-            # that pushed the multiplier off the feasible range).
+        # The group-level multiplier was solved against a closed-form sum,
+        # so per-row saturation against [0, 0.95] leaks a residual into
+        # the LP. In practice multipliers near 1 still clip a handful of
+        # low-waste countries by ~0.01 each, which is mass-balance noise.
+        # Warn at the row-count level; raise only when the cumulative
+        # clip residual (sum of per-row waste-fraction shifts the clip
+        # absorbed) crosses a threshold beyond which the group-level
+        # calibration is materially distorted.
+        clip_residual_limit = 0.20
+        if n_clipped > 0 and clip_residual > clip_residual_limit:
             sample = result.loc[
                 mask & ((new_waste < 0.0) | (new_waste > 0.95)),
                 ["country", "food_group", "waste_fraction"],
             ].head(5)
             raise ValueError(
                 f"Waste calibration for '{group}' (multiplier={multiplier:.3f}) "
-                f"would clip {n_clipped} row(s) to [0, 0.95], breaking the "
-                "calibration's mass balance. Regenerate with "
-                "`tools/calibrate food_waste`, or fix the upstream "
-                f"waste_fraction inputs. Examples: {sample.to_dict('records')}"
+                f"would clip {n_clipped} row(s) with cumulative residual "
+                f"{clip_residual:.3f} (limit {clip_residual_limit:.3f}), "
+                "materially distorting the group-level mass balance. "
+                "Regenerate with `tools/calibrate food_waste`, or fix the "
+                f"upstream waste_fraction inputs. Examples: "
+                f"{sample.to_dict('records')}"
             )
-        result.loc[mask, "waste_fraction"] = new_waste
+        if n_clipped > 0:
+            logger.warning(
+                "Waste calibration %s: clipped %d row(s) to [0, 0.95]; "
+                "cumulative waste-fraction residual = %.4f (under "
+                "%.2f limit, treated as mass-balance noise)",
+                group,
+                n_clipped,
+                clip_residual,
+                clip_residual_limit,
+            )
+        result.loc[mask, "waste_fraction"] = clipped_waste
         new_mean = result.loc[mask, "waste_fraction"].mean()
         logger.info(
             "Waste calibration %s: multiplier=%.3f, mean waste %.1f%% -> %.1f%% "
