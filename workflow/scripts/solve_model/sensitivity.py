@@ -337,6 +337,17 @@ def _scale_loss_on_links(
     ``loss_multiplier[N]``, rescale the loss fraction by ``factor``,
     and update both the efficiency and the stored loss multiplier.
     Returns the number of (link, output-bus) pairs that were rescaled.
+
+    Raises
+    ------
+    ValueError
+        If a bus column on the masked links carries a food output but
+        the matching ``loss_multiplier[N]`` column is missing. Build code
+        is expected to populate ``loss_multiplier{N}`` for every
+        food-output bus on crop_production and animal_production links
+        (see ``build_model/crops.py`` and ``build_model/animals.py``);
+        a missing column would silently leak loss-rescaling on that
+        port and bias mass balance under food-loss sweeps.
     """
     if not mask.any():
         return 0
@@ -351,9 +362,6 @@ def _scale_loss_on_links(
         eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
         if eff_col not in links.columns:
             continue
-        lm_col = "loss_multiplier" if suffix == "1" else f"loss_multiplier{suffix}"
-        if lm_col not in links.columns:
-            continue
 
         # Filter to links whose bus_col points at a food-output carrier.
         bus_names = links[bus_col].astype(str)
@@ -367,6 +375,15 @@ def _scale_loss_on_links(
         )
         if not food_mask.any():
             continue
+
+        lm_col = "loss_multiplier" if suffix == "1" else f"loss_multiplier{suffix}"
+        if lm_col not in links.columns:
+            raise ValueError(
+                f"Sensitivity food-loss scaling: links with {bus_col} pointing "
+                f"at a {food_carrier_prefix!r} carrier but no '{lm_col}' "
+                "column. Build code must populate a per-bus loss_multiplier "
+                "for every food-output port so loss sweeps stay mass-consistent."
+            )
 
         target_idx = links.index[food_mask]
         old_mult = n.links.static.loc[target_idx, lm_col].astype(float)
