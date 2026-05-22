@@ -27,6 +27,14 @@ name: "calibration"
 planning_horizon: 2020
 baseline_year: 2020
 
+# Pin the calibration regime explicitly: the main solve inherits these
+# values (the baseline solve is always forced to 0/0 in the script so that
+# consumer values reflect raw revealed preferences).
+emissions:
+  ghg_price: 0
+health:
+  value_per_yll: 0
+
 # Block-based diminishing marginal utility for food consumption (used by main
 # solves; baseline solves disable this inside the calibration script).
 food_utility_piecewise:

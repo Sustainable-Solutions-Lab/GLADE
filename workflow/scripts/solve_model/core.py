@@ -1272,6 +1272,7 @@ def run_solve(
     *,
     skip_post_processing: bool = False,
     skip_assign_duals: bool = False,
+    accept_time_limit: bool = False,
 ) -> pypsa.Network | None:
     """Core solve logic returning the solved network.
 
@@ -1292,6 +1293,10 @@ def run_solve(
         whenever the caller does not need the generic dual assignment on
         non-Link components.  ``_extract_p_set_duals`` still runs and reads
         Link ``p_set`` duals directly from ``n.model.constraints``.
+    accept_time_limit
+        If True, treat ``time_limit`` termination with a feasible incumbent
+        as a successful solve and proceed with solution assignment. Use for
+        calibration loops where a near-optimal incumbent is acceptable.
 
     Returns
     -------
@@ -1639,10 +1644,16 @@ def run_solve(
         n.model.solver_model = None
         gc.collect()
 
-    if condition == "time_limit":
-        logger.warning("Solver hit time limit — treating as failed solve.")
+    if condition == "time_limit" and not (accept_time_limit and status == "ok"):
+        logger.warning("Solver hit time limit -- treating as failed solve.")
         return None
-    elif status == "ok":
+    if condition == "time_limit" and accept_time_limit and status == "ok":
+        logger.warning(
+            "Solver hit time limit but returned a feasible incumbent; "
+            "proceeding with solution assignment (accept_time_limit=True)."
+        )
+
+    if status == "ok":
         aux_names = HEALTH_AUX_MAP.pop(id(n.model), set())
         variables_container = n.model.variables
         removed = {}

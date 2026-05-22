@@ -66,6 +66,12 @@ def _make_overrides(
     ``lambdas`` maps each component in ``components`` to its current L1
     cost iterate. Components not in ``components`` are forced off so the
     calibration measures the deviations driven only by the listed knobs.
+
+    The **baseline** solve always runs at ghg_price=0 / value_per_yll=0
+    so consumer values are derived from raw revealed preferences
+    (independent of any policy regime under investigation). The **main**
+    solve inherits emissions / health pricing from ``base_config``; set
+    them at the top level of the calibration config to pin the regime.
     """
     land_block: dict = {"enabled": "land" in components}
     feed_block: dict = {"enabled": "feed" in components}
@@ -76,7 +82,7 @@ def _make_overrides(
         feed_block["l1_cost"] = float(lambdas["feed"])
     if "diet" in components:
         diet_block["l1_cost"] = float(lambdas["diet"])
-    return {
+    overrides: dict = {
         "validation": {
             "enforce_baseline_diet": enforce_baseline,
         },
@@ -88,12 +94,12 @@ def _make_overrides(
             "feed": feed_block,
             "diet": diet_block,
         },
-        # Pin the calibration regime: GHG/health pricing off, piecewise
-        # utility on only for the main solve.
-        "emissions": {"ghg_price": 0},
-        "health": {"value_per_yll": 0},
         "food_utility_piecewise": {"enabled": not enforce_baseline},
     }
+    if enforce_baseline:
+        overrides["emissions"] = {"ghg_price": 0}
+        overrides["health"] = {"value_per_yll": 0}
+    return overrides
 
 
 def _write_utility_blocks(n_baseline, base_config: dict, blocks_path: Path) -> None:
@@ -194,7 +200,11 @@ def _evaluate(
     smk_b = build_namespace(entry_b)
     t0 = time.time()
     n_baseline = run_solve(
-        smk_b, logger, skip_post_processing=True, skip_assign_duals=True
+        smk_b,
+        logger,
+        skip_post_processing=True,
+        skip_assign_duals=True,
+        accept_time_limit=True,
     )
     timings["baseline_s"] = time.time() - t0
     if n_baseline is None:
@@ -212,7 +222,13 @@ def _evaluate(
     logger.info("[iter %d] main solve", iter_id)
     smk_m = build_namespace(entry_m_preview)
     t0 = time.time()
-    n_main = run_solve(smk_m, logger, skip_post_processing=True, skip_assign_duals=True)
+    n_main = run_solve(
+        smk_m,
+        logger,
+        skip_post_processing=True,
+        skip_assign_duals=True,
+        accept_time_limit=True,
+    )
     timings["main_s"] = time.time() - t0
     if n_main is None:
         raise RuntimeError(f"[iter {iter_id}] main solve failed at {lambda_str}")
