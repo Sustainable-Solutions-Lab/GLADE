@@ -733,28 +733,47 @@ _FEED_SOURCE_LABELS = {
 }
 
 
+# Feed categories whose crop-sourced supply maps to each source_key.
+# Roughage covers low-digestibility whole crops (e.g. fodder beet, alfalfa
+# routed by digestibility < 0.55 in categorize_feeds.py), which are
+# naturally bundled under "Fodder crops". Crops routed as
+# monogastric_low_quality (kitchen waste, swill-style by-products) are
+# bundled with food by-products. Without an entry here the source falls
+# through to "exog_other", which silently misattributes endogenous
+# crops as exogenous supply.
+_CROP_FEED_CATEGORY_TO_SOURCE_KEY = {
+    "ruminant_forage": "fodder_crop",
+    "ruminant_roughage": "fodder_crop",
+    "ruminant_grain": "grain_crop",
+    "monogastric_grain": "grain_crop",
+    "ruminant_protein": "protein_crop",
+    "monogastric_protein": "protein_crop",
+    "monogastric_low_quality": "food_byproduct",
+}
+
+
 def _feed_conversion_source_keys(
     bus0: pd.Series, feed_category: pd.Series
 ) -> pd.Series:
     """Vectorised source_key classifier for feed_conversion links."""
     src_type = bus0.str.split(":", n=1).str[0]
     keys = pd.Series("exog_other", index=bus0.index, dtype=object)
-    is_crop = src_type.eq("crop")
     keys.loc[src_type.eq("residue")] = "residue"
     keys.loc[src_type.eq("food")] = "food_byproduct"
-    keys.loc[is_crop & feed_category.str.endswith("_forage", na=False)] = "fodder_crop"
-    keys.loc[is_crop & feed_category.str.endswith("_grain", na=False)] = "grain_crop"
-    keys.loc[is_crop & feed_category.str.endswith("_protein", na=False)] = (
-        "protein_crop"
-    )
-    keys.loc[is_crop & feed_category.str.endswith("_low_quality", na=False)] = (
-        "food_byproduct"
-    )
+    is_crop = src_type.eq("crop")
+    crop_keys = feed_category.map(_CROP_FEED_CATEGORY_TO_SOURCE_KEY)
+    keys.loc[is_crop & crop_keys.notna()] = crop_keys[is_crop & crop_keys.notna()]
     return keys
 
 
 def _generator_source_keys(carrier: pd.Series, feed_category: pd.Series) -> pd.Series:
-    """Vectorised source_key classifier for feed-bus generators."""
+    """Vectorised source_key classifier for feed-bus generators.
+
+    Slack generators (carriers ``slack_positive_feed`` / ``slack_negative_feed``)
+    are penalty variables added by the build to keep the LP feasible under
+    validation; they are not supply and the caller filters them out before
+    this function sees them.
+    """
     keys = pd.Series("exog_other", index=carrier.index, dtype=object)
     keys.loc[carrier.eq("exogenous_forage_cal")] = "exog_forage_cal"
     keys.loc[carrier.eq("exogenous_protein_cal")] = "exog_protein_cal"
@@ -762,6 +781,15 @@ def _generator_source_keys(carrier: pd.Series, feed_category: pd.Series) -> pd.S
     keys.loc[is_xog & feed_category.eq("ruminant_roughage")] = "exog_browse"
     keys.loc[is_xog & feed_category.eq("monogastric_low_quality")] = "exog_swill"
     return keys
+
+
+# Slack generator carriers on feed buses. Positive slack is unmet demand
+# materialised at penalty cost (not a real supply source); negative slack
+# absorbs surplus dispatch (also not supply, and its sign is negative).
+# Filtering both out of the supply mix is the only way to keep the
+# attribution honest -- treating slack as supply would inflate the
+# exogenous bucket by exactly the model's infeasibility.
+_FEED_SLACK_CARRIERS = frozenset({"slack_positive_feed", "slack_negative_feed"})
 
 
 def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
@@ -798,10 +826,14 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
     feed-bus basis (which is uniformly DM across all categories).
 
     Inter-country trade in feed nets out at the global level for a
-    given feed_category (each export is paired with an import), so
-    trade does not appear as a source here -- the attribution is to
-    primary (non-trade) inflows. Per-country trade flows are visible
-    via the raw network if needed.
+    given feed_category (each export is paired with an import), so the
+    attribution is computed on the GLOBAL supply mix per feed_category
+    rather than per (country, feed_category). Per-country attribution
+    would credit each importer's animal draws to its own (possibly
+    empty) domestic supply mix, dropping countries whose feed bus is
+    fed exclusively by imports; aggregating globally first sidesteps
+    that and keeps the mt_dm totals consistent with
+    ``extract_feed_by_category`` and ``extract_feed_by_animal``.
 
     Returns
     -------
@@ -823,11 +855,12 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
     p0 = n.links.dynamic.p0.loc[snapshot]
     p_gen = n.generators.dynamic.p.loc[snapshot]
 
-    # --- Step 1: per (country, feed_category) bus, build a long-form
-    # table of non-trade inflow mass by source_key. Vectorised across
-    # all feed_conversion + grassland_production links and all feed-bus
-    # generators; trade_feed links are deliberately excluded (they net
-    # to zero at the global level for each feed_category).
+    # --- Step 1: build a global table of non-trade inflow mass per
+    # (feed_category, source_key), aggregated across all countries.
+    # Vectorised across feed_conversion + grassland_production links
+    # and all non-slack feed-bus generators. trade_feed links are
+    # deliberately excluded (each export is paired with an import, so
+    # they sum to zero per feed_category globally).
     inflow_frames: list[pd.DataFrame] = []
 
     fc = links[links["carrier"] == "feed_conversion"].copy()
@@ -838,14 +871,12 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
         fc["flow_out"] = fc["flow_in"] * pd.to_numeric(
             fc["efficiency"], errors="coerce"
         ).fillna(1.0)
-        bus1_parts = fc["bus1"].astype(str).str.split(":", expand=True)
-        fc["feed_category"] = bus1_parts[1]
-        fc["country"] = bus1_parts[2]
+        fc["feed_category"] = fc["bus1"].astype(str).str.split(":", expand=True)[1]
         fc["source_key"] = _feed_conversion_source_keys(
             fc["bus0"].astype(str), fc["feed_category"]
         )
         inflow_frames.append(
-            fc[["country", "feed_category", "source_key", "flow_out"]].rename(
+            fc[["feed_category", "source_key", "flow_out"]].rename(
                 columns={"flow_out": "supply_mt_dm"}
             )
         )
@@ -858,30 +889,31 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
         gp["flow_out"] = gp["flow_in"] * pd.to_numeric(
             gp["efficiency"], errors="coerce"
         ).fillna(1.0)
-        bus1_parts = gp["bus1"].astype(str).str.split(":", expand=True)
-        gp["feed_category"] = bus1_parts[1]
-        gp["country"] = bus1_parts[2]
+        gp["feed_category"] = gp["bus1"].astype(str).str.split(":", expand=True)[1]
         gp["source_key"] = "grassland"
         inflow_frames.append(
-            gp[["country", "feed_category", "source_key", "flow_out"]].rename(
+            gp[["feed_category", "source_key", "flow_out"]].rename(
                 columns={"flow_out": "supply_mt_dm"}
             )
         )
 
     gens = n.generators.static
-    feed_gen = gens[gens["bus"].astype(str).str.startswith("feed:", na=False)].copy()
+    feed_gen = gens[
+        gens["bus"].astype(str).str.startswith("feed:", na=False)
+        & ~gens["carrier"].isin(_FEED_SLACK_CARRIERS)
+    ].copy()
     if not feed_gen.empty:
         feed_gen["flow"] = p_gen.reindex(feed_gen.index).abs().to_numpy()
         feed_gen = feed_gen[feed_gen["flow"] > 1e-12]
     if not feed_gen.empty:
-        bus_parts = feed_gen["bus"].astype(str).str.split(":", expand=True)
-        feed_gen["feed_category"] = bus_parts[1]
-        feed_gen["country"] = bus_parts[2]
+        feed_gen["feed_category"] = (
+            feed_gen["bus"].astype(str).str.split(":", expand=True)[1]
+        )
         feed_gen["source_key"] = _generator_source_keys(
             feed_gen["carrier"].astype(str), feed_gen["feed_category"]
         )
         inflow_frames.append(
-            feed_gen[["country", "feed_category", "source_key", "flow"]].rename(
+            feed_gen[["feed_category", "source_key", "flow"]].rename(
                 columns={"flow": "supply_mt_dm"}
             )
         )
@@ -891,35 +923,31 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
 
     supply = (
         pd.concat(inflow_frames, ignore_index=True)
-        .groupby(["country", "feed_category", "source_key"], as_index=False)[
-            "supply_mt_dm"
-        ]
+        .groupby(["feed_category", "source_key"], as_index=False)["supply_mt_dm"]
         .sum()
     )
-    bus_totals = (
-        supply.groupby(["country", "feed_category"], as_index=False)["supply_mt_dm"]
+    category_totals = (
+        supply.groupby("feed_category", as_index=False)["supply_mt_dm"]
         .sum()
-        .rename(columns={"supply_mt_dm": "bus_total_mt_dm"})
+        .rename(columns={"supply_mt_dm": "category_total_mt_dm"})
     )
-    supply = supply.merge(bus_totals, on=["country", "feed_category"])
-    supply = supply[supply["bus_total_mt_dm"] > 0]
-    supply["source_share"] = supply["supply_mt_dm"] / supply["bus_total_mt_dm"]
+    supply = supply.merge(category_totals, on="feed_category")
+    supply = supply[supply["category_total_mt_dm"] > 0]
+    supply["source_share"] = supply["supply_mt_dm"] / supply["category_total_mt_dm"]
 
     # --- Step 2: animal_production draws, vectorised join with the
-    # per-bus source mix. Each (country, feed_category) row in `supply`
-    # expands across all consuming animal_production links via merge.
+    # global per-feed_category source mix. Each animal_production link
+    # expands into one row per source_key with mt_dm = flow * share.
     ap = links[ap_mask].copy()
     ap["flow"] = p0.reindex(ap.index).abs().to_numpy()
     ap = ap[ap["flow"] > 1e-12]
     if ap.empty:
         return pd.DataFrame(columns=cols)
-    bus0_parts = ap["bus0"].astype(str).str.split(":", expand=True)
-    ap["feed_category"] = bus0_parts[1]
-    ap["country"] = bus0_parts[2]
-    ap_cols = ["product", "country", "feed_category", "flow"]
+    ap["feed_category"] = ap["bus0"].astype(str).str.split(":", expand=True)[1]
+    ap_cols = ["product", "feed_category", "flow"]
     attributed = ap[ap_cols].merge(
-        supply[["country", "feed_category", "source_key", "source_share"]],
-        on=["country", "feed_category"],
+        supply[["feed_category", "source_key", "source_share"]],
+        on="feed_category",
         how="inner",
     )
     attributed["mt_dm"] = attributed["flow"] * attributed["source_share"]

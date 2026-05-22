@@ -38,12 +38,41 @@ the (negative) carbon-sequestration credit reported separately by
 """
 
 import logging
+import re
 
 import numpy as np
 import pandas as pd
 import pypsa
 
 from workflow.scripts.constants import TONNE_TO_MEGATONNE
+
+_BUS_COL_PATTERN = re.compile(r"^bus(\d+)$")
+
+
+def _emission_bus_columns(links: pd.DataFrame) -> list[tuple[str, str]]:
+    """List (bus_col, eff_col) pairs for every secondary port on a link table.
+
+    Secondary buses are bus2, bus3, ..., busN — i.e. every ``bus{N}`` column
+    with N >= 2 that exists on the DataFrame. The matching efficiency column
+    is ``efficiency{N}``. The primary port (bus0/bus1, efficiency) is excluded:
+    emissions are always wired as secondary outputs in this model.
+
+    Returned pairs are ordered by N so iteration is deterministic.
+    """
+    pairs: list[tuple[int, str, str]] = []
+    for col in links.columns:
+        match = _BUS_COL_PATTERN.match(col)
+        if match is None:
+            continue
+        n = int(match.group(1))
+        if n < 2:
+            continue
+        eff_col = f"efficiency{n}"
+        if eff_col in links.columns:
+            pairs.append((n, col, eff_col))
+    pairs.sort()
+    return [(bus_col, eff_col) for _, bus_col, eff_col in pairs]
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,23 +150,22 @@ def build_ghg_links_dataframe(
     # Ensure efficiency is filled
     links["efficiency"] = links["efficiency"].fillna(1.0)
 
-    # Compute emissions per unit of input flow (summing bus2/3/4 contributions).
-    # Positive efficiency to an emission bus = emissions (e.g. CH4 from enteric
-    # fermentation); negative efficiency = sequestration (e.g. CO2 credits from
-    # spared land).  Sequestration credits land at the spared-land sink bus
-    # and do not propagate to food buses (see module docstring).
+    # Compute emissions per unit of input flow by summing every secondary
+    # bus (bus2..busN) that targets an emission carrier. Iterating all
+    # secondary ports is essential because crop_production carries residue
+    # soil N2O on bus6 and crop_production_multi places residue N2O on a
+    # dynamically-numbered high bus; a hard-coded bus2/3/4 sweep would
+    # silently drop those contributions.
+    # Positive efficiency to an emission bus = emissions (e.g. CH4 from
+    # enteric fermentation); negative efficiency = sequestration (e.g. CO2
+    # credits from spared land). Sequestration credits land at the
+    # spared-land sink bus and do not propagate to food buses (see module
+    # docstring).
     links["emissions_co2e"] = 0.0
 
-    for bus_col, eff_col in [
-        ("bus2", "efficiency2"),
-        ("bus3", "efficiency3"),
-        ("bus4", "efficiency4"),
-    ]:
-        if bus_col not in links.columns:
-            continue
-
+    for bus_col, eff_col in _emission_bus_columns(links):
         emission_bus = links[bus_col].fillna("")
-        eff = links[eff_col].fillna(0.0) if eff_col in links.columns else 0.0
+        eff = links[eff_col].fillna(0.0)
 
         for gas, gwp_factor in gwp.items():
             mask = emission_bus == gas

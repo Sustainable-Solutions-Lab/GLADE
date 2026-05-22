@@ -42,15 +42,27 @@ def extract_baseline_deviation(n: pypsa.Network) -> pd.DataFrame:
     links = n.links.static
     p = n.links.dynamic["p0"].loc[n.snapshots[-1]]
 
+    # Each component is the set of link carriers whose bus0 dispatch
+    # contributes to that physical quantity. Multi-cropping links carry
+    # no observed baseline (baseline_area_mha is undefined for cycles
+    # beyond the single primary crop), but their bus0 dispatch is still
+    # Mha of cropping intensity above baseline and must be counted as
+    # deviation. The baseline of any link without a baseline column is
+    # treated as zero so abs_deviation = |actual| for those links.
     rows = []
-    for carrier, baseline_col, label, unit in [
-        ("crop_production", "baseline_area_mha", "crop_area", "Mha"),
-        ("grassland_production", "baseline_area_mha", "pasture_area", "Mha"),
-        ("animal_production", "baseline_feed_use_mt_dm", "animal_feed_use", "Mt DM"),
-        ("food_consumption", "baseline_consumption_mt", "food_consumption", "Mt"),
+    for carriers, baseline_col, label, unit in [
+        (
+            ("crop_production", "crop_production_multi"),
+            "baseline_area_mha",
+            "crop_area",
+            "Mha",
+        ),
+        (("grassland_production",), "baseline_area_mha", "pasture_area", "Mha"),
+        (("animal_production",), "baseline_feed_use_mt_dm", "animal_feed_use", "Mt DM"),
+        (("food_consumption",), "baseline_consumption_mt", "food_consumption", "Mt"),
     ]:
-        sel = links[links["carrier"] == carrier]
-        if sel.empty or baseline_col not in sel.columns:
+        sel = links[links["carrier"].isin(carriers)]
+        if sel.empty:
             rows.append(
                 {
                     "component": label,
@@ -62,7 +74,10 @@ def extract_baseline_deviation(n: pypsa.Network) -> pd.DataFrame:
             )
             continue
 
-        baseline = sel[baseline_col].values
+        if baseline_col in sel.columns:
+            baseline = sel[baseline_col].fillna(0.0).values
+        else:
+            baseline = np.zeros(len(sel))
         actual = p[sel.index].values
         rows.append(
             {

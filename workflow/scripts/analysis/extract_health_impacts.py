@@ -66,7 +66,15 @@ def get_cluster_population(
     country_clusters: pd.DataFrame,
     population: pd.DataFrame,
 ) -> dict[int, float]:
-    """Compute total population per health cluster."""
+    """Compute total population per health cluster.
+
+    Every country assigned to a cluster must have a population entry,
+    otherwise the cluster's per-capita-intake denominator is biased low
+    (numerator still includes the country's store mass via the cluster
+    lookup) and downstream YLL marginals are inflated. Fail fast: this
+    matches the same invariant that ``extract_statistics`` enforces on
+    food-consumption per-capita conversions.
+    """
     clusters = country_clusters.assign(
         country_iso3=lambda df: df["country_iso3"].str.upper()
     )
@@ -77,9 +85,19 @@ def get_cluster_population(
     pop = population.assign(iso3=lambda df: df["iso3"].str.upper())
     pop_map = pop.set_index("iso3")["population"].astype(float).to_dict()
 
+    missing = sorted(set(cluster_lookup) - set(pop_map))
+    if missing:
+        raise KeyError(
+            f"Countries in country_clusters missing from population data: "
+            f"{missing[:10]} (total {len(missing)}). "
+            "Per-capita intake denominators would be biased low; add these "
+            "countries to the population input or remove them from "
+            "country_clusters before solving."
+        )
+
     result: dict[int, float] = defaultdict(float)
     for iso3, cluster in cluster_lookup.items():
-        result[int(cluster)] += pop_map.get(iso3, 0.0)
+        result[int(cluster)] += pop_map[iso3]
 
     return dict(result)
 

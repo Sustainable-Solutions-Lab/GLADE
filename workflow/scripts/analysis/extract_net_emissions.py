@@ -53,10 +53,21 @@ def categorize_emission_carrier(carrier: str, bus_carrier: str) -> str:
             return "Rice cultivation"
         if bus_carrier == "co2":
             return "Land Use Change"
+        # N2O on crop_production comes from the mandatory soil-N2O share
+        # of crop residues left in the field (the (1 - FUE) fraction
+        # wired onto bus6 of every crop_production link). Bin it with
+        # the explicit residue_incorporation link so the source totals
+        # tally the full residue pulse.
+        if bus_carrier == "n2o":
+            return "Crop residue incorporation"
         return "Crop production"
     elif carrier == "crop_production_multi":
         if bus_carrier == "co2":
             return "Land Use Change"
+        # Same as the single-crop case: multi-cropping's N2O bus carries
+        # the (1 - FUE) residue soil-N2O share.
+        if bus_carrier == "n2o":
+            return "Crop residue incorporation"
         return "Multi-cropping"
     elif carrier == "animal_production":
         if bus_carrier == "n2o":
