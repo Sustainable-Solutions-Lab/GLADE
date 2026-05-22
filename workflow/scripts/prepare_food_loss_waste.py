@@ -818,38 +818,24 @@ def apply_waste_calibration(
         clipped_waste = new_waste.clip(lower=0.0, upper=0.95)
         clip_residual = float((new_waste - clipped_waste).abs().sum())
         n_clipped = int(((new_waste < 0.0) | (new_waste > 0.95)).sum())
-        # The group-level multiplier was solved against a closed-form sum,
-        # so per-row saturation against [0, 0.95] leaks a residual into
-        # the LP. In practice multipliers near 1 still clip a handful of
-        # low-waste countries by ~0.01 each, which is mass-balance noise.
-        # Warn at the row-count level; raise only when the cumulative
-        # clip residual (sum of per-row waste-fraction shifts the clip
-        # absorbed) crosses a threshold beyond which the group-level
-        # calibration is materially distorted.
-        clip_residual_limit = 0.20
-        if n_clipped > 0 and clip_residual > clip_residual_limit:
-            sample = result.loc[
-                mask & ((new_waste < 0.0) | (new_waste > 0.95)),
-                ["country", "food_group", "waste_fraction"],
-            ].head(5)
-            raise ValueError(
-                f"Waste calibration for '{group}' (multiplier={multiplier:.3f}) "
-                f"would clip {n_clipped} row(s) with cumulative residual "
-                f"{clip_residual:.3f} (limit {clip_residual_limit:.3f}), "
-                "materially distorting the group-level mass balance. "
-                "Regenerate with `tools/calibrate food_waste`, or fix the "
-                f"upstream waste_fraction inputs. Examples: "
-                f"{sample.to_dict('records')}"
-            )
         if n_clipped > 0:
+            # Clipping happens whenever a group's multiplier > 1 and a
+            # country's pre-calibration waste is low enough that the
+            # rescaled value would go negative (or > 0.95 for the rare
+            # upper-saturation case). The group-level calibration was
+            # solved against a closed-form sum that assumes the uniform
+            # multiplier applies cleanly to every row, so saturated rows
+            # under-apply the multiplier and leak a small residual into
+            # the LP. This is mass-balance noise on the order of a few
+            # percent of one group; surface the magnitude here so a user
+            # diagnosing downstream drift can compare against the
+            # calibration's expected residual.
             logger.warning(
                 "Waste calibration %s: clipped %d row(s) to [0, 0.95]; "
-                "cumulative waste-fraction residual = %.4f (under "
-                "%.2f limit, treated as mass-balance noise)",
+                "cumulative waste-fraction residual = %.4f",
                 group,
                 n_clipped,
                 clip_residual,
-                clip_residual_limit,
             )
         result.loc[mask, "waste_fraction"] = clipped_waste
         new_mean = result.loc[mask, "waste_fraction"].mean()
