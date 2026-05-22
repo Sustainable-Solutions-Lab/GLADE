@@ -22,6 +22,70 @@ from .utils import merge_lef
 logger = logging.getLogger(__name__)
 
 
+def compute_residue_n2o_efficiency_per_dm(
+    residue_feed_items: list[str],
+    ruminant_feed_mapping: pd.DataFrame,
+    ruminant_feed_categories: pd.DataFrame,
+    monogastric_feed_mapping: pd.DataFrame,
+    monogastric_feed_categories: pd.DataFrame,
+    incorporation_n2o_factor: float,
+    indirect_ef5: float,
+    frac_leach: float,
+) -> dict[str, float]:
+    """Per-residue-feed_item soil-incorporation N2O efficiency (t N2O / Mt DM).
+
+    Combines direct (IPCC eq. 11.1) and indirect-leaching (eq. 11.10)
+    pathways. Used for both the optional ``residue_incorporation`` link
+    on the residue bus (LP-controlled fraction) and the mandatory
+    (1 - FUE) * gross share that is baked into ``crop_production`` as a
+    fixed N2O coefficient per Mha of cropland.
+    """
+    if not residue_feed_items:
+        return {}
+
+    rum_residue = ruminant_feed_mapping[
+        ruminant_feed_mapping["source_type"] == "residue"
+    ].merge(
+        ruminant_feed_categories[["category", "N_g_per_kg_DM"]],
+        on="category",
+        how="left",
+    )
+    rum_valid = rum_residue.dropna(subset=["N_g_per_kg_DM"])
+    n_content_lookup: dict[str, float] = dict(
+        zip(rum_valid["feed_item"], rum_valid["N_g_per_kg_DM"].astype(float))
+    )
+    mono_residue = monogastric_feed_mapping[
+        monogastric_feed_mapping["source_type"] == "residue"
+    ].merge(
+        monogastric_feed_categories[["category", "N_g_per_kg_DM"]],
+        on="category",
+        how="left",
+    )
+    mono_valid = mono_residue.dropna(subset=["N_g_per_kg_DM"])
+    for item, n_val in zip(
+        mono_valid["feed_item"], mono_valid["N_g_per_kg_DM"].astype(float)
+    ):
+        n_content_lookup.setdefault(item, float(n_val))
+
+    missing = sorted(set(residue_feed_items) - set(n_content_lookup))
+    if missing:
+        raise ValueError(
+            "Missing N content data for residue items "
+            f"{missing}; add an entry to the ruminant or monogastric "
+            "feed category tables (column N_g_per_kg_DM)."
+        )
+
+    # Total N2O-N per kg residue-N: direct decomposition + leaching/runoff.
+    total_n2o_n = incorporation_n2o_factor + frac_leach * indirect_ef5
+    # t N2O per Mt residue DM:
+    # = (kg N / kg DM) * (kg N2O-N / kg N) * (44/28 N2O/N2O-N) * (1e6 t/Mt)
+    coeff = total_n2o_n * (44.0 / 28.0) * constants.MEGATONNE_TO_TONNE
+    return {
+        item: float(n_content_lookup[item]) / 1000.0 * coeff
+        for item in residue_feed_items
+    }
+
+
 def _redistribute_excess_baseline(df: pd.DataFrame) -> pd.Series:
     """Cap baseline_area_mha at p_nom_max, redistributing excess within each crop x country.
 
@@ -96,6 +160,8 @@ def add_regional_crop_production_links(
     rice_methane_factor: float,
     rainfed_wetland_rice_ch4_scaling_factor: float,
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
+    residue_fue_lookup: Mapping[str, float] | None = None,
+    residue_n2o_eff_lookup: Mapping[str, float] | None = None,
     use_actual_production: bool = False,
     *,
     cost_calibration: pd.Series | None = None,
@@ -138,6 +204,8 @@ def add_regional_crop_production_links(
         countries). A missing key falls back to 1.0 (no loss).
     """
     residue_lookup = residue_lookup or {}
+    residue_fue_lookup = residue_fue_lookup or {}
+    residue_n2o_eff_lookup = residue_n2o_eff_lookup or {}
 
     # Add crop production carrier
     if "crop_production" not in n.carriers.static.index:
@@ -445,6 +513,8 @@ def add_regional_crop_production_links(
     countries = all_df["country"].astype(str).to_numpy()
     residue_bus5 = np.empty(len(keys), dtype=object)
     residue_eff5 = np.zeros(len(keys), dtype=float)
+    residue_eff6 = np.zeros(len(keys), dtype=float)
+    has_residue_n2o = False
 
     for i, (key, country) in enumerate(zip(keys, countries, strict=False)):
         feed_map = residue_lookup.get(key, {})
@@ -457,17 +527,33 @@ def add_regional_crop_production_links(
                 "Expected at most one residue output per crop production link, "
                 f"got {len(feed_map)} for key {key}: {feed_items}"
             )
-        feed_item, residue_yield = next(iter(feed_map.items()))
+        feed_item, gross_residue_yield = next(iter(feed_map.items()))
+        fue = float(residue_fue_lookup.get(feed_item, 1.0))
         residue_bus5[i] = f"residue:{feed_item}:{country}"
-        residue_eff5[i] = float(residue_yield)
+        # Residue bus carries NET (feed-usable) DM: gross * FUE. The LP
+        # routes this NET pool between the feed_conversion link and the
+        # optional residue_incorporation link (the latter prices the
+        # marginal N2O if the LP can't place the residue as feed).
+        residue_eff5[i] = float(gross_residue_yield) * fue
+        # Mandatory soil N2O from the (1 - FUE) gross share that
+        # physically must be left on the field. Wired straight onto the
+        # crop_production link (bus6 = emission:n2o) so the LP cannot
+        # dodge it by re-routing through the feed link. Scales rigidly
+        # with Mha of cropland.
+        n2o_eff = float(residue_n2o_eff_lookup.get(feed_item, 0.0))
+        residue_eff6[i] = float(gross_residue_yield) * (1.0 - fue) * n2o_eff
+        if residue_eff6[i] > 0.0:
+            has_residue_n2o = True
 
     all_df["bus5"] = residue_bus5
-    # Residue yields come from build_crop_residue_yields.py and are
-    # derived from gross DM crop yield (pre-loss, at-harvest biomass).
-    # Don't scale by loss_mults: the crop bus carries post-loss product,
-    # but residues stay in the field and don't share the storage /
-    # transport / processing loss path of the grain.
+    # efficiency5 is the NET residue yield (gross * FUE) on the feed-usable
+    # residue bus. Don't scale by loss_mults: the crop bus carries post-
+    # loss product, but residues stay in the field and don't share the
+    # storage / transport / processing loss path of the grain.
     all_df["efficiency5"] = residue_eff5
+    if has_residue_n2o:
+        all_df["bus6"] = np.where(residue_eff6 > 0.0, "emission:n2o", "")
+        all_df["efficiency6"] = residue_eff6
 
     add_kwargs: dict[str, object] = {
         "carrier": "crop_production",
@@ -496,6 +582,9 @@ def add_regional_crop_production_links(
         "bounded_subsidy_bnusd_per_mha": all_df["bounded_subsidy_bnusd_per_mha"],
         "bounded_penalty_bnusd_per_mha": all_df["bounded_penalty_bnusd_per_mha"],
     }
+    if "bus6" in all_df.columns:
+        add_kwargs["bus6"] = all_df["bus6"]
+        add_kwargs["efficiency6"] = all_df["efficiency6"]
 
     if use_actual_production:
         add_kwargs["p_nom"] = all_df["p_nom"]
@@ -515,6 +604,8 @@ def add_multi_cropping_links(
     global_median_cost: pd.Series,
     fertilizer_n_rates: Mapping[str, float],
     residue_lookup: Mapping[tuple[str, str, str, int], dict[str, float]] | None = None,
+    residue_fue_lookup: Mapping[str, float] | None = None,
+    residue_n2o_eff_lookup: Mapping[str, float] | None = None,
     *,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
@@ -535,6 +626,8 @@ def add_multi_cropping_links(
         return
 
     residue_lookup = residue_lookup or {}
+    residue_fue_lookup = residue_fue_lookup or {}
+    residue_n2o_eff_lookup = residue_n2o_eff_lookup or {}
 
     key_cols = ["combination", "region", "resource_class", "water_supply"]
 
@@ -670,6 +763,9 @@ def add_multi_cropping_links(
         if not isinstance(feed_dict, Mapping):
             continue
         for feed_item, value in feed_dict.items():
+            gross = float(value)
+            fue = float(residue_fue_lookup.get(str(feed_item), 1.0))
+            n2o_eff = float(residue_n2o_eff_lookup.get(str(feed_item), 0.0))
             residue_records.append(
                 {
                     "crop": str(crop),
@@ -677,7 +773,11 @@ def add_multi_cropping_links(
                     "region": str(region),
                     "resource_class": int(res_class),
                     "feed_item": str(feed_item),
-                    "residue_yield": float(value),
+                    # NET feed-usable residue (gross * FUE); mandatory N2O
+                    # from the (1 - FUE) gross share is summed onto an
+                    # emission:n2o bus offset below.
+                    "residue_yield": gross * fue,
+                    "mandatory_n2o": gross * (1.0 - fue) * n2o_eff,
                 }
             )
 
@@ -694,6 +794,9 @@ def add_multi_cropping_links(
             residue_agg = pd.DataFrame(
                 columns=[*key_cols, "feed_item", "country", "residue_total"],
             )
+            mandatory_n2o_agg = pd.DataFrame(
+                columns=[*key_cols, "country", "mandatory_n2o_total"]
+            )
         else:
             residue_agg = (
                 residue_join.groupby([*key_cols, "feed_item", "country"])[
@@ -703,9 +806,21 @@ def add_multi_cropping_links(
                 .rename("residue_total")
                 .reset_index()
             )
+            mandatory_n2o_agg = (
+                residue_join.groupby([*key_cols, "country"])["mandatory_n2o"]
+                .sum()
+                .rename("mandatory_n2o_total")
+                .reset_index()
+            )
+            mandatory_n2o_agg = mandatory_n2o_agg[
+                mandatory_n2o_agg["mandatory_n2o_total"] > 0
+            ]
     else:
         residue_agg = pd.DataFrame(
             columns=[*key_cols, "feed_item", "country", "residue_total"],
+        )
+        mandatory_n2o_agg = pd.DataFrame(
+            columns=[*key_cols, "country", "mandatory_n2o_total"]
         )
 
     residue_counts = (
@@ -716,6 +831,11 @@ def add_multi_cropping_links(
     base["residue_count"] = 0
     if not residue_counts.empty:
         base.loc[residue_counts.index, "residue_count"] = residue_counts
+
+    base["has_n2o"] = 0
+    if not mandatory_n2o_agg.empty:
+        n2o_index = pd.MultiIndex.from_frame(mandatory_n2o_agg[key_cols])
+        base.loc[base.index.intersection(n2o_index), "has_n2o"] = 1
 
     index_df = base.reset_index()
     index_df["resource_class"] = index_df["resource_class"].astype(int)
@@ -928,6 +1048,55 @@ def add_multi_cropping_links(
                 ]
             ]
         )
+
+    if not mandatory_n2o_agg.empty:
+        n2o_entries = mandatory_n2o_agg.merge(
+            index_df[
+                [
+                    *key_cols,
+                    "link_name",
+                    "crop_count",
+                    "has_water",
+                    "has_fertilizer",
+                    "residue_count",
+                ]
+            ],
+            on=key_cols,
+            how="left",
+        )
+        n2o_entries = n2o_entries.dropna(subset=["link_name"])
+        if not n2o_entries.empty:
+            n2o_entries[
+                ["crop_count", "has_water", "has_fertilizer", "residue_count"]
+            ] = n2o_entries[
+                ["crop_count", "has_water", "has_fertilizer", "residue_count"]
+            ].fillna(0)
+            # Mandatory soil-N2O bus offset: sits after crops, water,
+            # fertilizer, and residue feed buses. One entry per link.
+            n2o_entries["offset"] = (
+                n2o_entries["crop_count"]
+                + n2o_entries["has_water"]
+                + n2o_entries["has_fertilizer"]
+                + n2o_entries["residue_count"]
+                + 1
+            )
+            offset_str = n2o_entries["offset"].astype(int).astype(str)
+            n2o_entries["bus_col"] = "bus" + offset_str
+            n2o_entries["eff_col"] = "efficiency" + offset_str
+            n2o_entries.loc[n2o_entries["offset"].eq(1), "eff_col"] = "efficiency"
+            n2o_entries["bus_value"] = "emission:n2o"
+            n2o_entries["eff_value"] = n2o_entries["mandatory_n2o_total"]
+            entry_frames.append(
+                n2o_entries[
+                    [
+                        "link_name",
+                        "bus_col",
+                        "bus_value",
+                        "eff_col",
+                        "eff_value",
+                    ]
+                ]
+            )
 
     # Strip per-output loss_multiplier info from outputs_entries before
     # concatenating; it only applies to crop output buses and is pivoted
@@ -1208,75 +1377,27 @@ def add_residue_soil_incorporation_links(
         logger.info("No residue items found; skipping soil incorporation links")
         return
 
-    # Build lookup for N content from both ruminant and monogastric feed data
-
-    # First, try ruminant feed categories
-    residue_mapping = ruminant_feed_mapping[
-        ruminant_feed_mapping["source_type"] == "residue"
-    ]
-    merged = residue_mapping.merge(
-        ruminant_feed_categories[["category", "N_g_per_kg_DM"]],
-        on="category",
-        how="left",
+    n2o_eff_lookup = compute_residue_n2o_efficiency_per_dm(
+        residue_feed_items,
+        ruminant_feed_mapping,
+        ruminant_feed_categories,
+        monogastric_feed_mapping,
+        monogastric_feed_categories,
+        incorporation_n2o_factor,
+        indirect_ef5,
+        frac_leach,
     )
-    valid = merged.dropna(subset=["N_g_per_kg_DM"])
-    n_content_lookup = dict(
-        zip(valid["feed_item"], valid["N_g_per_kg_DM"].astype(float))
-    )
-
-    # Then try monogastric feed categories (only adding items not already present)
-    mono_residue_mapping = monogastric_feed_mapping[
-        monogastric_feed_mapping["source_type"] == "residue"
-    ]
-    mono_merged = mono_residue_mapping.merge(
-        monogastric_feed_categories[["category", "N_g_per_kg_DM"]],
-        on="category",
-        how="left",
-    )
-    mono_valid = mono_merged.dropna(subset=["N_g_per_kg_DM"])
-    for item, n_val in zip(
-        mono_valid["feed_item"], mono_valid["N_g_per_kg_DM"].astype(float)
-    ):
-        if item not in n_content_lookup:
-            n_content_lookup[item] = n_val
-
-    if not n_content_lookup:
+    if not n2o_eff_lookup:
         logger.info(
             "No residue items with N content data; skipping soil incorporation links"
         )
         return
 
-    # Build per-item N₂O efficiency via vectorized computation. Each residue
-    # must have a known N content from one of the feed-category lookups;
-    # otherwise the N2O efficiency would silently inherit a generic fallback
-    # and bias incorporation emissions.
-    items_df = pd.DataFrame({"item": residue_feed_items})
-    items_df["n_content_g_per_kg"] = items_df["item"].map(n_content_lookup)
-    missing = items_df.loc[items_df["n_content_g_per_kg"].isna(), "item"].tolist()
-    if missing:
-        raise ValueError(
-            "Missing N content data for residue items "
-            f"{sorted(missing)}; add an entry to the ruminant or monogastric "
-            "feed category tables (column N_g_per_kg_DM)."
-        )
-
-    # Calculate N₂O emission efficiency (direct + indirect leaching)
-    # N content (kg N / kg DM)
-    n_content_kg_per_kg = items_df["n_content_g_per_kg"] / 1000.0
-
-    # Direct N₂O (Equation 11.1): kg N₂O-N per kg N
-    direct_n2o_n = incorporation_n2o_factor
-
-    # Indirect N₂O from leaching (Equation 11.10): kg N₂O-N per kg N
-    indirect_leach_n2o_n = frac_leach * indirect_ef5
-
-    # Total N₂O-N per kg N, converted to N₂O
-    total_n2o_n = direct_n2o_n + indirect_leach_n2o_n
-
-    # Total efficiency: tonnes N₂O per Mt residue DM
-    # = (kg N / kg DM) * (kg N₂O-N / kg N) * (44/28) * (tonnes per Mt)
-    items_df["n2o_efficiency"] = (
-        n_content_kg_per_kg * total_n2o_n * (44.0 / 28.0) * constants.MEGATONNE_TO_TONNE
+    items_df = pd.DataFrame(
+        {
+            "item": list(n2o_eff_lookup),
+            "n2o_efficiency": list(n2o_eff_lookup.values()),
+        }
     )
 
     # Build links for all residue x country combinations via cross product
@@ -1314,5 +1435,5 @@ def add_residue_soil_incorporation_links(
     logger.info(
         "Created %d residue soil incorporation links for %d residue types",
         len(cross),
-        len(n_content_lookup),
+        len(n2o_eff_lookup),
     )

@@ -185,6 +185,23 @@ if __name__ == "__main__":
         residue_lookup = {}
         residue_fue_lookup = {}
 
+    # Build per-residue soil-N2O coefficient (t N2O / Mt DM) once here so
+    # both crop_production (mandatory (1-FUE) N2O on bus6) and
+    # residue_incorporation (LP-controlled N2O on the net residue bus)
+    # use the same numbers. Requires the IPCC residue-decomposition
+    # factors from emissions.residues / emissions.fertilizer.
+    _emissions_params = snakemake.params.emissions
+    residue_n2o_eff_lookup = crops.compute_residue_n2o_efficiency_per_dm(
+        residue_feed_items,
+        ruminant_feed_mapping,
+        ruminant_feed_categories,
+        monogastric_feed_mapping,
+        monogastric_feed_categories,
+        float(_emissions_params["residues"]["incorporation_n2o_factor"]),
+        float(_emissions_params["fertilizer"]["indirect_ef5"]),
+        float(_emissions_params["fertilizer"]["frac_leach"]),
+    )
+
     # Read feed baseline (per-country, per-product, per-feed-category)
     feed_baseline = read_csv(snakemake.input.feed_baseline)
 
@@ -923,6 +940,8 @@ if __name__ == "__main__":
         rice_methane_factor=rice_methane_factor,
         rainfed_wetland_rice_ch4_scaling_factor=rainfed_wetland_rice_ch4_scaling_factor,
         residue_lookup=residue_lookup,
+        residue_fue_lookup=residue_fue_lookup,
+        residue_n2o_eff_lookup=residue_n2o_eff_lookup,
         use_actual_production=use_actual_production,
         cost_calibration=crop_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
@@ -955,6 +974,8 @@ if __name__ == "__main__":
             global_median_cost,
             fertilizer_n_rates,
             residue_lookup,
+            residue_fue_lookup=residue_fue_lookup,
+            residue_n2o_eff_lookup=residue_n2o_eff_lookup,
             min_yield_t_per_ha=min_crop_yield,
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
             crop_loss_multiplier=crop_loss_multiplier,
@@ -1008,7 +1029,6 @@ if __name__ == "__main__":
         residue_feed_items,
         cfg_countries,
         feed_marketing_cost_usd_per_t=feed_marketing_usd_per_t,
-        residue_fue_lookup=residue_fue_lookup,
     )
 
     # Compute trade hub positions once (shared across crop, food, and feed trade)

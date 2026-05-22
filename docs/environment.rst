@@ -132,30 +132,38 @@ The model uses the 2019 Refinement to the IPCC Guidelines for National Greenhous
 Crop Residue Incorporation (N₂O)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Crop residues left on the field and incorporated into the soil contribute to direct N₂O emissions. The model applies the IPCC EF\ :sub:`1` emission factor to residue nitrogen content to calculate these emissions.
+Crop residues left on the field decompose and release direct and indirect (leaching) N₂O. The IPCC EF\ :sub:`1` and EF\ :sub:`5` emission factors are applied to the residue nitrogen content.
+
+Two distinct shares contribute to the N₂O accounting and are wired into different parts of the network:
+
+1. **Mandatory un-collectable share** – the ``(1 - FUE)`` fraction of gross at-harvest residue that physically must be left on the field (FUE = field utilisation efficiency from GLEAM 3.0 Supplement S1, typically 0.5–0.9). This N₂O is baked into the ``crop_production`` link as an additional ``emission:n2o`` output (``bus6``) with efficiency ``(1 - FUE) * gross_residue_yield_per_ha * n2o_eff_per_t_DM``. It scales rigidly with Mha of cropland and cannot be re-routed by the LP.
+2. **Optional collected share** – the ``FUE * gross`` net residue placed on the ``residue:{item}:{country}`` bus. The LP routes it between feed-conversion (animal feed) and the ``residue_incorporation`` link; any portion sent to incorporation pays the same per-DM N₂O coefficient.
 
 Methodology
 ^^^^^^^^^^^
 
-N₂O emissions from incorporated crop residues are calculated as:
+Per-tonne N₂O efficiency (shared by both pathways):
 
 .. math::
 
-   \text{N}_2\text{O} = \text{Residue}_\text{DM} \times \text{N}_\text{content} \times \text{EF}_1 \times \frac{44}{28}
+   \text{N}_2\text{O per t DM} = \text{N}_\text{content} \times (\text{EF}_1 + \text{Frac}_\text{leach} \cdot \text{EF}_5) \times \frac{44}{28}
 
 where:
-  * **Residue**\ :sub:`DM` is the dry matter of crop residues incorporated into soil (tonnes DM)
   * **N**\ :sub:`content` is the nitrogen content of the residue (kg N per kg DM)
   * **EF**\ :sub:`1` is the IPCC direct emission factor for N inputs (kg N₂O-N per kg N input) = 0.010 (aggregated default)
+  * **Frac**\ :sub:`leach` is the leaching fraction (default 0.30)
+  * **EF**\ :sub:`5` is the IPCC indirect leaching factor (kg N₂O-N per kg N leached, default 0.011)
   * **44/28** converts N₂O-N to N₂O mass
+
+Total residue N₂O per Mha is then ``gross_residue_per_ha * N2O_per_t_DM``, split into the mandatory ``(1 - FUE)`` share (always emitted) and the optional ``FUE`` share (emitted only if the LP leaves residue unfed).
 
 Residue Management Constraints
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To ensure soil health and prevent degradation, the model limits the fraction of crop residues that can be removed for animal feed. The remainder must be left on the field and incorporated into the soil.
+In addition to the physical FUE cap, the model adds a soil-health constraint on the optional (collected) residue: at most ``max_feed_fraction`` of the dispatched net residue bus may be routed to feed, the rest must go through ``residue_incorporation``. This caps removal below the FUE ceiling when sustainable-management practice is stricter.
 
-* **Maximum removal for feed**: 30% of generated residues (configurable via ``residues.max_feed_fraction``; override per ISO3 country or M49 region/sub-region via ``residues.max_feed_fraction_by_region`` with country > sub-region > region)
-* **Minimum soil incorporation**: 70% of generated residues
+* **Maximum removal for feed**: 30% of net (collected) residue (configurable via ``residues.max_feed_fraction``; override per ISO3 country or M49 region/sub-region via ``residues.max_feed_fraction_by_region`` with country > sub-region > region)
+* **Minimum soil incorporation of net residue**: 70%
 
 This constraint is implemented as:
 
@@ -163,13 +171,15 @@ This constraint is implemented as:
 
    \text{feed use} \leq \frac{0.30}{0.70} \times \text{incorporation}
 
-The constraint ensures that residue removal for feed does not compromise soil organic matter maintenance and nutrient cycling.
+The constraint operates on the *net* residue bus (post-FUE). The un-collectable ``(1 - FUE)`` share is already accounted for separately and is not subject to this cap.
 
 Data Sources
 ^^^^^^^^^^^^
 
 * **Residue N content**: ``processing/{name}/ruminant_feed_categories.csv``, column ``N_g_per_kg_DM``, derived from GLEAM 3.0 [2]_ Supplement S1, Table S.3.3
-* **Emission factor**: IPCC 2019 Refinement, Table 11.1 (EF\ :sub:`1` aggregated default = 0.010)
+* **Direct EF**\ :sub:`1`: IPCC 2019 Refinement, Table 11.1 (aggregated default = 0.010)
+* **Leaching EF**\ :sub:`5` and Frac\ :sub:`leach`: IPCC 2019 Refinement, Table 11.3
+* **FUE per feed code**: GLEAM 3.0 Supplement S1 Tables S.3.3 / S.3.4 (per-residue), with crop-specific fallbacks in ``build_crop_residue_yields.py``
 * **Removal limits**: Model assumption based on sustainable residue management practices
 
 Rice Cultivation (CH₄)

@@ -286,13 +286,16 @@ In the PyPSA model (``workflow/scripts/build_model.py``), crop production is rep
 
 **Outputs**:
   * Crop product (to crop bus)
-  * Emissions (CO₂, CH₄, N₂O)
+  * Emissions (CH₄ from wetland rice, N₂O from un-collectable residue decomposition)
+  * Net (feed-usable) crop residue, if any
 
 **Efficiency Parameters**:
-  * ``efficiency`` (bus0→bus1): Yield in t/ha (already net of the seed reservation described above)
-  * ``efficiency2`` (bus2, negative): Water requirement in m³/t
-  * ``efficiency3`` (bus3, negative): Fertilizer requirement in kg/t
-  * ``efficiency4`` (bus4, positive): Emissions in tCO₂-eq/t
+  * ``efficiency`` (bus0→bus1): Yield in t/ha (already net of the seed reservation described above and the per-country supply-chain loss multiplier)
+  * ``efficiency2`` (bus2, negative): Water requirement in m³/ha (irrigated rows only)
+  * ``efficiency3`` (bus3, negative): Fertilizer N requirement in Mt N per Mha
+  * ``efficiency4`` (bus4, positive): Wetland-rice CH₄ emissions in t CH₄ per Mha (zero for non-rice rows)
+  * ``efficiency5`` (bus5, positive): Net residue yield in t DM per ha — gross at-harvest biomass scaled by the per-feed-item field utilisation efficiency (FUE, per GLEAM 3.0 Supplement S1). Routed to ``residue:{item}:{country}`` and from there into feed-conversion or optional ``residue_incorporation``. Loss multipliers are *not* applied: residues stay in the field and do not share the grain's storage/transport/processing loss path.
+  * ``efficiency6`` (bus6 = ``emission:n2o``, positive): Mandatory soil N₂O in t N₂O per Mha from the ``(1 - FUE)`` gross residue share that cannot be physically collected from the field. Equals ``gross_residue_per_ha * (1 - FUE) * n2o_eff_per_t_DM``. Wired here (rather than on the residue bus) so the LP cannot avoid the un-collectable-residue N₂O by re-routing dispatch through the feed link — a plain ``efficiency<1`` on a residue→feed link silently destroys the (1 - FUE) fraction at the conversion step instead of routing it to soil. See :doc:`environment` for the N₂O coefficient formula.
 
 When crops are converted into foods, the model first rescales the dry-matter crop bus to fresh edible mass using FAO edible portion coefficients and moisture shares drawn from ``data/curated/crop_moisture_content.csv``. The scaling factor ``edible_portion_coefficient / (1 - moisture_fraction)`` is applied before product-specific extraction factors in ``data/curated/foods.csv``. Crops listed in ``data/curated/yield_unit_conversions.csv`` are the cases where GAEZ reports processed outputs (sugar or oil); the table converts those back to dry matter so that subsequent processing logic is uniform.
 
