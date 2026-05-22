@@ -110,18 +110,17 @@ if __name__ == "__main__":
         if not np.any(mask):
             continue
 
-        yield_masked = np.where(mask, yield_grid, np.nan)
+        # Aggregate yield as an AREA-WEIGHTED mean rather than a plain
+        # pixel-coverage mean. The yield raster is in t/ha and cell area
+        # varies strongly with latitude, so an unweighted mean would bias
+        # regional yields toward smaller (high-latitude) cells. Compute
+        # total production (yield * area, in tonnes) and total area
+        # (ha) per region, then derive the area-weighted yield as the
+        # ratio. exactextract sums both rasters using cell coverage
+        # fractions, so partial coverage is handled symmetrically.
         area_masked = np.where(mask, cell_area_ha, np.nan)
+        production_masked = np.where(mask, yield_grid * cell_area_ha, np.nan)
 
-        yield_src = NumPyRasterSource(
-            yield_masked,
-            xmin=xmin,
-            ymin=ymin,
-            xmax=xmax,
-            ymax=ymax,
-            nodata=np.nan,
-            srs_wkt=crs_wkt,
-        )
         area_src = NumPyRasterSource(
             area_masked,
             xmin=xmin,
@@ -131,14 +130,16 @@ if __name__ == "__main__":
             nodata=np.nan,
             srs_wkt=crs_wkt,
         )
-
-        yield_stats = exact_extract(
-            yield_src,
-            regions_for_extract,
-            ["mean"],
-            include_cols=["region"],
-            output="pandas",
+        production_src = NumPyRasterSource(
+            production_masked,
+            xmin=xmin,
+            ymin=ymin,
+            xmax=xmax,
+            ymax=ymax,
+            nodata=np.nan,
+            srs_wkt=crs_wkt,
         )
+
         area_stats = exact_extract(
             area_src,
             regions_for_extract,
@@ -146,15 +147,28 @@ if __name__ == "__main__":
             include_cols=["region"],
             output="pandas",
         )
+        production_stats = exact_extract(
+            production_src,
+            regions_for_extract,
+            ["sum"],
+            include_cols=["region"],
+            output="pandas",
+        )
 
-        if yield_stats.empty or area_stats.empty:
+        if area_stats.empty or production_stats.empty:
             continue
 
-        merged = yield_stats.rename(columns={"mean": "yield"}).merge(
-            area_stats.rename(columns={"sum": "suitable_area"}),
+        merged = area_stats.rename(columns={"sum": "suitable_area"}).merge(
+            production_stats.rename(columns={"sum": "production_tonnes"}),
             on="region",
             how="inner",
         )
+        merged["yield"] = np.where(
+            merged["suitable_area"] > 0,
+            merged["production_tonnes"] / merged["suitable_area"],
+            np.nan,
+        )
+        merged = merged.drop(columns=["production_tonnes"])
         merged["resource_class"] = cls
         data_frames.append(merged)
 

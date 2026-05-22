@@ -815,23 +815,27 @@ def apply_waste_calibration(
             continue
         old_mean = result.loc[mask, "waste_fraction"].mean()
         new_waste = 1.0 - (1.0 - result.loc[mask, "waste_fraction"]) * multiplier
-        clipped_waste = new_waste.clip(lower=0.0, upper=0.95)
-        clip_residual = (new_waste - clipped_waste).abs().sum()
         n_clipped = int(((new_waste < 0.0) | (new_waste > 0.95)).sum())
         if n_clipped > 0:
-            # Quantify the mass-balance drift from clipping so the warning
-            # is actionable: clipping to [0, 0.95] silently undoes the
-            # calibration's intent on rows where the multiplier saturates
-            # against the per-row waste_fraction, breaking the
-            # calibration's compounded mass balance.
-            logger.warning(
-                "Waste calibration %s: clipped %d rows to [0, 0.95]; "
-                "total clipped waste-fraction magnitude = %.4f",
-                group,
-                n_clipped,
-                float(clip_residual),
+            # Clipping breaks the calibration's compounded mass balance:
+            # the uniform group-level multiplier was solved against a
+            # closed-form sum, so any per-row saturation against [0, 0.95]
+            # leaks the residual into the LP as a hidden mismatch. Refuse
+            # to apply a calibration that needs clipping; the user should
+            # regenerate it (or fix the upstream waste_fraction inputs
+            # that pushed the multiplier off the feasible range).
+            sample = result.loc[
+                mask & ((new_waste < 0.0) | (new_waste > 0.95)),
+                ["country", "food_group", "waste_fraction"],
+            ].head(5)
+            raise ValueError(
+                f"Waste calibration for '{group}' (multiplier={multiplier:.3f}) "
+                f"would clip {n_clipped} row(s) to [0, 0.95], breaking the "
+                "calibration's mass balance. Regenerate with "
+                "`tools/calibrate food_waste`, or fix the upstream "
+                f"waste_fraction inputs. Examples: {sample.to_dict('records')}"
             )
-        result.loc[mask, "waste_fraction"] = clipped_waste
+        result.loc[mask, "waste_fraction"] = new_waste
         new_mean = result.loc[mask, "waste_fraction"].mean()
         logger.info(
             "Waste calibration %s: multiplier=%.3f, mean waste %.1f%% -> %.1f%% "
@@ -1012,47 +1016,77 @@ def main():
 
         products = source["products"]
 
-        production_total = animal_production[
-            animal_production["product"].isin(products)
-        ]["production_mt_fresh_retail"].sum()
+        # Restrict both production and supply to the intersection of
+        # countries that appear in (a) animal_production, (b) the
+        # FAOSTAT supply table for this group, and (c) population.
+        # Summing production over ALL animal_production rows while
+        # silently dropping supply rows whose country lacks a
+        # population entry would inflate the implicit_loss
+        # (production stays high, supply biased low) and asymmetric
+        # country sets between the two FBS branches would compound the
+        # bias differently per group.
+        production_rows = animal_production[animal_production["product"].isin(products)]
+        production_countries = set(production_rows["country"].unique())
 
         if source["supply_source"] == "food_group_supply":
             supply_rows = faostat_supply[faostat_supply["item"] == source["fbs_item"]]
             supply_per_country = supply_rows.drop_duplicates(
                 subset=["country"]
             ).set_index("country")["value"]
+            supply_countries = set(supply_per_country.index)
+            common = (
+                production_countries & supply_countries & set(pop_per_country.index)
+            )
+            production_total = production_rows[production_rows["country"].isin(common)][
+                "production_mt_fresh_retail"
+            ].sum()
             # supply_mt = supply_g_day * population * 365 / 1e12
-            supply_total = 0.0
-            for country in supply_per_country.index:
-                if country not in pop_per_country.index:
-                    continue
-                supply_total += (
-                    supply_per_country[country] * pop_per_country[country] * 365 / 1e12
-                )
+            supply_total = sum(
+                supply_per_country[c] * pop_per_country[c] * 365 / 1e12 for c in common
+            )
         elif source["supply_source"] == "fbs_items":
             # Sum supply across one or more FBS items, each with its own
             # carcass-to-retail factor. The result is in retail mass and
-            # comparable to production_mt_fresh_retail.
-            supply_total = 0.0
+            # comparable to production_mt_fresh_retail. Build the
+            # per-item country sets first, then intersect with the
+            # production and population sets so production_total and
+            # supply_total cover the same countries.
+            per_item: list[tuple[pd.Series, float]] = []
+            supply_countries: set[str] = set()
             for item_spec in source["fbs_item_codes"]:
                 code = int(item_spec["code"])
                 c2r = float(item_spec["c2r"])
                 item_rows = fbs_items[fbs_items["item_code"] == code]
-                supply_per_country = item_rows.drop_duplicates(
-                    subset=["country"]
-                ).set_index("country")["supply_kg_per_capita_year"]
-                for country in supply_per_country.index:
-                    if country not in pop_per_country.index:
-                        continue
-                    supply_total += (
-                        supply_per_country[country]
-                        * pop_per_country[country]
-                        / 1e9
-                        * c2r
-                    )
+                spc = item_rows.drop_duplicates(subset=["country"]).set_index(
+                    "country"
+                )["supply_kg_per_capita_year"]
+                per_item.append((spc, c2r))
+                supply_countries |= set(spc.index)
+            common = (
+                production_countries & supply_countries & set(pop_per_country.index)
+            )
+            production_total = production_rows[production_rows["country"].isin(common)][
+                "production_mt_fresh_retail"
+            ].sum()
+            supply_total = 0.0
+            for spc, c2r in per_item:
+                for c in common & set(spc.index):
+                    supply_total += spc[c] * pop_per_country[c] / 1e9 * c2r
         else:
             raise ValueError(
                 f"Unknown supply_source '{source['supply_source']}' for {food_group}"
+            )
+
+        dropped = production_countries - common
+        if dropped:
+            logger.info(
+                "%s implicit-loss country intersection drops %d countries "
+                "from production_total (missing from FBS supply or "
+                "population): %s%s",
+                food_group,
+                len(dropped),
+                ", ".join(sorted(dropped)[:5]),
+                "..." if len(dropped) > 5 else "",
             )
 
         implicit_loss = 0.0

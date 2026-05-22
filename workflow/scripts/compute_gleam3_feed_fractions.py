@@ -286,6 +286,17 @@ def _compute_volume_weighted_fractions(
         entities["exogenous"], catch_all, entities["model_feed_category"]
     )
 
+    # Exogenous items in this group all route to the same catch_all
+    # category. Treat them collectively as a single placeholder of
+    # magnitude mean_tracked, not as N independent placeholders --
+    # otherwise a group with N distinct exogenous GLEAM codes would
+    # see its exogenous fraction inflate roughly N-fold relative to
+    # endogenous (the bucket would accumulate N * mean_tracked while
+    # endogenous accumulates the actual production sum, with no
+    # physical basis for the multiplicity in the placeholder).
+    endo_entities = entities[~entities["exogenous"]]
+    has_exo = bool(entities["exogenous"].any())
+
     records = []
     for country in countries:
         tracked_vols = [
@@ -298,27 +309,25 @@ def _compute_volume_weighted_fractions(
         ]
         mean_tracked = sum(tracked_vols) / len(tracked_vols) if tracked_vols else 1.0
 
-        # Per-category volume, split by exogenous flag so endogenous and
-        # exogenous shares of the same target category remain distinct.
         cat_volumes: dict[tuple[str, bool], float] = {}
-        for _, row in entities.iterrows():
+        for _, row in endo_entities.iterrows():
             cat = row["_target_category"]
-            exo = bool(row["exogenous"])
             entity = row["model_entity"]
             share = float(row["share"]) if "share" in row else 1.0
-            if exo:
-                # Exogenous items have no production-data backing; give them
-                # the same mean-tracked placeholder used for untracked
-                # endogenous entities so all items in the bucket compete on
-                # comparable scales.
-                vol = mean_tracked
-            elif row["entity_type"] == "crop" and entity in crops_in_data:
+            if row["entity_type"] == "crop" and entity in crops_in_data:
                 vol = crop_prod_lookup.get((country, entity), 0.0)
             elif row["entity_type"] == "food" and entity in foods_in_data:
                 vol = food_prod_lookup.get((country, entity), 0.0)
             else:
+                # Untracked endogenous entities (e.g. silage-maize, foods
+                # without a foods.csv pathway) use the mean-tracked
+                # placeholder so all entries in the bucket compete on
+                # comparable scales.
                 vol = mean_tracked
-            cat_volumes[(cat, exo)] = cat_volumes.get((cat, exo), 0.0) + vol * share
+            cat_volumes[(cat, False)] = cat_volumes.get((cat, False), 0.0) + vol * share
+
+        if has_exo:
+            cat_volumes[(catch_all, True)] = mean_tracked
 
         for (cat, exo), vol in cat_volumes.items():
             records.append(
