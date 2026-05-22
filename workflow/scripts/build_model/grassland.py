@@ -300,6 +300,7 @@ def add_grassland_feed_links(
         "resource_class": work_indexed["resource_class"],
         "country": work_indexed["country"],
         "crop": "grassland",
+        "feed_category": "ruminant_forage",
         "water_supply": "rainfed",
         "grazing_intensity": grazing_intensity,
         "yield_per_managed_ha": yield_per_managed_ha,

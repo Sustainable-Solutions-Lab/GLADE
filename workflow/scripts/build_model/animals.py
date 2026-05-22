@@ -339,24 +339,40 @@ def add_feed_to_animal_product_links(
     ):
         manure_rows[col] = pd.to_numeric(manure_rows[col], errors="coerce")
 
-    manure_ch4_lookup: dict[tuple[str, str, str], float] = {}
-    manure_n2o_lookup: dict[tuple[str, str], tuple[float, float, float]] = {}
-    manure_n2o_by_product_lookup: dict[str, tuple[float, float, float]] = {}
-    for row in manure_rows.itertuples(index=False):
-        country = str(row.country)
-        product = str(row.product)
-        feed_category = str(row.feed_category)
-        manure_ch4 = row.manure_ch4_kg_per_kg_DMI
-        if pd.notna(manure_ch4):
-            manure_ch4_lookup.setdefault(
-                (country, product, feed_category), float(manure_ch4)
-            )
+    mr = manure_rows.astype({"country": str, "product": str, "feed_category": str})
 
-        n2o_values = (row.pasture_fraction, row.pasture_n2o_ef, row.storage_n2o_ef)
-        if all(pd.notna(v) for v in n2o_values):
-            factors = (float(n2o_values[0]), float(n2o_values[1]), float(n2o_values[2]))
-            manure_n2o_lookup.setdefault((product, feed_category), factors)
-            manure_n2o_by_product_lookup.setdefault(product, factors)
+    ch4_rows = mr.dropna(subset=["manure_ch4_kg_per_kg_DMI"]).drop_duplicates(
+        subset=["country", "product", "feed_category"]
+    )
+    manure_ch4_lookup: dict[tuple[str, str, str], float] = (
+        ch4_rows.set_index(["country", "product", "feed_category"])[
+            "manure_ch4_kg_per_kg_DMI"
+        ]
+        .astype(float)
+        .to_dict()
+    )
+
+    n2o_rows = mr.dropna(
+        subset=["pasture_fraction", "pasture_n2o_ef", "storage_n2o_ef"]
+    ).copy()
+    n2o_rows["factors"] = list(
+        zip(
+            n2o_rows["pasture_fraction"].astype(float),
+            n2o_rows["pasture_n2o_ef"].astype(float),
+            n2o_rows["storage_n2o_ef"].astype(float),
+            strict=True,
+        )
+    )
+    manure_n2o_lookup: dict[tuple[str, str], tuple[float, float, float]] = (
+        n2o_rows.drop_duplicates(subset=["product", "feed_category"])
+        .set_index(["product", "feed_category"])["factors"]
+        .to_dict()
+    )
+    manure_n2o_by_product_lookup: dict[str, tuple[float, float, float]] = (
+        n2o_rows.drop_duplicates(subset=["product"])
+        .set_index("product")["factors"]
+        .to_dict()
+    )
 
     df = feed_requirements.copy()
     df = df[df["product"].isin(animal_products)]

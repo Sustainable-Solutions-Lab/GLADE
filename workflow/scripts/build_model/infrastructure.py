@@ -180,11 +180,13 @@ def add_carriers_and_buses(
         feed_df = pd.DataFrame(index=feed_buses)
         feed_df["carrier"] = ("feed_" + df["item"]).to_numpy()
         feed_df["country"] = df["country"].to_numpy()
+        feed_df["feed_category"] = df["item"].to_numpy()
         n.carriers.add(sorted(set(feed_df["carrier"])), unit="Mt")
         n.buses.add(
             feed_df.index,
             carrier=feed_df["carrier"],
             country=feed_df["country"],
+            feed_category=feed_df["feed_category"],
         )
 
     n.carriers.add("feed_conversion", unit="Mt")
