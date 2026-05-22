@@ -645,7 +645,7 @@ both a group key and an individual key for the same risk factor raises an error.
 .. _sensitivity-prod-stability-cost:
 
 Deviation-penalty regime (``gsa-l1-low`` / ``gsa-l1-high`` scenario groups)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The L1 deviation-penalty regime is a structural modelling choice rather than
 an empirical uncertainty, so it is not sampled as a Sobol parameter. Instead,
