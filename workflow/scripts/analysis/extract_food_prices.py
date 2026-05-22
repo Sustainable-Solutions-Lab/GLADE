@@ -17,6 +17,7 @@ Outputs:
 
 import logging
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -68,49 +69,24 @@ def extract_food_prices(n: pypsa.Network) -> pd.DataFrame:
     snapshot = n.snapshots[-1]
     consumption = p0.loc[snapshot].reindex(consume_links.index).fillna(0.0)
 
-    population = get_country_population(n)
+    population = pd.Series(get_country_population(n), dtype=float)
 
-    rows = []
-    for link_name, link in consume_links.iterrows():
-        food = str(link["food"])
-        food_group = str(link["food_group"])
-        country = str(link["country"])
-
-        # Food bus: bus0 of the consume link
-        food_bus = link["bus0"]
-        price = float(marginal_price.get(food_bus, 0.0))
-
-        # Consumption in Mt
-        cons_mt = float(consumption.get(link_name, 0.0))
-        if cons_mt < 1e-12:
-            continue
-
-        # Total cost in bnUSD
-        cost_bnusd = price * cons_mt
-
-        # Per-capita daily cost (USD/person/day)
-        pop = population.get(country, 0.0)
-        if pop > 0:
-            cost_per_person_day = (cost_bnusd * 1e9) / (pop * DAYS_PER_YEAR)
-        else:
-            cost_per_person_day = 0.0
-
-        rows.append(
-            {
-                "food": food,
-                "food_group": food_group,
-                "country": country,
-                "price_usd_per_kg": price,
-                "consumption_mt": cons_mt,
-                "cost_bnusd": cost_bnusd,
-                "cost_usd_per_person_per_day": cost_per_person_day,
-            }
-        )
-
-    if not rows:
+    df = consume_links[["food", "food_group", "country", "bus0"]].copy()
+    df = df.astype({"food": str, "food_group": str, "country": str})
+    df["consumption_mt"] = consumption.to_numpy()
+    df = df[df["consumption_mt"] >= 1e-12]
+    if df.empty:
         return pd.DataFrame(columns=columns)
 
-    df = pd.DataFrame(rows)
+    df["price_usd_per_kg"] = df["bus0"].map(marginal_price).fillna(0.0)
+    df["cost_bnusd"] = df["price_usd_per_kg"] * df["consumption_mt"]
+    pop = df["country"].map(population)
+    df["cost_usd_per_person_per_day"] = np.where(
+        pop > 0,
+        (df["cost_bnusd"] * 1e9) / (pop.to_numpy() * DAYS_PER_YEAR),
+        0.0,
+    )
+    df = df.drop(columns="bus0")
 
     # If duplicates exist across (food, food_group, country), the price
     # should be identical (it comes from the dual on the same food bus)

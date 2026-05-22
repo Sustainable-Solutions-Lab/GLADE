@@ -158,19 +158,14 @@ def compute_store_intake_by_cluster_risk(
     grouped = fg_stores.groupby(["cluster", "food_group"], as_index=False)[
         "level_mt"
     ].sum()
-
-    intake_totals: dict[tuple[int, str], float] = {}
-    for row in grouped.itertuples(index=False):
-        cluster = int(row.cluster)
-        cluster_pop = cluster_population[cluster]
-        if cluster_pop <= 0:
-            continue
-        intake_g = (
-            float(row.level_mt) * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * cluster_pop)
-        )
-        intake_totals[(cluster, str(row.food_group))] = intake_g
-
-    return intake_totals
+    pop = grouped["cluster"].map(pd.Series(cluster_population, dtype=float))
+    grouped = grouped[pop > 0]
+    pop = pop[pop > 0]
+    intake = grouped["level_mt"] * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * pop)
+    intake.index = pd.MultiIndex.from_arrays(
+        [grouped["cluster"].astype(int), grouped["food_group"].astype(str)]
+    )
+    return intake.astype(float).to_dict()
 
 
 def build_cluster_risk_tables(
