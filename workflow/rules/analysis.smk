@@ -36,25 +36,14 @@ _ANALYSIS_SCRIPTS = expand(
     ],
 )
 
+from workflow.scripts.solve_namespace import ANALYSIS_OUTPUT_NAMES
+
+# Per-scenario parquet outputs of analyze_model. The list of names is
+# the single source of truth in workflow/scripts/solve_namespace.py;
+# only the path template lives here.
 _ANALYSIS_OUTPUTS = {
-    "crop_production": "<results>/{name}/analysis/scen-{scenario}/crop_production.parquet",
-    "land_use": "<results>/{name}/analysis/scen-{scenario}/land_use.parquet",
-    "animal_production": "<results>/{name}/analysis/scen-{scenario}/animal_production.parquet",
-    "food_consumption": "<results>/{name}/analysis/scen-{scenario}/food_consumption.parquet",
-    "food_group_consumption": "<results>/{name}/analysis/scen-{scenario}/food_group_consumption.parquet",
-    "net_emissions": "<results>/{name}/analysis/scen-{scenario}/net_emissions.parquet",
-    "objective_breakdown": "<results>/{name}/analysis/scen-{scenario}/objective_breakdown.parquet",
-    "ghg_attribution": "<results>/{name}/analysis/scen-{scenario}/ghg_attribution.parquet",
-    "ghg_attribution_totals": "<results>/{name}/analysis/scen-{scenario}/ghg_attribution_totals.parquet",
-    "health_marginals": "<results>/{name}/analysis/scen-{scenario}/health_marginals.parquet",
-    "health_totals": "<results>/{name}/analysis/scen-{scenario}/health_totals.parquet",
-    "health_attribution": "<results>/{name}/analysis/scen-{scenario}/health_attribution.parquet",
-    "feed_by_category": "<results>/{name}/analysis/scen-{scenario}/feed_by_category.parquet",
-    "feed_by_animal": "<results>/{name}/analysis/scen-{scenario}/feed_by_animal.parquet",
-    "feed_by_source": "<results>/{name}/analysis/scen-{scenario}/feed_by_source.parquet",
-    "luc_breakdown": "<results>/{name}/analysis/scen-{scenario}/luc_breakdown.parquet",
-    "baseline_deviation": "<results>/{name}/analysis/scen-{scenario}/baseline_deviation.parquet",
-    "food_prices": "<results>/{name}/analysis/scen-{scenario}/food_prices.parquet",
+    name: f"<results>/{{name}}/analysis/scen-{{scenario}}/{name}.parquet"
+    for name in ANALYSIS_OUTPUT_NAMES
 }
 
 

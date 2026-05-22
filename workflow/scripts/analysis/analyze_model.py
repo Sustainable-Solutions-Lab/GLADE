@@ -54,6 +54,7 @@ from workflow.scripts.analysis.extract_statistics import (
 )
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.snakemake_utils import load_solved_network
+from workflow.scripts.solve_namespace import ANALYSIS_OUTPUT_NAMES
 
 
 def write_empty_outputs(output) -> None:
@@ -207,6 +208,17 @@ def run_analysis(
         "baseline_deviation": baseline_deviation,
         "food_prices": food_prices,
     }
+    # Producer-side drift guard: every output declared in the
+    # canonical list must be produced here, and we must not produce
+    # extras the downstream consumers don't know about.
+    if set(results) != set(ANALYSIS_OUTPUT_NAMES):
+        missing = sorted(set(ANALYSIS_OUTPUT_NAMES) - set(results))
+        extra = sorted(set(results) - set(ANALYSIS_OUTPUT_NAMES))
+        raise RuntimeError(
+            "analyze_model results mismatch ANALYSIS_OUTPUT_NAMES "
+            f"(missing={missing}, extra={extra}). Update the canonical "
+            "list in workflow/scripts/solve_namespace.py."
+        )
     for name, df in results.items():
         df.to_parquet(output_paths[name])
 

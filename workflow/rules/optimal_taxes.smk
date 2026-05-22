@@ -89,12 +89,11 @@ rule plot_optimal_taxes:
 rule plot_optimal_taxes_diet_comparison:
     """Compare global average diet across the optimal taxes optimizations."""
     input:
-        networks=[
-            "<results>/{name}/solved/model_scen-optimize.nc",
-            "<results>/{name}/solved/model_scen-extract_taxes.nc",
-            "<results>/{name}/solved/model_scen-apply_taxes.nc",
+        food_group_consumption=[
+            "<results>/{name}/analysis/scen-optimize/food_group_consumption.parquet",
+            "<results>/{name}/analysis/scen-extract_taxes/food_group_consumption.parquet",
+            "<results>/{name}/analysis/scen-apply_taxes/food_group_consumption.parquet",
         ],
-        food_groups="data/curated/food_groups.csv",
     output:
         pdf="<results>/{name}/plots/optimal_taxes/diet_comparison.pdf",
         csv="<results>/{name}/plots/optimal_taxes/diet_comparison.csv",

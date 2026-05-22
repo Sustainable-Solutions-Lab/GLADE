@@ -52,24 +52,38 @@ def load_solved_network(path: str | Path) -> pypsa.Network:
     return pypsa.Network(str(p))
 
 
-def _recursive_update(target: dict, source: dict) -> dict:
+def _recursive_update(target: dict, source: dict, _path: tuple[str, ...] = ()) -> dict:
     """Recursively update the target dictionary with the source dictionary.
 
-    Raises if a scenario override would silently replace a nested
+    Raises if a config override would silently replace a nested
     dictionary subtree with ``None`` -- a common YAML mistake (writing
     ``key:`` with no value or ``key: null``) that otherwise surfaces
     deep in solve-time code as cryptic ``TypeError: 'NoneType' is not
     subscriptable``.
+
+    The one location where ``null`` is intentional is
+    ``scenarios.<name>: null`` -- the canonical way to suppress an
+    inherited scenario from a base config (see
+    :func:`workflow.scenario_generators.expand_scenario_defs`, which
+    treats ``None`` entries under ``scenarios`` as suppression). That
+    case is allowed through; everywhere else, null-overriding-a-dict
+    still raises.
     """
     for key, value in source.items():
-        if value is None and key in target and isinstance(target[key], dict):
+        is_scenario_suppression = _path == ("scenarios",) and value is None
+        if (
+            value is None
+            and key in target
+            and isinstance(target[key], dict)
+            and not is_scenario_suppression
+        ):
             raise ValueError(
-                f"Scenario override sets '{key}' to null but the base "
-                "config has a dict at that key; use an empty dict ({}) "
-                "to clear the subtree or supply the intended keys."
+                f"Config override sets '{'.'.join((*_path, key))}' to null "
+                "but the base config has a dict at that key; use an empty "
+                "dict ({}) to clear the subtree or supply the intended keys."
             )
         if isinstance(value, dict) and key in target and isinstance(target[key], dict):
-            _recursive_update(target[key], value)
+            _recursive_update(target[key], value, _path=(*_path, key))
         else:
             target[key] = value
     return target

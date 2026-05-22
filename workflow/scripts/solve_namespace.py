@@ -93,8 +93,23 @@ def validate_scenario_overrides(scenario_defs: dict) -> None:
         )
 
 
-# Mirrors _ANALYSIS_OUTPUTS in workflow/rules/analysis.smk.
-ANALYSIS_OUTPUTS = [
+# Canonical list of per-scenario parquet outputs that analyze_model
+# writes. Single source of truth shared by three consumers, all of
+# which import from here:
+#
+#   - workflow/rules/analysis.smk derives the {name -> path-template}
+#     dict for Snakemake rule outputs.
+#   - workflow/scripts/analysis/analyze_model.py asserts the `results`
+#     dict it writes covers exactly this set (catches local drift in
+#     the producer).
+#   - workflow/scripts/solve_namespace.build_run_solve_namespace_for_scenario
+#     uses it to populate the cluster shim's `outputs` dict (the
+#     manifest-driven cluster path that bypasses Snakemake).
+#
+# A new output added to analyze_model MUST be appended here; otherwise
+# the cluster path raises KeyError on write and the Snakemake rule is
+# missing the file from its declared outputs.
+ANALYSIS_OUTPUT_NAMES = (
     "crop_production",
     "land_use",
     "animal_production",
@@ -109,10 +124,11 @@ ANALYSIS_OUTPUTS = [
     "health_attribution",
     "feed_by_category",
     "feed_by_animal",
+    "feed_by_source",
     "luc_breakdown",
     "baseline_deviation",
     "food_prices",
-]
+)
 
 
 def load_merged_config(*configfiles) -> dict:
@@ -321,7 +337,7 @@ def build_scenario_entry(
             out_name: rp(
                 f"<results>/{{name}}/analysis/scen-{{scenario}}/{out_name}.parquet"
             )
-            for out_name in ANALYSIS_OUTPUTS
+            for out_name in ANALYSIS_OUTPUT_NAMES
         }
     else:
         outputs = {
