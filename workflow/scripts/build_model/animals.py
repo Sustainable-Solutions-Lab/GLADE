@@ -566,9 +566,22 @@ def add_feed_to_animal_product_links(
     # animal_production link, starting at bus5. Yields are configured
     # per source product in ``animal_products.co_products``; products
     # not listed yield zero (link is inert on that co-product bus).
-    # A per-bus ``loss_multiplier{N}`` mirrors the primary product so
-    # food-loss sensitivity (sensitivity._scale_loss_on_links) rescales
-    # co-product efficiencies consistently with bus1.
+    #
+    # Downstream contract -- both invariants are checked at the use
+    # site, but the producer (this block) is the place to keep them
+    # true. Editing here without updating the consumers will break
+    # mass balance in sensitivity sweeps:
+    #
+    #   1. The co-product bus name must point at a bus whose carrier
+    #      starts with ``food_`` (we use ``food:{name}:{country}``,
+    #      whose carrier is set in infrastructure.py as ``food_{name}``).
+    #      ``solve_model.sensitivity._apply_fcr_factor`` filters
+    #      yield-proportional outputs by that prefix and asserts on
+    #      unclassified ports.
+    #   2. A per-bus ``loss_multiplier{N}`` is stamped here for every
+    #      food-output bus. ``solve_model.sensitivity._scale_loss_on_links``
+    #      raises if a food-output bus is missing one, since the
+    #      sweep would otherwise silently skip that port.
     co_product_kwargs: dict[str, pd.Series | str] = {}
     co_products = co_products or {}
     for offset, (co_product_food, spec) in enumerate(sorted(co_products.items())):

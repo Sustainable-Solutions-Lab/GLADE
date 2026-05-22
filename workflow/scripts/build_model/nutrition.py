@@ -281,6 +281,16 @@ def add_food_nutrition_links(
     # Food bus flows are Mt/year, in post-loss / pre-waste retail-supply
     # basis. Each nutrient/group efficiency is scaled by the consumer-side
     # waste multiplier so the downstream loads receive intake-basis mass.
+    #
+    # Downstream contract: every ``efficiency{i}`` produced here is
+    # ``raw_density * flw_multiplier`` -- including the group bus
+    # whose efficiency *is* the multiplier (raw_density = 1). The
+    # sensitivity hook ``solve_model.sensitivity._apply_food_waste_factor``
+    # rescales every ``efficiency*`` column on food_consumption links
+    # by the same waste-fraction ratio. If a future change adds an
+    # efficiency column here that is NOT proportional to flw_multiplier,
+    # store it under a differently-named field (or fold it into raw
+    # nutrient densities up front) so that loop stays mass-consistent.
     def _add_links(batch_df: pd.DataFrame, *, include_group: bool) -> None:
         links = batch_df.set_index("name", drop=False)
         mult = links["flw_multiplier"].astype(float).to_numpy()

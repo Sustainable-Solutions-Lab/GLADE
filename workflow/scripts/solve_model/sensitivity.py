@@ -38,8 +38,10 @@ interpolation between GBD confidence bounds.
 """
 
 import logging
+import re
 
 import numpy as np
+import pandas as pd
 import pypsa
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,45 @@ logger = logging.getLogger(__name__)
 # Loss/waste fractions are clipped to this maximum after scaling so a
 # large factor cannot drive the survival multiplier to (or below) zero.
 _MAX_LOSS_FRACTION = 0.99
+
+
+_BUS_COL_PATTERN = re.compile(r"^bus(\d+)$")
+
+
+def _output_port_columns(links: pd.DataFrame) -> list[tuple[str, str, str]]:
+    """List (bus_col, eff_col, suffix) tuples for every output port on `links`.
+
+    Output ports are bus1..busN (the input port lives at bus0 with no
+    secondary efficiency column). The matching efficiency column is
+    ``efficiency`` for bus1 and ``efficiency{N}`` for N >= 2 -- this is
+    the PyPSA convention baked into ``links.add()`` calls in
+    ``build_model/*``.
+
+    Returned tuples are ordered by N so iteration is deterministic, and
+    only ports whose efficiency column actually exists on the frame are
+    included. The ``suffix`` element ("1", "2", ...) is the bare bus
+    number as a string, useful for deriving sibling columns like
+    ``loss_multiplier{N}``.
+
+    This helper exists so the bus-iteration pattern (which used to be
+    duplicated across sensitivity scalers) reads consistently and the
+    bus1-vs-busN naming quirk is documented in one place.
+    """
+    pairs: list[tuple[int, str, str, str]] = []
+    for col in links.columns:
+        match = _BUS_COL_PATTERN.match(col)
+        if match is None:
+            continue
+        n = int(match.group(1))
+        if n < 1:
+            continue
+        suffix = match.group(1)
+        eff_col = "efficiency" if n == 1 else f"efficiency{n}"
+        if eff_col not in links.columns:
+            continue
+        pairs.append((n, col, eff_col, suffix))
+    pairs.sort()
+    return [(bus_col, eff_col, suffix) for _, bus_col, eff_col, suffix in pairs]
 
 
 def apply_sensitivity_factors(n: pypsa.Network, sensitivity_cfg: dict) -> None:
@@ -353,16 +394,10 @@ def _scale_loss_on_links(
         return 0
 
     links = n.links.static.loc[mask]
-    bus_cols = [c for c in links.columns if c.startswith("bus") and c != "bus0"]
     bus_carriers = n.buses.static["carrier"]
 
     scaled_pairs = 0
-    for bus_col in bus_cols:
-        suffix = bus_col[len("bus") :]
-        eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
-        if eff_col not in links.columns:
-            continue
-
+    for bus_col, eff_col, suffix in _output_port_columns(links):
         # Filter to links whose bus_col points at a food-output carrier.
         bus_names = links[bus_col].astype(str)
         nonempty = bus_names.ne("") & bus_names.ne("None")
@@ -420,6 +455,20 @@ def _apply_food_waste_factor(n: pypsa.Network, factor: float) -> None:
     is kept in sync so ``_match_baseline_to_consume_links`` reads the
     scaled value when converting intake targets to bus flows.
 
+    Build contract this relies on (see ``build_model/nutrition.py:_add_links``):
+
+    - Every ``efficiency{i}`` on food_consumption links is built as
+      ``raw_density * flw_multiplier`` -- nutrient efficiencies on
+      bus1..busN-1 carry the multiplier, and the optional group bus
+      stores the multiplier directly. There are no non-multiplied
+      efficiency columns on these links.
+
+    If a future build change adds an efficiency column to
+    food_consumption that is NOT proportional to flw_multiplier (e.g.
+    a per-link emission, or a fixed cost-side coefficient), this
+    blanket scaling would mis-scale it; consider adding such columns
+    to a separately-named field instead so this loop stays correct.
+
     Parameters
     ----------
     n : pypsa.Network
@@ -475,12 +524,35 @@ def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
     outputs (CH4 on bus2, manure N on bus3, N2O on bus4) are not
     proportional to product yield and are left untouched.
 
+    Build contract this relies on (see ``build_model/animals.py``):
+
+    - Every product output on ``animal_production`` lands on a bus
+      whose carrier starts with ``food_`` (primary product on bus1,
+      co-products on bus5+).
+    - Non-product outputs use distinguishable carriers
+      (``emission:ch4`` on bus2, ``fertilizer:<country>`` on bus3,
+      ``emission:n2o`` on bus4), so the carrier-prefix filter cleanly
+      separates yield-proportional outputs from per-feed outputs.
+
+    If a future build change routes a yield-proportional co-product
+    to a non-``food_`` carrier (or vice versa), this scaler will
+    silently mis-mass-balance the FCR sweep -- the assertion below
+    catches the simplest version of that drift.
+
     Parameters
     ----------
     n : pypsa.Network
         Network to modify.
     factor : float
         Multiplicative factor for animal product efficiencies.
+
+    Raises
+    ------
+    ValueError
+        If any output port on animal_production links has neither a
+        ``food_`` carrier nor one of the known per-feed carriers
+        (``emission:ch4``, ``emission:n2o``, ``fertilizer:*``). The
+        scaler would otherwise silently skip that port.
     """
     mask = n.links.static["carrier"] == "animal_production"
     if not mask.any():
@@ -489,23 +561,37 @@ def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
 
     links = n.links.static.loc[mask]
     bus_carriers = n.buses.static["carrier"]
-    bus_cols = [c for c in links.columns if c.startswith("bus") and c != "bus0"]
+    known_per_feed_carriers = {"emission:ch4", "emission:n2o"}
 
     scaled_pairs = 0
-    for bus_col in bus_cols:
-        suffix = bus_col[len("bus") :]
-        eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
-        if eff_col not in links.columns:
-            continue
-
+    for bus_col, eff_col, _suffix in _output_port_columns(links):
         bus_names = links[bus_col].astype(str)
         nonempty = bus_names.ne("") & bus_names.ne("None")
         if not nonempty.any():
             continue
         carrier_series = bus_carriers.reindex(bus_names.where(nonempty)).fillna("")
-        is_food_output = nonempty.values & np.char.startswith(
-            carrier_series.values.astype(str), "food_"
+        carrier_values = carrier_series.values.astype(str)
+        bus_values = bus_names.values.astype(str)
+        is_food_output = nonempty.values & np.char.startswith(carrier_values, "food_")
+
+        # Catch drift: any port that is neither a food output nor a
+        # known per-feed bus would be silently skipped. The fertilizer
+        # bus is per-country so we match it by bus-name prefix, not
+        # carrier.
+        is_per_feed = nonempty.values & (
+            np.isin(bus_values, list(known_per_feed_carriers))
+            | np.char.startswith(bus_values, "fertilizer:")
         )
+        unclassified = nonempty.values & ~is_food_output & ~is_per_feed
+        if unclassified.any():
+            sample_bus = bus_values[unclassified][0]
+            raise ValueError(
+                f"Sensitivity FCR scaler: animal_production {bus_col} "
+                f"contains an unclassified output bus ({sample_bus!r}). "
+                "Either route it as a food_ carrier (yield-proportional, "
+                "scaled by FCR) or extend known_per_feed_carriers to "
+                "cover the new per-feed output type."
+            )
         if not is_food_output.any():
             continue
 
