@@ -129,13 +129,17 @@ def build_ghg_links_dataframe(
     Returns DataFrame with columns:
     - link_name, bus0, bus1, flow, efficiency, emissions_co2e
     """
-    # GWP factors (CH4/N2O are in tonnes, convert to MtCO2e)
-    # Bus names include "emission:" prefix (e.g., "emission:co2")
-    gwp = {
-        "emission:co2": 1.0,
-        "emission:ch4": ch4_gwp * TONNE_TO_MEGATONNE,
-        "emission:n2o": n2o_gwp * TONNE_TO_MEGATONNE,
-    }
+    # GWP factors as a Series keyed by emission-bus name (which equals
+    # the bus carrier for emission buses). Anything not in the map maps
+    # to NaN -> 0 contribution, so non-emission output buses fall
+    # through without an explicit filter.
+    gwp = pd.Series(
+        {
+            "emission:co2": 1.0,
+            "emission:ch4": ch4_gwp * TONNE_TO_MEGATONNE,
+            "emission:n2o": n2o_gwp * TONNE_TO_MEGATONNE,
+        }
+    )
 
     links = n.links.static.copy()
     links["link_name"] = links.index
@@ -161,15 +165,14 @@ def build_ghg_links_dataframe(
     # credits from spared land). Sequestration credits land at the
     # spared-land sink bus and do not propagate to food buses (see module
     # docstring).
-    links["emissions_co2e"] = 0.0
-
+    emissions_co2e = pd.Series(0.0, index=links.index)
     for bus_col, eff_col in _emission_bus_columns(links):
-        emission_bus = links[bus_col].fillna("")
-        eff = links[eff_col].fillna(0.0)
-
-        for gas, gwp_factor in gwp.items():
-            mask = emission_bus == gas
-            links.loc[mask, "emissions_co2e"] += eff[mask] * gwp_factor
+        # `bus_col.map(gwp)` lifts each link's emission-bus name to its
+        # GWP factor (NaN -> 0 for non-emission outputs), so the
+        # contribution is just `efficiency * GWP` summed across ports.
+        gwp_factor = links[bus_col].map(gwp).fillna(0.0)
+        emissions_co2e += links[eff_col].fillna(0.0) * gwp_factor
+    links["emissions_co2e"] = emissions_co2e
 
     # Exclude links with zero primary efficiency: they consume from bus0 but
     # deliver nothing to bus1, so they cannot participate in the flow-weighted

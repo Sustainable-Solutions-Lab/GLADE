@@ -40,7 +40,6 @@ interpolation between GBD confidence bounds.
 import logging
 import re
 
-import numpy as np
 import pandas as pd
 import pypsa
 
@@ -398,16 +397,10 @@ def _scale_loss_on_links(
 
     scaled_pairs = 0
     for bus_col, eff_col, suffix in _output_port_columns(links):
-        # Filter to links whose bus_col points at a food-output carrier.
-        bus_names = links[bus_col].astype(str)
-        nonempty = bus_names.ne("") & bus_names.ne("None")
-        if not nonempty.any():
-            continue
-        carrier_series = bus_carriers.reindex(bus_names.where(nonempty)).fillna("")
-        is_food_output = carrier_series.values.astype(str)
-        food_mask = nonempty.values & np.char.startswith(
-            is_food_output, food_carrier_prefix
-        )
+        # `links[bus_col].map(bus_carriers)` lifts each link's target-bus
+        # name to its carrier in one step (empty / NaN -> NaN -> "").
+        carriers = links[bus_col].map(bus_carriers).fillna("")
+        food_mask = carriers.str.startswith(food_carrier_prefix)
         if not food_mask.any():
             continue
 
@@ -420,12 +413,12 @@ def _scale_loss_on_links(
                 "for every food-output port so loss sweeps stay mass-consistent."
             )
 
-        target_idx = links.index[food_mask]
+        target_idx = food_mask.index[food_mask]
         old_mult = n.links.static.loc[target_idx, lm_col].astype(float)
         valid = old_mult.notna() & (old_mult > 0)
         if not valid.any():
             continue
-        idx = target_idx[valid]
+        idx = old_mult.index[valid]
         old_mult = old_mult.loc[idx]
         new_loss = (factor * (1.0 - old_mult)).clip(lower=0.0, upper=_MAX_LOSS_FRACTION)
         new_mult = 1.0 - new_loss
@@ -561,41 +554,37 @@ def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
 
     links = n.links.static.loc[mask]
     bus_carriers = n.buses.static["carrier"]
-    known_per_feed_carriers = {"emission:ch4", "emission:n2o"}
+    known_per_feed_buses = {"emission:ch4", "emission:n2o"}
 
     scaled_pairs = 0
     for bus_col, eff_col, _suffix in _output_port_columns(links):
-        bus_names = links[bus_col].astype(str)
+        bus_names = links[bus_col].fillna("")
         nonempty = bus_names.ne("") & bus_names.ne("None")
-        if not nonempty.any():
-            continue
-        carrier_series = bus_carriers.reindex(bus_names.where(nonempty)).fillna("")
-        carrier_values = carrier_series.values.astype(str)
-        bus_values = bus_names.values.astype(str)
-        is_food_output = nonempty.values & np.char.startswith(carrier_values, "food_")
+        carriers = bus_names.map(bus_carriers).fillna("")
+        food_mask = nonempty & carriers.str.startswith("food_")
 
         # Catch drift: any port that is neither a food output nor a
         # known per-feed bus would be silently skipped. The fertilizer
         # bus is per-country so we match it by bus-name prefix, not
-        # carrier.
-        is_per_feed = nonempty.values & (
-            np.isin(bus_values, list(known_per_feed_carriers))
-            | np.char.startswith(bus_values, "fertilizer:")
+        # by enumerating every fertilizer:{country} bus name.
+        per_feed_mask = nonempty & (
+            bus_names.isin(known_per_feed_buses)
+            | bus_names.str.startswith("fertilizer:")
         )
-        unclassified = nonempty.values & ~is_food_output & ~is_per_feed
+        unclassified = nonempty & ~food_mask & ~per_feed_mask
         if unclassified.any():
-            sample_bus = bus_values[unclassified][0]
+            sample_bus = bus_names[unclassified].iloc[0]
             raise ValueError(
                 f"Sensitivity FCR scaler: animal_production {bus_col} "
                 f"contains an unclassified output bus ({sample_bus!r}). "
                 "Either route it as a food_ carrier (yield-proportional, "
-                "scaled by FCR) or extend known_per_feed_carriers to "
+                "scaled by FCR) or extend known_per_feed_buses to "
                 "cover the new per-feed output type."
             )
-        if not is_food_output.any():
+        if not food_mask.any():
             continue
 
-        target_idx = links.index[is_food_output]
+        target_idx = food_mask.index[food_mask]
         n.links.static.loc[target_idx, eff_col] = (
             n.links.static.loc[target_idx, eff_col].astype(float) * factor
         )
