@@ -113,14 +113,33 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
     for component in components:
         factor = float(resolved[component]["l1_cost_factor"])
         value = resolved[component]["l1_cost"]
-        if factor != 1.0 and value is not None:
-            resolved[component]["l1_cost"] = float(value) * factor
-            logger.info(
-                "Applied deviation_penalty.%s.l1_cost_factor=%.6g -> l1_cost=%.6f",
-                component,
-                factor,
-                resolved[component]["l1_cost"],
+        if factor == 1.0:
+            continue
+        if value is None:
+            # Only the feed component supports l1_cost=null (the documented
+            # "auto-scale feed deviations to Mha-equivalent via animal_scale"
+            # path). The factor's purpose is to scan around a known central
+            # value, but the central value in the null case is computed at
+            # solve time from network baselines (land.l1_cost * area/feed),
+            # which the resolver cannot see. Refuse to silently drop the
+            # factor: force the user to set an explicit numeric l1_cost
+            # (which is what every default and shipped scenario does).
+            raise ValueError(
+                f"deviation_penalty.{component}.l1_cost is null but "
+                f"l1_cost_factor={factor:g} != 1.0. The factor is meant to "
+                "scan around a known central value; with a null l1_cost "
+                "the central value is computed at solve time from network "
+                "baselines and the factor cannot be folded in cleanly. "
+                "Set l1_cost to an explicit numeric value (or 'calibrated') "
+                "before applying a factor."
             )
+        resolved[component]["l1_cost"] = float(value) * factor
+        logger.info(
+            "Applied deviation_penalty.%s.l1_cost_factor=%.6g -> l1_cost=%.6f",
+            component,
+            factor,
+            resolved[component]["l1_cost"],
+        )
 
     return resolved
 
