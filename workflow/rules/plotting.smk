@@ -347,7 +347,7 @@ rule plot_crop_use_breakdown:
 
 rule plot_feed_breakdown:
     input:
-        network="<results>/{name}/solved/model_scen-{scenario}.nc",
+        feed_by_source="<results>/{name}/analysis/scen-{scenario}/feed_by_source.parquet",
     output:
         pdf="<results>/{name}/plots/scen-{scenario}/feed_breakdown.pdf",
         csv="<results>/{name}/plots/scen-{scenario}/feed_breakdown.csv",

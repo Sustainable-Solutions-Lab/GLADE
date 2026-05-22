@@ -194,21 +194,35 @@ Feed Breakdown
 --------------
 
 The feed breakdown shows the composition of dry-matter feed consumed by each
-animal type. This is useful for validating that the model's livestock sector
-produces plausible feed mixes — for example, that ruminants receive
-predominantly grass and roughage while monogastrics rely on grains and protein
-meals.
+animal type, decomposed by **source of supply** (grassland, fodder crops,
+crop residues, food by-products, oilseed cakes, grains, and the various
+exogenous supplies tracked by GLEAM 3.0). This is useful for validating that
+the model's livestock sector produces plausible feed mixes — for example,
+that ruminants receive predominantly grass and crop residues while monogastrics
+rely on grains and protein meals.
+
+The decomposition is performed by ``extract_feed_by_source`` (see
+:doc:`analysis`) which attributes each animal's draw from a feed-category bus
+back to the **upstream** supply on that bus (a previous version of the plot
+labelled the entire ``ruminant_roughage`` bus as "Crop residues", which
+silently conflated actual crop residues with the GLEAM browse-and-leaves
+exogenous-feed mass that lives on the same bus). All quantities are on a
+**dry-matter** basis since every feed bus in the model is uniformly DM.
 
 .. _fig-validation-feed-breakdown:
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_feed_breakdown.png
    :width: 80%
-   :alt: Stacked horizontal bar chart of feed composition by animal type
+   :alt: Stacked horizontal bar chart of feed composition by animal type and source
    :align: center
 
-   Dry-matter feed use (Mt) by animal type and feed category under the
-   validation configuration. Animals are sorted by total feed intake. See
-   :doc:`livestock` for the feed conversion model and category definitions.
+   Dry-matter feed use (Mt) by animal type and supply source under the
+   validation configuration. Animals are sorted by total feed intake.
+   "Exog. forage / browse / swill / protein" lines denote feed mass that
+   GLEAM tracks but the model does not produce endogenously (browse and
+   tree leaves for ruminants, food-waste swill for monogastrics, and the
+   calibration-residual forage/protein supply). See :doc:`livestock` for
+   the feed conversion model and category definitions.
 
 Feed slack from the validation solve drives the calibration pipeline
 described in :ref:`feed-calibration`.

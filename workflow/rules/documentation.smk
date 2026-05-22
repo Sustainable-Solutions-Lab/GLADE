@@ -736,7 +736,7 @@ rule doc_fig_validation_slack_overview:
 rule doc_fig_validation_feed_breakdown:
     """Generate feed breakdown figure for validation."""
     input:
-        network=f"<results>/{DOC_VAL_NAME}/solved/model_scen-default.nc",
+        feed_by_source=f"<results>/{DOC_VAL_NAME}/analysis/scen-default/feed_by_source.parquet",
         style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/validation_feed_breakdown.svg",

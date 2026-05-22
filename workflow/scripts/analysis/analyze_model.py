@@ -46,6 +46,7 @@ from workflow.scripts.analysis.extract_statistics import (
     extract_crop_production,
     extract_feed_by_animal,
     extract_feed_by_category,
+    extract_feed_by_source,
     extract_food_consumption,
     extract_food_group_consumption,
     extract_land_use,
@@ -119,6 +120,7 @@ def run_analysis(
     food_group_consumption = extract_food_group_consumption(n)
     feed_by_category = extract_feed_by_category(n)
     feed_by_animal = extract_feed_by_animal(n)
+    feed_by_source = extract_feed_by_source(n)
 
     # --- Food prices ---
     logger.info("Extracting food prices...")
@@ -200,6 +202,7 @@ def run_analysis(
         "health_attribution": health_attribution,
         "feed_by_category": feed_by_category,
         "feed_by_animal": feed_by_animal,
+        "feed_by_source": feed_by_source,
         "luc_breakdown": luc_breakdown,
         "baseline_deviation": baseline_deviation,
         "food_prices": food_prices,

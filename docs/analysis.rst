@@ -98,6 +98,28 @@ Has the same columns as ``food_consumption.parquet``, except with ``food_group``
 instead of ``food``. Food groups aggregate related foods (e.g., ``cereals``,
 ``fruits``, ``red_meat``) for higher-level analysis.
 
+**feed_by_source.parquet** — Animal feed consumption decomposed by supply source
+
+Each row attributes a portion of an animal-class draw from a feed-category bus
+back to the upstream supply on that bus, using the bus's source mix as
+attribution weights. All quantities are on a dry-matter basis (every feed bus
+in the model is uniformly DM). Trade flows between countries net out at the
+global level for a given feed_category and are excluded from the source list;
+attribution is to primary (non-trade) inflows.
+
+.. csv-table::
+   :header: "Column", "Type", "Unit", "Description"
+
+   ``product``, str, –, "Raw animal product name (e.g., ``meat-cattle``, ``dairy``, ``eggs``)"
+   ``animal``, str, –, "Animal-class display label (e.g., ``Cattle``, ``Sheep``)"
+   ``feed_category``, str, –, "Raw feed category at the animal_production input (``ruminant_forage``, ``monogastric_low_quality``, etc.)"
+   ``source_key``, str, –, "Stable internal source identifier; one of ``grassland``, ``residue``, ``fodder_crop``, ``grain_crop``, ``protein_crop``, ``food_byproduct``, ``exog_forage_cal``, ``exog_protein_cal``, ``exog_browse``, ``exog_swill``, ``exog_other``"
+   ``source``, str, –, "Human-readable source label (e.g., ``Crop residues``, ``Exog. browse / leaves``)"
+   ``mt_dm``, float, Mt DM, "Attributed feed mass (dry matter)"
+
+``feed_by_category.parquet`` and ``feed_by_animal.parquet`` are coarser views
+(by feed category alone, or by animal alone) that drop the source breakdown.
+
 Example Usage
 ~~~~~~~~~~~~~
 

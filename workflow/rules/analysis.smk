@@ -51,6 +51,7 @@ _ANALYSIS_OUTPUTS = {
     "health_attribution": "<results>/{name}/analysis/scen-{scenario}/health_attribution.parquet",
     "feed_by_category": "<results>/{name}/analysis/scen-{scenario}/feed_by_category.parquet",
     "feed_by_animal": "<results>/{name}/analysis/scen-{scenario}/feed_by_animal.parquet",
+    "feed_by_source": "<results>/{name}/analysis/scen-{scenario}/feed_by_source.parquet",
     "luc_breakdown": "<results>/{name}/analysis/scen-{scenario}/luc_breakdown.parquet",
     "baseline_deviation": "<results>/{name}/analysis/scen-{scenario}/baseline_deviation.parquet",
     "food_prices": "<results>/{name}/analysis/scen-{scenario}/food_prices.parquet",

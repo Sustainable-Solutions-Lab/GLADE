@@ -5,18 +5,19 @@
 
 """Generate validation feed breakdown figure for documentation.
 
-Shows dry-matter feed use by animal type and feed category as stacked
-horizontal bars with doc figure styling.
+Shows dry-matter feed use by animal type and supply source as stacked
+horizontal bars with doc figure styling. Reads from the
+``feed_by_source.parquet`` produced by ``extract_statistics``.
 """
 
 import logging
 
 import matplotlib
+import pandas as pd
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import pypsa
 
 from workflow.scripts.doc_figures_config import (
     FIGURE_WIDTH,
@@ -27,8 +28,7 @@ from workflow.scripts.doc_figures_config import (
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.plotting.color_utils import categorical_colors
 from workflow.scripts.plotting.plot_feed_breakdown import (
-    FEED_COLOR_OVERRIDES,
-    _extract_feed_use,
+    SOURCE_COLOR_OVERRIDES,
     _pivot_for_plot,
 )
 
@@ -51,20 +51,20 @@ def _plot(wide, output_svg, output_png):
         )
         ax.axis("off")
     else:
-        categories = list(wide.columns)
-        colors = categorical_colors(categories, overrides=FEED_COLOR_OVERRIDES)
-        left = wide.iloc[:, 0] * 0  # Series of zeros
+        sources = list(wide.columns)
+        colors = categorical_colors(sources, overrides=SOURCE_COLOR_OVERRIDES)
+        left = wide.iloc[:, 0] * 0
 
-        for cat in categories:
-            values = wide[cat]
+        for src in sources:
+            values = wide[src]
             ax.barh(
                 wide.index,
                 values,
                 left=left,
-                color=colors[cat],
+                color=colors[src],
                 edgecolor="white",
                 linewidth=0.5,
-                label=cat,
+                label=src,
             )
             left = left + values
 
@@ -73,7 +73,7 @@ def _plot(wide, output_svg, output_png):
         ax.invert_yaxis()
         ax.grid(axis="x", alpha=0.3)
         ax.legend(
-            title="Feed category",
+            title="Feed source",
             fontsize=FONT_SIZES["legend"],
             title_fontsize=FONT_SIZES["legend"],
             bbox_to_anchor=(0.5, -0.12),
@@ -91,10 +91,8 @@ def _plot(wide, output_svg, output_png):
 def main() -> None:
     setup_script_logging(snakemake.log[0])  # type: ignore[name-defined]
 
-    network = pypsa.Network(snakemake.input.network)
-
-    feed_long = _extract_feed_use(network)
-    wide = _pivot_for_plot(feed_long)
+    feed_by_source = pd.read_parquet(snakemake.input.feed_by_source)
+    wide = _pivot_for_plot(feed_by_source)
 
     _plot(
         wide,
