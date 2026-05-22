@@ -496,8 +496,8 @@ def fix_food_consumption_to_baseline(
     # even tiny mismatches between baseline totals and per-capita caps
     # would cause hard infeasibility. The caps only constrain free-diet
     # optimization, not baseline validation.
-    store_idx = n.stores.static.index
-    group_stores = store_idx[store_idx.astype(str).str.startswith("store:group:")]
+    stores = n.stores.static
+    group_stores = stores.index[stores["carrier"].str.startswith("group_", na=False)]
     if not group_stores.empty:
         n.stores.static.loc[group_stores, "e_nom_max"] = np.inf
 
@@ -820,9 +820,13 @@ def add_residue_feed_constraints(
     link_p = m.variables["Link-p"].sel(snapshot="now")
     links_df = n.links.static
 
-    # Find residue feed links (carrier="feed_conversion", bus0 starts with "residue:")
+    # Find residue feed links: feed_conversion links whose input bus is a
+    # residue bus (carrier residue_*). Resolved via bus0.map(buses.carrier)
+    # rather than parsing the bus name, so the convention can change in one
+    # place if needed.
+    bus_carrier = n.buses.static["carrier"]
     feed_mask = (links_df["carrier"] == "feed_conversion") & (
-        links_df["bus0"].str.startswith("residue:")
+        links_df["bus0"].map(bus_carrier).str.startswith("residue_", na=False)
     )
     feed_links_df = links_df[feed_mask]
 
