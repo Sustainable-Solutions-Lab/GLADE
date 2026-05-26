@@ -133,9 +133,8 @@ objective.
    reading: even at ``baseline``, this tutorial's model uses less land
    than the real world and produces net-negative emissions by default.
    Serious studies "coerce" the model toward observed production using
-   ``deviation_penalty`` (see ``config/sensitivity.yaml``
-   and ``config/gsa.yaml``) or hard constraints (see
-   ``config/validation.yaml``). The tutorial omits both to keep the
+   ``deviation_penalty`` (see ``config/gsa.yaml``) or hard constraints
+   (see ``config/validation.yaml``). The tutorial omits both to keep the
    config short.
 
 Part 1 — Summary
@@ -293,10 +292,26 @@ Where to go from here
 You have now solved two small scenario sets, inspected the output files, and
 built a handful of comparisons by hand. Some natural next steps:
 
-* **Scale up the GHG price sweep.** ``config/sensitivity.yaml`` and
-  ``config/ghg_yll_grid.yaml`` do the same thing at full resolution, with
-  log-spaced GHG prices generated programmatically via the
-  :doc:`scenario generator DSL <configuration>`.
+* **Scale up the GHG price sweep.** Rather than listing prices by hand,
+  generate them programmatically with the
+  :doc:`scenario generator DSL <configuration>` -- for example a log-spaced
+  sweep from 5 to 500 USD/tCO2-eq:
+
+  .. code-block:: yaml
+
+     scenarios:
+       _generators:
+         - name: "ghg_{ghg}"
+           parameters:
+             ghg:
+               space: log
+               start: 5
+               stop: 500
+               num: 10
+               round: true
+           template:
+             emissions:
+               ghg_price: "{ghg}"
 * **Turn on health costs.** :doc:`health` describes the Global Burden of
   Disease integration and how ``health.value_per_yll`` prices diet-related
   disease burden alongside the environmental objectives.

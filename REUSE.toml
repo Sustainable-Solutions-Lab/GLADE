@@ -5,7 +5,7 @@
 version = 1
 SPDX-PackageName = "food-opt"
 SPDX-PackageSupplier = "Koen van Greevenbroek"
-SPDX-PackageDownloadLocation = "https://github.com/koen-vg/food-opt"
+SPDX-PackageDownloadLocation = "https://github.com/Sustainable-Solutions-Lab/food-opt"
 
 [[annotations]]
 path = [

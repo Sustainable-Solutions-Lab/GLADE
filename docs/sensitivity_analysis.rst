@@ -865,8 +865,7 @@ notebooks (policy sweeps, uncertainty-band plots).
    When a sweep solves outside Snakemake (typically the cluster path
    driven by ``tools/batch-solve``; see :doc:`cluster_execution`), set
    ``sensitivity_analysis.discover_scenarios_on_disk: true`` in the
-   config (already set in ``config/gsa.yaml`` and
-   ``config/gsa_fixed_diet.yaml``).  With the flag on, the surrogate-fit
+   config (already set in ``config/gsa.yaml``).  With the flag on, the surrogate-fit
    rule scans the analysis directory and fits over scenarios with
    complete outputs on disk, dropping the small fraction that may have
    hit per-solve TimeLimit.  The rule errors out if more than 50 % of

@@ -118,8 +118,8 @@ Preconditions for sensible duals
 
 Three model details are easy to overlook and each can pollute the extracted
 duals if it goes wrong. They are the reason the documentation baseline
-configuration looks the way it does (see ``docs/config/doc_figures.yaml`` and
-``config/central.yaml``'s ``baseline`` scenario).
+configuration looks the way it does (see ``docs/config/doc_figures.yaml``'s
+``baseline`` scenario).
 
 1. **The fixed diet must be supplyable.** If the model cannot deliver the
    baseline consumption of food *f* in country *c* through real production
