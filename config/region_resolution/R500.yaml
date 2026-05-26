@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Spatial-resolution sensitivity (500 regions).
+# Mirrors central.yaml's solve-time setup at the central
+# (GHG=50, YLL=5000) operating point. The full grid lives in
+# config/region_resolution/R{250,500,750,1000,1500,2000}.yaml and
+# is consumed by ../paper/scripts/si_region_resolution_*.py.
+
+name: "region_resolution_R500"
+
+aggregation:
+  regions:
+    target_count: 500
+
+scenarios:
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  central:
+    emissions:
+      ghg_price: 100
+    health:
+      value_per_yll: 5000
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+planning_horizon: 2020
+baseline_year: 2020
+
+food_utility_piecewise:
+  enabled: true
+
+validation:
+  use_actual_yields: true
+
+deviation_penalty:
+  enabled: true
+  penalty_mode: "l1"
+  deviation_type: "absolute"
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 4
+  mem_mb: 10000
+  runtime: 60
