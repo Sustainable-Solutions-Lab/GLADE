@@ -175,3 +175,38 @@ def test_sobol_columns_unknown_name_raises(analysis_dir):
 
 def test_expand_vector_column_separator_is_dot():
     assert expand_vector_column("foods", "wheat") == "foods.wheat"
+
+
+def test_pivot_row_expands_wide_single_row_parquet(tmp_path: Path):
+    """``pivot_row`` should turn each column of a 1-row parquet into a
+    vector element, skipping pandas' ``__index_level_*__`` artefact."""
+    base = tmp_path / "analysis"
+    (base / "scen-s0").mkdir(parents=True)
+    (base / "scen-s1").mkdir(parents=True)
+    pd.DataFrame(
+        {"crop_production": [100.0], "trade": [10.0], "health_burden": [5.0]}
+    ).to_parquet(base / "scen-s0" / "objective_breakdown.parquet")
+    pd.DataFrame({"crop_production": [120.0], "ghg_cost": [-50.0]}).to_parquet(
+        base / "scen-s1" / "objective_breakdown.parquet"
+    )
+
+    specs = parse_outputs_spec(
+        {
+            "obj": _spec(
+                kind="vector",
+                source="objective_breakdown.parquet",
+                reducer="pivot_row",
+            )
+        }
+    )
+    df = load_scenario_outputs(base, ["s0", "s1"], specs)
+
+    # Union of categories across scenarios, sorted, zero-filled.
+    expected = {"obj.crop_production", "obj.ghg_cost", "obj.health_burden", "obj.trade"}
+    assert expected.issubset(set(df.columns))
+    # ``__index_level_*__`` must not leak through.
+    assert not any(c.startswith("obj.__") for c in df.columns)
+    np.testing.assert_array_equal(df["obj.crop_production"].values, [100.0, 120.0])
+    np.testing.assert_array_equal(df["obj.ghg_cost"].values, [0.0, -50.0])
+    np.testing.assert_array_equal(df["obj.health_burden"].values, [5.0, 0.0])
+    np.testing.assert_array_equal(df["obj.trade"].values, [10.0, 0.0])

@@ -225,6 +225,28 @@ def _filter_sum(
     return float(values[mask].sum())
 
 
+@register("pivot_row")
+def _pivot_row(path: Path) -> dict[str, float]:
+    """Expand each column of a single-row parquet into a vector element.
+
+    Vector reducer for wide-format outputs like ``objective_breakdown.parquet``,
+    where every column is a separate category and there's exactly one row.
+    Returns ``{}`` for missing/empty parquets so the scenario stays observable.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    table = pq.read_table(path)
+    if table.num_rows == 0:
+        return {}
+    # Skip ``__index_level_*__`` artefacts that pandas writes when no
+    # index name is set, so the surrogate target list stays clean.
+    return {
+        name: float(table.column(i)[0].as_py())
+        for i, name in enumerate(table.column_names)
+        if not name.startswith("__")
+    }
+
+
 @register("pivot_column")
 def _pivot_column(path: Path, *, key_col: str, value_col: str) -> dict[str, float]:
     """Group ``value_col`` by ``key_col``, summing duplicate keys.

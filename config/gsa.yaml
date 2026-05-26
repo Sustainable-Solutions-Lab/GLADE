@@ -216,6 +216,17 @@ sensitivity_analysis:
         colsample_bytree: 0.8
         min_child_weight: 5
         early_stopping_rounds: 50
+  # Deep-merged with default.yaml's outputs: adds every objective-breakdown
+  # category as its own surrogate column (objective_breakdown.crop_production,
+  # objective_breakdown.health_burden, ...), so figures can recover producer
+  # cost separately from internalised YLL/GHG terms and consumer values.
+  outputs:
+    objective_breakdown:
+      kind: vector
+      source: objective_breakdown.parquet
+      reducer: pivot_row
+      label: Objective breakdown
+      units: bn USD
 
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
