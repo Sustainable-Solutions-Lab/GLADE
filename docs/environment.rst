@@ -708,7 +708,7 @@ The per-hectare land-use change factor (LEF) for **conversion** is split by cove
 
    \mathrm{LEF}_{\mathrm{crop,forest}} = \frac{P_{\mathrm{crop,forest}}}{H}, \quad \mathrm{LEF}_{\mathrm{crop,nonforest}} = \frac{P_{\mathrm{crop,nonforest}}}{H}
 
-and similarly for pasture. Here :math:`H` is the amortization horizon in years (configured via ``luc.horizon_years``, default 25 years). Spreading the one-off pulse over this period converts a stock change into an annualised flow that is comparable to the other per-year emission terms in the model. Each cover type also gets a **conversion share** — the fraction of convertible (non-agricultural) land that is forest vs. non-forest — which caps the capacity of the corresponding conversion link in the model.
+and similarly for pasture. Here :math:`H` is the amortization horizon in years (configured via ``luc.horizon_years``, default 30 years, chosen to match the Cook-Patton regrowth window used for spared-land sequestration). Spreading the one-off pulse over this period converts a stock change into an annualised flow that is comparable to the other per-year emission terms in the model. Each cover type also gets a **conversion share** -- the fraction of convertible (non-agricultural) land that is forest vs. non-forest -- which caps the capacity of the corresponding conversion link in the model.
 
 The LEF for **spared land** provides sequestration credits through regrowth:
 

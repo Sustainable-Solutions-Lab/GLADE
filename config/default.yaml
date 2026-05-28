@@ -185,7 +185,7 @@ land:
   land_use_cost_usd_per_ha: 0.0 # Small optional per-hectare land-use cost to regularize land allocation (set >0 to activate)
   conversion_cost_forest_usd_per_ha: 8000 # Overnight investment cost for converting forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
   conversion_cost_nonforest_usd_per_ha: 2000 # Overnight investment cost for converting non-forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
-  investment_horizon: 25 # Years over which to annualize land conversion investment costs
+  investment_horizon: 30 # Years over which to annualize land conversion investment costs (harmonized with luc.horizon_years and the ~30-year Cook-Patton regrowth window)
   discount_rate: 0.05 # Annual discount rate for annualizing land conversion investment costs
   filtering:
     min_crop_yield_t_per_ha: 0.01      # Minimum yield for crop links (t/ha); filters ~1% of entries
@@ -248,7 +248,7 @@ emissions:
 
 # --- section: land use change ---
 luc:
-  horizon_years: 25
+  horizon_years: 30  # Pulse-emissions amortization window; matched to the ~30-year Cook-Patton regrowth mean used for spared-land sequestration credits.
   managed_flux_mode: "zero"
   forest_fraction_threshold: 0.2  # Minimum forest fraction (0-1) to apply regrowth sequestration
   savanna_pvc_threshold: 75  # MgC/ha potential vegetation carbon; Hayek et al. 2024 threshold for closed vs open savanna

@@ -290,7 +290,7 @@ Since these are one-time investment costs, they are annualized using a **capital
 
    \text{CRF} = \frac{r}{1 - (1 + r)^{-n}}
 
-where *r* is the discount rate (``discount_rate``, default 0.05) and *n* is the investment horizon (``investment_horizon``, default 25 years, matching the LUC emissions horizon). The annualized cost is then converted to model units (bnUSD/Mha) and applied to the conversion links.
+where *r* is the discount rate (``discount_rate``, default 0.05) and *n* is the investment horizon (``investment_horizon``, default 30 years, matching the LUC emissions horizon). The annualized cost is then converted to model units (bnUSD/Mha) and applied to the conversion links.
 
 **Sources and rationale for default cost values.**
 Direct estimates of the full private cost of converting land to crop-ready agriculture are sparse in the academic literature, which tends to focus on opportunity costs and returns from conversion rather than upfront clearing expenditure. The default values are chosen as middle-of-the-road estimates based on the following sources (original values inflation-adjusted to approximate 2024 USD where needed):
