@@ -233,7 +233,7 @@ rule plot_health_impacts:
         health_cluster_summary="<processing>/{name}/health/cluster_summary.csv",
         health_clusters="<processing>/{name}/health/country_clusters.csv",
         health_cluster_risk_baseline="<processing>/{name}/health/cluster_risk_baseline.csv",
-        derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
+        tmrel="<processing>/{name}/health/tmrel.csv",
         population="<processing>/{name}/population.csv",
         food_groups="data/curated/food_groups.csv",
     params:

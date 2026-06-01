@@ -83,7 +83,7 @@ def run_scenario(
             health_cause_log_path=smk.input.health_cause_log,
             health_clusters_path=smk.input.health_clusters,
             population_path=smk.input.population,
-            derived_tmrel_path=smk.input.health_derived_tmrel,
+            tmrel_path=smk.input.health_tmrel,
             ghg_price=float(smk.params.ghg_price),
             ch4_gwp=float(smk.params.ch4_gwp),
             n2o_gwp=float(smk.params.n2o_gwp),

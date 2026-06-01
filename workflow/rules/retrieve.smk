@@ -1099,6 +1099,30 @@ rule download_hayek_reforestation_pvc:
         """
 
 
+rule retrieve_burden_of_proof:
+    """Download GBD 2023 dietary RR curves from the IHME Burden-of-Proof tool.
+
+    Config-independent: fetches every mapped (risk, cause) pair the tool offers
+    (config.health.gbd_rei_id x gbd_cause_id). No login required; passes the
+    Cloudflare edge check with a browser User-Agent. IHME data are
+    non-redistributable, so the output lives in the gitignored download cache.
+    Run manually; do not auto-rerun.
+    """
+    params:
+        health=config["health"],
+    output:
+        curves="data/downloads/burden_of_proof/bop_rr_curves.csv",
+    resources:
+        runtime="15m",
+        mem_mb=200,
+    log:
+        "<logs>/shared/retrieve_burden_of_proof.log",
+    benchmark:
+        "<benchmarks>/shared/retrieve_burden_of_proof.tsv"
+    script:
+        "../scripts/retrieve_burden_of_proof.py"
+
+
 rule retrieve_eurostat_fodder:
     input:
         m49_codes="data/curated/M49-codes.csv",

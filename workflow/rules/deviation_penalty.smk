@@ -27,7 +27,7 @@ if _dp_cal_cfg["generate"]:
             health_cause_log=f"<processing>/{name}/health/cause_log_breakpoints.csv",
             health_cluster_summary=f"<processing>/{name}/health/cluster_summary.csv",
             health_clusters=f"<processing>/{name}/health/country_clusters.csv",
-            health_derived_tmrel=f"<processing>/{name}/health/derived_tmrel.csv",
+            health_tmrel=f"<processing>/{name}/health/tmrel.csv",
             health_cluster_risk_baseline=f"<processing>/{name}/health/cluster_risk_baseline.csv",
             nutrition="data/curated/nutrition.csv",
         output:

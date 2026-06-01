@@ -43,15 +43,20 @@ increases with intake.
 Theoretical Minimum Risk Exposure Level (TMREL)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The **TMREL**, denoted :math:`\bar{x}`, is the intake level that minimises
-disease risk. We define:
+The **TMREL**, denoted :math:`\bar{x}`, is the counterfactual minimum-risk
+intake. We define:
 
 .. math::
    \mathrm{RR}_d^{\mathrm{ref}} = \mathrm{RR}_d(\bar{x})
 
-as the reference relative risk at optimal intake. For protective foods, TMREL
-corresponds to high intake where the RR curve reaches its minimum. For harmful
-foods, TMREL is typically zero.
+as the reference relative risk at optimal intake. TMREL values are taken
+directly from the GBD 2023 appendix (curated ``rr_tmrel.csv``), not derived
+from the curves: for protective foods it is a high real-world intake (e.g.
+fruits 340-350 g/day), and for harmful foods it is typically zero. Each RR
+curve is **clipped at its TMREL** so that intake beyond the TMREL yields no
+further benefit (protective) and intake below it none (harmful). This keeps
+the health cost non-negative and bounded, and avoids crediting implausibly
+high intakes.
 
 Population Attributable Fraction (PAF)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -131,11 +136,19 @@ where :math:`r` indexes risk factors and :math:`x_r` is the intake for each.
 Age-Specific Relative Risk
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The GBD provides **age-specific** relative risk values for cardiovascular
-outcomes (CHD, Stroke), where the protective or harmful effect of dietary risk
-factors **attenuates with age**. For example, at 300 g/day of fruit intake,
-:math:`\mathrm{RR}_{\mathrm{CHD}}` is 0.85 for ages 25–29 but 0.93 for ages
-75+. In contrast, T2DM and CRC have identical RR across all age groups.
+Relative risk for cardiovascular outcomes (CHD, Stroke) **attenuates with
+age**: the protective or harmful effect of dietary risk factors weakens in
+older age groups. T2DM and CRC have identical RR across all age groups.
+
+The Burden of Proof tool serves only age-aggregated ("All Ages") curves, so
+the age structure is reconstructed. The attenuation is multiplicative in
+log-RR and essentially exposure-independent, so each all-ages curve is
+expanded as :math:`\mathrm{RR}_{a}(x) = \exp(\beta_{a} \cdot \log
+\mathrm{RR}(x))`, with the per-(cause, age) factor :math:`\beta_a` taken from
+the curated ``rr_age_attenuation.csv`` (age shape from the GBD 2019 RR
+appendix, normalized to GBD's 60-64 reference age group -- the age to which
+GBD assigns the estimated risk curve, so the BoP "All Ages" curve is the RR at
+60-64; :math:`\beta = 1` for T2DM and CRC).
 
 Since most years of life lost (YLL) from cardiovascular diseases come from
 older age groups, using the youngest age group's RR would systematically
@@ -297,12 +310,13 @@ Appendix 1, p. 171).
   sugar-sweetened beverages, which are not represented in the model
   and thus not included here. No relative risk factors are given for
   total added sugar intake.
-- **TMREL values**: Derived from relative risk curves, not taken from the table
-  above (see :ref:`tmrel-derivation`)
-- **Age range**: Risk factors evaluated for adults ≥25 years
-  (``health.intake_age_min``). Age-specific RR curves are extracted for all
-  15 adult age groups (25–29 through 95+) and combined into YLL-weighted
-  effective RR curves per health cluster (see :ref:`age-specific-rr`).
+- **TMREL values**: Taken from the GBD 2023 appendix (curated ``rr_tmrel.csv``),
+  used to clip the curves (see :ref:`tmrel-derivation`)
+- **Age range**: Risk factors evaluated for adults >=25 years
+  (``health.intake_age_min``). The all-ages BoP curves are expanded to all
+  15 adult age groups (25-29 through 95+) via the curated age-attenuation
+  table and combined into YLL-weighted effective RR curves per health
+  cluster (see :ref:`age-specific-rr`).
 - **Intake units**: Per-group basis matches the baseline-diet pipeline
   output (model basis; see :doc:`current_diets`). GBD exposure is
   converted to that basis at load time via ``diet.source_basis`` and
@@ -311,24 +325,26 @@ Appendix 1, p. 171).
   substituting GBD dose-response curves with log-linear curves from literature
   meta-analyses on a per-risk-factor basis. By default, red meat uses literature
   estimates (Bechthold et al. 2019 for CHD/Stroke, Li et al. 2024 for T2DM,
-  Chan et al. 2011 for CRC) with GBD age-attenuation factors applied. The
+  Chan et al. 2011 for CRC) with the curated age-attenuation factors applied. The
   log-linear assumption means ``RR(x) = RR_{per\,unit}^{x/unit}``. Confidence
   intervals propagate through the GSA quantile architecture via ``log_rr_low``
   and ``log_rr_high`` columns in the breakpoint tables.
 
 .. _tmrel-derivation:
 
-TMREL Derivation
-~~~~~~~~~~~~~~~~
+TMREL and Curve Clipping
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Rather than using the published TMREL ranges from the table above, the
-model derives TMREL values directly from the GBD relative risk curves.
-For each risk factor, the derived TMREL is the intake level :math:`x`
-that minimises the product of :math:`\mathrm{RR}_d(x)` across all
-associated disease causes :math:`x`, evaluated on the empirical
-exposure points in the RR data. This approach ensures consistency
-between the TMREL used in health cost calculations and the underlying
-dose–response curves.
+TMREL values are taken from the GBD 2023 appendix (Table 18) and stored in the
+curated ``rr_tmrel.csv`` (GBD intake basis; converted to model basis at build
+time, alongside the per-risk ``tmrel.csv`` consumed downstream). Each
+``(risk_factor, cause)`` curve is then **clipped at its TMREL**: for protective
+risks the curve is truncated at the TMREL so intake beyond it gives no further
+benefit; for harmful risks it is truncated below the TMREL. Because the
+reference :math:`\mathrm{RR}_d^{\mathrm{ref}} = \mathrm{RR}_d(\bar{x})` is the
+plateau value, the modelled health cost is non-negative everywhere and zero on
+the no-burden side of the TMREL, so the optimiser is never rewarded for
+pushing intake to implausible levels.
 
 Implementation Strategy
 -----------------------

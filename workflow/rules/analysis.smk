@@ -180,7 +180,7 @@ else:
             health_cause_log="<processing>/{name}/health/cause_log_breakpoints.csv",
             health_clusters="<processing>/{name}/health/country_clusters.csv",
             population="<processing>/{name}/population.csv",
-            derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
+            tmrel="<processing>/{name}/health/tmrel.csv",
             analysis_scripts=_ANALYSIS_SCRIPTS,
         params:
             ghg_price=lambda w: get_effective_config(w.scenario)["emissions"][

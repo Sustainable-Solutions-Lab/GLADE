@@ -87,7 +87,7 @@ def run_analysis(
     health_cause_log_path: str,
     health_clusters_path: str,
     population_path: str,
-    derived_tmrel_path: str,
+    tmrel_path: str,
     ghg_price: float,
     ch4_gwp: float,
     n2o_gwp: float,
@@ -173,7 +173,7 @@ def run_analysis(
             "health_cause_log": health_cause_log_path,
             "health_clusters": health_clusters_path,
             "population": population_path,
-            "derived_tmrel": derived_tmrel_path,
+            "tmrel": tmrel_path,
         }
     )
     health_marginals = compute_health_marginals(n, health_data, risk_factors)
@@ -277,7 +277,7 @@ def main() -> None:
         health_cause_log_path=snakemake.input.health_cause_log,
         health_clusters_path=snakemake.input.health_clusters,
         population_path=snakemake.input.population,
-        derived_tmrel_path=snakemake.input.derived_tmrel,
+        tmrel_path=snakemake.input.tmrel,
         ghg_price=float(snakemake.params.ghg_price),
         ch4_gwp=float(snakemake.params.ch4_gwp),
         n2o_gwp=float(snakemake.params.n2o_gwp),

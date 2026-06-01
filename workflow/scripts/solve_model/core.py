@@ -1609,7 +1609,7 @@ def run_solve(
                 value_per_yll,
                 smk.input.health_cluster_risk_baseline,
                 rr_quantiles=rr_quantiles,
-                tmrel_path=smk.input.health_derived_tmrel,
+                tmrel_path=smk.input.health_tmrel,
             )
 
     # Export fully-constructed model to MPS for Gurobi parameter tuning
@@ -1781,7 +1781,7 @@ def run_solve(
                 risk_factors=smk.params.health_risk_factors,
                 risk_cause_map=smk.params.health_risk_cause_map,
                 rr_quantiles=rr_quantiles,
-                tmrel_path=smk.input.health_derived_tmrel,
+                tmrel_path=smk.input.health_tmrel,
             )
 
         # Free the linopy model; all values have been assigned.

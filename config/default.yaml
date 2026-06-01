@@ -1195,11 +1195,26 @@ health:
   risk_cause_map:
     fruits: [CHD, Stroke, T2DM]
     vegetables: [CHD, Stroke]
-    nuts_seeds: [CHD, T2DM]
+    nuts_seeds: [CHD]  # GBD 2023 BoP no longer links nuts/seeds to T2DM
     legumes: [CHD]
     red_meat: [CHD, Stroke, T2DM, CRC]
     whole_grains: [CHD, Stroke, T2DM, CRC]
     # sugar: [CHD, Stroke, T2DM, CRC]
+  # GBD identifiers driving the Burden-of-Proof retrieval: rei_id per risk
+  # factor and cause_id per cause. Stable across configs; used by
+  # retrieve_burden_of_proof and the id mapping in prepare_relative_risks.
+  gbd_rei_id:
+    fruits: 111
+    vegetables: 112
+    nuts_seeds: 114
+    legumes: 333
+    red_meat: 116
+    whole_grains: 113
+  gbd_cause_id:
+    CHD: 493        # Ischemic heart disease
+    Stroke: 495     # Ischemic stroke
+    T2DM: 976       # Diabetes mellitus type 2
+    CRC: 441        # Colon and rectum cancer
   # Per risk-factor overrides using log-linear RR from literature CSV files.
   # When a risk factor maps to a CSV path, the GBD dose-response curve is replaced
   # with a log-linear curve derived from the CSV, age-corrected using relative

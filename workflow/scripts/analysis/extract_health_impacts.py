@@ -58,7 +58,7 @@ def load_health_data(inputs: dict) -> HealthData:
         cause_log_breakpoints=pd.read_csv(inputs["health_cause_log"]),
         country_clusters=pd.read_csv(inputs["health_clusters"]),
         population=pd.read_csv(inputs["population"]),
-        tmrel=pd.read_csv(inputs["derived_tmrel"]),
+        tmrel=pd.read_csv(inputs["tmrel"]),
     )
 
 

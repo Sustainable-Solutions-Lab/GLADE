@@ -770,28 +770,27 @@ IHME GBD 2023 -- Mortality Rates
 
 .. _ihme-relative-risks:
 
-IHME GBD 2019 -- Relative Risk Curves
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+IHME GBD 2023 Burden of Proof -- Dietary Relative-Risk Curves
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Provider**: Institute for Health Metrics and Evaluation (IHME)
 
-**Description**: Appendix Table 7a from the Global Burden of Disease Study 2019, listing relative risks by dietary risk factor, outcome, age, and exposure level.
+**Description**: Age-aggregated exposure-response (relative risk vs. intake) curves for each dietary risk factor and cause, from the GBD 2023 Burden of Proof analysis. One curve per ``(risk_factor, cause)`` pair, with mean and 95% uncertainty interval over an intake grid.
 
-**Version**: GBD 2019; XLSX workbook
+**Version**: GBD 2023 (served by the Burden of Proof tool); JSON API
 
-**Access**: https://ghdx.healthdata.org/record/ihme-data/gbd-2019-relative-risks
+**Access**: https://vizhub.healthdata.org/burden-of-proof/
 
-**License**: Free for non-commercial use with attribution (IHME Free-of-Charge Non-commercial User Agreement)
+**License**: Free for non-commercial use with attribution (IHME Free-of-Charge Non-commercial User Agreement). **Non-redistributable**: the downloaded curves are gitignored (``data/downloads/burden_of_proof/``) and must be fetched per user.
 
-**Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Results. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2020.
+**Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2023 (GBD 2023) Burden of Proof Risk Function estimates. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2025.
 
-**Retrieval**: Automatically processed via ``workflow/scripts/prepare_relative_risks.py``
+**Retrieval**: The ``retrieve_burden_of_proof`` rule (``workflow/scripts/retrieve_burden_of_proof.py``) downloads the curves automatically -- **no login required**. The Burden of Proof data endpoints sit behind a Cloudflare edge bot-check only, which a normal browser User-Agent passes from a residential/university IP (automated cloud IPs may get a 403; run the rule from a normal machine if so). The risk/cause GBD identifiers come from ``config.health.gbd_rei_id`` / ``gbd_cause_id``. ``prepare_relative_risks.py`` then converts the exposure axis to the model basis, clips each curve at the TMREL, and restores the GBD age structure (see the curated tables below).
 
-**Manual download steps**:
+Two companion tables under ``data/curated/health/`` are our own derived results (committed; see the model health documentation for the method):
 
-1. Navigate to https://ghdx.healthdata.org/record/ihme-data/gbd-2019-relative-risks.
-2. Under the Files tab, locate and download the "Relative risks: all risk factors except for ambient air pollution, alcohol, smoking, and temperature [XLSX]" file; it will be named ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX``. Log in to your IHME account when requested.
-3. Place the downloaded file under ``data/manually_downloaded``; no need to rename.
+* ``rr_age_attenuation.csv`` -- per ``(risk_factor, cause, age)`` multiplicative log-RR attenuation. The Burden of Proof tool serves only all-ages curves, so the age structure is reconstructed: the age *shape* is the GBD 2019 RR appendix (indirect; ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX``), normalized to GBD's 60-64 reference age group (the median age-at-event of the cardiovascular age trend, to which GBD assigns the estimated risk curve), so the BoP "All Ages" curve is reproduced at age 60-64. Regenerated once via ``workflow/scripts/generate_rr_age_attenuation.py``.
+* ``rr_tmrel.csv`` -- theoretical minimum risk exposure level per risk factor, from GBD 2023 appendix Table 18 (in GBD intake basis; converted to model basis at build time). ``red_meat`` is treated as monotonic-harmful (TMREL 0) to match its literature override.
 
 .. _ihme-diet-risk-exposure:
 

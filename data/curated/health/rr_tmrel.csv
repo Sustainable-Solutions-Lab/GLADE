@@ -1,0 +1,7 @@
+risk_factor,risk_type,tmrel_low,tmrel_high,source
+fruits,protective,340,350,GBD 2023 appendix Table 18
+vegetables,protective,306,372,GBD 2023 appendix Table 18
+whole_grains,protective,160,210,GBD 2023 appendix Table 18
+nuts_seeds,protective,19,24,GBD 2023 appendix Table 18
+legumes,protective,100,110,GBD 2023 appendix Table 18
+red_meat,harmful,0,0,monotonic-harmful literature override (appendix J-shaped 0-200 g/day not used)

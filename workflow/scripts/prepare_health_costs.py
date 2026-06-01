@@ -426,45 +426,6 @@ def _build_rr_tables(
     return table, max_exposure_g_per_day
 
 
-def _derive_tmrel_from_rr(
-    rr_lookup: RelativeRiskTable, risk_to_causes: dict[str, list[str]]
-) -> dict[str, float]:
-    """Derive TMREL intake per risk from empirical RR curves.
-
-    For each risk, find the intake that minimizes the unweighted mean of
-    log(RR) across all its causes and age groups. TMREL location is
-    age-independent (monotonic curves), so unweighted averaging suffices.
-    """
-    tmrel: dict[str, float] = {}
-    for risk, causes in risk_to_causes.items():
-        exposure_grid: list[float] = []
-        for cause in causes:
-            for age in ADULT_AGES:
-                key = (risk, cause, age)
-                if key in rr_lookup:
-                    exposure_grid.extend(rr_lookup[key]["exposures"])
-        if not exposure_grid:
-            raise ValueError(f"No RR exposure data for risk factor: {risk}")
-        grid = sorted({float(x) for x in exposure_grid})
-        best_intake = grid[0]
-        best_log = math.inf
-        for intake in grid:
-            total_log = 0.0
-            n = 0
-            for cause in causes:
-                for age in ADULT_AGES:
-                    total_log += math.log(
-                        _evaluate_rr(rr_lookup, risk, cause, age, intake)
-                    )
-                    n += 1
-            avg_log = total_log / n if n > 0 else 0.0
-            if avg_log < best_log:
-                best_log = avg_log
-                best_intake = intake
-        tmrel[risk] = best_intake
-    return tmrel
-
-
 def _evaluate_log_rr(
     table: RelativeRiskTable,
     risk: str,
@@ -484,18 +445,6 @@ def _evaluate_log_rr(
         return float(log_rr[-1])
 
     return float(np.interp(intake, exposures, log_rr))
-
-
-def _evaluate_rr(
-    table: RelativeRiskTable,
-    risk: str,
-    cause: str,
-    age: str,
-    intake: float,
-    key: str = "log_rr_mean",
-) -> float:
-    """Interpolate relative risk for given intake using log-linear interpolation."""
-    return float(math.exp(_evaluate_log_rr(table, risk, cause, age, intake, key=key)))
 
 
 def _evaluate_log_rr_age_weighted(
@@ -1160,11 +1109,16 @@ def main() -> None:
         intake_age_min,
     )
 
-    tmrel_g_per_day = _derive_tmrel_from_rr(rr_lookup, risk_to_causes)
-    logger.info(
-        "Derived TMREL from RR curves for %d risks",
-        len(tmrel_g_per_day),
+    # TMREL is canonical curated data (model basis), produced by
+    # prepare_relative_risks; not derived from the curves here.
+    tmrel_df = pd.read_csv(snakemake.input["tmrel"])
+    tmrel_g_per_day = dict(
+        zip(tmrel_df["risk_factor"], tmrel_df["tmrel_g_per_day"].astype(float))
     )
+    missing_tmrel = [r for r in risk_factors if r not in tmrel_g_per_day]
+    if missing_tmrel:
+        raise ValueError(f"TMREL table missing risk factors: {missing_tmrel}")
+    logger.info("Loaded TMREL for %d risks", len(tmrel_g_per_day))
 
     intake_caps_g_per_day = _build_intake_caps(max_exposure_g_per_day, intake_cap_limit)
 
@@ -1241,17 +1195,6 @@ def main() -> None:
     cluster_map.to_csv(snakemake.output["clusters"], index=False)
     cluster_risk_baseline.sort_values(["health_cluster", "risk_factor"]).to_csv(
         snakemake.output["cluster_risk_baseline"], index=False
-    )
-
-    # Write derived TMREL values
-    tmrel_df = pd.DataFrame(
-        [
-            {"risk_factor": risk, "tmrel_g_per_day": value}
-            for risk, value in tmrel_g_per_day.items()
-        ]
-    )
-    tmrel_df.sort_values("risk_factor").to_csv(
-        snakemake.output["derived_tmrel"], index=False
     )
 
 

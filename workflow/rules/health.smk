@@ -33,20 +33,29 @@ rule prepare_gbd_mortality:
 
 
 rule prepare_relative_risks:
+    """Build dietary RR curves from GBD 2023 Burden-of-Proof curves.
+
+    Applies the GBD->model basis conversion, clips each curve at the curated
+    TMREL, and age-expands the all-ages BoP curve with the curated
+    age-attenuation table. Risks in alternative_rr use a literature log-linear
+    curve instead. Emits the canonical model-basis TMREL alongside the curves.
+    """
     input:
         **{f"alt_rr_{k}": v for k, v in config["health"]["alternative_rr"].items() if v},
-        gbd_rr="data/manually_downloaded/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX",
+        bop_curves="data/downloads/burden_of_proof/bop_rr_curves.csv",
+        beta="data/curated/health/rr_age_attenuation.csv",
+        tmrel="data/curated/health/rr_tmrel.csv",
         food_basis="data/curated/food_basis.csv",
         food_groups="data/curated/food_groups.csv",
     params:
         risk_factors=config["health"]["risk_factors"],
-        causes=config["health"]["causes"],
-        ssb_sugar_g_per_100g=config["health"]["ssb_sugar_g_per_100g"],
+        risk_cause_map=config["health"]["risk_cause_map"],
         alternative_rr=config["health"]["alternative_rr"],
         source_basis=config["diet"]["source_basis"],
         weight_conversion=config["weight_conversion"],
     output:
         relative_risks="<processing>/{name}/health/relative_risks.csv",
+        tmrel="<processing>/{name}/health/tmrel.csv",
     group:
         "prep"
     resources:
@@ -92,6 +101,7 @@ rule prepare_health_costs:
         regions="<processing>/{name}/regions.geojson",
         diet="<processing>/{name}/dietary_intake.csv",
         relative_risks="<processing>/{name}/health/relative_risks.csv",
+        tmrel="<processing>/{name}/health/tmrel.csv",
         dr="<processing>/{name}/health/gbd_mortality_rates.csv",
         population="<processing>/{name}/population_age.csv",
         life_table="<processing>/{name}/health/life_table.csv",
@@ -108,7 +118,6 @@ rule prepare_health_costs:
         cluster_summary="<processing>/{name}/health/cluster_summary.csv",
         clusters="<processing>/{name}/health/country_clusters.csv",
         cluster_risk_baseline="<processing>/{name}/health/cluster_risk_baseline.csv",
-        derived_tmrel="<processing>/{name}/health/derived_tmrel.csv",
     group:
         "prep"
     resources:

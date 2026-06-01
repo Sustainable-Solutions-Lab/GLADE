@@ -232,7 +232,7 @@ def solve_model_inputs(w):
         "health_cause_log": f"<processing>/{w.name}/health/cause_log_breakpoints.csv",
         "health_cluster_summary": f"<processing>/{w.name}/health/cluster_summary.csv",
         "health_clusters": f"<processing>/{w.name}/health/country_clusters.csv",
-        "health_derived_tmrel": f"<processing>/{w.name}/health/derived_tmrel.csv",
+        "health_tmrel": f"<processing>/{w.name}/health/tmrel.csv",
         "health_cluster_risk_baseline": f"<processing>/{w.name}/health/cluster_risk_baseline.csv",
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": f"<processing>/{w.name}/baseline_diet.csv",

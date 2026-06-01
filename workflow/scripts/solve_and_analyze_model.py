@@ -49,7 +49,7 @@ def main() -> None:
         health_cause_log_path=snakemake.input.health_cause_log,
         health_clusters_path=snakemake.input.health_clusters,
         population_path=snakemake.input.population,
-        derived_tmrel_path=snakemake.input.health_derived_tmrel,
+        tmrel_path=snakemake.input.health_tmrel,
         ghg_price=float(snakemake.params.ghg_price),
         ch4_gwp=float(snakemake.params.ch4_gwp),
         n2o_gwp=float(snakemake.params.n2o_gwp),

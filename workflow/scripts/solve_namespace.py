@@ -229,7 +229,7 @@ def build_scenario_entry(
         "health_cause_log": rp("<processing>/{name}/health/cause_log_breakpoints.csv"),
         "health_cluster_summary": rp("<processing>/{name}/health/cluster_summary.csv"),
         "health_clusters": rp("<processing>/{name}/health/country_clusters.csv"),
-        "health_derived_tmrel": rp("<processing>/{name}/health/derived_tmrel.csv"),
+        "health_tmrel": rp("<processing>/{name}/health/tmrel.csv"),
         "health_cluster_risk_baseline": rp(
             "<processing>/{name}/health/cluster_risk_baseline.csv"
         ),

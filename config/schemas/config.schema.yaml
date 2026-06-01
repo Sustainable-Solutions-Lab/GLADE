@@ -1105,6 +1105,8 @@ properties:
       - risk_factors
       - causes
       - risk_cause_map
+      - gbd_rei_id
+      - gbd_cause_id
       - clustering
     additionalProperties: false
     properties:
@@ -1165,6 +1167,16 @@ properties:
           items:
             type: string
             pattern: "^[A-Za-z0-9]+$"
+      gbd_rei_id:
+        type: object
+        description: "GBD rei_id per risk factor, for the Burden-of-Proof retrieval"
+        additionalProperties:
+          type: integer
+      gbd_cause_id:
+        type: object
+        description: "GBD cause_id per cause, for the Burden-of-Proof retrieval"
+        additionalProperties:
+          type: integer
       alternative_rr:
         type: object
         description: "Per risk-factor overrides using log-linear RR from literature CSV files"
