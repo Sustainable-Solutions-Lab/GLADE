@@ -21,7 +21,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 
 1. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
 2. Download the IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`).
-3. Download the IHME 2019 dietary risk exposure estimates ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA`` (:ref:`ihme-diet-risk-exposure`).
+3. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
 4. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
 
 **Required API key setup:**
@@ -795,34 +795,35 @@ IHME GBD 2019 -- Relative Risk Curves
 
 .. _ihme-diet-risk-exposure:
 
-IHME GBD 2019 -- Dietary Risk Exposure Estimates
+IHME GBD 2023 -- Dietary Risk Exposure Estimates
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Provider**: Institute for Health Metrics and Evaluation (IHME)
 
-**Description**: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2019, covering 15 dietary risk factors with mean exposure, uncertainty, and summary exposure values (SEVs) by country, age, sex, and year. Used as the **anchor source** for risk-factor food groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat) in the baseline diet, so the model's intake basis matches the basis the GBD relative-risk functions are calibrated against. GDD-IA provides the fallback when GBD lacks a country.
+**Description**: Country-level dietary risk exposure estimates from the Global Burden of Disease Study 2023, covering 15 dietary risk factors with mean exposure and uncertainty by country, age group, sex, and year. Used as the **anchor source** for risk-factor food groups (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat) in the baseline diet, so the model's intake basis matches the basis the GBD relative-risk functions are calibrated against. GDD-IA provides the fallback when GBD lacks a country.
 
-**Version**: GBD 2019; ZIP archive containing per-risk-factor CSVs (~47 MB each)
+The 2023 release ships only per-5-year-age-bucket estimates split by sex; it does not include the ready-made "25 plus" both-sex aggregate that the 2019 release provided. ``prepare_gbd_food_group_intake.py`` therefore reconstructs the adult (25+) both-sex exposure by population-weighting the adult age buckets (using per-country age-bucket population for the reference year) and averaging the two sexes. The bulk files also contain subnational locations (US states, UK nations, Indian/Pakistani provinces, ...) whose names collide with countries, so processing restricts to national locations by ``location_id`` (taken from the GBD 2023 death-rates file) rather than by name.
+
+**Version**: GBD 2023; two ZIP archives, each containing per-risk-factor CSVs (~90 MB each)
 
 **Coverage**:
-  * Spatial: 204 countries and territories
-  * Temporal: 1990-2019, by age group and sex
-  * Risk factors: Calcium, fiber, fruit, legumes, milk, nuts, omega-3, processed meat, PUFA, red meat, sodium, sugar-sweetened beverages, trans fat, vegetables, whole grains
+  * Spatial: 204 countries and territories (plus subnational units, filtered out)
+  * Temporal: 1990-2023, by age group and sex
+  * Risk factors: Calcium, fiber, fruit, legumes, milk, nuts and seeds, omega-3 (seafood), omega-6 PUFA, processed meat, red meat, sodium, sugar-sweetened beverages, trans fat, vegetables, whole grains
 
-**Access**: https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019
+**Access**: https://ghdx.healthdata.org/record/ihme-data/gbd-2023-dietary-risk-exposure-estimates
 
 **License**: Free for non-commercial use with attribution (IHME Free-of-Charge Non-commercial User Agreement; `Terms <https://www.healthdata.org/data-tools-practices/data-practices/ihme-free-charge-non-commercial-user-agreement>`_)
 
-**Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2019 (GBD 2019) Dietary Risk Exposure Estimates 1990-2019. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2021.
+**Citation**: Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2023 (GBD 2023) Dietary Risk Exposure Estimates. Seattle, United States of America: Institute for Health Metrics and Evaluation (IHME), 2025.
 
-**Retrieval**: Processed via ``workflow/scripts/prepare_gbd_food_group_intake.py`` from ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/``.
+**Retrieval**: Processed via ``workflow/scripts/prepare_gbd_food_group_intake.py`` from ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_1/`` and ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_2/``.
 
 **Manual download steps**:
 
-1. Navigate to https://ghdx.healthdata.org/record/ihme-data/gbd-2019-dietary-risk-exposure-estimates-1990-2019.
-2. Log in to your IHME account.
-3. Download ``IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip`` (direct link: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2019_DIET_RISK_1990_2019_DATA.zip).
-4. Extract the ZIP file and place the resulting directory as ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA``.
+1. Log in to your IHME account.
+2. Download both archives (direct links: https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2023_RISK_EXPOSURE_DIET_1.zip and https://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_GBD_2023_RISK_EXPOSURE_DIET_2.zip).
+3. Extract each ZIP and place the resulting directories as ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_2``.
 
 .. _gdd-ia-dietary-intake:
 

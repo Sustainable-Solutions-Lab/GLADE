@@ -591,7 +591,7 @@ Workflow Integration
 
 * ``data/manually_downloaded/GDD-IA-intake_grams_{baseline_year}.csv``
 * ``data/manually_downloaded/GDD-IA-intake_kcals_{baseline_year}.csv``
-* ``data/manually_downloaded/IHME_GBD_2019_DIET_RISK_1990_2019_DATA/*.csv``
+* ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_{1,2}/*.CSV``
 * ``data/downloads/usda_fped/Table_1_FPED_MaleFemale_{cycle}.pdf``
 * FAOSTAT FBS and QCL (auto-fetched via the FAOSTAT bulk API)
 

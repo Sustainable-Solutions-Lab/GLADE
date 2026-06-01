@@ -101,8 +101,9 @@ manually:
 
 * **IHME GBD 2023 mortality rates** — `IHME GBD Results Tool
   <https://vizhub.healthdata.org/gbd-results/>`_ (free registration).
-* **IHME GBD 2019 relative risk and dietary exposure data** — same
-  source, separate exports (free registration).
+* **IHME GBD 2023 dietary risk exposure data** and **IHME GBD 2019
+  relative risk curves** — same source, separate exports (free
+  registration).
 * **GDD-IA (Global Dietary Database — Integrated Assessment)** —
   available upon personal request from Marco Springmann, pending
   publication (will be released under CC-BY-NC). See :doc:`current_diets`
