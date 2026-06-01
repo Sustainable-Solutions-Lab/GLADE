@@ -243,7 +243,12 @@ solving:
   # parallel per node).  Each GSA solve is small enough that single-thread gurobi
   # is already near-optimal; hyperthreading gives diminishing returns.
   threads: 2
-  mem_mb: 10000
-  time_limit: 60  # Hard limit
-  runtime: 30     # Initial limit before retries for more favourable slurm scheduling
+  # Budgets sized for the post-health-MIP-speedup solve: profiled gsa solves
+  # (incl. inline analysis) now peak ~4.5 GB and finish in ~1.7 min across the
+  # central and L1-high regimes (adaptive breakpoints + convexity gating), so
+  # the old 10 GB / 60 min envelope is over-provisioned. Keep ~1.5x memory
+  # headroom (OOM fails hard) and generous time headroom for hard samples.
+  mem_mb: 7000
+  time_limit: 30  # Hard limit
+  runtime: 12     # Initial limit before retries for more favourable slurm scheduling
   inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
