@@ -1164,11 +1164,10 @@ commodities:
 health:
   enabled: true  # Whether to include health costs in the objective function
   region_clusters: 30
-  intake_grid_points: 15  # Number of grid knots over empirical RR range
+  breakpoint_rel_tol: 0.05  # Max Stage 1 PWL deviation as a fraction of each RR curve's amplitude (5%)
   log_rr_points: 15
-  ssb_sugar_g_per_100g: 5.7  # ≈50 kcal per 226.8 g sugar-sweetened beverage (SSB) implies ~5.7 g sugar per 100 g
+  ssb_sugar_g_per_100g: 5.7  # ~=50 kcal per 226.8 g sugar-sweetened beverage (SSB) implies ~5.7 g sugar per 100 g
   value_per_yll: 50000  # USD_2024 per year of life lost
-  intake_cap_g_per_day: 1000  # Uniform generous cap on intake grids and clipping
   intake_age_min: 11  # GDD adult band starts at 11; set to 11 to retain adult intake data. Note however that GDB chronic disease risk factors are for adults of >=25 years.
   # Dietary risk factors to consider (must match GDD data items)
   risk_factors:

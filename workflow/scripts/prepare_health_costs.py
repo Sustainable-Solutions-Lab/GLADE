@@ -662,17 +662,100 @@ def _compute_baseline_health_metrics(
 
 def _build_intake_caps(
     max_exposure_g_per_day: dict[str, float],
-    intake_cap_limit: float,
+    max_per_capita: dict[str, float],
 ) -> dict[str, float]:
-    """Apply a uniform generous intake cap across all risk factors."""
+    """Per-risk intake-grid domain cap.
 
-    if intake_cap_limit <= 0:
-        return dict(max_exposure_g_per_day)
+    The cap is the smallest domain that still covers every feasible solution:
+    the larger of the empirical RR exposure range and the per-capita
+    consumption cap (``max_per_capita``, enforced as ``e_nom_max`` on the
+    food-group stores in build_model). Capping here rather than at a uniform
+    generous limit avoids a long flat extrapolation plateau beyond the data,
+    which would otherwise introduce a spurious concave kink for harmful
+    (increasing) risk factors and force unnecessary integer branching.
 
-    caps = dict(max_exposure_g_per_day)
-    for risk in list(caps.keys()):
-        caps[risk] = max(caps[risk], float(intake_cap_limit))
-    return caps
+    ``max_per_capita`` is assumed complete for all risk factors (enforced by
+    ``validate_health_map``).
+    """
+    return {
+        risk: max(float(max_exp), float(max_per_capita[risk]))
+        for risk, max_exp in max_exposure_g_per_day.items()
+    }
+
+
+def _select_adaptive_knots(
+    x: np.ndarray,
+    curves: list[np.ndarray],
+    rel_tol: float,
+) -> np.ndarray:
+    """Douglas-Peucker knot selection over a family of curves.
+
+    Returns a boolean mask over ``x`` marking the minimal set of knots whose
+    piecewise-linear interpolation reproduces every curve in ``curves`` to
+    within ``rel_tol`` times that curve's amplitude (peak-to-peak log-RR
+    range). A knot is kept whenever any curve's relative interpolation error
+    exceeds the tolerance, so the shared per-risk grid stays accurate for every
+    (cluster, cause) dose-response curve. Normalising per curve means a 5%
+    target means "within 5% of each curve's own effect size", independent of
+    whether the risk factor has a large or small log-RR.
+    """
+    n = len(x)
+    keep = np.zeros(n, dtype=bool)
+    keep[0] = keep[-1] = True
+    if n <= 2 or not curves:
+        return keep
+
+    scales = [max(float(np.ptp(y)), 1e-12) for y in curves]
+    stack = [(0, n - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b <= a + 1:
+            continue
+        seg_x = x[a : b + 1]
+        denom = x[b] - x[a]
+        worst_rel = -1.0
+        worst_k = -1
+        for y, scale in zip(curves, scales):
+            if denom > 0:
+                interp = y[a] + (y[b] - y[a]) * (seg_x - x[a]) / denom
+            else:
+                interp = np.full_like(seg_x, y[a])
+            rel_err = np.abs(y[a : b + 1] - interp) / scale
+            k_local = int(np.argmax(rel_err))
+            if rel_err[k_local] > worst_rel:
+                worst_rel = float(rel_err[k_local])
+                worst_k = a + k_local
+        if worst_rel > rel_tol and worst_k not in (a, b):
+            keep[worst_k] = True
+            stack.append((a, worst_k))
+            stack.append((worst_k, b))
+    return keep
+
+
+def _age_weighted_curve_on_grid(
+    table: RelativeRiskTable,
+    risk: str,
+    cause: str,
+    cluster_id: int,
+    age_weights: AgeWeights,
+    grid: np.ndarray,
+    key: str,
+) -> np.ndarray:
+    """Vectorised YLL-weighted log(RR) over a whole intake grid.
+
+    Equivalent to evaluating ``_evaluate_log_rr_age_weighted`` at every point
+    of ``grid`` (``np.interp`` clamps to the curve endpoints outside the data
+    range, matching the scalar helper), but done with one interpolation per age
+    band instead of one per (age, grid point).
+    """
+    out = np.zeros(len(grid))
+    for age in ADULT_AGES:
+        w = age_weights.get((cluster_id, cause, age), 0.0)
+        if w <= 0:
+            continue
+        data = table[(risk, cause, age)]
+        out += w * np.interp(grid, data["exposures"], data[key])
+    return out
 
 
 def _compute_cluster_age_weights(
@@ -885,7 +968,6 @@ def _generate_breakpoint_tables(
     risk_factors: list[str],
     intake_caps_g_per_day: dict[str, float],
     baseline_intake_registry: dict[str, set],
-    intake_grid_points: int,
     rr_lookup: RelativeRiskTable,
     risk_to_causes: dict[str, list[str]],
     relevant_causes: list[str],
@@ -893,20 +975,23 @@ def _generate_breakpoint_tables(
     tmrel_g_per_day: dict[str, float],
     cluster_ids: list[int],
     age_weights: AgeWeights,
+    breakpoint_rel_tol: float,
 ) -> tuple:
-    """Generate SOS2 linearization breakpoint tables for risks and causes.
+    """Generate piecewise-linear breakpoint tables for risks and causes.
 
     Produces cluster-specific risk breakpoints using YLL-weighted effective
     RR curves that account for the age structure of the disease burden in
     each health cluster.
 
-    Intake grids:
-        - Evenly spaced `intake_grid_points` over the empirical RR data range
-          (min→max exposure in RR table, expanded to include 0).
-        - Always include all empirical exposure points, TMREL, baseline intakes,
-          and the global intake cap for feasibility beyond the data range.
-        - The generous cap is *added* as a knot but does not stretch the
-          linspace; this keeps knot density high where RR actually changes.
+    Intake grids (per risk factor, shared across clusters and causes):
+        - The candidate knots are the native (smooth) RR exposure points -
+          unioned across causes - plus TMREL, baseline intakes and the domain
+          endpoints (0 and the per-risk cap).
+        - `_select_adaptive_knots` keeps the smallest subset whose linear
+          interpolation reproduces every (cluster, cause) curve - including the
+          low/high uncertainty bounds - to within `breakpoint_rel_tol` of each
+          curve's own amplitude. This trades a controlled accuracy loss for a
+          much smaller Stage 1 MILP.
     Cause grids:
         - `log_rr_points` evenly spaced between aggregated min/max log(RR)
           implied by the risk grids above (global across all clusters).
@@ -914,79 +999,78 @@ def _generate_breakpoint_tables(
     risk_breakpoint_rows = []
     cause_log_min: dict[str, float] = dict.fromkeys(relevant_causes, 0.0)
     cause_log_max: dict[str, float] = dict.fromkeys(relevant_causes, 0.0)
+    keys = ("log_rr_mean", "log_rr_low", "log_rr_high")
 
     for risk in risk_factors:
         cap = float(intake_caps_g_per_day[risk])
         if cap <= 0:
             continue
-        causes = risk_to_causes[risk]
-        # Empirical exposure domain from RR table (may vary by cause; take union)
-        exposures = []
-        for cause in causes:
-            key = (risk, cause, ADULT_AGES[0])
-            if key in rr_lookup:
-                exposures = list(rr_lookup[key]["exposures"])
-                break
-        if not exposures:
+        present_causes = [
+            cause
+            for cause in risk_to_causes[risk]
+            if (risk, cause, ADULT_AGES[0]) in rr_lookup
+        ]
+        if not present_causes:
             continue
-        lo = min(0.0, float(min(exposures)))
-        hi_empirical = float(max(exposures))
-        # Even spacing only over the empirical RR range
-        lin = np.linspace(lo, hi_empirical, max(intake_grid_points, 2))
-        grid_points = {float(x) for x in lin}
-        grid_points.update(float(x) for x in exposures)
-        grid_points.add(0.0)
-        grid_points.add(hi_empirical)
+
+        # Candidate knots: the native (smooth) BoP exposure points, unioned
+        # across causes, plus structural knots. No artificial grid is added -
+        # the native points are already finely spaced.
+        native = set()
+        for cause in present_causes:
+            native.update(
+                float(x) for x in rr_lookup[(risk, cause, ADULT_AGES[0])]["exposures"]
+            )
+        lo = min(0.0, min(native))
+        candidate_points = {0.0, lo, cap}
+        candidate_points.update(x for x in native if lo <= x <= cap)
         for val in baseline_intake_registry[risk]:
-            grid_points.add(float(val))
-        # Include TMREL as a breakpoint for accurate interpolation at optimal intake
-        if risk in tmrel_g_per_day:
-            grid_points.add(float(tmrel_g_per_day[risk]))
-        # Add the generous cap without stretching the linspace range
-        grid_points.add(cap)
-        grid = sorted(grid_points)
+            if lo <= float(val) <= cap:
+                candidate_points.add(float(val))
+        forced = {lo, cap}
+        if risk in tmrel_g_per_day and lo <= tmrel_g_per_day[risk] <= cap:
+            forced.add(float(tmrel_g_per_day[risk]))
+        candidate_grid = np.array(sorted(candidate_points))
 
-        for cause in causes:
-            if (risk, cause, ADULT_AGES[0]) not in rr_lookup:
-                continue
-
+        # Evaluate mean/low/high curves for every (cluster, cause) on the
+        # candidate grid once; reuse for both knot selection and output.
+        evaluated: dict[tuple[int, str, str], np.ndarray] = {}
+        curves = []
+        for cause in present_causes:
             for cluster_id in cluster_ids:
-                for intake in grid:
-                    log_rr = _evaluate_log_rr_age_weighted(
+                for key in keys:
+                    vals = _age_weighted_curve_on_grid(
                         rr_lookup,
                         risk,
                         cause,
-                        intake,
-                        age_weights,
                         cluster_id,
-                    )
-                    log_rr_low = _evaluate_log_rr_age_weighted(
-                        rr_lookup,
-                        risk,
-                        cause,
-                        intake,
                         age_weights,
-                        cluster_id,
-                        key="log_rr_low",
+                        candidate_grid,
+                        key,
                     )
-                    log_rr_high = _evaluate_log_rr_age_weighted(
-                        rr_lookup,
-                        risk,
-                        cause,
-                        intake,
-                        age_weights,
-                        cluster_id,
-                        key="log_rr_high",
-                    )
+                    evaluated[(cluster_id, cause, key)] = vals
+                    curves.append(vals)
+
+        keep_mask = _select_adaptive_knots(candidate_grid, curves, breakpoint_rel_tol)
+        for forced_x in forced:
+            keep_mask[int(np.argmin(np.abs(candidate_grid - forced_x)))] = True
+        grid = candidate_grid[keep_mask]
+
+        for cause in present_causes:
+            for cluster_id in cluster_ids:
+                mean = evaluated[(cluster_id, cause, "log_rr_mean")][keep_mask]
+                low = evaluated[(cluster_id, cause, "log_rr_low")][keep_mask]
+                high = evaluated[(cluster_id, cause, "log_rr_high")][keep_mask]
+                for i, intake in enumerate(grid):
                     risk_breakpoint_rows.append(
                         {
                             "health_cluster": cluster_id,
                             "risk_factor": risk,
                             "cause": cause,
                             "intake_g_per_day": float(intake),
-                            "log_rr": log_rr,
-                            "log_rr_low": log_rr_low,
-                            "log_rr_high": log_rr_high,
+                            "log_rr": float(mean[i]),
+                            "log_rr_low": float(low[i]),
+                            "log_rr_high": float(high[i]),
                         }
                     )
     # Aggregate per-cause log_rr bounds across risk factors and clusters.
@@ -1069,10 +1153,12 @@ def main() -> None:
         str(risk): list(health_cfg["risk_cause_map"][risk]) for risk in risk_factors
     }
     reference_year = int(snakemake.params["baseline_year"])
-    intake_grid_points = int(health_cfg["intake_grid_points"])
     log_rr_points = int(health_cfg["log_rr_points"])
-    intake_cap_limit = float(health_cfg["intake_cap_g_per_day"])
+    breakpoint_rel_tol = float(health_cfg["breakpoint_rel_tol"])
     intake_age_min = int(health_cfg["intake_age_min"])
+    max_per_capita = {
+        str(k): float(v) for k, v in snakemake.params["max_per_capita"].items()
+    }
 
     # Load input data
     (
@@ -1120,7 +1206,7 @@ def main() -> None:
         raise ValueError(f"TMREL table missing risk factors: {missing_tmrel}")
     logger.info("Loaded TMREL for %d risks", len(tmrel_g_per_day))
 
-    intake_caps_g_per_day = _build_intake_caps(max_exposure_g_per_day, intake_cap_limit)
+    intake_caps_g_per_day = _build_intake_caps(max_exposure_g_per_day, max_per_capita)
 
     # Compute baseline health metrics
     combo = _compute_baseline_health_metrics(
@@ -1160,13 +1246,12 @@ def main() -> None:
         age_weights,
     )
 
-    # Generate breakpoint tables for SOS2 linearization
+    # Generate piecewise-linear breakpoint tables
     cluster_ids = sorted(cluster_to_countries.keys())
     risk_breakpoints, cause_log_breakpoints = _generate_breakpoint_tables(
         risk_factors,
         intake_caps_g_per_day,
         baseline_intake_registry,
-        intake_grid_points,
         rr_lookup,
         risk_to_causes,
         relevant_causes,
@@ -1174,6 +1259,7 @@ def main() -> None:
         tmrel_g_per_day,
         cluster_ids,
         age_weights,
+        breakpoint_rel_tol,
     )
 
     # Write outputs

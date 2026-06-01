@@ -90,10 +90,10 @@ rule prepare_life_table:
 
 
 rule prepare_health_costs:
-    """Prepare health cost data for SOS2 linearization.
+    """Prepare health cost data for piecewise-linear interpolation.
 
-    This rule is scenario-independent: grid resolution parameters
-    (intake_grid_points, log_rr_points) and clustering are config-level
+    This rule is scenario-independent: breakpoint resolution
+    (breakpoint_rel_tol, log_rr_points) and clustering are config-level
     settings. Scenario-specific adjustments (rr_quantiles, value_per_yll)
     are applied downstream in build_model/solve_model.
     """
@@ -110,6 +110,7 @@ rule prepare_health_costs:
     params:
         countries=config["countries"],
         health=config["health"],
+        max_per_capita=config["food_groups"]["max_per_capita"],
         baseline_year=config["baseline_year"],
     output:
         risk_breakpoints="<processing>/{name}/health/risk_breakpoints.csv",

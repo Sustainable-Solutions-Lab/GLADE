@@ -1097,11 +1097,10 @@ properties:
     required:
       - enabled
       - region_clusters
-      - intake_grid_points
+      - breakpoint_rel_tol
       - log_rr_points
       - ssb_sugar_g_per_100g
       - value_per_yll
-      - intake_cap_g_per_day
       - risk_factors
       - causes
       - risk_cause_map
@@ -1117,10 +1116,10 @@ properties:
         type: integer
         minimum: 1
         description: "Number of health clusters"
-      intake_grid_points:
-        type: integer
-        minimum: 2
-        description: "Number of intake grid points over empirical RR data range"
+      breakpoint_rel_tol:
+        type: number
+        minimum: 0
+        description: "Max Stage 1 PWL deviation as a fraction of each RR curve's amplitude"
       log_rr_points:
         type: integer
         minimum: 1
@@ -1137,10 +1136,6 @@ properties:
         type: number
         minimum: 0
         description: "USD per year of life lost"
-      intake_cap_g_per_day:
-        type: number
-        minimum: 0
-        description: "Uniform generous cap applied to intake grids for all risk factors"
       risk_factors:
         type: array
         minItems: 1

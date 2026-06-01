@@ -50,23 +50,3 @@ def validate_food_groups(config: dict, project_root: Path) -> None:
         raise ValueError(
             f"Config food_groups.included missing groups present in data file: {missing_text}"
         )
-
-    # Validate that max_per_capita for health risk factors doesn't exceed health intake cap
-    max_per_capita = config["food_groups"].get("max_per_capita", {})
-    health_cfg = config.get("health", {})
-    if health_cfg.get("enabled", True) and max_per_capita:
-        intake_cap = health_cfg.get("intake_cap_g_per_day", float("inf"))
-        risk_factors = set(health_cfg.get("risk_factors", []))
-
-        # Check risk factors that are also food groups
-        violations = []
-        for group, cap_value in max_per_capita.items():
-            if group in risk_factors and cap_value > intake_cap:
-                violations.append(f"{group}={cap_value}")
-
-        if violations:
-            raise ValueError(
-                f"food_groups.max_per_capita exceeds health.intake_cap_g_per_day ({intake_cap}) "
-                f"for risk factors: {', '.join(violations)}. "
-                f"Either increase health.intake_cap_g_per_day or reduce the food group caps."
-            )

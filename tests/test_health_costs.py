@@ -17,9 +17,8 @@ from workflow.scripts.prepare_health_costs import (
     _age_bucket_min,
     _build_intake_caps,
     _build_rr_tables,
-    _derive_tmrel_from_rr,
     _evaluate_log_rr_age_weighted,
-    _evaluate_rr,
+    _select_adaptive_knots,
 )
 from workflow.scripts.prepare_relative_risks import ADULT_AGE_LABELS
 
@@ -135,57 +134,6 @@ def _make_age_varying_rr_table():
 
 
 # ---------------------------------------------------------------------------
-# Tests: _evaluate_rr
-# ---------------------------------------------------------------------------
-
-
-class TestEvaluateRR:
-    """Tests for log-linear relative risk interpolation."""
-
-    def test_exact_knot(self):
-        """Intake at an exact exposure knot returns the corresponding RR."""
-        table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 100.0)
-        assert rr == pytest.approx(1.0)
-
-    def test_below_minimum_clamps(self):
-        """Intake below the lowest exposure clamps to the first RR value."""
-        table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", -10.0)
-        assert rr == pytest.approx(1.5)
-
-    def test_above_maximum_clamps(self):
-        """Intake above the highest exposure clamps to the last RR value."""
-        table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 300.0)
-        assert rr == pytest.approx(0.8)
-
-    def test_interpolation_between_knots(self):
-        """Intake between knots is log-linearly interpolated."""
-        table = _make_simple_rr_table()
-        intake = 50.0
-        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", intake)
-
-        # Manual computation: interp in log space
-        exposures = np.array([0.0, 100.0, 200.0])
-        log_rr_vals = np.log(np.array([1.5, 1.0, 0.8]))
-        expected_log = float(np.interp(intake, exposures, log_rr_vals))
-        expected_rr = math.exp(expected_log)
-        assert rr == pytest.approx(expected_rr)
-
-    def test_interpolation_formula(self):
-        """Verify the log-linear interpolation formula explicitly.
-
-        At intake=50 (midpoint of [0, 100]):
-            log_rr = 0.5 * log(1.5) + 0.5 * log(1.0) = 0.5 * log(1.5)
-            rr = exp(0.5 * log(1.5)) = 1.5^0.5
-        """
-        table = _make_simple_rr_table()
-        rr = _evaluate_rr(table, "fruits", "CHD", "25-29", 50.0)
-        assert rr == pytest.approx(math.sqrt(1.5))
-
-
-# ---------------------------------------------------------------------------
 # Tests: _evaluate_log_rr_age_weighted
 # ---------------------------------------------------------------------------
 
@@ -241,64 +189,6 @@ class TestEvaluateLogRRAgeWeighted:
         assert log_rr_eff == pytest.approx(expected)
         # And distinct from the (incorrect) arithmetic-mean approach:
         assert log_rr_eff != pytest.approx(math.log(0.8))
-
-
-# ---------------------------------------------------------------------------
-# Tests: _derive_tmrel_from_rr
-# ---------------------------------------------------------------------------
-
-
-class TestDeriveTmrelFromRR:
-    """Tests for TMREL derivation from RR curves."""
-
-    def test_tmrel_at_known_minimum(self):
-        """TMREL is the exposure where the product of RRs is minimised.
-
-        Both causes have their minimum RR at exposure=200, so TMREL should
-        be 200.
-        """
-        table = RelativeRiskTable()
-
-        # CHD: RR decreases from 1.5 to 0.6 (minimum at 200)
-        rr_chd = np.array([1.5, 1.0, 0.6])
-        for age in ADULT_AGES:
-            table[("fruits", "CHD", age)] = {
-                "exposures": np.array([0.0, 100.0, 200.0]),
-                "log_rr_mean": np.log(rr_chd),
-                "log_rr_low": np.log(rr_chd),
-                "log_rr_high": np.log(rr_chd),
-            }
-
-        # T2DM: RR decreases from 1.3 to 0.7 (minimum at 200)
-        rr_t2dm = np.array([1.3, 0.9, 0.7])
-        for age in ADULT_AGES:
-            table[("fruits", "T2DM", age)] = {
-                "exposures": np.array([0.0, 100.0, 200.0]),
-                "log_rr_mean": np.log(rr_t2dm),
-                "log_rr_low": np.log(rr_t2dm),
-                "log_rr_high": np.log(rr_t2dm),
-            }
-
-        risk_to_causes = {"fruits": ["CHD", "T2DM"]}
-        tmrel = _derive_tmrel_from_rr(table, risk_to_causes)
-
-        assert tmrel["fruits"] == pytest.approx(200.0)
-
-    def test_tmrel_with_single_cause(self):
-        """With a single cause the TMREL is at the minimum RR exposure."""
-        table = RelativeRiskTable()
-        rr_vals = np.array([1.2, 0.8, 1.0])
-        for age in ADULT_AGES:
-            table[("sugar", "T2DM", age)] = {
-                "exposures": np.array([0.0, 50.0, 100.0]),
-                "log_rr_mean": np.log(rr_vals),
-                "log_rr_low": np.log(rr_vals),
-                "log_rr_high": np.log(rr_vals),
-            }
-        risk_to_causes = {"sugar": ["T2DM"]}
-        tmrel = _derive_tmrel_from_rr(table, risk_to_causes)
-        # Minimum RR is 0.8 at exposure=50
-        assert tmrel["sugar"] == pytest.approx(50.0)
 
 
 # ---------------------------------------------------------------------------
@@ -391,38 +281,75 @@ class TestBuildRRTables:
 
 
 class TestBuildIntakeCaps:
-    """Tests for applying intake cap limits across risk factors."""
+    """Tests for the per-risk intake-grid domain cap."""
 
-    def test_cap_limit_positive_enforces_minimum(self):
-        """When cap_limit > 0, each cap is at least cap_limit."""
-        max_exposure = {"fruits": 200.0, "sugar": 50.0}
-        caps = _build_intake_caps(max_exposure, intake_cap_limit=300.0)
-        assert caps["fruits"] == pytest.approx(300.0)
-        assert caps["sugar"] == pytest.approx(300.0)
+    def test_per_capita_cap_extends_domain_beyond_data(self):
+        """When the consumption cap exceeds the RR data range, it sets the cap."""
+        caps = _build_intake_caps({"fruits": 300.0}, {"fruits": 658.0})
+        assert caps["fruits"] == pytest.approx(658.0)
 
-    def test_cap_limit_positive_keeps_larger_exposure(self):
-        """When max_exposure exceeds cap_limit, the exposure value is kept."""
-        max_exposure = {"fruits": 500.0, "sugar": 50.0}
-        caps = _build_intake_caps(max_exposure, intake_cap_limit=300.0)
-        assert caps["fruits"] == pytest.approx(500.0)
-        assert caps["sugar"] == pytest.approx(300.0)
+    def test_data_range_kept_when_it_exceeds_consumption_cap(self):
+        """For harmful risks the data range >= consumption cap, so no plateau."""
+        # red_meat: empirical exposure max (286) slightly above max_per_capita.
+        caps = _build_intake_caps({"red_meat": 286.0}, {"red_meat": 285.0})
+        assert caps["red_meat"] == pytest.approx(286.0)
 
-    def test_cap_limit_zero_returns_original(self):
-        """When cap_limit is zero, the original values are returned unchanged."""
-        max_exposure = {"fruits": 200.0, "sugar": 50.0}
-        caps = _build_intake_caps(max_exposure, intake_cap_limit=0.0)
-        assert caps["fruits"] == pytest.approx(200.0)
-        assert caps["sugar"] == pytest.approx(50.0)
-
-    def test_cap_limit_negative_returns_original(self):
-        """When cap_limit is negative, the original values are returned unchanged."""
-        max_exposure = {"fruits": 200.0, "sugar": 50.0}
-        caps = _build_intake_caps(max_exposure, intake_cap_limit=-10.0)
-        assert caps["fruits"] == pytest.approx(200.0)
-        assert caps["sugar"] == pytest.approx(50.0)
+    def test_missing_per_capita_entry_raises(self):
+        """max_per_capita is assumed complete; a missing risk is a hard error."""
+        with pytest.raises(KeyError):
+            _build_intake_caps({"sugar": 50.0}, {})
 
     def test_returns_new_dict(self):
         """The function returns a new dict, not modifying the input."""
         max_exposure = {"fruits": 200.0}
-        caps = _build_intake_caps(max_exposure, intake_cap_limit=300.0)
+        caps = _build_intake_caps(max_exposure, {"fruits": 300.0})
         assert caps is not max_exposure
+
+
+class TestSelectAdaptiveKnots:
+    """Tests for Douglas-Peucker breakpoint pruning over a curve family.
+
+    Tolerance is relative to each curve's amplitude (peak-to-peak range).
+    """
+
+    def test_collinear_points_dropped_losslessly(self):
+        """Points on a straight line are redundant and pruned."""
+        x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        line = np.array([2.0 * xi for xi in x])
+        keep = _select_adaptive_knots(x, [line], rel_tol=0.01)
+        # Only the two endpoints are needed to reproduce a straight line.
+        assert keep.tolist() == [True, False, False, False, True]
+
+    def test_kink_is_retained(self):
+        """A bend that deviates by 100% of amplitude is always kept."""
+        x = np.array([0.0, 1.0, 2.0])
+        # V-shape: chord between endpoints (0->0) misses the middle by the
+        # full amplitude (1.0), i.e. 100% relative error.
+        keep = _select_adaptive_knots(x, [np.array([0.0, -1.0, 0.0])], rel_tol=0.1)
+        assert keep.tolist() == [True, True, True]
+
+    def test_union_over_curves_keeps_any_curves_kink(self):
+        """A knot needed by any single curve in the family is retained."""
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        flat = np.array([0.0, 0.0, 0.0, 0.0])
+        bent = np.array([0.0, 0.0, 1.0, 0.0])  # kink at index 2
+        keep = _select_adaptive_knots(x, [flat, bent], rel_tol=0.1)
+        assert keep[2]  # the bent curve forces index 2 to be kept
+        assert keep[0] and keep[-1]
+
+    def test_relative_tolerance_controls_pruning(self):
+        """The bend deviates 10% of amplitude: dropped at 20%, kept at 5%."""
+        x = np.array([0.0, 1.0, 2.0])
+        # chord 0->1.0 interpolates 0.5 at x=1; actual 0.6 => 0.1 dev on
+        # amplitude 1.0 => 10% relative error.
+        curve = [np.array([0.0, 0.6, 1.0])]
+        assert _select_adaptive_knots(x, curve, rel_tol=0.2).tolist() == [
+            True,
+            False,
+            True,
+        ]
+        assert _select_adaptive_knots(x, curve, rel_tol=0.05).tolist() == [
+            True,
+            True,
+            True,
+        ]

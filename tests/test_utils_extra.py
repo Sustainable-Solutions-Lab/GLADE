@@ -140,17 +140,30 @@ class TestFreshMassConversionFactors:
         with pytest.raises(ValueError, match="Missing edible portion data"):
             _fresh_mass_conversion_factors(edible_df, moisture_df, {"wheat", "rice"})
 
-    def test_missing_crop_in_moisture_raises(self):
-        """Missing crop in moisture data should raise ValueError."""
+    def test_conversion_factors_follow_food_conversion_policy(self):
+        """Factors combine edible portion and moisture per food_conversion.
+
+        ``moisture_df`` is indexed by crop with completeness guaranteed
+        upstream (validation/crop_moisture_content.py), so the function no
+        longer re-checks moisture coverage itself.
+        """
         edible_df = pd.DataFrame(
-            {
-                "crop": ["wheat", "rice"],
-                "edible_portion_coefficient": [0.8, 0.65],
-            }
+            {"crop": ["wheat", "tea"], "edible_portion_coefficient": [0.8, 1.0]}
         )
-        moisture_df = pd.DataFrame({"crop": ["wheat"], "moisture_fraction": [0.1]})
-        with pytest.raises(ValueError, match="Missing moisture fraction data"):
-            _fresh_mass_conversion_factors(edible_df, moisture_df, {"wheat", "rice"})
+        moisture_df = pd.DataFrame(
+            {
+                "crop": ["wheat", "tea"],
+                "moisture_fraction": [0.125, 0.0],
+                "food_conversion": ["inverse_moisture", "identity"],
+            }
+        ).set_index("crop")
+        factors = _fresh_mass_conversion_factors(
+            edible_df, moisture_df, {"wheat", "tea"}
+        )
+        # inverse_moisture: edible / (1 - moisture) = 0.8 / 0.875
+        assert factors["wheat"] == pytest.approx(0.8 / 0.875)
+        # identity: factor is just the edible portion
+        assert factors["tea"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

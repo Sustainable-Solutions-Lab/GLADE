@@ -438,19 +438,28 @@ number of clusters is configured via ``health.region_clusters``.
 Solver Compatibility
 ~~~~~~~~~~~~~~~~~~~~
 
-The piecewise-linear interpolation uses solver-dependent formulations:
+Stage 1 uses a single delta (incremental) formulation for all solvers, and
+adds integer structure only where a curve actually needs it:
 
-- **Gurobi**: Native SOS2 constraint support. Uses λ (lambda) variables with SOS2
-  adjacency constraints for efficient piecewise-linear interpolation.
+- **Convex curves** (in the objective-relevant direction): the delta fill-up
+  LP relaxation is already exact, because the health objective is monotone
+  increasing in every log(RR) and so the LP fills the steepest-benefit
+  segments first on its own. No integer variables are added. Harmful risk
+  factors with a de-plateaued (linear) curve and protective curves with
+  diminishing returns fall here.
 
-- **HiGHS**: Uses the **delta (incremental) formulation** that requires no binary
-  variables, keeping the problem as a pure LP.
+- **Non-convex (S-shaped) curves**: SOS1 segment indicators plus delta-y
+  linking constraints forbid the LP from interpolating across the convex hull
+  (which would under-count risk). On solvers without native SOS (e.g. HiGHS),
+  linopy reformulates the SOS1 sets to binary + Big-M.
 
-Delta Formulation for HiGHS
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The convex/non-convex split is decided per (cluster, risk) pair, which keeps
+the Stage 1 MILP as small as the dose-response data allows.
 
-Since HiGHS lacks native SOS2 support, the implementation uses an incremental
-formulation that avoids binary variables entirely. For n breakpoints
+Delta Formulation
+^^^^^^^^^^^^^^^^^
+
+For n breakpoints
 :math:`(x_0, x_1, \ldots, x_{n-1})` with function values
 :math:`(f_0, f_1, \ldots, f_{n-1})`:
 
@@ -469,30 +478,11 @@ formulation that avoids binary variables entirely. For n breakpoints
 where :math:`\Delta x_j = x_{j+1} - x_j` and :math:`\Delta f_j = f_{j+1} - f_j`.
 
 **Why it works**: The fill-up constraints ensure segments are "filled" from left
-to right. When the input x is fixed by an equality constraint (as in both Stage 1
-and Stage 2), the δ values are uniquely determined without degeneracy.
-
-**Comparison with lambda formulation**:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 35 35
-
-   * - Aspect
-     - Lambda + SOS2
-     - Delta (incremental)
-   * - Continuous variables
-     - n (one per breakpoint)
-     - n-1 (one per segment)
-   * - Binary variables
-     - 0 (with native SOS2)
-     - 0
-   * - Additional constraints
-     - Convexity (Σλ=1) + SOS2
-     - Fill-up ordering (n-2)
-   * - Problem type
-     - LP (Gurobi), MIP (old HiGHS)
-     - LP (all solvers)
+to right. For a convex curve this is exactly the LP optimum (minimising
+:math:`\sum_j \delta_j \Delta f_j` for a fixed input fills segments in
+increasing slope order, which equals left-to-right order iff the slopes are
+non-decreasing). For a non-convex curve the SOS1 indicators are needed to pin
+the single fractional segment.
 
 Data Flow Overview
 ~~~~~~~~~~~~~~~~~~
@@ -556,9 +546,18 @@ The preprocessing script performs these steps:
 3. **TMREL derivation** – finds the intake that minimises aggregate log(RR) for
    each risk factor. Results: ``processing/{name}/health/derived_tmrel.csv``.
 
-4. **Risk-factor breakpoints** – builds grids of intake values over the
-   empirical RR data range, evaluating :math:`\log(\mathrm{RR})` at each point.
-   Results: ``processing/{name}/health/risk_breakpoints.csv``.
+4. **Risk-factor breakpoints** – builds per-risk intake grids and evaluates
+   :math:`\log(\mathrm{RR})` at each knot. The grid domain runs from 0 to the
+   larger of the empirical RR range and the per-capita consumption cap
+   (``food_groups.max_per_capita``, itself the store ``e_nom_max``); capping at
+   the consumption limit rather than a uniform generous value avoids a flat
+   extrapolation plateau beyond the data, which would otherwise add a spurious
+   concave kink for harmful (increasing) risk factors. Starting from the native
+   (smooth) BoP exposure points, a Douglas-Peucker pass keeps the smallest knot
+   set reproducing every (cluster, cause) curve -- including the low/high
+   uncertainty bounds -- to within ``health.breakpoint_rel_tol`` of each curve's
+   amplitude (default 5%). Results:
+   ``processing/{name}/health/risk_breakpoints.csv``.
 
 5. **Cause-level breakpoints** – constructs breakpoints for the aggregated
    log-RR and its exponential. Results:
@@ -625,7 +624,7 @@ Configuration
 Key parameters:
 
 - ``region_clusters``: Number of health clusters (more = finer resolution, slower)
-- ``intake_grid_points``: Density of Stage 1 breakpoints
+- ``breakpoint_rel_tol``: Stage 1 PWL accuracy as a fraction of each RR curve's amplitude (default 5%)
 - ``log_rr_points``: Density of Stage 2 breakpoints
 - ``value_per_yll``: Monetary value per year of life lost (USD)
 - ``risk_factors``: Which dietary risk factors to model

@@ -36,15 +36,22 @@ piecewise-linear approximation:
     Stage 1: Intake x_r → log(RR_{r,d}) for each (cluster, risk) pair
     Stage 2: Σ_r log(RR_{r,d}) → exp(·) → RR_d → YLL store level
 
-**Stage 1** uses delta (incremental) variables with SOS1 segment indicators
-because the dose-response curves may be non-convex:
+**Stage 1** uses delta (incremental) variables:
 
     δ_j ∈ [0,1], δ_j ≤ δ_{j-1} (fill-up ordering)
     x = x_0 + Σ_j δ_j Δx_j
     f(x) = f_0 + Σ_j δ_j Δf_j
 
-Linopy's ``reformulate_sos='auto'`` converts the SOS1 constraints to binary
-+ Big-M for solvers that don't support SOS natively (e.g. HiGHS).
+Because the health objective is monotone increasing in every log(RR), the LP
+relaxation of this delta fill-up formulation is already exact for curves that
+are convex in the objective-relevant direction (the LP fills the
+steepest-benefit segments first on its own). Only genuinely non-convex
+(S-shaped) dose-response curves additionally get SOS1 segment indicators with
+δ-y linking constraints to forbid interpolating across the convex hull (which
+would under-count risk). ``_convex_cluster_risk_mask`` decides this per
+(cluster, risk) pair, so the integer structure is restricted to the curves
+that need it. Linopy's ``reformulate_sos='auto'`` converts the residual SOS1
+constraints to binary + Big-M for solvers without native SOS (e.g. HiGHS).
 
 **Stage 2** uses an LP-tangent (chord-only) formulation: no auxiliary
 variables at all. Because ``exp()`` is convex and the YLL cost minimises
@@ -106,6 +113,50 @@ def _register_auxiliary_variable(m: linopy.Model, name: str) -> None:
     """Track an auxiliary variable for post-solve cleanup."""
     aux = HEALTH_AUX_MAP.setdefault(id(m), set())
     aux.add(name)
+
+
+# Relative tolerance for classifying a Stage 1 dose-response curve as convex.
+# The health objective is monotone increasing in every log(RR), so for a
+# convex (in the objective-relevant direction) curve the delta fill-up LP
+# relaxation is already exact and the segment-indicator (SOS1/binary)
+# machinery can be dropped -- the LP fills the steepest-benefit segments
+# first on its own. Only genuinely non-convex curves (S-shaped GBD dose
+# responses) keep integer structure. Convex curves have second slope
+# differences ~0..+; non-convex ones are -0.02..-0.5 relative, so the exact
+# threshold is not sensitive.
+LP_CONVEXITY_TOL = 1e-3
+
+
+def _convex_cluster_risk_mask(
+    log_rr_by_intake: xr.DataArray,
+    intake_values: xr.DataArray,
+    tol: float,
+) -> dict[str, bool]:
+    """Flag (cluster, risk) curves that are convex across all their causes.
+
+    A curve is convex when the per-segment slopes of log(RR) vs intake are
+    non-decreasing (within ``tol`` relative to the largest slope magnitude)
+    for every cause. Because the segment delta variables are shared across a
+    risk's causes and the objective weights every cause positively, a pair is
+    LP-safe (no integer variables needed) only if all of its cause curves are
+    convex.
+
+    Returns ``{cluster_risk_label: is_convex}``.
+    """
+    labels = [str(label) for label in log_rr_by_intake.coords["cluster_risk"].values]
+    dx = np.diff(intake_values.values)
+    arr = log_rr_by_intake.transpose("cluster_risk", "intake_step", "cause").values
+    # slopes: (cluster_risk, n_segments, cause)
+    slopes = np.diff(arr, axis=1) / dx[None, :, None]
+    if slopes.shape[1] < 2:
+        # 0 or 1 segment: trivially convex.
+        return dict.fromkeys(labels, True)
+    d2 = np.diff(slopes, axis=1)  # (cluster_risk, n_segments - 1, cause)
+    scale = np.max(np.abs(slopes), axis=(1, 2))
+    scale = np.where(scale > 0, scale, 1.0)
+    worst = np.min(d2, axis=(1, 2))
+    convex = worst >= -tol * scale
+    return {label: bool(flag) for label, flag in zip(labels, convex)}
 
 
 # =============================================================================
@@ -607,76 +658,66 @@ def _add_stage1_delta(
         )
 
     # -----------------------------------------------------------------------
-    # Segment indicator variables for correct interpolation
+    # Segment indicator variables (only for non-convex curves)
     # -----------------------------------------------------------------------
-    # y_j indicates segment j is "active" (contains the fractional δ)
-    # Exactly one segment is active: Σ y_j = 1
-    # SOS1 constraint ensures at most one y_j is non-zero per cluster_risk.
-    # linopy's reformulate_sos='auto' converts to binary+Big-M for solvers
-    # that don't support SOS natively (e.g. HiGHS).
-    y_var = m.add_variables(
-        lower=0,
-        upper=1,
-        coords=[cluster_risk_index, segment_coords],
-        name=f"health_segment_ind_{group_id}_{risk_label}",
+    # The δ fill-up above is exact for curves that are convex in the
+    # objective-relevant direction: the health objective is monotone in every
+    # log(RR), so the LP fills the steepest-benefit segments first without
+    # help. Only non-convex (cluster, risk) curves need SOS1 segment
+    # indicators to stop the LP interpolating across the convex hull and
+    # under-counting risk. Restricting the integer structure to those pairs is
+    # the main MILP-size lever (e.g. red_meat is convex and becomes pure LP).
+    convex_map = _convex_cluster_risk_mask(
+        log_rr_by_intake, intake_values, LP_CONVEXITY_TOL
     )
-    m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
+    mip_labels = [
+        str(label) for label in cluster_risk_index if not convex_map[str(label)]
+    ]
 
-    _register_auxiliary_variable(m, y_var.name)
+    y_var = None
+    if mip_labels and n_segments > 1:
+        mip_index = pd.Index(mip_labels, name="cluster_risk")
 
-    # Exactly one segment active
-    m.add_constraints(
-        y_var.sum(segment_dim) == 1,
-        name=f"health_segment_sum_{group_id}_{risk_label}",
-    )
+        # y_j indicates segment j is "active" (contains the fractional δ).
+        # Exactly one segment active: Σ y_j = 1. SOS1 ensures at most one y_j
+        # is non-zero per cluster_risk; linopy's reformulate_sos='auto'
+        # converts to binary+Big-M for solvers without native SOS (e.g. HiGHS).
+        y_var = m.add_variables(
+            lower=0,
+            upper=1,
+            coords=[mip_index, segment_coords],
+            name=f"health_segment_ind_{group_id}_{risk_label}",
+        )
+        m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
+        _register_auxiliary_variable(m, y_var.name)
 
-    # Linking constraints between δ and y
-    # For segment j active (y_j = 1):
-    #   - δ_0 = δ_1 = ... = δ_{j-1} = 1 (all before are full)
-    #   - δ_j ∈ [0, 1] (the active one is fractional)
-    #   - δ_{j+1} = ... = δ_{n-1} = 0 (all after are empty)
-    #
-    # Constraints:
-    #   δ_i ≥ Σ_{k=i+1}^{n-1} y_k  (δ_i = 1 if active segment is later than i)
-    #   δ_i ≤ Σ_{k=i}^{n-1} y_k    (δ_i = 0 if active segment is before i)
-    #
-    # Vectorized implementation using suffix sums computed via matrix multiplication.
+        m.add_constraints(
+            y_var.sum(segment_dim) == 1,
+            name=f"health_segment_sum_{group_id}_{risk_label}",
+        )
 
-    # Build suffix sum coefficient matrix: A[i,j] = 1 if j >= i
-    # y_suffix[i] = Σ_{j>=i} y[j] = (A @ y)[i]
-    suffix_matrix = np.triu(np.ones((n_segments, n_segments)))
-    suffix_coeffs = xr.DataArray(
-        suffix_matrix,
-        dims=[segment_dim, "sum_over"],
-        coords={segment_dim: segment_coords, "sum_over": segment_coords},
-    )
+        # Linking constraints between δ and y (suffix-sum formulation):
+        #   δ_i ≥ Σ_{k>i} y_k  (δ_i = 1 if the active segment is later than i)
+        #   δ_i ≤ Σ_{k≥i} y_k  (δ_i = 0 if the active segment is before i)
+        suffix_matrix = np.triu(np.ones((n_segments, n_segments)))
+        suffix_coeffs = xr.DataArray(
+            suffix_matrix,
+            dims=[segment_dim, "sum_over"],
+            coords={segment_dim: segment_coords, "sum_over": segment_coords},
+        )
+        # to_linexpr() avoids sos_dim validation issues with Variable.rename().
+        y_linexpr_renamed = y_var.to_linexpr().rename({segment_dim: "sum_over"})
+        y_suffix = (y_linexpr_renamed * suffix_coeffs).sum("sum_over")
 
-    # Convert y_var to LinearExpression and rename dimension for matrix multiply.
-    # We use to_linexpr() to avoid sos_dim validation issues with Variable.rename().
-    y_linexpr = y_var.to_linexpr()
-    y_linexpr_renamed = y_linexpr.rename({segment_dim: "sum_over"})
+        delta_mip = delta_var.sel(cluster_risk=mip_index)
+        m.add_constraints(
+            delta_mip <= y_suffix,
+            name=f"health_delta_upper_{group_id}_{risk_label}",
+        )
 
-    # Compute suffix sums: y_suffix[i] = Σ_{j>=i} y[j]
-    # Shape: (n_cluster_risk, n_segments)
-    y_suffix = (y_linexpr_renamed * suffix_coeffs).sum("sum_over")
-
-    # Upper bound constraints: δ[i] <= y_suffix[i] for all i=0..n-1
-    # Both delta_var and y_suffix have same coords, so direct comparison works
-    m.add_constraints(
-        delta_var <= y_suffix,
-        name=f"health_delta_upper_{group_id}_{risk_label}",
-    )
-
-    # Lower bound constraints: δ[i] >= y_suffix[i+1] for i=0..n-2
-    # y_suffix[i+1] = Σ_{k>i} y_k (the "later" sum)
-    if n_segments > 1:
-        # Use roll to shift y_suffix by -1, then take first n-1 elements
-        # This aligns y_suffix[i+1] with coords [0, 1, ..., n-2]
-        y_later_rolled = y_suffix.roll({segment_dim: -1})
-        y_later = y_later_rolled.isel({segment_dim: slice(0, -1)})  # y_suffix[i+1]
-        delta_for_lower = delta_var.isel({segment_dim: slice(0, -1)})  # δ[i]
-
-        # Both have coords [0, 1, ..., n-2], comparison works directly
+        # δ[i] >= y_suffix[i+1] for i=0..n-2
+        y_later = y_suffix.roll({segment_dim: -1}).isel({segment_dim: slice(0, -1)})
+        delta_for_lower = delta_mip.isel({segment_dim: slice(0, -1)})
         m.add_constraints(
             delta_for_lower >= y_later,
             name=f"health_delta_lower_{group_id}_{risk_label}",
@@ -756,6 +797,7 @@ def _add_stage1_delta(
     # MIP start values from baseline intake
     # -----------------------------------------------------------------------
     breakpoints = intake_values.values
+    mip_label_set = set(mip_labels)
     for label, (cluster, risk) in zip(cluster_risk_index, cluster_risk_pairs):
         intake = baseline_intakes.get((cluster, risk))
         if intake is None:
@@ -764,10 +806,12 @@ def _add_stage1_delta(
         seg = int(np.searchsorted(breakpoints[1:], intake, side="right"))
         seg = min(seg, n_segments - 1)
 
-        # y_var: indicator = 1 for active segment, 0 otherwise
-        for j in range(n_segments):
-            col = int(y_var.labels.sel(cluster_risk=label, intake_step_seg=j))
-            start_entries[col] = 1.0 if j == seg else 0.0
+        # y_var: indicator = 1 for active segment, 0 otherwise (only for the
+        # non-convex pairs that actually carry segment indicators).
+        if y_var is not None and str(label) in mip_label_set:
+            for j in range(n_segments):
+                col = int(y_var.labels.sel(cluster_risk=label, intake_step_seg=j))
+                start_entries[col] = 1.0 if j == seg else 0.0
 
         # delta_var: fill-up pattern
         for j in range(n_segments):
