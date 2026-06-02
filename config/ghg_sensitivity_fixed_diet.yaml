@@ -8,30 +8,38 @@
 # Since diet is fixed, food utility is irrelevant and disabled, and no
 # baseline calibration scenario is needed.
 #
-# The paper's figure 3 reads exactly the low/central/high anchors below
-# (matching plotting_config.yaml: ghg_display_range = {5, 500},
-# transition.ghg_price = 50) — no full sweep is needed.
+# Swept continuously over a 20-point log grid (5–500 USD/tCO2eq) plus an
+# explicit 50 anchor, for the paper's single-axis figure 3
+# (paper/scripts/figure_03_*).  The paper reads exactly these prices via
+# ``figure_03_ghg_prices`` in paper/plotting_config.yaml — keep the two in
+# lockstep.  The original 5/50/500 anchors fall out of this grid (5, 500)
+# plus the explicit 50, so the deterministic figure-1 inputs and the
+# three-price Extended Data companions (yield distributions, feed mosaic)
+# are unaffected.
 
 name: "ghg_sensitivity_fixed_diet"
 scenarios:
-  default: null
-  ghg_5:
-    emissions:
-      ghg_price: 5
-    health:
-      value_per_yll: 0
-
+  # Explicit central anchor (50 is not a node of the log grid below).
   ghg_50:
     emissions:
       ghg_price: 50
     health:
       value_per_yll: 0
 
-  ghg_500:
-    emissions:
-      ghg_price: 500
-    health:
-      value_per_yll: 0
+  _generators:
+    - name: ghg_{ghg}
+      parameters:
+        ghg:
+          space: log
+          start: 5
+          stop: 500
+          num: 20
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: 0
 
 # Fix diet to baseline
 validation:
