@@ -5,12 +5,19 @@
 """Merge LUIcube and ISIMIP grassland yields.
 
 Prefers LUIcube yields where available (finite yield > 0); falls back to
-ISIMIP for gaps.  Applies utilization corrections so the output ``yield``
-column is effective feed yield ready for direct use:
+ISIMIP for gaps.  The output ``yield`` is a per-managed-hectare yield and
+``grazing_intensity`` converts physical to managed area; the consumer
+(``build_model/grassland.py``) forms the effective per-physical-hectare
+efficiency as ``grazing_intensity * yield``. Both branches therefore obey
+the same ``efficiency = grazing_intensity * yield`` contract:
 
-- **LUIcube rows**: ``yield`` is already effective per managed hectare
-  (hanpp_harv / managed_area / C_FRACTION), used directly.
-- **ISIMIP rows**: ``yield = raw_yield * isimip_utilization_rate``
+- **LUIcube rows**: ``yield`` is per managed hectare
+  (hanpp_harv / managed_area / C_FRACTION); ``grazing_intensity`` is the
+  NPP-weighted harvest fraction.
+- **ISIMIP rows**: ``yield`` is the raw ISIMIP managed-grass yield and
+  ``grazing_intensity = isimip_utilization_rate`` is the GI proxy. The
+  utilization rate is applied exactly once, via that single multiply in
+  the consumer -- do NOT also pre-multiply ``yield`` here.
 
 Output columns: yield, suitable_area, grazing_intensity
 """
@@ -35,10 +42,10 @@ if __name__ == "__main__":
     luicube_valid = luicube["yield"].apply(np.isfinite) & (luicube["yield"] > 0)
 
     # Start from ISIMIP as the base (covers all region/class combinations).
-    # Apply isimip_utilization_rate to convert raw ISIMIP yield to effective feed yield.
-    # ISIMIP regions use isimip_utilization_rate as their GI proxy.
+    # ISIMIP regions use isimip_utilization_rate as their grazing-intensity
+    # proxy; the raw managed-grass yield is left untouched so the haircut is
+    # applied exactly once in grassland.py via efficiency = GI * yield.
     merged = isimip[["yield", "suitable_area"]].copy()
-    merged["yield"] = merged["yield"] * isimip_utilization_rate
     merged["grazing_intensity"] = isimip_utilization_rate
 
     # Overwrite with LUIcube where valid (yields are already per managed hectare)

@@ -11,6 +11,7 @@ import pytest
 
 from workflow.scripts.prepare_feed_baseline import (
     RUMINANT_ANIMALS,
+    _apply_roughage_resplit,
     _build_item_to_product,
     _compute_all_product_shares,
     _flatten_system_product_map,
@@ -471,3 +472,122 @@ class TestComputeFcrLookup:
         lookup = compute_fcr_lookup(me_requirements_csv, ["dairy", "meat-cattle"])
         products_in_lookup = {p for p, _c in lookup}
         assert products_in_lookup == {"dairy", "meat-cattle"}
+
+
+class TestRoughageResplit:
+    """Tests for the Mottet-based ruminant roughage re-split."""
+
+    # Minimal composition: SA dairy_cattle (residue-heavy), NAM beef_cattle
+    # (grass-only). Already renormalized within roughage (sum to 1), as
+    # _load_roughage_composition produces.
+    COMP: ClassVar = {
+        ("SA", "dairy_cattle"): {
+            "fresh_grass": 0.10,
+            "hay": 0.10,
+            "legumes_silage": 0.0,
+            "crop_residues": 0.65,
+            "sugarcane_tops": 0.05,
+            "tree_leaves": 0.10,
+        },
+        ("NAM", "beef_cattle"): {
+            "fresh_grass": 0.55,
+            "hay": 0.35,
+            "legumes_silage": 0.10,
+            "crop_residues": 0.0,
+            "sugarcane_tops": 0.0,
+            "tree_leaves": 0.0,
+        },
+    }
+    REGION_DEFAULT: ClassVar = {
+        "SA": COMP[("SA", "dairy_cattle")],
+        "NAM": COMP[("NAM", "beef_cattle")],
+    }
+    REGION: ClassVar = {"IND": "SA", "USA": "NAM"}
+
+    def _intakes(self, iso, animal, product, **cat_intake):
+        rows = [
+            {
+                "ISO3": iso,
+                "Animal": animal,
+                "LPS": "Mixed",
+                "feed_category": cat,
+                "intake_mt": mt,
+                "product": product,
+                "animal_type": "ruminant",
+                "product_share": 1.0,
+            }
+            for cat, mt in cat_intake.items()
+        ]
+        return pd.DataFrame(rows)
+
+    def test_pooled_total_preserved_and_routing(self):
+        """Pooled roughage is preserved and routed to forage/roughage/browse."""
+        intakes = self._intakes(
+            "IND",
+            "Cattle",
+            "dairy",
+            **{"Grass and leaves": 50.0, "Crop residues": 30.0, "Fodder crop": 0.0},
+        )
+        out = _apply_roughage_resplit(
+            intakes, self.COMP, self.REGION_DEFAULT, self.REGION
+        )
+        out["feed_use"] = out["intake_mt"] * out["product_share"] * out["fraction"]
+        # Total preserved (80 Mt pooled).
+        assert out["feed_use"].sum() == pytest.approx(80.0)
+        # SA dairy_cattle: forage 0.10+0.10, roughage 0.65+0.05, browse 0.10.
+        forage = out[out["model_feed_category"] == "ruminant_forage"]["feed_use"].sum()
+        rough = out[
+            (out["model_feed_category"] == "ruminant_roughage") & (~out["exogenous"])
+        ]["feed_use"].sum()
+        browse = out[
+            (out["model_feed_category"] == "ruminant_roughage") & (out["exogenous"])
+        ]["feed_use"].sum()
+        assert forage == pytest.approx(80.0 * 0.20)
+        assert rough == pytest.approx(80.0 * 0.70)
+        assert browse == pytest.approx(80.0 * 0.10)
+
+    def test_product_share_weights_dairy_vs_meat(self):
+        """Two products of one animal use their own species composition."""
+        intakes = pd.concat(
+            [
+                self._intakes("USA", "Cattle", "dairy", **{"Grass and leaves": 100.0}),
+                self._intakes(
+                    "USA", "Cattle", "meat-cattle", **{"Grass and leaves": 100.0}
+                ),
+            ]
+        )
+        # dairy uses dairy_cattle (absent here -> region default = NAM beef),
+        # meat uses beef_cattle. Give both a product_share of 0.5.
+        intakes["product_share"] = 0.5
+        out = _apply_roughage_resplit(
+            intakes, self.COMP, self.REGION_DEFAULT, self.REGION
+        )
+        out["feed_use"] = out["intake_mt"] * out["product_share"] * out["fraction"]
+        # Total preserved: 100 pooled per product * 0.5 share, two products.
+        assert out["feed_use"].sum() == pytest.approx(100.0)
+        # NAM has no residues -> all forage, no endogenous roughage.
+        rough = out[
+            (out["model_feed_category"] == "ruminant_roughage") & (~out["exogenous"])
+        ]["feed_use"].sum()
+        assert rough == pytest.approx(0.0)
+
+    def test_fractions_sum_to_one_per_group(self):
+        """Emitted fractions sum to 1.0 per (country, animal, product)."""
+        intakes = self._intakes(
+            "IND",
+            "Cattle",
+            "dairy",
+            **{"Grass and leaves": 50.0, "Crop residues": 30.0},
+        )
+        out = _apply_roughage_resplit(
+            intakes, self.COMP, self.REGION_DEFAULT, self.REGION
+        )
+        assert out["fraction"].sum() == pytest.approx(1.0)
+
+    def test_missing_region_raises(self):
+        """A country absent from the region map raises rather than silently dropping."""
+        intakes = self._intakes("ZZZ", "Cattle", "dairy", **{"Grass and leaves": 10.0})
+        with pytest.raises(ValueError, match="country_mottet_region"):
+            _apply_roughage_resplit(
+                intakes, self.COMP, self.REGION_DEFAULT, self.REGION
+            )

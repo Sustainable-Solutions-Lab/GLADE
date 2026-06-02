@@ -224,6 +224,8 @@ residues:
   max_feed_fraction: 0.30 # Maximum fraction of residues that can be removed for animal feed (remainder must be incorporated into soil)
   max_feed_fraction_by_region: # Overrides by ISO3 country code or M49 region/sub-region name (country overrides sub-region overrides region)
     Asia: 0.70 # Asia uses a lot of crop residues for feeding; setting this higher helps livestock feed balancing in the model
+    Southern Asia: 0.85 # India/Pakistan/Bangladesh remove most crop residue for feed/fuel, leaving little for soil (ICAR/IGFRI residue-balance studies)
+    Sub-Saharan Africa: 0.70 # mixed crop-livestock systems feed/graze crop residues heavily rather than incorporating them
 
 # --- section: emissions ---
 emissions:
@@ -638,10 +640,10 @@ grazing:
 # generators up to the listed cap are added to each country's protein
 # feed bus (in validation/enforce_baseline_feed mode dispatch is forced).
 # See docs/calibration.rst for the full discussion.
-feed_protein_calibration:
+exogenous_feed_calibration:
   enabled: true
   generate: false
-  exogenous_protein: "data/curated/calibration/exogenous_protein.csv"
+  exogenous_feed: "data/curated/calibration/exogenous_feed.csv"
   scenario: "default"
 
 # Food waste calibration: a per-food-group multiplier on (1 - waste_fraction)
@@ -1138,7 +1140,13 @@ commodities:
         - rendered-fat
 
   feeds:
-    non_tradable: [ruminant_forage]
+    # ruminant_forage (grazed grass) and ruminant_roughage (crop residues,
+    # straw, browse/leaves) are bulky, low-value feeds not traded
+    # internationally at scale; keep them national. This also stops the
+    # landless exogenous-leaves backstop (which supplies the roughage bus)
+    # from flowing across borders. non_tradable overrides class membership
+    # below, so ruminant_roughage remaining in bulky_low_quality is inert.
+    non_tradable: [ruminant_forage, ruminant_roughage]
     classes:
       grain_protein:
         trade_cost_per_t_km: 0.006   # matches crop bulk_dry_goods (concentrated, dense)

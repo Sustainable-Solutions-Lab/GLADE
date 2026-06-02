@@ -52,7 +52,7 @@ required:
   - animal_costs
   - crop_costs
   - cost_calibration
-  - feed_protein_calibration
+  - exogenous_feed_calibration
   - food_loss_waste_calibration
   - food_demand_calibration
   - deviation_penalty
@@ -1571,9 +1571,9 @@ properties:
         type: string
         description: "Path to animal cost calibration correction CSV"
 
-  feed_protein_calibration:
+  exogenous_feed_calibration:
     type: object
-    required: [enabled, generate, exogenous_protein, scenario]
+    required: [enabled, generate, exogenous_feed, scenario]
     additionalProperties: false
     description: "Per-country exogenous monogastric/ruminant protein-feed supply (Mt DM) derived from positive feed-bus slack on an uncalibrated validation solve."
     properties:
@@ -1583,7 +1583,7 @@ properties:
       generate:
         type: boolean
         description: "Generate the calibration CSV from a solved model's protein-feed slack (breaks DAG cycle when true)"
-      exogenous_protein:
+      exogenous_feed:
         type: string
         description: "Path to CSV with per-country exogenous protein supply (country, monogastric_protein_mt_dm, ruminant_protein_mt_dm)"
       scenario:

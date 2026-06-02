@@ -117,9 +117,9 @@ if config["solving"]["inline_analysis"]:
                 "grazing"
             ]["grassland_forage_calibration"]["enabled"],
             forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
-            protein_feed_calibration_enabled=lambda w: get_effective_config(
+            exogenous_feed_calibration_enabled=lambda w: get_effective_config(
                 w.scenario
-            )["feed_protein_calibration"]["enabled"],
+            )["exogenous_feed_calibration"]["enabled"],
             enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
             regional_limit=lambda w: get_effective_config(w.scenario)["land"][
                 "regional_limit"

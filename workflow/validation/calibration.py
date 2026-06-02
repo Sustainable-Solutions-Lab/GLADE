@@ -35,9 +35,9 @@ _CALIBRATION_SECTIONS = [
         "has_scenario": True,
     },
     {
-        "name": "feed_protein_calibration",
-        "path": ("feed_protein_calibration",),
-        "files": ["exogenous_protein"],
+        "name": "exogenous_feed_calibration",
+        "path": ("exogenous_feed_calibration",),
+        "files": ["exogenous_feed"],
         "has_scenario": True,
     },
     {

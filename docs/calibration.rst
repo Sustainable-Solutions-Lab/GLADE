@@ -47,9 +47,9 @@ anything.
      - ``grassland_yield.csv``,
        ``fodder_conversion.csv``,
        ``exogenous_forage.csv``,
-       ``exogenous_protein.csv``
+       ``exogenous_feed.csv``
      - Per-country corrections that balance ruminant-forage and
-       monogastric/ruminant-protein supply against the GLEAM3-derived
+       monogastric/ruminant-protein and ruminant-roughage supply against the GLEAM3-derived
        baseline demand.
    * - :ref:`food_waste <food-waste-calibration>`
      - ``config/calibration/food_waste.yaml``
@@ -134,9 +134,9 @@ workflow when their configuration blocks are enabled (the default):
 * ``grazing.grassland_forage_calibration.enabled: true`` loads the
   three forage-side CSVs at solve time (see
   :ref:`grassland-forage-calibration`).
-* ``feed_protein_calibration.enabled: true`` loads
-  ``exogenous_protein.csv`` and injects free per-country generators on
-  the monogastric/ruminant protein feed buses (see
+* ``exogenous_feed_calibration.enabled: true`` loads
+  ``exogenous_feed.csv`` and injects free per-country generators on
+  the monogastric/ruminant protein and ruminant-roughage feed buses (see
   :ref:`exogenous-protein-feed`).
 * ``food_demand_calibration.enabled: true`` loads
   ``data/curated/calibration/food_demand.csv`` at solve time and applies
@@ -173,13 +173,13 @@ validation solve:
 * **Protein corrections** (deficit side only, on
   ``feed:monogastric_protein:*`` and ``feed:ruminant_protein:*``). The
   positive slack on each protein feed bus is written to
-  ``data/curated/calibration/exogenous_protein.csv``. See
+  ``data/curated/calibration/exogenous_feed.csv``. See
   :ref:`exogenous-protein-feed` for what real-world sources it stands
   in for.
 
 Both rules read the same solved validation network. The relevant
 Snakemake rules are ``compute_grassland_calibration`` (forage) and
-``compute_protein_feed_calibration`` (protein), both in
+``compute_exogenous_feed_calibration`` (protein and roughage), both in
 ``workflow/rules/animals.smk``. ``generate: true`` lives in
 ``config/calibration/feed.yaml`` and is ``false`` everywhere else,
 which breaks the otherwise circular dependency.

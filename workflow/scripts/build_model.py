@@ -1088,11 +1088,14 @@ if __name__ == "__main__":
         animal_marketing_cost_usd_per_t=food_marketing_usd_per_t,
     )
 
-    # Add exogenous feed generators (leaves/browse, swill)
+    # Add exogenous feed generators (leaves/browse, swill), priced at the
+    # grassland grazing cost in optimisation mode so the landless backstop
+    # does not undercut endogenous grassland/fodder/residue feed.
     animals.add_exogenous_feed_generators(
         n,
         feed_baseline,
         enforce_baseline_feed=enforce_baseline_feed,
+        grazing_cost_usd_per_t=grazing_cost_per_tonne_dm,
     )
 
     # Add feed slack generators for validation mode feasibility

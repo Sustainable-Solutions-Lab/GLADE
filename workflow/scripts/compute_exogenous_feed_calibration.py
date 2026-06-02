@@ -2,24 +2,27 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Compute exogenous protein-feed supply from a solved validation model.
+"""Compute exogenous supplementary-feed supply from a solved validation model.
 
 Mirrors the deficit-side of ``compute_grassland_calibration.py``: for each
-country and each protein feed category (``monogastric_protein``,
-``ruminant_protein``), the positive slack on the corresponding feed bus is
-recorded as an exogenous supply that the model can rely on at solve time.
+country and each supplementary feed category (``monogastric_protein``,
+``ruminant_protein``, ``ruminant_roughage``), the positive slack on the
+corresponding feed bus is recorded as an exogenous supply that the model can
+rely on at solve time.
 
-Rationale: roughly 10-15% of global protein-feed demand cannot be produced
-endogenously by the model. The missing sources are fishmeal (seafood
-isn't modelled), synthetic amino acids, animal by-products (meat & bone
-meal, blood, feathers) and — until the corresponding processing pathways
-are added — palm kernel cake and maize gluten meal/feed. Rather than
-attempting to model each of these explicitly, we book the per-country
-shortfall as an exogenous supply with the same accounting convention
-already used for forage deficits (see ``exogenous_forage.csv``).
+Rationale: a share of protein- and roughage-feed demand cannot be produced
+endogenously by the model. For protein the missing sources are fishmeal
+(seafood isn't modelled), synthetic amino acids, and animal by-products (meat
+& bone meal, blood, feathers). For roughage, residue-dependent systems
+(notably South Asia) demand more crop residues than the modelled domestic
+residue supply provides -- partly a real, documented fodder deficit, partly
+cut green fodder and residue we don't fully account for. Rather than model
+each explicitly, we book the per-country shortfall as an exogenous supply
+with the same accounting convention used for forage deficits (see
+``exogenous_forage.csv``).
 
-Output: ``exogenous_protein.csv`` with columns
-``country, monogastric_protein_mt_dm, ruminant_protein_mt_dm``.
+Output: ``exogenous_feed.csv`` with columns ``country,
+monogastric_protein_mt_dm, ruminant_protein_mt_dm, ruminant_roughage_mt_dm``.
 """
 
 import logging
@@ -33,11 +36,15 @@ from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
-PROTEIN_CATEGORIES = ("monogastric_protein", "ruminant_protein")
+EXOGENOUS_FEED_CATEGORIES = (
+    "monogastric_protein",
+    "ruminant_protein",
+    "ruminant_roughage",
+)
 
 
 def _positive_slack_by_country(n: pypsa.Network, feed_category: str) -> pd.Series:
-    """Return positive feed slack (Mt DM) by country for one protein bus."""
+    """Return positive feed slack (Mt DM) by country for one feed bus."""
     bus_prefix = f"feed:{feed_category}:"
     pos_slack = n.generators.static[
         n.generators.static["carrier"] == "slack_positive_feed"
@@ -60,7 +67,7 @@ def _positive_slack_by_country(n: pypsa.Network, feed_category: str) -> pd.Serie
     return by_country[by_country > 1e-10].rename(feed_category)
 
 
-def compute_protein_feed_calibration(
+def compute_exogenous_feed_calibration(
     network_path: str,
     output_path: str,
 ) -> None:
@@ -84,7 +91,7 @@ def compute_protein_feed_calibration(
     n = pypsa.Network(network_path)
 
     deficits: dict[str, pd.Series] = {
-        cat: _positive_slack_by_country(n, cat) for cat in PROTEIN_CATEGORIES
+        cat: _positive_slack_by_country(n, cat) for cat in EXOGENOUS_FEED_CATEGORIES
     }
 
     countries = sorted({c for s in deficits.values() for c in s.index})
@@ -92,21 +99,23 @@ def compute_protein_feed_calibration(
     rows = []
     for country in countries:
         row = {"country": country}
-        for cat in PROTEIN_CATEGORIES:
+        for cat in EXOGENOUS_FEED_CATEGORIES:
             row[f"{cat}_mt_dm"] = round(float(deficits[cat].get(country, 0.0)), 6)
         rows.append(row)
 
     df = pd.DataFrame(
-        rows, columns=["country", *[f"{c}_mt_dm" for c in PROTEIN_CATEGORIES]]
+        rows, columns=["country", *[f"{c}_mt_dm" for c in EXOGENOUS_FEED_CATEGORIES]]
     )
 
-    totals = {cat: float(deficits[cat].sum()) for cat in PROTEIN_CATEGORIES}
-    n_nonzero = {cat: int((deficits[cat] > 0).sum()) for cat in PROTEIN_CATEGORIES}
+    totals = {cat: float(deficits[cat].sum()) for cat in EXOGENOUS_FEED_CATEGORIES}
+    n_nonzero = {
+        cat: int((deficits[cat] > 0).sum()) for cat in EXOGENOUS_FEED_CATEGORIES
+    }
     logger.info(
         "Protein-feed calibration: %s",
         ", ".join(
             f"{cat}={n_nonzero[cat]} countries / {totals[cat]:.1f} Mt DM"
-            for cat in PROTEIN_CATEGORIES
+            for cat in EXOGENOUS_FEED_CATEGORIES
         ),
     )
 
@@ -122,7 +131,7 @@ if __name__ == "__main__":
         log_file=snakemake.log[0] if snakemake.log else None  # type: ignore[name-defined]
     )
 
-    compute_protein_feed_calibration(
+    compute_exogenous_feed_calibration(
         network_path=snakemake.input.network,  # type: ignore[name-defined]
-        output_path=snakemake.output.exogenous_protein,  # type: ignore[name-defined]
+        output_path=snakemake.output.exogenous_feed,  # type: ignore[name-defined]
     )

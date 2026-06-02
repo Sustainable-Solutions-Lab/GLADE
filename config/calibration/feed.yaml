@@ -28,7 +28,7 @@
 #     data/curated/calibration/grassland_yield.csv \
 #     data/curated/calibration/fodder_conversion.csv \
 #     data/curated/calibration/exogenous_forage.csv \
-#     data/curated/calibration/exogenous_protein.csv
+#     data/curated/calibration/exogenous_feed.csv
 
 # Shared name across all calibration configs so the expensive upstream
 # processing (crop yields, harvested area, regions, etc.) is built once
@@ -38,7 +38,7 @@ name: "calibration"
 scenarios:
   # No scenario-level overrides needed: the generated calibrations are
   # disabled at the base level (see grazing.grassland_forage_calibration
-  # and feed_protein_calibration below), so the solved scenario's feed-bus
+  # and exogenous_feed_calibration below), so the solved scenario's feed-bus
   # slack reveals the supply/demand gap.
   feed_uncal: {}
 
@@ -70,7 +70,7 @@ grazing:
     generate: true     # Generate calibration from solved model
     scenario: feed_uncal
 
-feed_protein_calibration:
+exogenous_feed_calibration:
   enabled: false       # Don't apply calibration (we're generating it)
   generate: true       # Generate calibration from solved model
   scenario: feed_uncal

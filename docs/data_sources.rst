@@ -489,6 +489,23 @@ Additionally, model-specific feed category mappings live in ``data/curated/gleam
 
 **Usage**: Provides the feed baseline for the livestock module. Country-level intakes are mapped to model feed categories via ``compute_gleam3_feed_fractions.py``, split between co-products using FCR-weighted shares, and scaled to the configured reference year. Consumed by ``prepare_feed_baseline.py``. See :ref:`gleam-feed-baseline` for details.
 
+Ruminant Roughage Composition (Mottet et al. 2017)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Provider**: Mottet et al. (2017), based on FAO GLEAM 2.0
+
+**Description**: Region x species ruminant roughage composition (fresh grass, hay, grass-legume/silage, crop residues, sugarcane tops, tree leaves) as shares of dry-matter intake. Used to re-split the GLEAM 3.0 ruminant roughage total, whose availability-based grass/residue split over-attributes grazed/cut grass relative to feeding surveys in South/East Asia (see :ref:`gleam-feed-baseline`).
+
+**Coverage**: 10 GLEAM regions x 6 ruminant species (dairy/meat cattle, buffalo, small ruminants)
+
+**Access**: Transcribed from the supplementary information (Tables SI 4-9) of the cited paper.
+
+**License**: CC BY 4.0
+
+**Citation**: Mottet, A., de Haan, C., Falcucci, A., Tempio, G., Opio, C., Gerber, P. (2017). Livestock: On our plates or eating at our table? A new analysis of the feed/food debate. *Global Food Security* 14, 1-8. https://doi.org/10.1016/j.gfs.2017.01.001
+
+**Retrieval**: Bundled as ``data/curated/gleam/roughage_composition.csv`` (composition shares) and ``data/curated/country_mottet_region.csv`` (country-to-region map). Consumed by ``prepare_feed_baseline.py``.
+
 Grassland Yield Data (ISIMIP / LPJmL)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

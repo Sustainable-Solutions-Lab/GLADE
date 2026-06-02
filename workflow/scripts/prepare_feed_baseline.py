@@ -40,6 +40,148 @@ _GLEAM3_ITEM_TYPE = {
     "Eggs": "eggs",
 }
 
+# GLEAM3 roughage intake categories.  When the roughage re-split is enabled,
+# these three are pooled per (country, animal, LPS) and redistributed across
+# model feed categories using the Mottet (2017) region x species composition,
+# instead of GLEAM 3.0's availability-based grass/residue split.
+ROUGHAGE_GLEAM3_CATEGORIES = frozenset(
+    {"Grass and leaves", "Crop residues", "Fodder crop"}
+)
+
+# (GLEAM Animal, model product) -> Mottet species row in roughage_composition.csv.
+RUMINANT_SPECIES_MAP = {
+    ("Cattle", "dairy"): "dairy_cattle",
+    ("Cattle", "meat-cattle"): "beef_cattle",
+    ("Buffalo", "dairy-buffalo"): "dairy_buffalo",
+    ("Buffalo", "meat-cattle"): "meat_buffalo",
+    ("Sheep", "dairy"): "dairy_small_ruminant",
+    ("Sheep", "meat-sheep"): "meat_small_ruminant",
+    ("Goats", "dairy"): "dairy_small_ruminant",
+    ("Goats", "meat-sheep"): "meat_small_ruminant",
+}
+
+# Roughage components -> (model feed category, exogenous flag).
+_FORAGE_COMPONENTS = ("fresh_grass", "hay", "legumes_silage")
+_ROUGHAGE_COMPONENTS = ("crop_residues", "sugarcane_tops")
+_BROWSE_COMPONENTS = ("tree_leaves",)
+_ALL_COMPONENTS = _FORAGE_COMPONENTS + _ROUGHAGE_COMPONENTS + _BROWSE_COMPONENTS
+
+
+def _load_roughage_composition(
+    path: str,
+) -> tuple[dict[tuple[str, str], dict[str, float]], dict[str, dict[str, float]]]:
+    """Load the Mottet roughage composition, renormalized within roughage.
+
+    Returns ``(by_region_species, region_default)``; each value maps component
+    name -> fraction summing to 1.0 over the six roughage components.
+    ``region_default`` is the per-region mean across species, used as a
+    fallback when a (region, species) row is absent (a species not present in
+    that region).
+    """
+    df = pd.read_csv(path, comment="#")
+    wide = pd.pivot_table(
+        df,
+        index=["region", "species"],
+        columns="component",
+        values="share",
+        fill_value=0.0,
+    ).reindex(columns=list(_ALL_COMPONENTS), fill_value=0.0)
+
+    def _renorm(row: pd.Series) -> dict[str, float] | None:
+        total = float(row.sum())
+        if total <= 0:
+            return None
+        return {c: float(row[c]) / total for c in _ALL_COMPONENTS}
+
+    by_rs: dict[tuple[str, str], dict[str, float]] = {}
+    for (region, species), row in wide.iterrows():
+        shares = _renorm(row)
+        if shares is not None:
+            by_rs[(region, species)] = shares
+    region_default: dict[str, dict[str, float]] = {}
+    for region, sub in wide.groupby(level="region"):
+        shares = _renorm(sub.mean(axis=0))
+        if shares is not None:
+            region_default[region] = shares
+    return by_rs, region_default
+
+
+def _apply_roughage_resplit(
+    intakes: pd.DataFrame,
+    comp_by_rs: dict[tuple[str, str], dict[str, float]],
+    region_default: dict[str, dict[str, float]],
+    country_region: dict[str, str],
+) -> pd.DataFrame:
+    """Re-split ruminant roughage intake into model feed categories.
+
+    Pools the GLEAM3 roughage categories per (country, animal, LPS, product)
+    and redistributes the pooled total across model feed categories using the
+    Mottet region x species composition: forage = fresh grass + hay +
+    legumes/silage; roughage = crop residues + sugarcane tops; browse = tree
+    leaves (exogenous).  GLEAM 3.0 per-system roughage totals are preserved
+    exactly (component fractions sum to 1.0).  Returns rows with the same
+    columns the fraction-merge path produces.
+    """
+    rough = intakes[
+        (intakes["animal_type"] == "ruminant")
+        & (intakes["feed_category"].isin(ROUGHAGE_GLEAM3_CATEGORIES))
+    ]
+    if rough.empty:
+        return pd.DataFrame()
+
+    # Pool the three roughage categories per (country, animal, LPS, product).
+    # intake_mt is the category intake (constant across the products of a
+    # system); product_share splits it.  Summing the (<=3) category rows gives
+    # the system's total roughage intake for that product row.
+    pooled = rough.groupby(
+        ["ISO3", "Animal", "LPS", "product", "animal_type"], as_index=False
+    ).agg(
+        roughage_intake=("intake_mt", "sum"), product_share=("product_share", "first")
+    )
+
+    routing = (
+        [(c, "ruminant_forage", False) for c in _FORAGE_COMPONENTS]
+        + [(c, "ruminant_roughage", False) for c in _ROUGHAGE_COMPONENTS]
+        + [(c, "ruminant_roughage", True) for c in _BROWSE_COMPONENTS]
+    )
+
+    records = []
+    for row in pooled.itertuples(index=False):
+        region = country_region.get(row.ISO3)
+        if region is None:
+            raise ValueError(
+                f"Country {row.ISO3!r} missing from country_mottet_region map"
+            )
+        species = RUMINANT_SPECIES_MAP.get((row.Animal, row.product))
+        if species is None:
+            raise ValueError(
+                f"No Mottet species mapping for ruminant ({row.Animal!r}, "
+                f"{row.product!r})"
+            )
+        comp = comp_by_rs.get((region, species)) or region_default.get(region)
+        if comp is None:
+            raise ValueError(f"No roughage composition for region {region!r}")
+        agg: dict[tuple[str, bool], float] = {}
+        for component, model_cat, exo in routing:
+            agg[(model_cat, exo)] = agg.get((model_cat, exo), 0.0) + comp[component]
+        for (model_cat, exo), frac in agg.items():
+            records.append(
+                {
+                    "ISO3": row.ISO3,
+                    "Animal": row.Animal,
+                    "LPS": row.LPS,
+                    "feed_category": "Roughage (resplit)",
+                    "intake_mt": row.roughage_intake,
+                    "product": row.product,
+                    "animal_type": row.animal_type,
+                    "product_share": row.product_share,
+                    "model_feed_category": model_cat,
+                    "fraction": frac,
+                    "exogenous": exo,
+                }
+            )
+    return pd.DataFrame.from_records(records)
+
 
 def _flatten_system_product_map(
     nested: dict[str, dict[str, list[str]]],
@@ -408,6 +550,8 @@ def main() -> None:
         dict(snakemake.params.gleam3_system_product_map)  # type: ignore[name-defined]
     )
     item_to_product = _build_item_to_product(system_product_map)
+    roughage_composition_path = snakemake.input.roughage_composition  # type: ignore[name-defined]
+    country_region_path = snakemake.input.country_mottet_region  # type: ignore[name-defined]
 
     # -- Phase 1: Load GLEAM3 data ----------------------------------------
     logger.info("Loading GLEAM3 feed intake data")
@@ -501,6 +645,36 @@ def main() -> None:
     # -- Phase 4: Apply feed fractions ------------------------------------
     logger.info("Applying feed fractions to compute model feed categories")
 
+    # Re-split ruminant roughage via Mottet (2017) composition. The three
+    # ruminant roughage GLEAM3 categories are removed from the fraction-merge
+    # path (compute_gleam3_feed_fractions emits no rows for them) and replaced
+    # by pre-resolved (model_feed_category, fraction, exogenous) rows that
+    # preserve the GLEAM 3.0 per-system roughage total.
+    comp_by_rs, region_default = _load_roughage_composition(roughage_composition_path)
+    country_region = (
+        pd.read_csv(country_region_path, comment="#")
+        .set_index("country")["mottet_region"]
+        .to_dict()
+    )
+    missing_regions = sorted(set(countries) - set(country_region))
+    if missing_regions:
+        raise ValueError(
+            "country_mottet_region map missing countries: " + ", ".join(missing_regions)
+        )
+    resplit_rows = _apply_roughage_resplit(
+        intakes, comp_by_rs, region_default, country_region
+    )
+    intakes = intakes[
+        ~(
+            (intakes["animal_type"] == "ruminant")
+            & (intakes["feed_category"].isin(ROUGHAGE_GLEAM3_CATEGORIES))
+        )
+    ].copy()
+    logger.info(
+        "Roughage re-split: %d rows replacing pooled ruminant roughage",
+        len(resplit_rows),
+    )
+
     # Split fractions into global and country-specific
     global_fractions = fractions[fractions["country"] == "_global"].copy()
     country_fractions = fractions[fractions["country"] != "_global"].copy()
@@ -538,10 +712,10 @@ def main() -> None:
         "fraction",
         "exogenous",
     ]
-    combined = pd.concat(
-        [intakes_global[frac_cols], intakes_country[frac_cols]],
-        ignore_index=True,
-    )
+    frames = [intakes_global[frac_cols], intakes_country[frac_cols]]
+    if not resplit_rows.empty:
+        frames.append(resplit_rows[frac_cols])
+    combined = pd.concat(frames, ignore_index=True)
     if combined.empty:
         raise ValueError("No feed baseline records generated after applying fractions.")
 

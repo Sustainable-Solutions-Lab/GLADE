@@ -278,9 +278,9 @@ def solve_model_inputs(w):
 
     # Protein-feed calibration: per-country exogenous protein supply CSV.
     # Same gating pattern as the forage calibration.
-    pcal_cfg = eff_cfg["feed_protein_calibration"]
-    if pcal_cfg["enabled"]:
-        inputs["exogenous_protein"] = pcal_cfg["exogenous_protein"]
+    exo_feed_cal_cfg = eff_cfg["exogenous_feed_calibration"]
+    if exo_feed_cal_cfg["enabled"]:
+        inputs["exogenous_feed"] = exo_feed_cal_cfg["exogenous_feed"]
 
     # Food demand calibration: include the per-food multiplier CSV when
     # enabled. The generation config sets enabled=false to break the DAG
@@ -412,8 +412,8 @@ rule solve_model:
             "grazing"
         ]["grassland_forage_calibration"]["enabled"],
         forage_overlap_crops=config["grazing"]["forage_overlap_crops"],
-        protein_feed_calibration_enabled=lambda w: get_effective_config(w.scenario)[
-            "feed_protein_calibration"
+        exogenous_feed_calibration_enabled=lambda w: get_effective_config(w.scenario)[
+            "exogenous_feed_calibration"
         ]["enabled"],
         enforce_baseline_feed=config["validation"]["enforce_baseline_feed"],
         regional_limit=lambda w: get_effective_config(w.scenario)["land"][

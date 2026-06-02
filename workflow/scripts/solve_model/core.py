@@ -1110,11 +1110,34 @@ def _apply_biofuel_demand_scaling(n: pypsa.Network, scale: float) -> None:
     )
 
 
+def _exogenous_feed_marginal_cost(n: pypsa.Network) -> float:
+    """Marginal cost (bnUSD per Mt DM) for landless exogenous feed generators.
+
+    Anchored to the model's own grassland grazing cost per tonne DM: the
+    median of ``marginal_cost / efficiency`` across grassland_production
+    links (which itself derives from USDA ERS / EU FADN grazed-feed costs;
+    see docs/costs.rst). Pricing the landless exogenous backstop at the cost
+    of obtaining the equivalent forage by grazing removes the artificial
+    preference for exogenous feed over endogenous grassland, fodder, and
+    crop-residue feed. Must be evaluated before forage calibration scales
+    grassland efficiency. Returns 0.0 when no grassland links exist.
+    """
+    grass = n.links.static[n.links.static["carrier"] == "grassland_production"]
+    if grass.empty:
+        return 0.0
+    eff = grass["efficiency"].astype(float)
+    per_mt = (grass["marginal_cost"].astype(float) / eff.where(eff > 0)).dropna()
+    if per_mt.empty:
+        return 0.0
+    return float(per_mt.median())
+
+
 def _apply_forage_calibration(
     n: pypsa.Network,
     smk,
     forage_overlap_crops: list[str],
     enforce_baseline_feed: bool,
+    exogenous_marginal_cost: float,
 ) -> None:
     """Apply grassland forage calibration corrections at solve time.
 
@@ -1190,7 +1213,7 @@ def _apply_forage_calibration(
                     carrier="exogenous_forage_cal",
                     p_nom_extendable=True,
                     p_nom_max=exog["exogenous_forage_mt_dm"].values,
-                    marginal_cost=0.0,
+                    marginal_cost=exogenous_marginal_cost,
                     country=exog["country"].values,
                 )
             logger.info(
@@ -1200,22 +1223,27 @@ def _apply_forage_calibration(
             )
 
 
-def _apply_protein_feed_calibration(
+def _apply_exogenous_feed_calibration(
     n: pypsa.Network,
     smk,
     enforce_baseline_feed: bool,
+    exogenous_marginal_cost: float,
 ) -> None:
-    """Inject per-country exogenous monogastric/ruminant protein supply.
+    """Inject per-country exogenous protein and roughage supply.
 
-    Reads ``smk.input.exogenous_protein`` and adds free generators on the
-    matching ``feed:{monogastric,ruminant}_protein:{country}`` buses up to
-    the listed ceiling. In validation/enforce_baseline_feed mode the
+    Reads ``smk.input.exogenous_feed`` and adds generators on the matching
+    ``feed:{monogastric_protein,ruminant_protein,ruminant_roughage}:{country}``
+    buses up to the listed ceiling, priced at ``exogenous_marginal_cost``
+    (roughage carries the ``exogenous_roughage_cal`` carrier; protein meals
+    ``exogenous_protein_cal``). In validation/enforce_baseline_feed mode the
     generators are forced to dispatch at the listed amount.
     """
     read_csv = functools.partial(pd.read_csv, comment="#")
-    df = read_csv(smk.input.exogenous_protein)
+    df = read_csv(smk.input.exogenous_feed)
 
-    categories = ("monogastric_protein", "ruminant_protein")
+    # Roughage gets its own carrier so analysis can distinguish exogenous
+    # protein meals from exogenous (unaccounted) roughage.
+    categories = ("monogastric_protein", "ruminant_protein", "ruminant_roughage")
     for category in categories:
         col = f"{category}_mt_dm"
         if col not in df.columns:
@@ -1231,7 +1259,11 @@ def _apply_protein_feed_calibration(
         if exog.empty:
             continue
 
-        carrier = "exogenous_protein_cal"
+        carrier = (
+            "exogenous_roughage_cal"
+            if category == "ruminant_roughage"
+            else "exogenous_protein_cal"
+        )
         if carrier not in n.carriers.static.index:
             n.carriers.add(carrier, unit="Mt")
 
@@ -1258,7 +1290,7 @@ def _apply_protein_feed_calibration(
                 carrier=carrier,
                 p_nom_extendable=True,
                 p_nom_max=exog[col].values,
-                marginal_cost=0.0,
+                marginal_cost=exogenous_marginal_cost,
                 country=exog["country"].values,
                 feed_category=category,
             )
@@ -1324,6 +1356,11 @@ def run_solve(
             logger.info("Applying sensitivity adjustments...")
             apply_sensitivity_factors(n, sensitivity_cfg)
 
+    # Price the landless exogenous feed backstops at the grassland grazing
+    # cost (evaluated before forage calibration scales grassland efficiency)
+    # so they no longer undercut endogenous grassland/fodder/residue feed.
+    exo_feed_cost = _exogenous_feed_marginal_cost(n)
+
     # Apply grassland forage calibration if enabled for this scenario
     if smk.params.forage_calibration_enabled:
         logger.info("Applying grassland forage calibration...")
@@ -1332,16 +1369,18 @@ def run_solve(
             smk,
             forage_overlap_crops=smk.params.forage_overlap_crops,
             enforce_baseline_feed=smk.params.enforce_baseline_feed,
+            exogenous_marginal_cost=exo_feed_cost,
         )
 
     # Apply protein-feed calibration (exogenous mono/ruminant protein
     # supply) if enabled for this scenario.
-    if smk.params.protein_feed_calibration_enabled:
+    if smk.params.exogenous_feed_calibration_enabled:
         logger.info("Applying protein-feed calibration...")
-        _apply_protein_feed_calibration(
+        _apply_exogenous_feed_calibration(
             n,
             smk,
             enforce_baseline_feed=smk.params.enforce_baseline_feed,
+            exogenous_marginal_cost=exo_feed_cost,
         )
 
     # Rescale land supply generators if scenario regional_limit differs from build

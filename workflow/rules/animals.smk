@@ -193,6 +193,8 @@ rule prepare_feed_baseline:
         monogastric_feed_mapping="<processing>/{name}/monogastric_feed_mapping.csv",
         feed_to_animal_products="<processing>/{name}/feed_to_animal_products.csv",
         faostat_animal_production="<processing>/{name}/faostat_animal_production.csv",
+        roughage_composition="data/curated/gleam/roughage_composition.csv",
+        country_mottet_region="data/curated/country_mottet_region.csv",
     params:
         reference_year=config["baseline_year"],
         countries=config["countries"],
@@ -238,25 +240,25 @@ if _grassland_cal_cfg["generate"]:
             "../scripts/compute_grassland_calibration.py"
 
 
-_protein_cal_cfg = config["feed_protein_calibration"]
+_exo_feed_cal_cfg = config["exogenous_feed_calibration"]
 
-if _protein_cal_cfg["generate"]:
-    _protein_cal_scenario = _protein_cal_cfg["scenario"]
+if _exo_feed_cal_cfg["generate"]:
+    _exo_feed_cal_scenario = _exo_feed_cal_cfg["scenario"]
 
-    rule compute_protein_feed_calibration:
+    rule compute_exogenous_feed_calibration:
         input:
-            network=f"<results>/{name}/solved/model_scen-{_protein_cal_scenario}.nc",
+            network=f"<results>/{name}/solved/model_scen-{_exo_feed_cal_scenario}.nc",
         output:
-            exogenous_protein=_protein_cal_cfg["exogenous_protein"],
+            exogenous_feed=_exo_feed_cal_cfg["exogenous_feed"],
         resources:
             runtime="2m",
             mem_mb=4000,
         log:
-            f"<logs>/{name}/compute_protein_feed_calibration_scen-{_protein_cal_scenario}.log",
+            f"<logs>/{name}/compute_exogenous_feed_calibration_scen-{_exo_feed_cal_scenario}.log",
         benchmark:
-            f"<benchmarks>/{name}/compute_protein_feed_calibration_scen-{_protein_cal_scenario}.tsv"
+            f"<benchmarks>/{name}/compute_exogenous_feed_calibration_scen-{_exo_feed_cal_scenario}.tsv"
         script:
-            "../scripts/compute_protein_feed_calibration.py"
+            "../scripts/compute_exogenous_feed_calibration.py"
 
 
 rule calculate_manure_emissions:

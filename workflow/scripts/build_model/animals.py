@@ -100,6 +100,7 @@ def add_exogenous_feed_generators(
     n: pypsa.Network,
     feed_baseline: pd.DataFrame,
     enforce_baseline_feed: bool,
+    grazing_cost_usd_per_t: float,
 ) -> None:
     """Add generators for exogenous feed supply (leaves/browse, swill).
 
@@ -118,7 +119,12 @@ def add_exogenous_feed_generators(
     enforce_baseline_feed : bool
         If True (validation mode), generators are fixed at the exogenous
         amount.  If False (optimisation mode), generators are extendable up
-        to the exogenous amount at zero cost.
+        to the exogenous amount, priced at ``grazing_cost_usd_per_t``.
+    grazing_cost_usd_per_t : float
+        Marginal cost of exogenous feed in USD per tonne DM, applied in
+        optimisation mode. Anchored to the grassland grazing cost so this
+        landless backstop does not undercut endogenous grassland, fodder,
+        and crop-residue feed.
     """
     if "exogenous_mt_dm" not in feed_baseline.columns:
         logger.info("No exogenous_mt_dm column in feed baseline; skipping")
@@ -169,14 +175,21 @@ def add_exogenous_feed_generators(
             feed_category=agg["feed_category"].values,
         )
     else:
-        # Optimisation mode: available up to baseline, free
+        # Optimisation mode: available up to baseline, priced at the
+        # grassland grazing cost (bnUSD/Mt DM) so the landless backstop does
+        # not undercut endogenous grassland/fodder/residue feed.
+        cost_bnusd_per_mt = (
+            grazing_cost_usd_per_t
+            / constants.TONNE_TO_MEGATONNE
+            * constants.USD_TO_BNUSD
+        )
         n.generators.add(
             names,
             bus=agg["bus"].values,
             carrier="exogenous_feed",
             p_nom_extendable=True,
             p_nom_max=agg["exogenous_mt_dm"].values,
-            marginal_cost=0.0,
+            marginal_cost=cost_bnusd_per_mt,
             country=agg["country"].values,
             feed_category=agg["feed_category"].values,
         )

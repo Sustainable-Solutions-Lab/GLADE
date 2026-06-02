@@ -475,6 +475,17 @@ def main() -> None:
     # Build the expanded item → model category table
     item_table = _build_item_table(xlsx_items, gleam_mapping, rum_mapping, mono_mapping)
 
+    # Ruminant roughage ("Grass and leaves", "Crop residues", "Fodder crop") is
+    # re-split downstream in prepare_feed_baseline using the Mottet region x
+    # species composition, so emit no fractions for it here.
+    roughage_cats = {"Grass and leaves", "Crop residues", "Fodder crop"}
+    item_table = item_table[
+        ~(
+            (item_table["animal_type"] == "ruminant")
+            & (item_table["gleam3_category"].isin(roughage_cats))
+        )
+    ].copy()
+
     n_endo = (~item_table["exogenous"]).sum()
     n_exo = item_table["exogenous"].sum()
     logger.info(

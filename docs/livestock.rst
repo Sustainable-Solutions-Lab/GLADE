@@ -446,17 +446,13 @@ categories using pre-computed fractions:
      - ruminant / monogastric
      - ``ruminant_protein`` / ``monogastric_protein``
      - No
-   * - Crop residues
-     - ruminant / monogastric
-     - ``ruminant_roughage`` / ``monogastric_low_quality``
-     - No
-   * - Grass and leaves
-     - ruminant / monogastric
-     - ``ruminant_forage`` / ``monogastric_low_quality``
-     - No
-   * - Fodder crop
+   * - Grass and leaves, Crop residues, Fodder crop
      - ruminant
-     - ``ruminant_forage``
+     - Re-split into ``ruminant_forage`` / ``ruminant_roughage`` (see below)
+     - Browse only
+   * - Grass and leaves, Crop residues
+     - monogastric
+     - ``monogastric_low_quality``
      - No
    * - By-products
      - both
@@ -479,10 +475,26 @@ sourced grains and crops into this category (see the backyard correction in
 exogenous in the feed baseline since these feeds have no endogenous crop-based
 production route in the model.
 
-**Grass and leaves** maps 100% to ``ruminant_forage``. The grassland forage
-calibration mechanism (see :ref:`grassland-forage-calibration`) detects any
-forage shortfall from the leaves/browse component and creates exogenous
-supply to compensate.
+**Ruminant roughage re-split.** GLEAM 3.0 allocates the ruminant roughage
+ration (grass, hay, crop residues, etc.) by modelled feed *availability*
+rather than from feeding surveys. For South and East Asia this over-attributes
+grazed/cut grass and under-attributes crop residues relative to both GLEAM 2.0
+and field surveys (for example, GLEAM 3.0 has Indian ruminants on ~60% grass
+and leaves, whereas surveys report a residue-dominated ration). Because the
+total roughage intake is sound, the model keeps the GLEAM 3.0 per-system
+roughage total but re-splits its composition using the survey-consistent
+region x species shares of Mottet et al. (2017), in
+``prepare_feed_baseline.py``. The three ruminant roughage GLEAM3 categories
+("Grass and leaves", "Crop residues", "Fodder crop") are pooled per
+(country, animal, production system), weighted across the dairy and meat
+species rows by the same production-based product shares used elsewhere, and
+routed by component: fresh grass + hay + grass-legume/silage to
+``ruminant_forage``; crop residues + sugarcane tops to ``ruminant_roughage``;
+and tree leaves to a small exogenous browse supply on the roughage bus.
+Composition shares come from ``data/curated/gleam/roughage_composition.csv``
+and the country-to-region map from ``data/curated/country_mottet_region.csv``.
+Any residual forage shortfall is still handled by the grassland forage
+calibration (see :ref:`grassland-forage-calibration`).
 
 **Step 3 — Scaling to the reference year**
 
@@ -787,13 +799,14 @@ supply that mirrors the existing
 
 1. Solve the model in validation mode with both feed calibrations
    *disabled*. Positive slack on each
-   ``feed:{monogastric,ruminant}_protein:{country}`` bus reveals the
+   ``feed:{monogastric,ruminant}_protein:{country}`` and
+   ``feed:ruminant_roughage:{country}`` buses reveal the
    per-country gap.
-2. ``compute_protein_feed_calibration`` writes those positive slacks
-   to ``data/curated/calibration/exogenous_protein.csv``.
-3. At solve time, ``_apply_protein_feed_calibration`` reads the CSV
-   and adds free per-country generators on the matching protein feed
-   buses. In validation / ``enforce_baseline_feed: true`` mode the
+2. ``compute_exogenous_feed_calibration`` writes those positive slacks
+   to ``data/curated/calibration/exogenous_feed.csv``.
+3. At solve time, ``_apply_exogenous_feed_calibration`` reads the CSV
+   and adds free per-country generators on the matching protein and
+   roughage feed buses. In validation / ``enforce_baseline_feed: true`` mode the
    generators are forced to dispatch at the listed amount (so the
    exogenous supply enters the mass balance unconditionally); in
    optimisation mode they are extendable up to the listed cap at zero
@@ -824,10 +837,10 @@ generators are named ``supply:exogenous_{category}:{country}``.
 
 .. code-block:: yaml
 
-   feed_protein_calibration:
+   exogenous_feed_calibration:
      enabled: true
      generate: false
-     exogenous_protein: "data/curated/calibration/exogenous_protein.csv"
+     exogenous_feed: "data/curated/calibration/exogenous_feed.csv"
      scenario: "default"
 
 When upstream feed or crop data changes, re-run

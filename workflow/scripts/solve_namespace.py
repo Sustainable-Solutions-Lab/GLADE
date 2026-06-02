@@ -45,7 +45,7 @@ SOLVE_TIME_CONFIG_PREFIXES = {
     "biomass.biofuel_demand_scale",
     "land.regional_limit",
     "grazing.grassland_forage_calibration.enabled",
-    "feed_protein_calibration.enabled",
+    "exogenous_feed_calibration.enabled",
     "consumer_values",
     "sensitivity",
     "solving",
@@ -271,9 +271,9 @@ def build_scenario_entry(
         inputs["fodder_conversion_correction"] = cal_cfg["fodder_conversion_correction"]
         inputs["exogenous_forage"] = cal_cfg["exogenous_forage"]
 
-    protein_cal_cfg = eff["feed_protein_calibration"]
-    if protein_cal_cfg["enabled"]:
-        inputs["exogenous_protein"] = protein_cal_cfg["exogenous_protein"]
+    exo_feed_cal_cfg = eff["exogenous_feed_calibration"]
+    if exo_feed_cal_cfg["enabled"]:
+        inputs["exogenous_feed"] = exo_feed_cal_cfg["exogenous_feed"]
 
     fd_cal_cfg = eff["food_demand_calibration"]
     if fd_cal_cfg["enabled"]:
@@ -312,7 +312,7 @@ def build_scenario_entry(
         "sensitivity": eff.get("sensitivity", {}),
         "forage_calibration_enabled": cal_cfg["enabled"],
         "forage_overlap_crops": eff["grazing"]["forage_overlap_crops"],
-        "protein_feed_calibration_enabled": protein_cal_cfg["enabled"],
+        "exogenous_feed_calibration_enabled": exo_feed_cal_cfg["enabled"],
         "enforce_baseline_feed": eff["validation"]["enforce_baseline_feed"],
         "regional_limit": eff["land"]["regional_limit"],
         "biofuel_demand_scale": eff["biomass"]["biofuel_demand_scale"],

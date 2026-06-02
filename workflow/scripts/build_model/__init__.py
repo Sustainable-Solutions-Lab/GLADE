@@ -127,8 +127,9 @@ identification. Carriers identify **component type only** -- specific items
 
 - Generators: ``land_existing_cropland``, ``land_existing_grassland_convertible``,
   ``land_existing_grassland_marginal``, ``fertilizer``, ``land_slack``,
-  ``exogenous_feed``, ``exogenous_forage_cal``, ``exogenous_protein_cal``
-  (the last two are added at solve time by calibration generators),
+  ``exogenous_feed``, ``exogenous_forage_cal``, ``exogenous_protein_cal``,
+  ``exogenous_roughage_cal``
+  (the last three are added at solve time by calibration generators),
   ``slack_positive_feed``, ``slack_negative_feed``, ``biomass``, ``health``
 
 Custom Columns

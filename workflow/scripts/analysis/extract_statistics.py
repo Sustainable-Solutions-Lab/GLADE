@@ -797,6 +797,7 @@ def _generator_source_keys(carrier: pd.Series, feed_category: pd.Series) -> pd.S
     keys = pd.Series("exog_other", index=carrier.index, dtype=object)
     keys.loc[carrier.eq("exogenous_forage_cal")] = "exog_forage_cal"
     keys.loc[carrier.eq("exogenous_protein_cal")] = "exog_protein_cal"
+    keys.loc[carrier.eq("exogenous_roughage_cal")] = "exog_roughage_cal"
     is_xog = carrier.eq("exogenous_feed")
     keys.loc[is_xog & feed_category.eq("ruminant_roughage")] = "exog_browse"
     keys.loc[is_xog & feed_category.eq("monogastric_low_quality")] = "exog_swill"
