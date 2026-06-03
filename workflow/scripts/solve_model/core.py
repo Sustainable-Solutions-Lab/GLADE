@@ -1267,8 +1267,13 @@ def _apply_exogenous_feed_calibration(
         if carrier not in n.carriers.static.index:
             n.carriers.add(carrier, unit="Mt")
 
+        # Use a "_cal" infix so these calibration generators never collide
+        # with the build-time GLEAM exogenous_feed generators, which already
+        # occupy supply:exogenous_{category}:{country} (e.g. browse on the
+        # ruminant_roughage bus). A silent name collision would drop the
+        # backstop and leave the bus short.
         gen_names = pd.Index(
-            "supply:exogenous_" + category + ":" + exog["country"].values,
+            "supply:exogenous_cal_" + category + ":" + exog["country"].values,
             dtype="object",
         )
         if enforce_baseline_feed:

@@ -6,7 +6,7 @@
 # Orchestrator for the calibrations that feed the default workflow.
 #
 # Dependency order (upstream data changed → rerun in this order):
-#   1. feed        → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_protein}.csv
+#   1. feed        → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_feed}.csv
 #   2. food_waste  → data/curated/calibration/food_waste.yaml
 #   3. food_demand → data/curated/calibration/food_demand.csv
 #   4. cost        → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
@@ -38,7 +38,7 @@ FEED_TARGETS=(
   data/curated/calibration/grassland_yield.csv
   data/curated/calibration/fodder_conversion.csv
   data/curated/calibration/exogenous_forage.csv
-  data/curated/calibration/exogenous_protein.csv
+  data/curated/calibration/exogenous_feed.csv
 )
 FOOD_WASTE_TARGETS=(
   data/curated/calibration/food_waste.yaml

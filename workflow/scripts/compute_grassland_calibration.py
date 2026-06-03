@@ -9,9 +9,10 @@ for grassland area, fodder-to-forage conversion efficiency, and exogenous
 forage amounts.
 
 **Surplus countries** (negative slack > 0, i.e. supply exceeds demand):
-  Surplus is attributed proportionally between grassland and fodder crops
-  based on their shares of total forage supply.  Both receive the same
-  correction factor: ``demand / total_supply``.
+  The grassland yield correction absorbs the surplus (grassland yield is the
+  uncertain quantity this step calibrates -- an ISIMIP/LPJmL potential floor),
+  while fodder-crop conversion keeps its observed level. Only when fodder alone
+  over-supplies demand is fodder scaled down instead.
 
 **Deficit countries** (positive slack > 0, i.e. demand exceeds supply):
   exogenous_forage_mt_dm = positive_slack
@@ -167,9 +168,9 @@ def compute_grassland_calibration(
     3. **Exogenous forage** — per-country Mt DM of external forage for
        deficit countries where supply cannot meet demand.
 
-    Surplus is attributed **proportionally** between grassland and fodder
-    based on their shares of total supply: both get the same correction
-    factor ``demand / total_supply``.
+    Surplus is absorbed by the grassland yield correction (grassland is the
+    uncertain supply this step calibrates); fodder conversion stays at 1.0
+    unless fodder alone over-supplies demand.
 
     Parameters
     ----------
@@ -277,18 +278,31 @@ def compute_grassland_calibration(
         non_grass = non_grass_supply_by_country.get(country, 0.0)
 
         total_supply = grass + non_grass
+        demand = total_supply - surplus  # negative slack dispatched = supply - demand
 
-        # Proportional attribution: split surplus between grassland and
-        # fodder based on their shares of total supply.  Both sources
-        # receive the same correction factor = demand / total_supply.
-        if surplus > 0 and total_supply > 1e-10:
-            factor = max(0.0, (total_supply - surplus) / total_supply)
-        else:
-            factor = 1.0
+        # Grassland absorbs the surplus, not fodder. Grassland yield is the
+        # uncertain quantity (an ISIMIP/LPJmL potential floor that this step
+        # exists to correct); fodder-crop conversion rests on real FAOSTAT crop
+        # production and should keep its observed level. So scale grassland down
+        # to supply (demand - fodder), leaving fodder_conversion at 1.0. Only
+        # when fodder alone over-supplies demand do we scale fodder instead.
+        grass_factor = 1.0
+        fodder_factor = 1.0
+        if surplus > 0:
+            if grass >= surplus and grass > 1e-10:
+                grass_factor = max(0.0, (grass - surplus) / grass)
+            elif non_grass > 1e-10:
+                grass_factor = 0.0
+                fodder_factor = max(0.0, demand / non_grass)
 
-        grass_rows.append({"country": country, "yield_correction": round(factor, 6)})
+        grass_rows.append(
+            {"country": country, "yield_correction": round(grass_factor, 6)}
+        )
         fodder_rows.append(
-            {"country": country, "fodder_conversion_correction": round(factor, 6)}
+            {
+                "country": country,
+                "fodder_conversion_correction": round(fodder_factor, 6),
+            }
         )
         exo_rows.append(
             {

@@ -24,7 +24,7 @@ companion: when to run, how to run, what to expect, what to watch out for.
 
 | Step | Config | Produces | Absorbs |
 |---|---|---|---|
-| feed | `config/calibration/feed.yaml` | `grassland_yield.csv`, `fodder_conversion.csv`, `exogenous_forage.csv`, `exogenous_protein.csv` | Per-country forage and protein-feed supply/demand gaps |
+| feed | `config/calibration/feed.yaml` | `grassland_yield.csv`, `fodder_conversion.csv`, `exogenous_forage.csv`, `exogenous_feed.csv` | Per-country forage, and protein- and roughage-feed supply/demand gaps |
 | food_waste | `config/calibration/food_waste.yaml` | `food_waste.yaml` | Per-food-group consumer-side waste multiplier (FBS supply vs GDD-IA intake) |
 | food_demand | `config/calibration/food_demand.yaml` | `food_demand.csv` | Per-food residual mismatch left over after food_waste |
 | cost | `config/calibration/cost.yaml` | `crop_cost.csv`, `grassland_cost.csv`, `animal_cost.csv` | Additive production-cost corrections from stability-constraint duals |
