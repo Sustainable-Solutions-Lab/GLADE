@@ -281,7 +281,7 @@ def main() -> None:
     target_transform, target_crs, target_shape, coords = _load_target_grid(classes_path)
 
     lc_ds = xr.load_dataset(land_cover_path)
-    required_vars = {"forest_fraction", "cropland_fraction", "grassland_fraction"}
+    required_vars = {"forest_fraction", "cropland_fraction"}
     missing = required_vars.difference(lc_ds.data_vars)
     if missing:
         raise ValueError(
@@ -291,34 +291,47 @@ def main() -> None:
 
     forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
-    grassland_frac = lc_ds["grassland_fraction"].astype(np.float32).values
 
-    # Compute pasture_fraction = LUIcube grassland_fraction * grazing_intensity.
-    # This distinguishes managed pasture from natural grassland (savanna, tundra,
-    # steppe) so that only actively grazed pixels contribute to spared-land
-    # sequestration potential.
+    # LUC-carbon land partition (pasture + cropland + forest + natural <= 1),
+    # assigned by dominant cover so each hectare carries the carbon stock of
+    # what is physically there.
     #
-    # KNOWN ASYMMETRY: this LUC pasture_frac is GI-weighted (managed
-    # only), while the LP's pasture supply pool (built from
-    # ``build_current_grassland_area``) is the FULL physical area. The
-    # two pools intentionally differ -- see ``docs/land_use.rst``,
-    # section "Pasture supply vs LUC pasture fraction", for the
-    # rationale and the small overcrediting it implies on spared-pasture
-    # regrowth. If you change either side, you almost certainly need to
-    # rerun the full ``tools/calibrate`` cascade and confirm the
-    # stability L1 cost remains balanced (land vs animal-feed friction
-    # of similar magnitude) rather than collapsing onto one axis.
+    # Observed forest and cropland take their full area; pasture (LUIcube
+    # grassland) fills only the remaining OPEN land. Grazing that overlaps tree
+    # canopy or cropland (silvopasture, crop-stubble grazing) is real, but it
+    # does not change the pixel's dominant carbon cover -- the trees/tilled soil
+    # still hold the carbon and de-stocking sequesters little extra -- so for
+    # carbon such a hectare is forest/cropland, not pasture. That overlap is
+    # captured on the FEED side instead: ``build_current_grassland_area`` grazes
+    # the FULL physical LUIcube grass area. On genuinely open grazed land
+    # (steppe, savanna) forest ~= crop ~= 0, so pasture_frac == the full grass
+    # area and the feed and carbon sides agree.
+    #
+    # Grazing intensity is exported separately and enters the carbon
+    # coefficients as a per-hectare DEPLETION factor
+    # (``build_luc_carbon_coefficients``), NOT as an area discount: a
+    # lightly-grazed hectare is pasture carrying near-natural carbon stocks, and
+    # the spared-land regrowth credit is gated by reforestation potential rather
+    # than by grazing intensity.
     luicube_path: str = snakemake.input.luicube  # type: ignore[name-defined]
     luicube_ds = xr.load_dataset(luicube_path)
     luicube_grass_frac = luicube_ds["grassland_fraction"].astype(np.float32).values
     luicube_gi = luicube_ds["grazing_intensity"].astype(np.float32).values
-    with np.errstate(invalid="ignore"):
-        pasture_frac = np.where(
-            np.isfinite(luicube_grass_frac) & np.isfinite(luicube_gi),
-            luicube_grass_frac * luicube_gi,
-            0.0,
-        )
-    pasture_frac = np.clip(pasture_frac, 0.0, 1.0).astype(np.float32)
+    grazing_intensity = np.clip(
+        np.where(np.isfinite(luicube_gi), luicube_gi, 0.0), 0.0, 1.0
+    ).astype(np.float32)
+    forest_frac = np.clip(np.nan_to_num(forest_frac, nan=0.0), 0.0, 1.0).astype(
+        np.float32
+    )
+    cropland_frac = np.minimum(
+        np.nan_to_num(cropland_frac, nan=0.0), 1.0 - forest_frac
+    ).astype(np.float32)
+    open_room = np.clip(1.0 - forest_frac - cropland_frac, 0.0, 1.0)
+    pasture_frac = np.minimum(
+        np.where(np.isfinite(luicube_grass_frac), luicube_grass_frac, 0.0), open_room
+    ).astype(np.float32)
+    # Single grassland concept (carbon side) = open grazed land.
+    grassland_frac = pasture_frac
 
     if forest_frac.shape != target_shape:
         raise ValueError(
@@ -357,6 +370,7 @@ def main() -> None:
                 grassland_frac.astype(np.float32),
             ),
             "pasture_fraction": (("y", "x"), pasture_frac),
+            "grazing_intensity": (("y", "x"), grazing_intensity),
             "forest_mask": (("y", "x"), forest_mask),
             "cropland_mask": (("y", "x"), cropland_mask),
             "grassland_mask": (("y", "x"), grassland_mask),
@@ -368,6 +382,7 @@ def main() -> None:
         "cropland_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "grassland_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "pasture_fraction": {"zlib": True, "complevel": 4, "dtype": "float32"},
+        "grazing_intensity": {"zlib": True, "complevel": 4, "dtype": "float32"},
         "forest_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
         "cropland_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},
         "grassland_mask": {"zlib": True, "complevel": 4, "dtype": "uint8"},

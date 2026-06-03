@@ -211,8 +211,9 @@ This separation ensures that:
 Pasture supply vs LUC pasture fraction
 ---------------------------------------
 
-The model uses **two different definitions of pasture area** on
-purpose, and the asymmetry is load-bearing for calibration:
+The feed side and the carbon side describe pasture from the same LUIcube
+grassland layer but resolve sub-pixel overlap with forest and cropland
+differently, because grazing and carbon ask different questions:
 
 1. **LP pasture supply pool** (``build_current_grassland_area``,
    ``build_grazing_only_land``): the **full physical** grassland area
@@ -220,43 +221,32 @@ purpose, and the asymmetry is load-bearing for calibration:
    ``(region, resource_class)`` cell. Per-pixel grazing intensity (GI)
    is exported separately and applied at the *efficiency* step in
    ``build_model/grassland.py``: per-Mha forage output equals
-   ``GI * yield``. Total feed capacity is therefore
-   ``sum(physical_area * GI * yield)``, matching real managed-forage
-   productivity even though the LP sees the full physical pool as the
-   area it may allocate between pasture, sparing, or (where land is
-   GAEZ-suitable) cropland conversion.
+   ``GI * yield``, so total feed capacity is
+   ``sum(physical_area * GI * yield)``. Grazing that happens *between
+   trees* (silvopasture) or on *crop stubble* is genuine forage and is
+   counted here in full.
 
-2. **LUC pasture fraction** (``prepare_luc_inputs``,
-   ``build_luc_carbon_coefficients``): the **GI-weighted** managed
-   fraction. Carbon-stock and SOC accounting uses this so that only
-   actively grazed pixels carry the AGB/SOC profile of managed pasture;
-   the unmanaged remainder (savanna, steppe, lightly-grazed) is folded
-   into ``natural_frac`` with its own carbon coefficients.
+2. **LUC carbon partition** (``prepare_luc_inputs``,
+   ``build_luc_carbon_coefficients``): each hectare is assigned to its
+   **dominant cover**. Observed forest and cropland take their full
+   area; pasture fills only the remaining *open* grazed land. The same
+   between-the-trees / stubble grazing does *not* change the pixel's
+   carbon stock -- the canopy and tilled soil still hold the carbon and
+   de-stocking sequesters little extra -- so for carbon that hectare is
+   forest or cropland, not pasture. Grazing intensity then enters the
+   carbon coefficients as a per-hectare **depletion** factor (a lightly
+   grazed open hectare carries near-natural AGB/SOC), and the
+   spared-land regrowth credit is gated by reforestation potential
+   rather than by grazing intensity.
 
-This intentional mismatch implies a small known overcrediting: if the
-LP spares more grassland than the GI-weighted managed area in a cell,
-the spared-pasture regrowth credit covers slightly more area than is
-truly "managed-pasture-like" in carbon-stock terms. We accept this for
-two reasons:
-
-* **Calibration stability.** Forcing the LP pool itself to GI-weighted
-  managed area collapses pasture flexibility, pushing dietary
-  adjustments onto cropland deviations. The production-stability L1
-  calibration then has to spike land friction by roughly an order of
-  magnitude (and animal-feed friction toward zero) to hit the 5%
-  deviation target. The balanced regime, with physical area in the LP
-  pool and GI applied in efficiency, leaves both land and animal-feed
-  L1 lambdas at similar, economically plausible magnitudes.
-* **Magnitude of the overcredit.** Spared-pasture regrowth credits
-  apply only to grassland the LP actively chooses to retire; the
-  carbon difference between managed-pasture regrowth and
-  natural-grassland regrowth in those same cells is modest compared to
-  the cropland/pasture decisions the calibration governs.
-
-A cleaner long-term fix would preserve the physical pasture pool but
-split spared-pasture credits between managed and natural portions
-explicitly in ``build_luc_carbon_coefficients``, so the LP pays the
-correct carbon coefficient for whichever fraction it ends up sparing.
+On genuinely open grazed land (steppe, savanna) forest and cropland are
+near zero, so the two definitions **coincide**: the carbon partition
+treats grazed open land as pasture exactly as the feed side does. They
+differ only where grass overlaps forest or cropland, and there the
+difference is physical (the same hectare is grazed *and* forested/tilled)
+rather than an accounting artifact. This keeps forest carbon fully
+protected (no rangeland-vs-forest mis-assignment) while still treating
+open grazing as pasture for both forage and carbon.
 
 **If you change either definition** -- e.g. by GI-weighting the LP
 pool, or by switching the LUC side to a different managed-fraction

@@ -77,9 +77,9 @@ def _correct_subpixel_soc(
     depleted agricultural SOC (``soc_natural * soc_factor``).  We
     invert the mixing to recover the natural-state SOC.
 
-    Only managed agricultural land (cropland and managed pasture)
-    carries depletion factors; natural grassland (savanna, steppe) is
-    part of ``natural_frac`` and contributes at factor 1.0.
+    ``soc_factor_past`` is the grazing-intensity-scaled pasture depletion
+    factor (-> 1.0 as GI -> 0), so lightly grazed grassland contributes
+    near-natural SOC even though it is counted as pasture, not natural land.
     """
     soc_denom = (
         natural_frac + cropland_frac * soc_factor_crop + pasture_frac * soc_factor_past
@@ -107,9 +107,9 @@ def _decompose_agb(
     then dividing by the forest fraction.  Non-forest natural AGB uses
     zone-level estimates (shrubland/savanna defaults).
 
-    Only managed agricultural land (cropland and managed pasture)
-    carries agricultural AGB values; natural grassland is part of
-    ``nonforest_frac`` and contributes the zone-level non-forest AGB.
+    ``agb_past`` is the grazing-intensity-scaled pasture AGB (-> the
+    non-forest natural AGB as GI -> 0), so lightly grazed grassland carries
+    near-natural AGB even though it is counted as pasture.
 
     Returns
     -------
@@ -183,18 +183,15 @@ def main() -> None:
     cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
     pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
     forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
-    # Natural (convertible) land = total minus managed agriculture.
-    # Here ``pasture_frac`` is the GI-weighted (managed-only) fraction
-    # written by ``prepare_luc_inputs.py``; the remainder of grassland
-    # (savanna, steppe, lightly-grazed) is natural and contributes to
-    # natural_frac with its own AGB/SOC carbon coefficients.
-    #
-    # NOTE: this is the LUC-side definition of pasture. The LP's pasture
-    # supply pool downstream is built from FULL physical grassland area
-    # (not GI-weighted) so the optimization retains enough flexibility
-    # to keep the production-stability calibration well-behaved. The
-    # asymmetry is documented in ``docs/land_use.rst``, section
-    # "Pasture supply vs LUC pasture fraction".
+    grazing_intensity = lc_ds["grazing_intensity"].astype(np.float32).values
+    # Dominant-cover partition (see ``prepare_luc_inputs``): ``pasture_frac`` is
+    # the open grazed land (LUIcube grass not overlapping forest/cropland), so
+    # genuinely grazed open land is pasture -- not natural land -- for carbon,
+    # while silvopasture/stubble grazing stays with its forest/cropland cover.
+    # Grazing intensity enters as a per-hectare DEPLETION factor below (lightly
+    # grazed -> near-natural stocks), not as an area discount. cropland +
+    # pasture + forest + natural <= 1 by construction, so natural_frac (which
+    # still includes forest) and nonforest_frac are clean.
     natural_frac = np.clip(1.0 - cropland_frac - pasture_frac, 0.0, 1.0)
     nonforest_frac = np.clip(natural_frac - forest_frac, 0.0, None)
 
@@ -209,6 +206,17 @@ def main() -> None:
     soc_factor_past = params["soc_factor_past"][zone_idx]
     agb_nonforest_zone = params["agb_nonforest_tc_per_ha"][zone_idx]
 
+    # Grazing intensity scales the per-hectare carbon depletion of pasture, so a
+    # lightly grazed hectare (GI -> 0) carries near-natural stocks and an
+    # intensively managed one (GI -> 1) the full agricultural depletion. These
+    # effective factors are used only for the sub-pixel natural-state recovery
+    # below; the conversion target (new managed pasture, ``s_ag_past``) keeps the
+    # full zone-level depletion.
+    soc_factor_past_eff = 1.0 - grazing_intensity * (1.0 - soc_factor_past)
+    agb_past_eff = (
+        1.0 - grazing_intensity
+    ) * agb_nonforest_zone + grazing_intensity * agb_past
+
     agb_obs = np.where(np.isfinite(agb), agb, np.nan)
     soc_0_30 = np.where(np.isfinite(soc_0_30), soc_0_30, np.nan)
 
@@ -220,7 +228,7 @@ def main() -> None:
         pasture_frac,
         natural_frac,
         soc_factor_crop,
-        soc_factor_past,
+        soc_factor_past_eff,
     )
 
     # Decompose observed AGB into forest and non-forest natural components.
@@ -231,7 +239,7 @@ def main() -> None:
         forest_frac,
         nonforest_frac,
         agb_crop,
-        agb_past,
+        agb_past_eff,
         agb_nonforest_zone,
     )
 
