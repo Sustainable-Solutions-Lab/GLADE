@@ -243,13 +243,15 @@ solving:
   # parallel per node).  Each GSA solve is small enough that single-thread gurobi
   # is already near-optimal; hyperthreading gives diminishing returns.
   threads: 2
-  # Budgets re-profiled 2026-06-03 from 1237 local solves (feed-revision model,
-  # incl. inline analysis): peak ~4.9 GB; solve time median 2.2 min, mean 2.4,
-  # p95 3.4, p99 5.4, with a thin tail to ~27 min on the hardest samples (1 in
-  # ~1238 hits the 30-min cap and fails -- picked up as a straggler retry). A
-  # touch slower/larger than the original post-speedup profiling, so keep
-  # mem_mb at ~1.4x the observed peak (OOM fails hard) and the 30-min hard cap.
-  mem_mb: 7000
+  # Budgets re-profiled 2026-06-03 from local solves (feed-revision model, incl.
+  # inline analysis). Peak RSS is model-dominated, not B&B-dominated: measured
+  # 4.70-4.87 GB across central and L1 regimes and the slowest (3.6 min) sample
+  # peaked the same, so hard samples do NOT balloon memory. Solve time median
+  # 2.2 min, mean 2.4, p95 3.4, p99 5.4, thin tail to ~27 min (1 in ~1238 hits
+  # the 30-min cap and fails -- retried as a straggler). mem_mb at ~1.2x the
+  # observed peak keeps the per-element slurm footprint small (the cluster is
+  # memory-limited); pair with a modest --parallel (e.g. 3) at submit time.
+  mem_mb: 6000
   time_limit: 30  # Hard limit (successes observed up to ~27 min)
   runtime: 6      # Realistic typical+p99 estimate for slurm/local scheduling
   inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
