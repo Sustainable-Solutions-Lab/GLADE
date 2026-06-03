@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Nutritive properties for feed items that GLEAM 3.0 does not characterize in its
+# material tables (Supplement S1 Tab. S.3.3 / S.3.4). Merged into the feed
+# properties database by prepare_gleam_feed_properties.py alongside the
+# GLEAM-sourced feeds, keyed on feed_item. Currently holds the crop residues
+# added beyond GLEAM's cereal-straw set (groundnut haulm, sweet-potato vine,
+# cassava foliage, sugar-beet tops, soybean and rapeseed straw), which are real
+# ruminant roughages but are treated as non-feed (fuel/soil) by GLEAM.
+#
+# Columns mirror the ruminant/monogastric feed-property outputs:
+#   GE_MJ_per_kg_DM   gross energy
+#   N_g_per_kg_DM     nitrogen content (CP/6.25)
+#   digestibility     DM/OM digestibility fraction (ruminant)
+# Values are representative DM-basis figures from Feedipedia and the cited feed
+# evaluations; refine per source as needed.
+#
+# Sources:
+#   FEEDIPEDIA      Feedipedia (INRAE/CIRAD/AFZ/FAO) feed tables, respective nodes
+#   OTENG2017       Oteng-Frimpong et al. 2017, Int. J. Agronomy 7479309
+feed_item,source_type,animal_type,GE_MJ_per_kg_DM,N_g_per_kg_DM,digestibility,source
+groundnut-haulm,residue,ruminant,17.5,24.0,0.60,OTENG2017;FEEDIPEDIA
+sweetpotato-vine,residue,ruminant,16.5,24.0,0.62,FEEDIPEDIA
+cassava-foliage,residue,ruminant,16.5,32.0,0.55,FEEDIPEDIA
+sugarbeet-tops,residue,ruminant,14.5,20.0,0.68,FEEDIPEDIA
+soybean-straw,residue,ruminant,17.0,8.0,0.40,FEEDIPEDIA
+rapeseed-straw,residue,ruminant,17.0,6.0,0.38,FEEDIPEDIA

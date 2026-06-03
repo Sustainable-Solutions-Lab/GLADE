@@ -506,6 +506,17 @@ Ruminant Roughage Composition (Mottet et al. 2017)
 
 **Retrieval**: Bundled as ``data/curated/gleam/roughage_composition.csv`` (composition shares) and ``data/curated/country_mottet_region.csv`` (country-to-region map). Consumed by ``prepare_feed_baseline.py``.
 
+Crop Residue Specifications
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Description**: The crop-residue supply model in ``data/curated/crop_residue_specs.csv`` -- one row per model crop giving the residue feed item it produces, the above-ground residue ratio (``slope`` per unit grain DM, ``intercept_kg_ha``), and the field utilisation efficiency (``fue``). Residue ratios are GLEAM 3.0 Supplement S1 Table S.3.1 R_AG regressions for the cereal, sugar, pulse, banana, soybean, rapeseed and cassava residues; groundnut and sweet-potato (absent from S.3.1) use fodder-literature ratios. Beyond GLEAM's cereal-straw set the table adds groundnut haulm, cassava foliage, sweet-potato vine, sugar-beet tops, soybean and rapeseed straw -- real ruminant roughages that GLEAM characterises only for residue production, not feed.
+
+**Description (nutritive values)**: ``data/curated/supplementary_feed_properties.csv`` supplies gross energy, nitrogen content and digestibility for feed items GLEAM does not characterise in its material tables (the added residues above), merged into the feed-properties database by ``prepare_gleam_feed_properties.py``.
+
+**License**: CC BY 4.0
+
+**Sources**: GLEAM 3.0 Supplement S1 (Table S.3.1); Feedipedia (INRAE/CIRAD/AFZ/FAO) feed tables; Oteng-Frimpong et al. (2017) for groundnut haulm. Each row cites its source. Consumed by ``build_crop_residue_yields.py`` and ``prepare_gleam_feed_properties.py``.
+
 Grassland Yield Data (ISIMIP / LPJmL)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

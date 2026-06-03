@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Crop-residue supply model: which model crop produces which residue feed item,
+# the above-ground residue ratio (gross residue DM = slope * grain_DM + intercept,
+# with grain_DM in t/ha and intercept in kg/ha), and the field utilization
+# efficiency (FUE, the feed-usable fraction of gross residue). One row per model
+# crop; crops sharing a residue feed item repeat its parameters (FUE is required
+# to be identical across rows of a feed item).
+#
+# Provenance
+# ----------
+# slope/intercept for the cereal, sugar, pulse, banana, soybean, rapeseed and
+# cassava residues are the R_AG (above-ground residue) regressions in GLEAM 3.0
+# Supplement S1, Table S.3.1 (on a DM-grain basis, matching IPCC 2019 R_AG).
+# groundnut and sweet-potato are absent from S.3.1; their ratios are from the
+# fodder literature (see per-row source). FUE for the GLEAM-listed cereal
+# residues is the GLEAM "all production systems" value (0.70); pulse (0.90) and
+# banana (0.50) follow GLEAM; the added residues use feed-survey FUE (see source).
+#
+# Sources (per-row `source` codes):
+#   S31      GLEAM 3.0 Supplement S1, Table S.3.1
+#   FEEDIPEDIA-551  Feedipedia, Sweet potato forage (feedipedia.org/node/551)
+#   FEEDIPEDIA-528  Feedipedia, Cassava leaves and foliage (feedipedia.org/node/528)
+#   OTENG2017       Oteng-Frimpong et al. 2017, Int. J. Agronomy 7479309 (groundnut haulm)
+crop,feed_item,slope,intercept_kg_ha,fue,source
+dryland-rice,rice-straw,0.95,2460,0.70,S31
+wetland-rice,rice-straw,0.95,2460,0.70,S31
+wheat,wheat-straw,1.51,520,0.70,S31
+barley,barley-straw,0.98,590,0.70,S31
+oat,barley-straw,0.98,590,0.70,S31
+rye,barley-straw,0.98,590,0.70,S31
+maize,maize-stover,1.03,610,0.70,S31
+pearl-millet,millet-stover,1.43,140,0.70,S31
+foxtail-millet,millet-stover,1.43,140,0.70,S31
+sorghum,sorghum-stover,0.88,1330,0.70,S31
+sugarcane,sugarcane-tops,0.28,0,0.70,S31
+dry-pea,pulse-straw,1.13,850,0.90,S31
+chickpea,pulse-straw,1.13,850,0.90,S31
+cowpea,pulse-straw,1.13,850,0.90,S31
+gram,pulse-straw,1.13,850,0.90,S31
+phaseolus-bean,pulse-straw,1.13,850,0.90,S31
+pigeonpea,pulse-straw,1.13,850,0.90,S31
+banana,banana-stem,1.00,0,0.50,S31
+groundnut,groundnut-haulm,1.40,0,0.85,OTENG2017
+sweet-potato,sweetpotato-vine,0.40,0,0.70,FEEDIPEDIA-551
+cassava,cassava-foliage,0.10,1060,0.40,S31;FEEDIPEDIA-528
+sugarbeet,sugarbeet-tops,0.10,0,0.70,S31
+soybean,soybean-straw,0.93,1350,0.30,S31
+rapeseed,rapeseed-straw,0.28,0,0.30,S31

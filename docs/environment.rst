@@ -176,10 +176,10 @@ The constraint operates on the *net* residue bus (post-FUE). The un-collectable 
 Data Sources
 ^^^^^^^^^^^^
 
-* **Residue N content**: ``processing/{name}/ruminant_feed_categories.csv``, column ``N_g_per_kg_DM``, derived from GLEAM 3.0 [2]_ Supplement S1, Table S.3.3
+* **Residue N content**: column ``N_g_per_kg_DM`` of the feed-properties tables, from GLEAM 3.0 [2]_ Supplement S1, Table S.3.3 for GLEAM-characterised residues and from ``data/curated/supplementary_feed_properties.csv`` (Feedipedia / fodder literature) for the residues GLEAM omits
 * **Direct EF**\ :sub:`1`: IPCC 2019 Refinement, Table 11.1 (aggregated default = 0.010)
 * **Leaching EF**\ :sub:`5` and Frac\ :sub:`leach`: IPCC 2019 Refinement, Table 11.3
-* **FUE per feed code**: GLEAM 3.0 Supplement S1 Tables S.3.3 / S.3.4 (per-residue), with crop-specific fallbacks in ``build_crop_residue_yields.py``
+* **FUE per residue**: column ``fue`` of ``data/curated/crop_residue_specs.csv`` (GLEAM 3.0 Supplement S1 all-systems values for the cereal straws; fodder-survey values for the added residues)
 * **Removal limits**: Model assumption based on sustainable residue management practices
 
 Rice Cultivation (CH₄)

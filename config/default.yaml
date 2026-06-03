@@ -586,20 +586,26 @@ animal_products:
   residue_crops:
   - banana
   - barley
+  - cassava
   - chickpea
   - cowpea
   - dry-pea
   - dryland-rice
   - foxtail-millet
   - gram
+  - groundnut
   - maize
   - oat
   - pearl-millet
   - phaseolus-bean
   - pigeonpea
+  - rapeseed
   - rye
   - sorghum
+  - soybean
+  - sugarbeet
   - sugarcane
+  - sweet-potato
   - wetland-rice
   - wheat
 

@@ -61,6 +61,7 @@ rule prepare_gleam_feed_properties:
     input:
         gleam_supplement="data/downloads/gleam_3.0_supplement_s1.xlsx",
         gleam_mapping="data/curated/gleam/feed_mapping.csv",
+        supplementary_properties="data/curated/supplementary_feed_properties.csv",
     output:
         ruminant="<processing>/{name}/ruminant_feed_properties.csv",
         monogastric="<processing>/{name}/monogastric_feed_properties.csv",

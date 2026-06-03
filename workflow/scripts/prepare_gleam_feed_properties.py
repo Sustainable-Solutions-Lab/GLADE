@@ -130,6 +130,7 @@ def parse_gleam_monogastric_nutrition(excel_file: str) -> pd.DataFrame:
 def create_feed_properties(
     gleam_supplement: str,
     gleam_mapping: str,
+    supplementary_properties: str,
     output_ruminant: str,
     output_monogastric: str,
 ) -> None:
@@ -190,6 +191,18 @@ def create_feed_properties(
             "gleam_code",
         ]
     ].rename(columns={"model_entity": "feed_item", "entity_type": "source_type"})
+
+    # Append curated properties for feeds GLEAM does not characterize (e.g. crop
+    # residues beyond GLEAM's cereal-straw set). Keyed on feed_item; carries no
+    # GLEAM material code.
+    supp = pd.read_csv(supplementary_properties, comment="#")
+    supp_ruminant = supp[supp["animal_type"].isin(["ruminant", "both"])].copy()
+    if not supp_ruminant.empty:
+        supp_ruminant["gleam_code"] = pd.NA
+        ruminant_output = pd.concat(
+            [ruminant_output, supp_ruminant[ruminant_output.columns]],
+            ignore_index=True,
+        )
 
     # Sort and write
     ruminant_output = ruminant_output.sort_values(["source_type", "feed_item"])
@@ -287,6 +300,7 @@ if __name__ == "__main__":
     create_feed_properties(
         gleam_supplement=snakemake.input.gleam_supplement,
         gleam_mapping=snakemake.input.gleam_mapping,
+        supplementary_properties=snakemake.input.supplementary_properties,
         output_ruminant=snakemake.output.ruminant,
         output_monogastric=snakemake.output.monogastric,
     )

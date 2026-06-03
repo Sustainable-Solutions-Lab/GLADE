@@ -906,13 +906,12 @@ When demand falls and grazing links release land, ``spare_existing_grassland_*``
 Crop Residue Feed Supply
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Crop residues (e.g., straw, stover, pulse haulms) are now generated explicitly using the new Snakemake rule ``build_crop_residue_yields``:
+Crop residues (e.g., straw, stover, pulse haulms, oilseed/root foliage) are
+generated explicitly using the Snakemake rule ``build_crop_residue_yields``:
 
 * **Configuration**: Select residue crops via ``animal_products.residue_crops`` in ``config/default.yaml``. Only crops present in ``config.crops`` are processed.
-* **Data sources**:
-  - GLEAM Supplement S1 Table S.3.1 (slope/intercept) and Tables 3.3 / 3.6 (FUE factors)
-  - GLEAM feed codes → model mapping in ``data/curated/gleam/feed_mapping.csv``
-* **Outputs**: Per-crop CSVs at ``processing/{name}/crop_residue_yields/{crop}.csv`` with net dry-matter residue yields (t/ha) by region, resource class, and water supply.
+* **Residue specification**: The complete supply model -- which crop produces which residue feed item, the above-ground residue ratio (``slope``/``intercept_kg_ha``), and the field utilisation efficiency (``fue``) -- lives in the curated table ``data/curated/crop_residue_specs.csv`` (one row per crop). Residue ratios are the GLEAM 3.0 Supplement S1 Table S.3.1 R_AG regressions for the cereal, sugar, pulse, banana, soybean, rapeseed and cassava residues; groundnut and sweet-potato (absent from S.3.1) use fodder-literature ratios. Each row cites its source. Beyond GLEAM's cereal-straw set the table adds groundnut haulm, cassava foliage, sweet-potato vine, sugar-beet tops, soybean and rapeseed straw -- real ruminant roughages that GLEAM treats as non-feed.
+* **Outputs**: Per-crop CSVs at ``processing/{name}/crop_residue_yields/{crop}.csv`` with gross dry-matter residue yields (t/ha) plus the per-item FUE, by region, resource class, and water supply.
 * **Integration**: ``build_model`` reads all residue CSVs, adds ``residue_{feed_item}_{country}`` buses, and attaches them as additional outputs on crop production links. Residues flow through the same feed supply logic as crops/foods and enter the appropriate feed pools or soil incorporation.
 
 Residue Removal Limits for Feed
