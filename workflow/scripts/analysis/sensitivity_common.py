@@ -281,10 +281,23 @@ def _reduce(spec: OutputSpec, path: Path) -> float | dict[str, float]:
     return REDUCERS[spec.reducer](path, **spec.reducer_kwargs)
 
 
+def _reduce_scenario(
+    scenario_name: str, analysis_dir: Path, specs: list[OutputSpec]
+) -> list:
+    """Reduce every spec for a single scenario (one process-pool task).
+
+    Returns the per-spec reductions in ``specs`` order so the caller can
+    fan them back into per-spec columns.
+    """
+    scen_dir = analysis_dir / f"scen-{scenario_name}"
+    return [_reduce(spec, scen_dir / spec.source) for spec in specs]
+
+
 def load_scenario_outputs(
     analysis_dir: Path,
     scenario_names: list[str],
     specs: list[OutputSpec],
+    n_workers: int = 1,
 ) -> pd.DataFrame:
     """Extract each spec's value(s) from every scenario.
 
@@ -293,13 +306,37 @@ def load_scenario_outputs(
     ``{spec.name}.{element}``, with absent elements zero-filled.  Failed
     or empty scalar reductions become ``NaN`` so the caller can drop the
     affected scenarios before fitting.
+
+    Loading reads a handful of small parquet files per scenario and is
+    metadata/IOPS-bound on the cluster's parallel filesystem.  Set
+    ``n_workers > 1`` to fan the per-scenario reductions over a process
+    pool; on Sherlock this cuts the (cold-cache) load of an 8k-sample
+    design from minutes to under a minute.
     """
     n = len(scenario_names)
     raw: dict[str, list] = {spec.name: [] for spec in specs}
-    for scenario_name in scenario_names:
-        scen_dir = analysis_dir / f"scen-{scenario_name}"
-        for spec in specs:
-            raw[spec.name].append(_reduce(spec, scen_dir / spec.source))
+    if n_workers > 1 and n > 1:
+        import concurrent.futures as cf
+        from functools import partial
+        import multiprocessing as mp
+
+        # ``forkserver`` forks workers from a clean single-threaded server
+        # process, avoiding the deadlock risk of forking a parent that
+        # already holds pyarrow/BLAS thread pools.
+        worker = partial(_reduce_scenario, analysis_dir=analysis_dir, specs=specs)
+        with cf.ProcessPoolExecutor(
+            max_workers=n_workers, mp_context=mp.get_context("forkserver")
+        ) as pool:
+            per_scenario = pool.map(worker, scenario_names, chunksize=16)
+            for reductions in per_scenario:
+                for spec, value in zip(specs, reductions):
+                    raw[spec.name].append(value)
+    else:
+        for scenario_name in scenario_names:
+            for spec, value in zip(
+                specs, _reduce_scenario(scenario_name, analysis_dir, specs)
+            ):
+                raw[spec.name].append(value)
 
     columns: dict[str, list] = {"scenario": list(scenario_names)}
     for spec in specs:

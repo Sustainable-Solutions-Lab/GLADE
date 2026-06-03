@@ -95,6 +95,26 @@ def test_load_scalar_and_vector_with_union_keys(analysis_dir):
     np.testing.assert_array_equal(df["foods.maize"].values, [50.0, 0.0, 60.0])
 
 
+def test_load_parallel_matches_serial(analysis_dir):
+    cfg = {
+        "total": _spec(source="objective_breakdown.parquet", reducer="row_sum"),
+        "foods": _spec(
+            kind="vector",
+            source="food_consumption.parquet",
+            reducer="pivot_column",
+            key_col="food",
+            value_col="consumption_mt",
+        ),
+    }
+    specs = parse_outputs_spec(cfg)
+    names = ["s0", "s1", "s2"]
+    serial = load_scenario_outputs(analysis_dir, names, specs, n_workers=1)
+    parallel = load_scenario_outputs(analysis_dir, names, specs, n_workers=2)
+    # Process-pool loading must reproduce the serial result exactly, including
+    # row order (pool.map preserves input order).
+    pd.testing.assert_frame_equal(serial, parallel)
+
+
 def test_load_handles_missing_parquet_as_empty_vector(tmp_path: Path):
     base = tmp_path / "analysis"
     (base / "scen-s0").mkdir(parents=True)

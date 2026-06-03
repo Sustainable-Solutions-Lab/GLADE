@@ -63,7 +63,9 @@ def run(snakemake) -> None:
         100 * len(scenario_names) / x_design_full.shape[0],
     )
 
-    outputs_df = load_scenario_outputs(analysis_dir, scenario_names, outputs_spec)
+    outputs_df = load_scenario_outputs(
+        analysis_dir, scenario_names, outputs_spec, n_workers=n_threads
+    )
     logger.info("Loaded outputs for %d scenarios", len(outputs_df))
 
     output_columns = expanded_output_columns(outputs_spec, outputs_df)
