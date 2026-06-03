@@ -13,8 +13,8 @@ components:
 - land
 - feed
 l1_costs:
-  land: 0.1551539378570997
-  feed: 0.048991118183761194
+  land: 0.16072789880443702
+  feed: 0.04853457279738971
 iterations: 3
 converged: true
-final_residual_log_inf: 0.012530019958584625
+final_residual_log_inf: 0.014390126087412008
