@@ -5,11 +5,12 @@
 Introduction
 ============
 
-What ``GLADE`` is
+What GLADE is
 --------------------
 
-``GLADE`` is a global food systems optimization model for exploring
-trade-offs between nutritional and environmental outcomes. It can be used to
+GLADE -- short for Global Land, Agriculture, Diet and Emissions -- is a
+global food systems optimization model for exploring trade-offs between
+nutritional and environmental outcomes. It can be used to
 answer questions like: *How could we feed the world's population while
 minimizing greenhouse gas emissions and diet-related disease burden? What are
 the trade-offs and synergies between environmental sustainability and food
@@ -25,7 +26,7 @@ physical constraints on land, water, yields, and nutritional adequacy.
 Modeling approach
 -----------------
 
-``GLADE`` is built on `PyPSA <https://pypsa.org/>`_ (Python for Power
+GLADE is built on `PyPSA <https://pypsa.org/>`_ (Python for Power
 System Analysis), an open-source framework originally designed for energy
 system modeling. We adapt PyPSA's flexible, component-based network
 representation to describe food flows rather than energy flows: buses

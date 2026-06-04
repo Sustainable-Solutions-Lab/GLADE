@@ -365,7 +365,7 @@ Processing steps (``workflow/scripts/process_blue_water_availability.py``):
    :width: 100%
    :alt: Basin water availability map
 
-   Annual blue water availability by GRDC river basin (mm/year). The map shows area-normalized yearly water availability across 405 major river basins globally. Higher availability is shown in darker blue, allowing direct comparison between basins of different sizes. While we normalize by area for better visualisation here, ``GLADE`` tracks total water amount availability internally.
+   Annual blue water availability by GRDC river basin (mm/year). The map shows area-normalized yearly water availability across 405 major river basins globally. Higher availability is shown in darker blue, allowing direct comparison between basins of different sizes. While we normalize by area for better visualisation here, GLADE tracks total water amount availability internally.
 
 Current-Use Irrigation Withdrawals
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -553,7 +553,7 @@ Crop-Specific Data Files
   Add new parameters by appending rows; comment lines starting with ``#`` are ignored by loaders.
 
 **data/curated/gaez_crop_code_mapping.csv**
-  Lookup table aligning ``GLADE`` crop identifiers with GAEZ resource codes. Columns: ``crop_name``, ``description``, and the RES02/RES05/RES06 codes used to locate raster layers.
+  Lookup table aligning GLADE crop identifiers with GAEZ resource codes. Columns: ``crop_name``, ``description``, and the RES02/RES05/RES06 codes used to locate raster layers.
 
 **data/curated/yield_unit_conversions.csv**
   Optional per-crop overrides for converting raw GAEZ yields to tonnes of dry matter per hectare. Columns: ``code`` (crop identifier), ``factor_to_t_per_ha`` (multiplier applied to raster values), and ``note`` for context. Only sugar crops and oil-palm currently require overrides; all other crops use the default ``0.001`` factor (kg → tonne).

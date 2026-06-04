@@ -2,10 +2,10 @@
 ..
 .. SPDX-License-Identifier: CC-BY-4.0
 
-``GLADE`` Documentation
+GLADE Documentation
 ==========================
 
-A global food systems optimization model that explores trade-offs between environmental sustainability and nutritional outcomes using linear programming.
+GLADE (Global Land, Agriculture, Diet and Emissions) is a global food systems optimization model that explores trade-offs between environmental sustainability and nutritional outcomes using linear programming.
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/production_pattern.gif
    :alt: Animated map showing how optimal crop production patterns shift as carbon prices increase from $0 to $500 per tonne CO2-equivalent.

@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 [![Docs](https://github.com/Sustainable-Solutions-Lab/GLADE/actions/workflows/docs.yml/badge.svg)](https://sustainable-solutions-lab.github.io/GLADE/)
 
-GLADE is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program built around a reproducible workflow.
+GLADE (**G**lobal **L**and, **A**griculture, **D**iet and **E**missions) is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program built around a reproducible workflow.
 
 ![Map showing optimal crop production patterns at a $50/t CO2-equivalent carbon price.](https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/production_pattern_ghg_50.png)
 

@@ -8,7 +8,7 @@ Development & Contributing
 Overview
 --------
 
-This page provides guidance for developers contributing to the ``GLADE`` project, including code conventions and best practices.
+This page provides guidance for developers contributing to the GLADE project, including code conventions and best practices.
 
 For AI coding agents, see ``AGENTS.md`` in the repository root for specific instructions.
 

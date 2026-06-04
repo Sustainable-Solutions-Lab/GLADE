@@ -23,7 +23,7 @@ Processing is represented in the model as PyPSA multi-output links with crop bus
 Data Files
 ~~~~~~~~~~
 
-The two files below, created and distributed for internal ``GLADE`` use, define possible food processing pathways and food groups.
+The two files below, created and distributed for internal GLADE use, define possible food processing pathways and food groups.
 
 **data/curated/foods.csv**
   Defines crop-to-food processing pathways using a pathway-based format that supports multi-output processing. Each pathway can convert one crop into one or more food products, with conversion factors maintaining mass balance.

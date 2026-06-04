@@ -8,7 +8,7 @@ Model Framework
 Mathematical Structure
 ----------------------
 
-The ``GLADE`` model is formulated as a mixed integer linear programming (MILP) problem that minimizes total system costs subject to constraints on production capacity, nutritional requirements, and environmental limits. Here, we give a high-level overview over the model structure; a complete listing of equations is outstanding.
+The GLADE model is formulated as a mixed integer linear programming (MILP) problem that minimizes total system costs subject to constraints on production capacity, nutritional requirements, and environmental limits. Here, we give a high-level overview over the model structure; a complete listing of equations is outstanding.
 
 Objective Function
 ~~~~~~~~~~~~~~~~~~

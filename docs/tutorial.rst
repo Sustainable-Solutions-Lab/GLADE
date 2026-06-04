@@ -6,7 +6,7 @@ Tutorial
 ========
 
 This tutorial walks you through two complete modelling exercises with
-``GLADE``. It assumes you have finished the :doc:`introduction` (clone,
+GLADE. It assumes you have finished the :doc:`introduction` (clone,
 ``pixi install``, credentials, manually-downloaded datasets). You'll leave
 each part with solved scenarios, auto-generated plots, and a handful of
 hand-rolled comparisons built in a notebook.
@@ -157,7 +157,7 @@ lets the optimiser decide when giving up some of today's diet is worth the
 GHG savings — which requires pricing the cost of deviating from today's
 diet.
 
-``GLADE`` does that by **deriving consumer values from a baseline
+GLADE does that by **deriving consumer values from a baseline
 solve**:
 
 1. Solve a baseline scenario with ``enforce_baseline_diet: true``. The

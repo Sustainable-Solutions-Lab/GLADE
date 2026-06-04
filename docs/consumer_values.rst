@@ -10,7 +10,7 @@ Consumer Values
 Overview
 --------
 
-Many of the most interesting questions for ``GLADE`` ask how diets *respond*
+Many of the most interesting questions for GLADE ask how diets *respond*
 to environmental or health pricing — for example, "what would people eat under
 a $50/tCO\ :sub:`2`-eq price?". Naively letting the optimizer choose the
 cheapest macronutrient-and-food-group-feasible diet gives implausible answers:
