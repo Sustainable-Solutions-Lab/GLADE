@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# GHG Price Sensitivity with Flexible Diet
+# ----------------------------------------
+# Flexible-diet counterpart of config/ghg_sensitivity_fixed_diet.yaml: the
+# social cost of carbon is swept over the same 20-point log grid (5-500
+# USD/tCO2eq) plus an explicit 50 anchor, but here food consumption is free to
+# re-optimise rather than pinned to the baseline.  Health is NOT valued
+# (value_per_yll = 0), so the diet shifts purely in response to the carbon
+# price (and cost / consumer preferences) — matching the flexible-diet
+# definition used for figure 3a/b in the paper (figure_03_data.py sweeps the
+# flexible surrogate with fix_yll=True, i.e. value_per_yll = 0).
+#
+# Mirrors the solve-time setup of config/central.yaml (same planning horizon,
+# baseline year, food-utility piecewise blocks, production-stability
+# penalties), so the baseline calibrates against the same diet.  Consumed by
+# the paper's SI emissions-by-source figure (paper/scripts/
+# si_emissions_by_source_*); keep the swept prices in lockstep with
+# ``figure_03_ghg_prices`` in paper/plotting_config.yaml.
+
+name: "ghg_sensitivity_flexible_diet"
+scenarios:
+  # Suppress the implicit "default" scenario inherited from default.yaml.
+  default: null
+
+  # Baseline scenario for calibrating the piecewise food-utility blocks
+  # (dual variables). Identical structure to central.yaml's baseline.
+  baseline:
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  # Explicit central anchor (50 is not a node of the log grid below).
+  ghg_50:
+    emissions:
+      ghg_price: 50
+    health:
+      value_per_yll: 0
+    macronutrients:
+      cal:
+        equal_to_baseline: true
+
+  _generators:
+    - name: ghg_{ghg}
+      parameters:
+        ghg:
+          space: log
+          start: 5
+          stop: 500
+          num: 20
+          round: true
+      template:
+        emissions:
+          ghg_price: "{ghg}"
+        health:
+          value_per_yll: 0
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+
+# Block-based diminishing marginal utility for food consumption (flexible diet).
+food_utility_piecewise:
+  enabled: true
+
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 4
+  # value_per_yll = 0 in every swept scenario, so these are LPs (the integer
+  # variables only bind when health is valued); ~3-4 GB each, not the ~10 GB a
+  # MILP central solve needs.
+  mem_mb: 4000
+  runtime: 30
