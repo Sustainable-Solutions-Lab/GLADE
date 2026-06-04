@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Export food-opt model to MPS format using Gurobi's native export.
+"""Export GLADE model to MPS format using Gurobi's native export.
 
 This script builds the complete optimization model (including all constraints
 added at solve time) and exports it to MPS format using Gurobi's native API,
@@ -242,7 +242,7 @@ def build_and_export_model(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export food-opt model to MPS format for Gurobi tuning",
+        description="Export GLADE model to MPS format for Gurobi tuning",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example:

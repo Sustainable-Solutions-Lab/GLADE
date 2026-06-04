@@ -7,7 +7,7 @@
 # Usage: tools/sync-gsa-results
 set -euo pipefail
 
-REMOTE="shr:~/food-opt-scratch"
+REMOTE="shr:~/GLADE-scratch"
 REMOTE_NAME="pce_sensitivity"
 LOCAL_NAME="gsa"
 

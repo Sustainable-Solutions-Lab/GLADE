@@ -25,7 +25,7 @@ several roles:
   (:doc:`consumer_values`) and the production-stability L1 calibration
   (:doc:`calibration`).
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/baseline_diet_by_region.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/baseline_diet_by_region.png
    :alt: Baseline diet composition by world region
    :width: 100%
    :align: center
@@ -34,7 +34,7 @@ several roles:
    M49 macro-region, showing how dietary patterns vary across world
    regions.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/baseline_diet_by_food.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/baseline_diet_by_food.png
    :alt: Baseline diet breakdown by individual foods
    :width: 100%
    :align: center

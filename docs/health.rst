@@ -173,7 +173,7 @@ across risk factors).
 Health Cost Formulation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-In ``food-opt``, we define the health cost as the monetised value of years
+In ``GLADE``, we define the health cost as the monetised value of years
 of life lost that could have been avoided by eating optimally. For a
 population cluster :math:`c` and disease :math:`d`:
 
@@ -362,7 +362,7 @@ The core challenge is that relative risks **multiply** across risk factors :math
    \mathrm{RR}_d = \prod_{r} \mathrm{RR}_{r,d}(x_r)
 
 This product is nonlinear in the intake variables :math:`x_r`. This is
-a problem since ``food-opt`` is nominally formulated as a *linear*
+a problem since ``GLADE`` is nominally formulated as a *linear*
 optimization model. Non-linear constraints such as the above cannot
 directly be incorporated into the overall linear program formulation,
 and generally make the optimization program more difficult to solve
@@ -418,14 +418,14 @@ into **health clusters** that share:
 The clustering algorithm uses weighted K-means with iterative refinement. The
 number of clusters is configured via ``health.region_clusters``.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/health_clusters.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/health_clusters.png
    :width: 100%
    :alt: Health cluster map
 
    Health clusters grouping countries based on geographic proximity, GDP per
    capita similarity, and population balance.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/health_burden.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/health_burden.png
    :width: 100%
    :alt: Choropleth map of diet-attributable disease burden by health cluster
 

@@ -65,14 +65,14 @@ logger = logging.getLogger("prepare_gdd_ia_dietary_intake")
 
 
 # --------------------------------------------------------------------------
-# Mapping: GDD-IA `prim` non-overlapping primary categories → food-opt
+# Mapping: GDD-IA `prim` non-overlapping primary categories → GLADE
 # food groups. Cereal categories are intentionally absent because we use
 # the `prcd:whole_grains` / `prcd:prc_grains` split for the cereal
 # allocation. butter/cream are handled specially (see below).
 # fat_ani (rendered animal fat) maps to the animal_fat food group via
 # rendered-fat, which is added as an animal_production co-product
 # (config: animal_products.co_products.rendered-fat).
-PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
+PRIM_TO_GLADE_GROUP: dict[str, str] = {
     "roots": "starchy_vegetable",
     "vegetables": "vegetables",
     "fruits_trop": "fruits",
@@ -97,7 +97,7 @@ PRIM_TO_FOODOPT_GROUP: dict[str, str] = {
 }
 
 # `prcd` rows providing the whole/refined cereal split.
-PRCD_TO_FOODOPT_GROUP: dict[str, str] = {
+PRCD_TO_GLADE_GROUP: dict[str, str] = {
     "whole_grains": "whole_grains",
     "prc_grains": "grain",
 }
@@ -217,7 +217,7 @@ def _aggregate(
     prcd_map: dict[str, str],
     value_name: str,
 ) -> pd.DataFrame:
-    """Sum GDD-IA rows into food-opt groups."""
+    """Sum GDD-IA rows into GLADE groups."""
     prim = df[df["type"] == "prim"].copy()
     prim["group"] = prim["food_group"].map(prim_map)
     prim_grp = (
@@ -349,11 +349,9 @@ def main() -> None:
     logger.info("Reading GDD-IA kcal from %s", kcal_path)
     kcal = _filter_baseline(pd.read_csv(kcal_path))
 
-    # --- Aggregate to food-opt groups ---
-    g_df = _aggregate(
-        grams, PRIM_TO_FOODOPT_GROUP, PRCD_TO_FOODOPT_GROUP, "g_as_reported"
-    )
-    k_df = _aggregate(kcal, PRIM_TO_FOODOPT_GROUP, PRCD_TO_FOODOPT_GROUP, "kcal")
+    # --- Aggregate to GLADE groups ---
+    g_df = _aggregate(grams, PRIM_TO_GLADE_GROUP, PRCD_TO_GLADE_GROUP, "g_as_reported")
+    k_df = _aggregate(kcal, PRIM_TO_GLADE_GROUP, PRCD_TO_GLADE_GROUP, "kcal")
     df = g_df.merge(k_df, on=["country", "group"], how="outer")
 
     # Drop non-country region aggregates.

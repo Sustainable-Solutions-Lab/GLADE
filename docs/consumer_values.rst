@@ -10,7 +10,7 @@ Consumer Values
 Overview
 --------
 
-Many of the most interesting questions for ``food-opt`` ask how diets *respond*
+Many of the most interesting questions for ``GLADE`` ask how diets *respond*
 to environmental or health pricing — for example, "what would people eat under
 a $50/tCO\ :sub:`2`-eq price?". Naively letting the optimizer choose the
 cheapest macronutrient-and-food-group-feasible diet gives implausible answers:
@@ -85,7 +85,7 @@ documentation baseline solve, ordered by food group. Each row is one food;
 the boxen shows the spread across countries. Colours follow the food-group
 palette used elsewhere in the documentation.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/consumer_values_distribution.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/consumer_values_distribution.png
    :width: 100%
    :alt: Letter-value plot of consumer values per food, coloured by food group
 

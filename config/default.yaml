@@ -1698,7 +1698,7 @@ remote_solve:
   enabled: false  # If true, solve_model is executed remotely over SSH
   local_scenarios: ["baseline"]  # Scenarios that must always solve locally (currently only "baseline" is supported)
   host: "user@login.cluster"  # Placeholder SSH host or alias; customize for your setup
-  workdir: "~/path/to/food-opt"  # Placeholder remote project root containing this repository
+  workdir: "~/path/to/GLADE"  # Placeholder remote project root containing this repository
   pixi_env: "default"  # Placeholder remote pixi environment passed to tools/smk -e
   use_slurm: false  # Set true when remote solves should be submitted via --slurm
   slurm_account: ""  # SLURM account for remote job submission

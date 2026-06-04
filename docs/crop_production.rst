@@ -94,19 +94,19 @@ The model uses several GAEZ raster products for each crop:
 
 The following figures show yield potential maps for three major crops, illustrating the spatial variation in productivity that drives the optimization:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/crop_yield_wheat.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/crop_yield_wheat.png
    :width: 100%
    :alt: Wheat yield potential map
 
    Wheat rainfed yield potential (tonnes/hectare) from GAEZ v5. Higher yields are shown in darker green. Black lines indicate region boundaries. Wheat performs best in temperate zones with adequate rainfall.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/crop_yield_wetland-rice.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/crop_yield_wetland-rice.png
    :width: 100%
    :alt: Rice yield potential map
 
    Wetland rice rainfed yield potential (tonnes/hectare) from GAEZ v5. Rice shows high productivity in tropical and subtropical regions with suitable water availability, particularly in Asia.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/crop_yield_maize.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/crop_yield_maize.png
    :width: 100%
    :alt: Maize yield potential map
 
@@ -165,7 +165,7 @@ This allows the optimizer to preferentially allocate crops to high-quality land 
 
 The following figure illustrates this variation, comparing rainfed wheat yields between resource classes 1 and 2 across all regions:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/crop_yield_resource_class_wheat.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/crop_yield_resource_class_wheat.png
    :width: 100%
    :alt: Wheat yields by resource class
 
@@ -361,11 +361,11 @@ Processing steps (``workflow/scripts/process_blue_water_availability.py``):
 1. **Load basin shapefile** with monthly availability (Mm³/month)
 2. **Aggregate by basin and month** to get monthly water budgets
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/water_basin_availability.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/water_basin_availability.png
    :width: 100%
    :alt: Basin water availability map
 
-   Annual blue water availability by GRDC river basin (mm/year). The map shows area-normalized yearly water availability across 405 major river basins globally. Higher availability is shown in darker blue, allowing direct comparison between basins of different sizes. While we normalize by area for better visualisation here, ``food-opt`` tracks total water amount availability internally.
+   Annual blue water availability by GRDC river basin (mm/year). The map shows area-normalized yearly water availability across 405 major river basins globally. Higher availability is shown in darker blue, allowing direct comparison between basins of different sizes. While we normalize by area for better visualisation here, ``GLADE`` tracks total water amount availability internally.
 
 Current-Use Irrigation Withdrawals
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -402,7 +402,7 @@ For the sustainable dataset, the allocation steps are:
    * ``processing/{name}/water/monthly_region_water.csv``: Monthly water by region
    * ``processing/{name}/water/region_growing_season_water.csv``: Growing season totals
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/water_region_availability.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/water_region_availability.png
    :width: 100%
    :alt: Regional water availability map
 
@@ -421,7 +421,7 @@ Only a fraction of agricultural land is equipped with irrigation infrastructure.
 
 The following figure shows the global distribution of land equipped for irrigation:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/irrigated_land_fraction.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/irrigated_land_fraction.png
    :width: 100%
    :alt: Irrigated land fraction map
 
@@ -521,7 +521,7 @@ rained or irrigated multi-output link that:
 If any required raster is missing the rule fails early to avoid silently enabling
 unsupported sequences.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/multi_cropping_potential_rainfed.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/multi_cropping_potential_rainfed.png
    :alt: Rain-fed multi-cropping zones and regional potential
    :width: 100%
 
@@ -530,7 +530,7 @@ unsupported sequences.
    multi-cropping (zones C–H). Zones suitable only for relay systems are counted as
    sequential double cropping, consistent with the current model assumptions.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/multi_cropping_potential_irrigated.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/multi_cropping_potential_irrigated.png
    :alt: Irrigated multi-cropping zones and regional potential
    :width: 100%
 
@@ -553,7 +553,7 @@ Crop-Specific Data Files
   Add new parameters by appending rows; comment lines starting with ``#`` are ignored by loaders.
 
 **data/curated/gaez_crop_code_mapping.csv**
-  Lookup table aligning ``food-opt`` crop identifiers with GAEZ resource codes. Columns: ``crop_name``, ``description``, and the RES02/RES05/RES06 codes used to locate raster layers.
+  Lookup table aligning ``GLADE`` crop identifiers with GAEZ resource codes. Columns: ``crop_name``, ``description``, and the RES02/RES05/RES06 codes used to locate raster layers.
 
 **data/curated/yield_unit_conversions.csv**
   Optional per-crop overrides for converting raw GAEZ yields to tonnes of dry matter per hectare. Columns: ``code`` (crop identifier), ``factor_to_t_per_ha`` (multiplier applied to raster values), and ``note`` for context. Only sugar crops and oil-palm currently require overrides; all other crops use the default ``0.001`` factor (kg → tonne).

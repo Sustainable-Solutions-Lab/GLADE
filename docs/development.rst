@@ -8,7 +8,7 @@ Development & Contributing
 Overview
 --------
 
-This page provides guidance for developers contributing to the ``food-opt`` project, including code conventions and best practices.
+This page provides guidance for developers contributing to the ``GLADE`` project, including code conventions and best practices.
 
 For AI coding agents, see ``AGENTS.md`` in the repository root for specific instructions.
 
@@ -27,7 +27,7 @@ Installation
 1. Clone the repository::
 
        git clone <repository-url>
-       cd food-opt
+       cd GLADE
 
 2. Install dependencies::
 
@@ -231,7 +231,7 @@ Repository Structure
 
 ::
 
-    food-opt/
+    GLADE/
     ├── config/              # Scenario configuration files
     ├── data/                # Input data (small tracked files; large downloads ignored)
     ├── docs/                # Documentation (Sphinx)

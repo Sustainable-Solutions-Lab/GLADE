@@ -4,9 +4,9 @@
 
 cff-version: 1.2.0
 message: "If you use this software, please cite it using these metadata."
-title: "food-opt"
+title: "GLADE"
 abstract: >-
-  food-opt is a global food-systems optimization model built on PyPSA and
+  GLADE is a global food-systems optimization model built on PyPSA and
   Snakemake, exploring environmental, nutritional, and economic trade-offs
   through a configuration-driven linear program and a reproducible workflow.
 type: software
@@ -16,5 +16,5 @@ authors:
 # TODO: add co-authors.
 # TODO: set version + date-released at tag time (0.1.0).
 license: "GPL-3.0-or-later"
-repository-code: "https://github.com/Sustainable-Solutions-Lab/food-opt"
-url: "https://sustainable-solutions-lab.github.io/food-opt/"
+repository-code: "https://github.com/Sustainable-Solutions-Lab/GLADE"
+url: "https://sustainable-solutions-lab.github.io/GLADE/"

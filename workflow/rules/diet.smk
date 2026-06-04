@@ -14,7 +14,7 @@ rule prepare_gdd_ia_dietary_intake:
     """Process Global Dietary Database — Integrated Assessment (GDD-IA) dataset.
 
     Reads the parallel grams and kcal CSVs, maps prim/prcd categories to
-    food-opt food groups (butter+cream folded into dairy as
+    GLADE food groups (butter+cream folded into dairy as
     milk-equivalent; fat_ani, fruits_starch, seafood, alcohol etc. left
     out-of-scope), derives mass in model basis from energy
     (``g_model = kcal_ia / kcal_per_g_model_basis``), and applies a

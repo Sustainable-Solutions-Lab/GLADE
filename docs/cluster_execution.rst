@@ -136,18 +136,18 @@ This writes ``.batch/manifest_gsa.json`` in ~15 seconds.
 
 Transfer inputs, manifest, and scripts::
 
-    tools/sync-solve-inputs gsa.yaml <ssh-host> </path/to/remote/food-opt>
+    tools/sync-solve-inputs gsa.yaml <ssh-host> </path/to/remote/GLADE>
 
-If the remote path is given with ``~`` (e.g. ``~/food-opt``), single-quote it so
+If the remote path is given with ``~`` (e.g. ``~/GLADE``), single-quote it so
 the local shell does not expand it to the local home directory::
 
-    tools/sync-solve-inputs gsa.yaml <ssh-host> '~/food-opt'
+    tools/sync-solve-inputs gsa.yaml <ssh-host> '~/GLADE'
 
 **4. Submit on the cluster**
 
 SSH to the cluster and submit::
 
-    cd </path/to/remote/food-opt>
+    cd </path/to/remote/GLADE>
     pixi run python tools/batch-solve \
         --manifest .batch/manifest_gsa.json \
         -j6 -e gurobi \
@@ -182,7 +182,7 @@ flag at its default ``false``.
 ::
 
     # On the cluster
-    cd <path/to/remote/food-opt>
+    cd <path/to/remote/GLADE>
     srun --partition=dev --cpus-per-task=2 --mem=8G --time=15:00 \
         tools/smk -j2 --configfile config/gsa.yaml \
         --allowed-rules build_surrogate \
@@ -204,17 +204,17 @@ machine (the raw per-scenario analysis can stay on the cluster if you
 only need downstream plots)::
 
     rsync -a --info=progress2 \
-        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/surrogates/" \
+        "<ssh-host>:<path/to/remote/GLADE>/results/gsa/surrogates/" \
         results/gsa/surrogates
 
     rsync -a --info=progress2 \
-        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/analysis/sobol_*.parquet" \
+        "<ssh-host>:<path/to/remote/GLADE>/results/gsa/analysis/sobol_*.parquet" \
         results/gsa/analysis/
 
 If you *do* need the full per-scenario analysis locally, sync that too::
 
     rsync -a --info=progress2 \
-        "<ssh-host>:<path/to/remote/food-opt>/results/gsa/analysis/" \
+        "<ssh-host>:<path/to/remote/GLADE>/results/gsa/analysis/" \
         results/gsa/analysis
 
 **7. Post-processing**
@@ -274,7 +274,7 @@ re-submit::
     pixi run python tools/export-solve-manifest config/gsa.yaml \
         --exclude "baseline*" "default" --skip-existing
 
-    tools/sync-solve-inputs gsa.yaml <ssh-host> </path/to/remote/food-opt>
+    tools/sync-solve-inputs gsa.yaml <ssh-host> </path/to/remote/GLADE>
 
     # On cluster
     pixi run python tools/batch-solve --manifest .batch/manifest_gsa.json \

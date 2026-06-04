@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Gurobi parameter tuning for food-opt models.
+"""Gurobi parameter tuning for GLADE models.
 
 This script runs Gurobi's parameter tuning on an exported MPS model file.
 

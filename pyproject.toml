@@ -10,9 +10,9 @@
 # the editable install of the workflow package itself.
 
 [project]
-name = "food-opt-workflow"
+name = "glade-workflow"
 version = "0.0.1"
-description = "Food systems optimization workflow scripts"
+description = "GLADE model workflow scripts"
 requires-python = ">=3.13"
 
 [build-system]

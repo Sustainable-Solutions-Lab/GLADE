@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: CC-BY-4.0
 
-"""Sphinx configuration for food-opt documentation."""
+"""Sphinx configuration for GLADE documentation."""
 
 import os
 import sys
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("../workflow/scripts"))
 
 # Project information
-project = "food-opt"
+project = "GLADE"
 copyright = "2026, Koen van Greevenbroek"
 author = "Koen van Greevenbroek"
 release = "0.1.0"
@@ -57,7 +57,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_logo = "_static/logo.svg"
 html_favicon = "_static/logo.svg"
-html_title = "food-opt"
+html_title = "GLADE"
 html_theme_options = {
     "navigation_with_keys": True,
     "light_css_variables": {
@@ -107,7 +107,7 @@ autodoc_mock_imports = [
 # Figure URL configuration
 # Figures are hosted on GitHub Releases to avoid tracking large assets in git
 FIGURE_RELEASE_TAG = "doc-figures"
-GITHUB_REPO = "Sustainable-Solutions-Lab/food-opt"
+GITHUB_REPO = "Sustainable-Solutions-Lab/GLADE"
 FIGURE_BASE_URL = (
     f"https://github.com/{GITHUB_REPO}/releases/download/{FIGURE_RELEASE_TAG}"
 )

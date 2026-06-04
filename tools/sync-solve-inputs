@@ -8,8 +8,8 @@
 # Usage: tools/sync-solve-inputs [--tar] <config.yaml> <remote-host> <remote-workdir>
 #
 # Example:
-#   tools/sync-solve-inputs sensitivity.yaml my-cluster /cluster/work/food-opt
-#   tools/sync-solve-inputs --tar sensitivity.yaml my-cluster /cluster/work/food-opt
+#   tools/sync-solve-inputs sensitivity.yaml my-cluster /cluster/work/GLADE
+#   tools/sync-solve-inputs --tar sensitivity.yaml my-cluster /cluster/work/GLADE
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ if [[ $# -ne 3 ]]; then
     echo "  --tar         — use tar+ssh instead of rsync (faster for many small files)" >&2
     echo "  config.yaml   — config file name under config/ (e.g. sensitivity.yaml)" >&2
     echo "  remote-host   — SSH host or alias" >&2
-    echo "  remote-workdir — path to food-opt workdir on remote" >&2
+    echo "  remote-workdir — path to GLADE workdir on remote" >&2
     exit 1
 fi
 

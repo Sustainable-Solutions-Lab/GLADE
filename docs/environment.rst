@@ -775,7 +775,7 @@ These layers are reprojected, resampled, and combined by dedicated Snakemake rul
 
 .. _fig-luc-inputs:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/environment_luc_inputs.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/environment_luc_inputs.png
    :alt: Global maps showing forest fraction, biomass, soil carbon, and regrowth inputs
    :align: center
    :width: 95%
@@ -880,7 +880,7 @@ The chosen approach---**Cook-Patton rates masked by Hayek biomes**---combines th
 
 .. _fig-luc-lef:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/environment_luc_lef.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/environment_luc_lef.png
    :alt: Global maps of cropland expansion and spared land emission factors
    :align: center
    :width: 95%

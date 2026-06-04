@@ -4,9 +4,9 @@ SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# `food-opt` Documentation
+# `GLADE` Documentation
 
-This directory contains the Sphinx documentation for the `food-opt` global food systems optimization model.
+This directory contains the Sphinx documentation for the `GLADE` global food systems optimization model.
 
 ## Building Documentation Locally
 
@@ -121,7 +121,7 @@ gh auth login
 Documentation `.rst` files always reference figures via GitHub release URLs:
 
 ```rst
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/figure_name.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/figure_name.png
 ```
 
 When building locally, `conf.py` has a `source-read` hook that transparently

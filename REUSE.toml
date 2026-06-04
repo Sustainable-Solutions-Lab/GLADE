@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: CC-BY-4.0
 
 version = 1
-SPDX-PackageName = "food-opt"
+SPDX-PackageName = "GLADE"
 SPDX-PackageSupplier = "Koen van Greevenbroek"
-SPDX-PackageDownloadLocation = "https://github.com/Sustainable-Solutions-Lab/food-opt"
+SPDX-PackageDownloadLocation = "https://github.com/Sustainable-Solutions-Lab/GLADE"
 
 [[annotations]]
 path = [

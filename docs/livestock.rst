@@ -93,7 +93,7 @@ The model assumes that only a portion of the total grassland biomass production 
 
 This value is consistent with the **GLOBIOM** model, which assumes a 50% grazing efficiency for grass in native grasslands [3]_. While intensive dairy systems can achieve higher utilization (up to 70-80%), global rangeland management guidelines typically recommend utilization rates below 50% to prevent degradation.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/grassland_yield.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/grassland_yield.png
    :alt: Managed grassland yield potential
    :width: 100%
    :align: center
@@ -687,7 +687,7 @@ increase it).  Countries with forage deficits are additionally flagged via
 hatching, indicating reliance on ``exogenous_forage_mt_dm`` after endogenous
 grassland supply is exhausted.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_grassland_calibration.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_grassland_calibration.png
    :width: 100%
    :alt: Map of grassland forage yield correction by country
    :align: center

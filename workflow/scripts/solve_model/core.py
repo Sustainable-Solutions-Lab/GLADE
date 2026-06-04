@@ -1328,7 +1328,7 @@ def run_solve(
         only need ``n.links.dynamic.p0`` etc. (set by ``assign_solution``) can
         opt out of the PyPSA bus-injection recompute, which is dominated by
         per-link-port ``DataFrame.rename`` calls and is the single largest
-        cost after the solver itself for the food-opt model.
+        cost after the solver itself for the GLADE model.
     skip_assign_duals
         If True, do not call ``n.optimize.assign_duals(...)``.  This is safe
         whenever the caller does not need the generic dual assignment on

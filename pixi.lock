@@ -3256,12 +3256,6 @@ packages:
   - pkg:pypi/fonttools?source=hash-mapping
   size: 2927817
   timestamp: 1759187293931
-- pypi: ./
-  name: food-opt-workflow
-  version: 0.0.1
-  sha256: 7121f51d1a0e50f52671acb3b8b31e9f58116946e773a7f935b30f151bb58386
-  requires_python: '>=3.13'
-  editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/fqdn-1.5.1-pyhd8ed1ab_1.conda
   sha256: 2509992ec2fd38ab27c7cdb42cf6cadc566a1cc0d1021a2673475d9fa87c6276
   md5: d3549fd50d450b6d9e7dddff25dd2110
@@ -3599,6 +3593,12 @@ packages:
   - sphinx-rtd-theme ; extra == 'doc'
   - sphinx-autodoc-typehints ; extra == 'doc'
   requires_python: '>=3.7'
+- pypi: ./
+  name: glade-workflow
+  version: 0.0.1
+  sha256: 10b055687b2ffe890414843b1b67d10fc6865988d96f78e511e3efe43e50e2a8
+  requires_python: '>=3.13'
+  editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/glib-tools-2.86.2-hf516916_0.conda
   sha256: 5517dae367d069de42c16d48f4b7e269acdedc11d43a5d4ec8d077d43ae00f45
   md5: 14ad79cb7501b6a408485b04834a734c

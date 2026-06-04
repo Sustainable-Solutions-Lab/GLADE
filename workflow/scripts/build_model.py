@@ -647,7 +647,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network()
     n.set_snapshots(["now"])
-    n.name = "food-opt"
+    n.name = "GLADE"
 
     # Store population in network metadata for consistent access in solve and analysis
     n.meta["population"] = {

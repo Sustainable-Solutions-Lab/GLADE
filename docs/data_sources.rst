@@ -1060,7 +1060,7 @@ FAO Nutrient Conversion Table for SUA (2024)
 Data License Summary
 --------------------
 
-Most datasets used in this project require attribution. Some disallow redistribution, meaning that ``food-opt`` cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
+Most datasets used in this project require attribution. Some disallow redistribution, meaning that ``GLADE`` cannot be distributed together with these datasets. Some furthermore prohibit commercial use without prior agreement or a paid-for license.
 
 **Open licenses (attribution required, redistribution allowed)**:
 

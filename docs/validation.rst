@@ -99,7 +99,7 @@ separately below.
 
 .. _fig-validation-crop-production:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_crop_production.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_crop_production.png
    :width: 100%
    :alt: Map of dominant crop group and land-use intensity under validation
 
@@ -121,7 +121,7 @@ in isolation.
 
 .. _fig-validation-pasture:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_pasture.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_pasture.png
    :width: 100%
    :alt: Map of pasture utilization intensity under validation
 
@@ -155,7 +155,7 @@ Food groups are sorted by relative deviation (largest first) in both panels.
 
 .. _fig-validation-food-group-slack:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_food_group_slack.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_food_group_slack.png
    :width: 100%
    :alt: Two-panel food group slack showing absolute and relative deviation
 
@@ -177,7 +177,7 @@ structural assumptions need refinement.
 
 .. _fig-validation-slack-overview:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_slack_overview.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_slack_overview.png
    :width: 80%
    :alt: Horizontal bar chart showing slack penalty by category
    :align: center
@@ -211,7 +211,7 @@ exogenous-feed mass that lives on the same bus). All quantities are on a
 
 .. _fig-validation-feed-breakdown:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/validation_feed_breakdown.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/validation_feed_breakdown.png
    :width: 80%
    :alt: Stacked horizontal bar chart of feed composition by animal type and source
    :align: center

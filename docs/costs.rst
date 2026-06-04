@@ -194,7 +194,7 @@ per-hectare cost scales with the actual yield.
 
 The resulting cost estimates vary substantially across crops and countries, reflecting differences in local prices, yields, and agricultural productivity.  The map below shows the median cost per country (across all crops), while the distribution plot reveals the cross-country spread for each crop individually.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/costs_crop_cost_map.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/costs_crop_cost_map.png
    :width: 100%
    :alt: World map of median crop production costs per country
 
@@ -202,7 +202,7 @@ The resulting cost estimates vary substantially across crops and countries, refl
    Higher costs in Europe and North America reflect higher input prices and labour costs;
    lower costs in Sub-Saharan Africa and South Asia reflect lower price levels.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/costs_crop_cost_distribution.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/costs_crop_cost_distribution.png
    :width: 100%
    :alt: Distribution of crop production costs across countries for each crop
 

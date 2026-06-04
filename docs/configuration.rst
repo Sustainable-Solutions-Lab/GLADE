@@ -8,7 +8,7 @@ Configuration
 Overview
 --------
 
-The ``food-opt`` model is configuration-driven: all scenario parameters, crop selections, constraints, and solver options are defined in YAML configuration files under ``config/``. This allows exploring different scenarios without modifying code.
+The ``GLADE`` model is configuration-driven: all scenario parameters, crop selections, constraints, and solver options are defined in YAML configuration files under ``config/``. This allows exploring different scenarios without modifying code.
 
 The default configuration is ``config/default.yaml``, structured into thematic sections.
 
@@ -311,7 +311,7 @@ NetCDF Options
    :end-before: # --- section: validation ---
 
 ``paths.*_root`` values support environment-variable and ``~`` expansion in the
-Snakefile (for example ``"${GROUP_SCRATCH}/${USER}/food-opt/processing"``).
+Snakefile (for example ``"${GROUP_SCRATCH}/${USER}/GLADE/processing"``).
 
 Validation Options
 ~~~~~~~~~~~~~~~~~~

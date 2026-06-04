@@ -8,7 +8,7 @@ Workflow & Execution
 Overview
 --------
 
-The ``food-opt`` model uses `Snakemake <https://snakemake.readthedocs.io/>`__ for workflow orchestration. If you have never used Snakemake before, consider having a look at the official `tutotial <https://snakemake.readthedocs.io/en/stable/tutorial/tutorial.html>`__ to get familiar with the basic concepts. The workflow follows these main stages:
+The ``GLADE`` model uses `Snakemake <https://snakemake.readthedocs.io/>`__ for workflow orchestration. If you have never used Snakemake before, consider having a look at the official `tutotial <https://snakemake.readthedocs.io/en/stable/tutorial/tutorial.html>`__ to get familiar with the basic concepts. The workflow follows these main stages:
 
 1. **Downloads** (GAEZ, GADM, UN WPP, FAOSTAT)
 2. **Preprocessing** (regions, resource classes, yields, population, health)
@@ -28,7 +28,7 @@ Before Snakemake resolves any rules, the ``workflow/Snakefile`` uses the ``onsta
 
 The complete workflow dependency graph is shown below. Each node represents a Snakemake rule, and edges show dependencies between rules.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/workflow_rulegraph.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/workflow_rulegraph.png
    :alt: Workflow dependency graph
    :align: center
    :width: 100%
@@ -231,7 +231,7 @@ Memory Management
 The ``tools/smk`` Wrapper
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-It is possible to run the workflow directly with the ``snakemake`` command. Food-opt, however, provides a simple shell script, ``tools/smk``, which:
+It is possible to run the workflow directly with the ``snakemake`` command. GLADE, however, provides a simple shell script, ``tools/smk``, which:
 
 1. Runs Snakemake in a systemd cgroup with hard memory limit (default 10 GB), killing the process group if memory limit is exceeded
 2. Disables swap to prevent system instability
@@ -330,7 +330,7 @@ Enable remote solving in your config file:
    remote_solve:
      enabled: true
      host: "mycluster"           # SSH host or alias from ~/.ssh/config
-     workdir: "~/food-opt"       # Remote project root
+     workdir: "~/GLADE"       # Remote project root
      pixi_env: "gurobi"          # Remote pixi environment (passed to tools/smk -e)
      use_slurm: true             # Submit via sbatch (false = direct SSH execution)
      slurm_account: "myaccount"  # SLURM --account

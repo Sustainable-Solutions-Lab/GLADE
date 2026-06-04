@@ -21,7 +21,7 @@ Land Pool Structure
 
 The model uses separate **land pools** for cropland and pasture, with distinct supply pathways and the option to spare land for carbon sequestration:
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/land_flows.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/land_flows.png
    :width: 100%
    :alt: Land flow diagram showing cropland and pasture pool structure
 
@@ -86,7 +86,7 @@ Optimization regions are created by clustering administrative units (GADM level 
 3. **Clustering**: Aggregate administrative units using k-means clustering on centroids
 4. **Output**: GeoJSON with region polygons (``processing/{name}/regions.geojson``)
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/intro_global_coverage.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/intro_global_coverage.png
    :width: 100%
    :alt: Global model coverage map
 
@@ -139,7 +139,7 @@ in the gridcell. This uses GAEZ potential-yield rasters in standard runs
 and GAEZ actual-yield rasters when ``validation.use_actual_yields`` is
 enabled.
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/land_resource_classes.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/land_resource_classes.png
    :width: 50%
    :alt: Resource class distribution map showing yield potential categories
 
@@ -192,7 +192,7 @@ Data sources and split:
 - ``build_grazing_only_land`` estimates the marginal (grazing-only) subset on the same physical basis.
 - Cropland-suitable current grassland is computed as ``max(current_grassland - grazing_only, 0)``
 
-.. figure:: https://github.com/Sustainable-Solutions-Lab/food-opt/releases/download/doc-figures/grazing_only_land_fraction.png
+.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/grazing_only_land_fraction.png
    :width: 100%
    :alt: Fraction of each gridcell and region classified as grassland
 

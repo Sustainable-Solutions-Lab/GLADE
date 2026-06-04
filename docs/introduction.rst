@@ -5,10 +5,10 @@
 Introduction
 ============
 
-What ``food-opt`` is
+What ``GLADE`` is
 --------------------
 
-``food-opt`` is a global food systems optimization model for exploring
+``GLADE`` is a global food systems optimization model for exploring
 trade-offs between nutritional and environmental outcomes. It can be used to
 answer questions like: *How could we feed the world's population while
 minimizing greenhouse gas emissions and diet-related disease burden? What are
@@ -25,7 +25,7 @@ physical constraints on land, water, yields, and nutritional adequacy.
 Modeling approach
 -----------------
 
-``food-opt`` is built on `PyPSA <https://pypsa.org/>`_ (Python for Power
+``GLADE`` is built on `PyPSA <https://pypsa.org/>`_ (Python for Power
 System Analysis), an open-source framework originally designed for energy
 system modeling. We adapt PyPSA's flexible, component-based network
 representation to describe food flows rather than energy flows: buses
@@ -125,8 +125,8 @@ Installation
 
    .. code-block:: bash
 
-      git clone https://github.com/Sustainable-Solutions-Lab/food-opt.git
-      cd food-opt
+      git clone https://github.com/Sustainable-Solutions-Lab/GLADE.git
+      cd GLADE
 
 2. **Install dependencies**:
 
@@ -188,7 +188,7 @@ Repository layout
 
 The repository is organised as follows::
 
-    food-opt/
+    GLADE/
     ├── config/              # Scenario configuration files (YAML)
     │   ├── default.yaml     # Default values for every configurable key
     │   ├── example.yaml     # Minimal override template
