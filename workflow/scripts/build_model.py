@@ -256,6 +256,20 @@ if __name__ == "__main__":
             else:
                 yields_df["harvested_area"] = 0.0
 
+            # Floor crop-production capacity at the observed harvested area.
+            # ``suitable_area`` is a GAEZ suitability raster that, in semi-arid
+            # systems, rates far less land suitable than is actually cultivated.
+            # Capping production at GAEZ suitability relocates baseline
+            # production off real cropland (via _redistribute_excess_baseline)
+            # and frees the marginal land, which p_min_pu=1 then forces into the
+            # spared-land (reforestation) sink. Real harvested area is hard data
+            # and wins: a crop may always be grown on at least its observed
+            # footprint. Mirrors the CROPGRIDS treatment, where suitable_area is
+            # harvested_area * suitable_area_expansion (build_crop_yields_cropgrids.py).
+            yields_df["suitable_area"] = yields_df[
+                ["suitable_area", "harvested_area"]
+            ].max(axis=1)
+
             yields_data[yields_key] = yields_df
 
     # Per-crop coverage check: a crop is viable only if at least one of its
