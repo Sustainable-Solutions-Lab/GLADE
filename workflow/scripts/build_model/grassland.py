@@ -146,10 +146,21 @@ def add_grassland_feed_links(
     grass_df["resource_class"] = grass_df["resource_class"].astype(int)
     grass_df = grass_df.set_index(["region", "resource_class"])
 
+    # Left join (NOT inner): grazing-only pasture -- land suitable for grazing
+    # but not for cropping -- has no row in ``land_rainfed`` (the rainfed
+    # cropland-eligible table, further filtered to area >= min_area_ha in
+    # build_model). An inner join silently dropped every grazing-only pool,
+    # excluding it from grassland production even though it carries valid grass
+    # yield, grazing intensity, and grazing-only (``marginal``) area. That land
+    # then had no productive outlet and was forced into the spared-land sink.
+    # Keep all grass-yield rows and fill the missing cropland-eligible area with
+    # 0; the marginal grazing area added below supplies the available capacity,
+    # exactly as the marginal handling already intends.
     base_df = grass_df.join(
         land_rainfed[["area_ha"]].rename(columns={"area_ha": "land_area"}),
-        how="inner",
+        how="left",
     )
+    base_df["land_area"] = base_df["land_area"].fillna(0.0)
     if use_actual_production:
         observed_area = (
             current_grassland_area.set_index(["region", "resource_class"])["area_ha"]
@@ -206,6 +217,25 @@ def add_grassland_feed_links(
     work["name"] = "produce:grassland:" + suffix
     work["bus0"] = "land:pasture:" + suffix
     work["bus1"] = "feed:ruminant_forage:" + work["country"]
+
+    # Defensive guard: only create links whose pasture-pool bus exists. land.py
+    # builds a pasture pool for every region/class with grassland (cropland or
+    # grazing-only) supply, so this should retain all rows; but with the
+    # left-join above we no longer rely on land_rainfed membership to guarantee
+    # a pool, so drop (and report) any orphan rather than leave an unbalanced
+    # bus reference.
+    missing_pool = ~work["bus0"].isin(n.buses.static.index)
+    if missing_pool.any():
+        logger.warning(
+            "Skipping %d grassland_production links with no pasture-pool bus "
+            "(e.g. %s)",
+            int(missing_pool.sum()),
+            work.loc[missing_pool, "bus0"].iloc[0],
+        )
+        work = work[~missing_pool].copy()
+    if work.empty:
+        logger.info("No grassland entries with an existing pasture pool; skipping")
+        return
 
     available_mha = work["available_area"].to_numpy() / HA_PER_MHA
 
