@@ -37,6 +37,7 @@ from workflow.scripts.solve_model.production_stability import (
     add_bounded_subsidy_constraints,
     add_crop_growth_cap_constraints,
     add_production_stability_constraints,
+    add_reforestation_cap_constraints,
     resolve_calibrated_l1_costs,
 )
 
@@ -1613,6 +1614,18 @@ def run_solve(
     crop_growth_cap_cfg = smk.params.crop_growth_cap
     with _phase("add_crop_growth_cap_constraints"):
         add_crop_growth_cap_constraints(n, crop_growth_cap_cfg)
+
+    # Per-country reforestation cap: bounds total spared land (cropland +
+    # pasture) at a fraction of each country's reforestable agricultural
+    # area. Driven by the sensitivity parameter; absent or >= 1.0 is a no-op.
+    reforest_fraction = float(
+        (smk.params.sensitivity or {}).get("max_reforestation_fraction", 1.0)
+    )
+    reforest_buffer_mha = float(
+        (smk.params.sensitivity or {}).get("reforestation_cap_buffer_mha", 0.0)
+    )
+    with _phase("add_reforestation_cap_constraints"):
+        add_reforestation_cap_constraints(n, reforest_fraction, reforest_buffer_mha)
 
     # Apply negative cost-calibration corrections only up to baseline (two-tier).
     # Positive corrections are already applied additively at build time;

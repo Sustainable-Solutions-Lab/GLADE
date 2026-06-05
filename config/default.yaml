@@ -429,7 +429,12 @@ macronutrients: {}
 # --- section: sensitivity ---
 # Multiplicative adjustment factors for sensitivity analysis. Applied after
 # model construction. See config/schemas/config.schema.yaml for structure.
-sensitivity: {}
+# reforestation_cap_buffer_mha is not a factor: it is a small additive
+# per-country allowance for the reforestation cap (see
+# add_reforestation_cap_constraints), grandfathering the structural minimum
+# reforestation a few countries cannot avoid so a tight cap stays feasible.
+sensitivity:
+  reforestation_cap_buffer_mha: 0.05
 
 # --- section: byproducts ---
 # Foods that are not for direct human consumption (excluded from food group tracking)

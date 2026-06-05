@@ -1283,3 +1283,135 @@ def add_crop_growth_cap_constraints(
         len(constraint_names),
         100.0 * cap,
     )
+
+
+# Carriers that route baseline agricultural land to a carbon-sequestration
+# sink: cropland sparing (``spare_land``) and existing-pasture sparing
+# (``spare_existing_grassland``). Both are reforestation channels.
+REFORESTATION_CARRIERS = ["spare_land", "spare_existing_grassland"]
+
+
+def add_reforestation_cap_constraints(
+    n: pypsa.Network, max_fraction: float, buffer_mha: float
+) -> None:
+    """Cap per-country reforestation at a fraction of reforestable land.
+
+    Aggregates spared-land dispatch (``spare_land`` cropland +
+    ``spare_existing_grassland`` pasture) across regions, resource classes
+    and water-supply types within each country, then bounds the country
+    total at ``max_fraction * reforestable_area + buffer_mha``. The
+    reforestable area is the sum of ``p_nom_max`` over the same links -- the
+    country's baseline agricultural land that the model is allowed to spare.
+
+    ``max_fraction`` is the ``sensitivity.max_reforestation_fraction``
+    parameter: at ``1.0`` the bound equals the existing per-link
+    ``p_nom_max`` sum and is non-binding (skipped); at ``0.0`` no land may
+    be reforested anywhere; intermediate values limit the concentration of
+    reforestation within each country (e.g. preventing a single country
+    from reforesting 80-90% of its agricultural area at high carbon prices).
+
+    ``buffer_mha`` is a small additive per-country allowance. A handful of
+    countries carry a residual of baseline agricultural land that no modeled
+    crop can grow and no grassland can graze (second-order inconsistencies
+    between the cropland-baseline raster and the per-crop harvested/suitable
+    tables), which the forced existing-land supply (``p_min_pu=1``) must route
+    to the spared sink. Without a buffer this structural minimum makes a tight
+    cap infeasible for those countries (mostly micro-states; max ~0.7 Mha in
+    absolute terms). The additive buffer grandfathers that unavoidable
+    reforestation without perceptibly loosening the cap for the large
+    reforesters the parameter targets.
+
+    Country-level (rather than per-link) granularity preserves the model's
+    freedom to choose *which* land to spare within a country (highest
+    carbon-credit land first), mirroring ``add_crop_growth_cap_constraints``.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    max_fraction : float
+        Maximum fraction of reforestable agricultural land that may be
+        spared per country, in [0, 1].
+    buffer_mha : float
+        Additive per-country allowance (Mha, >= 0) on top of
+        ``max_fraction * reforestable_area``.
+    """
+    if max_fraction < 0.0 or max_fraction > 1.0:
+        raise ValueError(
+            f"max_reforestation_fraction must be in [0, 1], got {max_fraction}"
+        )
+    if buffer_mha < 0.0:
+        raise ValueError(f"reforestation_cap_buffer_mha must be >= 0, got {buffer_mha}")
+    if max_fraction >= 1.0:
+        logger.info(
+            "Reforestation cap fraction %.3f >= 1.0; non-binding, skipping",
+            max_fraction,
+        )
+        return
+
+    m = n.model
+    link_p = m.variables["Link-p"].sel(snapshot="now")
+    links_df = n.links.static
+    spare_links = links_df[links_df["carrier"].isin(REFORESTATION_CARRIERS)]
+    if spare_links.empty:
+        logger.info("No spared-land links found; skipping reforestation cap")
+        return
+
+    # ``country`` is populated at build time (build_model.py maps region ->
+    # country on spare links). Drop any link with a missing country so a
+    # build regression surfaces as fewer constrained links rather than a
+    # bogus empty-string group.
+    country = spare_links["country"].astype(str)
+    valid = country.str.len() > 0
+    if not valid.all():
+        logger.warning(
+            "%d spared-land links have no country; excluded from reforestation cap",
+            int((~valid).sum()),
+        )
+        spare_links = spare_links[valid.to_numpy()]
+        country = spare_links["country"].astype(str)
+    if spare_links.empty:
+        logger.info("No spared-land links with a country; skipping reforestation cap")
+        return
+
+    reforestable_per_country = (
+        spare_links.assign(_country=country.to_numpy())
+        .groupby("_country")["p_nom_max"]
+        .sum()
+        .sort_index()
+    )
+
+    group_map = xr.DataArray(
+        country.to_numpy(),
+        coords={"name": spare_links.index},
+        dims="name",
+        name="reforest_country",
+    )
+    grouped = link_p.sel(name=spare_links.index).groupby(group_map).sum()
+
+    upper_bounds = xr.DataArray(
+        (max_fraction * reforestable_per_country + buffer_mha).to_numpy(),
+        coords={"reforest_country": reforestable_per_country.index.to_numpy()},
+        dims="reforest_country",
+    )
+
+    m.add_constraints(
+        grouped <= upper_bounds, name="GlobalConstraint-reforestation_cap"
+    )
+
+    n.global_constraints.add(
+        [f"reforestation_cap_{c}" for c in reforestable_per_country.index],
+        sense="<=",
+        constant=upper_bounds.to_numpy(),
+        type="reforestation_cap",
+    )
+
+    logger.info(
+        "Added reforestation cap (%.1f%% of reforestable land + %.3f Mha buffer) "
+        "over %d countries; reforestable %.1f Mha, capped total %.1f Mha",
+        100.0 * max_fraction,
+        buffer_mha,
+        len(reforestable_per_country),
+        float(reforestable_per_country.sum()),
+        float((max_fraction * reforestable_per_country + buffer_mha).sum()),
+    )

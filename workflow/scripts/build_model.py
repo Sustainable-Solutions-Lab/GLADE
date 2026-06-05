@@ -908,6 +908,18 @@ if __name__ == "__main__":
         luc_lef_lookup,
         disable_spared_cropland=disable_spared_cropland,
     )
+
+    # Tag spared-land links (cropland + existing-grassland sparing) with their
+    # country so the solve-time per-country reforestation cap
+    # (sensitivity.max_reforestation_fraction) can group by it. These links are
+    # created without a country; every other geographic link already carries one.
+    _spare_r2c = regions_df.set_index("region")["country"]
+    _spare_mask = n.links.static["carrier"].isin(
+        ["spare_land", "spare_existing_grassland"]
+    )
+    n.links.static.loc[_spare_mask, "country"] = (
+        n.links.static.loc[_spare_mask, "region"].map(_spare_r2c).fillna("")
+    )
     # Per-(crop, country) supply-chain loss multiplier = 1 - loss_fraction
     # applied to crop_production efficiency. The loss rate is sourced from
     # the crop's *primary* food group (the food output with the highest
