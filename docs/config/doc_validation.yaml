@@ -27,7 +27,13 @@ validation:
   disable_spared_grassland: true
   slack_marginal_cost: 10
 
+deviation_penalty:
+  enabled: false
+
 cost_calibration:
+  enabled: false
+
+food_demand_calibration:
   enabled: false
 
 health:
