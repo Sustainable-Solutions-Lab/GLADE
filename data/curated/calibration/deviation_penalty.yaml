@@ -10,11 +10,11 @@ target_deviation_pct: 5.0
 penalty_mode: l1
 deviation_type: absolute
 components:
-- land
+- cropland
 - feed
 l1_costs:
-  land: 0.3998557913279479
-  feed: 0.060289512984363844
-iterations: 4
+  cropland: 1.591927041258676
+  feed: 0.13049140097056353
+iterations: 3
 converged: true
-final_residual_log_inf: 0.016441086468494213
+final_residual_log_inf: 0.012918798355152621
