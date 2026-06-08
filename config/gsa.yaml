@@ -59,7 +59,10 @@ scenarios:
       enforce_baseline_diet: true
     deviation_penalty:
       land:
-        l1_cost_factor: 0.31623   # 1 / sqrt(10)
+        crops:
+          l1_cost_factor: 0.31623   # 1 / sqrt(10)
+        grassland:
+          l1_cost_factor: 0.31623
       feed:
         l1_cost_factor: 0.31623
 
@@ -69,7 +72,10 @@ scenarios:
       enforce_baseline_diet: true
     deviation_penalty:
       land:
-        l1_cost_factor: 3.16228   # sqrt(10)
+        crops:
+          l1_cost_factor: 3.16228   # sqrt(10)
+        grassland:
+          l1_cost_factor: 3.16228
       feed:
         l1_cost_factor: 3.16228
 
@@ -167,7 +173,10 @@ scenarios:
         <<: *gsa_template
         deviation_penalty:
           land:
-            l1_cost_factor: 0.31623
+            crops:
+              l1_cost_factor: 0.31623
+            grassland:
+              l1_cost_factor: 0.31623
           feed:
             l1_cost_factor: 0.31623
         consumer_values:
@@ -184,7 +193,10 @@ scenarios:
         <<: *gsa_template
         deviation_penalty:
           land:
-            l1_cost_factor: 3.16228
+            crops:
+              l1_cost_factor: 3.16228
+            grassland:
+              l1_cost_factor: 3.16228
           feed:
             l1_cost_factor: 3.16228
         consumer_values:

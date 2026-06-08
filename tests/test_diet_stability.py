@@ -51,7 +51,11 @@ def _dp_cfg(
         "penalty_mode": penalty_mode,
         "deviation_type": deviation_type,
         "quadratic_cost": quadratic_cost,
-        "land": {"enabled": False, "l1_cost": 0.0, "l1_cost_factor": 1.0},
+        "land": {
+            "enabled": False,
+            "crops": {"enabled": False, "l1_cost": 0.0, "l1_cost_factor": 1.0},
+            "grassland": {"enabled": False, "l1_cost": 0.0, "l1_cost_factor": 1.0},
+        },
         "feed": {"enabled": False, "l1_cost": 0.0, "l1_cost_factor": 1.0},
         "diet": {
             "enabled": diet_enabled,

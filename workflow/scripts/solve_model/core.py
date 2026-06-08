@@ -1782,23 +1782,24 @@ def run_solve(
         # The L1 coefficient mirrors what _add_animal_l1_penalty applies in
         # production_stability.py: when feed.l1_cost is set, the penalty
         # uses that value directly (animal_scale=1.0) and abs_dev is in
-        # native Mt DM; when null, the penalty uses land.l1_cost on
+        # native Mt DM; when null, the penalty uses the cropland l1_cost on
         # Mha-equivalent units. In both cases the per-component coefficient
         # times sum(abs_dev.solution) reproduces the actual objective term.
         if dp_cfg["enabled"]:
             penalty_mode = dp_cfg.get("penalty_mode")
             stability_cost = 0.0
             if penalty_mode == "l1":
-                land_l1 = float(dp_cfg["land"]["l1_cost"])
+                crop_l1 = float(dp_cfg["land"]["crops"]["l1_cost"])
+                grassland_l1 = float(dp_cfg["land"]["grassland"]["l1_cost"])
                 feed_l1_override = dp_cfg["feed"]["l1_cost"]
                 animal_l1 = (
-                    float(feed_l1_override) if feed_l1_override is not None else land_l1
+                    float(feed_l1_override) if feed_l1_override is not None else crop_l1
                 )
                 for var_name, cost in [
-                    ("crop_stability_abs_dev", land_l1),
-                    ("grassland_stability_abs_dev", land_l1),
+                    ("crop_stability_abs_dev", crop_l1),
+                    ("grassland_stability_abs_dev", grassland_l1),
                     ("animal_stability_abs_dev", animal_l1),
-                    ("land_conversion_stability_abs_dev", land_l1),
+                    ("land_conversion_stability_abs_dev", crop_l1),
                 ]:
                     if var_name in n.model.variables:
                         sol = n.model.variables[var_name].solution

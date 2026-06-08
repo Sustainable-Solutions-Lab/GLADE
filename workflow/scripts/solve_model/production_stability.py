@@ -49,15 +49,35 @@ LAND_CONVERSION_CARRIERS = [
 CALIBRATED_SENTINEL = "calibrated"
 
 
+# Map each calibration component name to its config-block path within the
+# deviation_penalty dict. Cropland and grassland carry independent L1 costs but
+# live under the shared ``land`` block; feed and diet are top-level.
+COMPONENT_PATHS = {
+    "cropland": ("land", "crops"),
+    "grassland": ("land", "grassland"),
+    "feed": ("feed",),
+    "diet": ("diet",),
+}
+
+
+def _component_block(dp_cfg: dict, component: str) -> dict:
+    """Return the config sub-dict carrying ``component``'s l1_cost knobs."""
+    block = dp_cfg
+    for key in COMPONENT_PATHS[component]:
+        block = block[key]
+    return block
+
+
 def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> dict:
     """Resolve ``"calibrated"`` sentinels and apply per-component factors.
 
-    For each component in ``{land, feed, diet}`` whose ``l1_cost`` is the
-    string ``"calibrated"``, the numeric value is substituted from
-    ``calibrated_yaml`` (produced by ``calibrate_deviation_penalty``). The
-    per-component ``l1_cost_factor`` is then multiplied in so scenarios can
-    scan around the calibrated central value without hard-coding absolute
-    numbers that drift whenever the calibration is refreshed.
+    For each component in ``{cropland, grassland, feed, diet}`` whose
+    ``l1_cost`` is the string ``"calibrated"``, the numeric value is
+    substituted from ``calibrated_yaml`` (produced by
+    ``calibrate_deviation_penalty``). The per-component ``l1_cost_factor`` is
+    then multiplied in so scenarios can scan around the calibrated central
+    value without hard-coding absolute numbers that drift whenever the
+    calibration is refreshed.
 
     The input dict is not mutated. When ``penalty_mode != "l1"`` the L1
     costs are unused and the input is returned unchanged.
@@ -65,13 +85,19 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
     if dp_cfg.get("penalty_mode") != "l1":
         return dp_cfg
 
-    components = ("land", "feed", "diet")
+    components = ("cropland", "grassland", "feed", "diet")
 
     def _needs_lookup() -> bool:
-        return any(dp_cfg[c]["l1_cost"] == CALIBRATED_SENTINEL for c in components)
+        return any(
+            _component_block(dp_cfg, c)["l1_cost"] == CALIBRATED_SENTINEL
+            for c in components
+        )
 
     def _any_nontrivial_factor() -> bool:
-        return any(float(dp_cfg[c]["l1_cost_factor"]) != 1.0 for c in components)
+        return any(
+            float(_component_block(dp_cfg, c)["l1_cost_factor"]) != 1.0
+            for c in components
+        )
 
     if not _needs_lookup() and not _any_nontrivial_factor():
         return dp_cfg
@@ -92,27 +118,29 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
         cal_components = set(calibrated.get("components", []))
         cal_l1 = calibrated.get("l1_costs", {})
         for component in components:
-            if resolved[component]["l1_cost"] != CALIBRATED_SENTINEL:
+            block = _component_block(resolved, component)
+            if block["l1_cost"] != CALIBRATED_SENTINEL:
                 continue
             if component not in cal_components or component not in cal_l1:
                 raise ValueError(
-                    f"deviation_penalty.{component}.l1_cost='calibrated' but the "
+                    f"deviation_penalty {component}.l1_cost='calibrated' but the "
                     f"calibrated YAML at {path} did not calibrate '{component}' "
                     f"(components: {sorted(cal_components)}). Either remove the "
                     "sentinel, set an explicit numeric value, or regenerate the "
                     "calibration including this component."
                 )
-            resolved[component]["l1_cost"] = float(cal_l1[component])
+            block["l1_cost"] = float(cal_l1[component])
             logger.info(
-                "Resolved deviation_penalty.%s.l1_cost='calibrated' -> %.6f (from %s)",
+                "Resolved deviation_penalty %s.l1_cost='calibrated' -> %.6f (from %s)",
                 component,
-                resolved[component]["l1_cost"],
+                block["l1_cost"],
                 path,
             )
 
     for component in components:
-        factor = float(resolved[component]["l1_cost_factor"])
-        value = resolved[component]["l1_cost"]
+        block = _component_block(resolved, component)
+        factor = float(block["l1_cost_factor"])
+        value = block["l1_cost"]
         if factor == 1.0:
             continue
         if value is None:
@@ -120,7 +148,7 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
             # "auto-scale feed deviations to Mha-equivalent via animal_scale"
             # path). The factor's purpose is to scan around a known central
             # value, but the central value in the null case is computed at
-            # solve time from network baselines (land.l1_cost * area/feed),
+            # solve time from network baselines (cropland l1_cost * area/feed),
             # which the resolver cannot see. Refuse to silently drop the
             # factor: force the user to set an explicit numeric l1_cost
             # (which is what every default and shipped scenario does).
@@ -133,12 +161,12 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
                 "Set l1_cost to an explicit numeric value (or 'calibrated') "
                 "before applying a factor."
             )
-        resolved[component]["l1_cost"] = float(value) * factor
+        block["l1_cost"] = float(value) * factor
         logger.info(
-            "Applied deviation_penalty.%s.l1_cost_factor=%.6g -> l1_cost=%.6f",
+            "Applied deviation_penalty %s.l1_cost_factor=%.6g -> l1_cost=%.6f",
             component,
             factor,
-            resolved[component]["l1_cost"],
+            block["l1_cost"],
         )
 
     return resolved
@@ -207,7 +235,7 @@ def add_production_stability_constraints(
                 "crop_production",
                 "crop",
                 deviation_type,
-                land_cfg["l1_cost"],
+                crops_cfg["l1_cost"],
                 crops_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -244,7 +272,7 @@ def add_production_stability_constraints(
                 "grassland_production",
                 "grassland",
                 deviation_type,
-                land_cfg["l1_cost"],
+                grassland_cfg["l1_cost"],
                 grassland_cfg["min_baseline"],
             )
         elif penalty_mode == "quadratic":
@@ -266,7 +294,7 @@ def add_production_stability_constraints(
         # If feed.l1_cost is set, use it directly in native Mt DM units
         # (no scaling). Otherwise (null), compute a dynamic scaling so
         # that feed deviations (Mt DM) are converted to Mha-equivalent
-        # units, making land.l1_cost comparable across crop/grassland
+        # units, making the cropland l1_cost comparable across crop/grassland
         # (Mha) and animal (Mt DM) components.
         animal_l1_cost = None
         animal_scale = 1.0
@@ -280,7 +308,9 @@ def add_production_stability_constraints(
                 animal_l1_cost,
             )
         else:
-            animal_l1_cost = land_cfg["l1_cost"]
+            # Auto-scale feed deviations (Mt DM) to Mha-equivalent using the
+            # cropland L1 as the land reference point.
+            animal_l1_cost = crops_cfg["l1_cost"]
             if deviation_type == "absolute":
                 crop_links = links_df[links_df["carrier"] == "crop_production"]
                 grass_links = links_df[links_df["carrier"] == "grassland_production"]
@@ -360,11 +390,12 @@ def add_production_stability_constraints(
                 "penalty (zero baselines would forbid all conversion); skipping"
             )
         elif penalty_mode == "l1":
+            # Land conversion uses the cropland L1 as its land reference point.
             _add_land_conversion_l1_penalty(
                 n,
                 link_p,
                 links_df,
-                land_cfg["l1_cost"],
+                crops_cfg["l1_cost"],
             )
         elif penalty_mode == "quadratic":
             _add_land_conversion_quadratic_penalty(

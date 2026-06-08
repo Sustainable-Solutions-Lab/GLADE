@@ -55,8 +55,12 @@ deviation_penalty:
   penalty_mode: "l1"
   deviation_type: "absolute"
   land:
-    l1_cost: 0.1
-    l1_cost_factor: 1.0
+    crops:
+      l1_cost: 0.1
+      l1_cost_factor: 1.0
+    grassland:
+      l1_cost: 0.1
+      l1_cost_factor: 1.0
   feed:
     l1_cost: 0.03
     l1_cost_factor: 1.0

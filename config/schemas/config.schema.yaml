@@ -1665,29 +1665,29 @@ properties:
         description: "Shared coefficient for quadratic mode (bn USD per deviation^2 unit)."
       land:
         type: object
-        required: [enabled, l1_cost, l1_cost_factor, crops, grassland, land_conversion]
+        required: [enabled, crops, grassland, land_conversion]
         additionalProperties: false
         properties:
           enabled:
             type: boolean
             description: "Apply deviation penalty to crop + grassland production area (Mha)."
-          l1_cost:
-            oneOf:
-              - type: number
-                minimum: 0
-              - type: string
-                enum: ["calibrated"]
-            description: "L1 penalty per Mha of land deviation. Set to \"calibrated\" to resolve from calibration.calibrated_yaml at solve time."
-          l1_cost_factor:
-            type: number
-            minimum: 0
-            description: "Multiplicative factor applied after the calibrated value is resolved."
           crops:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack, min_baseline]
+            required: [enabled, l1_cost, l1_cost_factor, max_relative_deviation, enable_slack, min_baseline]
             additionalProperties: false
             properties:
               enabled: {type: boolean}
+              l1_cost:
+                oneOf:
+                  - type: number
+                    minimum: 0
+                  - type: string
+                    enum: ["calibrated"]
+                description: "L1 penalty per Mha of cropland deviation (calibration component \"cropland\"). \"calibrated\" resolves from calibration.calibrated_yaml."
+              l1_cost_factor:
+                type: number
+                minimum: 0
+                description: "Multiplicative factor applied after the calibrated value is resolved."
               max_relative_deviation:
                 type: number
                 minimum: 0
@@ -1698,10 +1698,21 @@ properties:
                 exclusiveMinimum: 0
           grassland:
             type: object
-            required: [enabled, max_relative_deviation, enable_slack, min_baseline]
+            required: [enabled, l1_cost, l1_cost_factor, max_relative_deviation, enable_slack, min_baseline]
             additionalProperties: false
             properties:
               enabled: {type: boolean}
+              l1_cost:
+                oneOf:
+                  - type: number
+                    minimum: 0
+                  - type: string
+                    enum: ["calibrated"]
+                description: "L1 penalty per Mha of grassland deviation (calibration component \"grassland\"). \"calibrated\" resolves from calibration.calibrated_yaml."
+              l1_cost_factor:
+                type: number
+                minimum: 0
+                description: "Multiplicative factor applied after the calibrated value is resolved."
               max_relative_deviation:
                 type: number
                 minimum: 0
@@ -1733,7 +1744,7 @@ properties:
               - type: string
                 enum: ["calibrated"]
               - type: "null"
-            description: "L1 penalty per Mt DM of feed deviation. null falls back to automatic Mha-equivalent scaling from land.l1_cost."
+            description: "L1 penalty per Mt DM of feed deviation. null falls back to automatic Mha-equivalent scaling from the cropland l1_cost."
           l1_cost_factor:
             type: number
             minimum: 0
@@ -1792,10 +1803,10 @@ properties:
             type: array
             items:
               type: string
-              enum: ["land", "feed", "diet"]
+              enum: ["cropland", "grassland", "feed", "diet"]
             minItems: 1
             uniqueItems: true
-            description: "Non-empty subset of {land, feed, diet} to calibrate jointly. Default [land, feed]."
+            description: "Non-empty subset of {cropland, grassland, feed, diet} to calibrate jointly. Default [cropland, grassland, feed]."
           target_deviation_pct:
             type: number
             exclusiveMinimum: 0
@@ -1816,10 +1827,13 @@ properties:
             type: string
           seeds:
             type: object
-            required: [land, feed, diet]
+            required: [cropland, grassland, feed, diet]
             additionalProperties: false
             properties:
-              land:
+              cropland:
+                type: number
+                exclusiveMinimum: 0
+              grassland:
                 type: number
                 exclusiveMinimum: 0
               feed:

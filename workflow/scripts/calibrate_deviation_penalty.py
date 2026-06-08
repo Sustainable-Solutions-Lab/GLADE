@@ -8,7 +8,7 @@ Treats the map
 
     F : (log lambda_c1, ..., log lambda_cn) -> (log dev_c1, ..., log dev_cn)
 
-for any non-empty subset of components ``{land, feed, diet}`` as a black-box
+for any non-empty subset of components ``{cropland, grassland, feed, diet}`` as a black-box
 root-finder for ``F = (log target, ..., log target)``. The map is monotone
 and near-affine in log-log coordinates, so a Broyden quasi-Newton iteration
 converges in a handful of evaluations.
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 # Order in which components appear in vectors and tables. The actual subset
 # being calibrated is a non-empty selection from this list.
-COMPONENT_ORDER = ("land", "feed", "diet")
+COMPONENT_ORDER = ("cropland", "grassland", "feed", "diet")
 
 
 def _make_overrides(
@@ -73,11 +73,19 @@ def _make_overrides(
     solve inherits emissions / health pricing from ``base_config``; set
     them at the top level of the calibration config to pin the regime.
     """
-    land_block: dict = {"enabled": "land" in components}
+    cropland_on = "cropland" in components
+    grassland_on = "grassland" in components
+    land_block: dict = {
+        "enabled": cropland_on or grassland_on,
+        "crops": {"enabled": cropland_on},
+        "grassland": {"enabled": grassland_on},
+    }
     feed_block: dict = {"enabled": "feed" in components}
     diet_block: dict = {"enabled": "diet" in components}
-    if "land" in components:
-        land_block["l1_cost"] = float(lambdas["land"])
+    if cropland_on:
+        land_block["crops"]["l1_cost"] = float(lambdas["cropland"])
+    if grassland_on:
+        land_block["grassland"]["l1_cost"] = float(lambdas["grassland"])
     if "feed" in components:
         feed_block["l1_cost"] = float(lambdas["feed"])
     if "diet" in components:
@@ -135,18 +143,22 @@ def _deviation_pcts(n_main, components: list[str]) -> dict[str, float]:
     """Return per-component absolute deviation as a percentage of baseline."""
     df = extract_baseline_deviation(n_main).set_index("component")
     pcts: dict[str, float] = {}
-    if "land" in components:
-        land_bl = (
-            df.loc["crop_area", "baseline_total"]
-            + df.loc["pasture_area", "baseline_total"]
-        )
-        land_dev = (
-            df.loc["crop_area", "abs_deviation"]
-            + df.loc["pasture_area", "abs_deviation"]
-        )
-        if land_bl <= 0:
-            raise ValueError("Land baseline_total is non-positive; cannot calibrate")
-        pcts["land"] = float(100 * land_dev / land_bl)
+    if "cropland" in components:
+        crop_bl = df.loc["crop_area", "baseline_total"]
+        crop_dev = df.loc["crop_area", "abs_deviation"]
+        if crop_bl <= 0:
+            raise ValueError(
+                "Cropland baseline_total is non-positive; cannot calibrate"
+            )
+        pcts["cropland"] = float(100 * crop_dev / crop_bl)
+    if "grassland" in components:
+        pasture_bl = df.loc["pasture_area", "baseline_total"]
+        pasture_dev = df.loc["pasture_area", "abs_deviation"]
+        if pasture_bl <= 0:
+            raise ValueError(
+                "Grassland (pasture) baseline_total is non-positive; cannot calibrate"
+            )
+        pcts["grassland"] = float(100 * pasture_dev / pasture_bl)
     if "feed" in components:
         feed_bl = df.loc["animal_feed_use", "baseline_total"]
         feed_dev = df.loc["animal_feed_use", "abs_deviation"]

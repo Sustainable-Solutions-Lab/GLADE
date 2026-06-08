@@ -121,8 +121,13 @@ def validate_calibration(config: dict, project_root: Path | None = None) -> None
     # the calibrated sentinel to the mode it was fit in.
     dp_cfg = config["deviation_penalty"]
     uses_calibrated = any(
-        dp_cfg[component]["l1_cost"] == "calibrated"
-        for component in ("land", "feed", "diet")
+        block["l1_cost"] == "calibrated"
+        for block in (
+            dp_cfg["land"]["crops"],
+            dp_cfg["land"]["grassland"],
+            dp_cfg["feed"],
+            dp_cfg["diet"],
+        )
     )
     if uses_calibrated:
         penalty_mode = dp_cfg.get("penalty_mode")
