@@ -1,0 +1,238 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# GSA at lower/higher production-stability regimes
+# ------------------------------------------------
+# Companion to gsa.yaml that re-runs the same Sobol design (identical
+# parameters, including reforest_fraction) at two off-central
+# production-stability regimes, to test how robust the main GSA results are
+# to the calibrated deviation-penalty stiffness:
+#
+#   lower  (factor 1/sqrt(10) ~ 0.31623): half an order of magnitude below central
+#   higher (factor sqrt(10)   ~ 3.16228): half an order of magnitude above central
+#
+# The factor multiplies the calibrated central L1 costs via
+# deviation_penalty.{land.crops, land.grassland, feed}.l1_cost_factor, so the
+# regimes track the calibration automatically when it is refreshed. Each regime
+# has its own baseline scenario for consumer-values calibration.
+#
+# Kept separate from gsa.yaml (the central regime is the headline analysis;
+# these are an SI robustness check) following the same pattern as
+# gsa_fixed_diet.yaml.
+
+name: "gsa_l1"
+scenarios:
+  # Base baseline (enforce_baseline_diet) used as the merge anchor for the two
+  # regime-specific baselines below.
+  baseline: &baseline_template
+    validation:
+      enforce_baseline_diet: true
+    food_utility_piecewise:
+      enabled: false
+    emissions:
+      ghg_price: 0
+    health:
+      value_per_yll: 0
+
+  baseline_l1_low:
+    <<: *baseline_template
+    deviation_penalty:
+      land:
+        crops:
+          l1_cost_factor: 0.31623   # 1 / sqrt(10)
+        grassland:
+          l1_cost_factor: 0.31623
+      feed:
+        l1_cost_factor: 0.31623
+
+  baseline_l1_high:
+    <<: *baseline_template
+    deviation_penalty:
+      land:
+        crops:
+          l1_cost_factor: 3.16228   # sqrt(10)
+        grassland:
+          l1_cost_factor: 3.16228
+      feed:
+        l1_cost_factor: 3.16228
+
+  # Default scenario for reference (no sensitivity adjustments)
+  default: {}
+
+  _generators:
+    # --- Lower stability (factor 1/sqrt(10) ~ 0.31623 on all penalties) ---
+    - name: gsa-l1-low_{sample_id}
+      mode: sensitivity
+      samples: 2048
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: &gsa_parameter_groups
+        "Emission factors": [ch4_factor, n2o_factor, luc_factor]
+        "Agricultural": [yield_factor, flw_factor, fcr_factor]
+        "Health risk": [rr_protective, rr_harmful]
+        "Land use": [reforest_fraction]
+      parameters: &gsa_parameters
+        yield_factor:
+          lower: 0.8
+          upper: 1.2
+          bounds: [0, null]
+        ch4_factor:
+          distribution: normal_ci
+          lower: 0.5
+          upper: 1.5
+          confidence: 0.9
+          bounds: [0, null]
+        n2o_factor:
+          distribution: normal_ci
+          lower: 0.3
+          upper: 1.7
+          confidence: 0.9
+          bounds: [0, null]
+        luc_factor:
+          distribution: normal_ci
+          lower: 0.3
+          upper: 1.7
+          confidence: 0.9
+          bounds: [0, null]
+        flw_factor:
+          lower: 0.7
+          upper: 1.3
+          bounds: [0, null]
+        fcr_factor:
+          lower: 0.8
+          upper: 1.2
+          bounds: [0, null]
+        rr_protective:
+          lower: 0
+          upper: 1
+          bounds: [0, 1]
+        rr_harmful:
+          lower: 0
+          upper: 1
+          bounds: [0, 1]
+        reforest_fraction:
+          lower: 0.05
+          upper: 1.0
+          bounds: [0.05, 1]
+        value_per_yll:
+          distribution: log_uniform
+          lower: 50
+          upper: 50000
+        ghg_price:
+          distribution: log_uniform
+          lower: 5
+          upper: 500
+      template: &gsa_template
+        sensitivity:
+          crop_yields:
+            all: "{yield_factor}"
+          emission_factors:
+            ch4: "{ch4_factor}"
+            n2o: "{n2o_factor}"
+            luc: "{luc_factor}"
+          food_loss_waste: "{flw_factor}"
+          feed_conversion: "{fcr_factor}"
+          health_relative_risk:
+            protective: "{rr_protective}"
+            harmful: "{rr_harmful}"
+          max_reforestation_fraction: "{reforest_fraction}"
+        health:
+          value_per_yll: "{value_per_yll}"
+        emissions:
+          ghg_price: "{ghg_price}"
+        macronutrients:
+          cal:
+            equal_to_baseline: true
+        deviation_penalty:
+          land:
+            crops:
+              l1_cost_factor: 0.31623
+            grassland:
+              l1_cost_factor: 0.31623
+          feed:
+            l1_cost_factor: 0.31623
+        consumer_values:
+          baseline_scenario: "baseline_l1_low"
+
+    # --- Higher stability (factor sqrt(10) ~ 3.16228 on all penalties) ---
+    - name: gsa-l1-high_{sample_id}
+      mode: sensitivity
+      samples: 2048
+      slice_parameters: [value_per_yll, ghg_price]
+      parameter_groups: *gsa_parameter_groups
+      parameters: *gsa_parameters
+      template:
+        <<: *gsa_template
+        deviation_penalty:
+          land:
+            crops:
+              l1_cost_factor: 3.16228
+            grassland:
+              l1_cost_factor: 3.16228
+          feed:
+            l1_cost_factor: 3.16228
+        consumer_values:
+          baseline_scenario: "baseline_l1_high"
+
+# Surrogate-based sensitivity analysis methods. Mirrors gsa.yaml.
+sensitivity_analysis:
+  holdout_fraction: 0.15
+  threads: 6
+  default_surrogate: xgb
+  # GSA solves run outside Snakemake on the cluster (tools/batch-solve), so the
+  # surrogate fit reads scenarios from disk rather than declaring every output.
+  discover_scenarios_on_disk: true
+  sobol:
+    outputs: [total_cost, co2, ch4, n2o, land_use, yll, sequestration]
+  methods:
+    xgb:
+      method_options:
+        n_estimators: 5000
+        max_depth: 4
+        learning_rate: 0.02
+        subsample: 0.8
+        colsample_bytree: 0.8
+        min_child_weight: 5
+        early_stopping_rounds: 50
+  # Deep-merged with default.yaml's outputs.
+  outputs:
+    sequestration:
+      source: net_emissions.parquet
+      reducer: filter_sum
+      filter_col: source
+      filter_value: "Carbon sequestration"
+      value_col: mtco2eq
+      label: Carbon sequestration
+      units: "MtCO\u2082eq"
+    objective_breakdown:
+      kind: vector
+      source: objective_breakdown.parquet
+      reducer: pivot_row
+      label: Objective breakdown
+      units: bn USD
+
+# Block-based diminishing marginal utility for food consumption
+food_utility_piecewise:
+  enabled: true
+
+# Compare all scenarios in plots
+plotting:
+  comparison_scenarios: "all"
+
+solving:
+  solver: "gurobi"
+  io_api: "direct"
+  threads: 2
+  options_gurobi:
+    LogToConsole: 0
+    OutputFlag: 1
+    # Concurrent root relaxation: the dense per-country reforestation-cap rows
+    # make plain barrier (Method=2) stall; see gsa.yaml for the full rationale.
+    Method: 3
+    NumericFocus: 2
+    MIPGap: 0.001
+    MIPFocus: 2
+  mem_mb: 10000
+  time_limit: 30  # Hard limit
+  runtime: 6
+  inline_analysis: true  # Fuse solve + analyze to avoid writing intermediate .nc files
