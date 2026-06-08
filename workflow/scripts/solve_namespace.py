@@ -282,8 +282,13 @@ def build_scenario_entry(
     dp_cfg = eff["deviation_penalty"]
     dp_cal_cfg = dp_cfg["calibration"]
     if dp_cal_cfg["enabled"] and any(
-        dp_cfg[component]["l1_cost"] == "calibrated"
-        for component in ("land", "feed", "diet")
+        block["l1_cost"] == "calibrated"
+        for block in (
+            dp_cfg["land"]["crops"],
+            dp_cfg["land"]["grassland"],
+            dp_cfg["feed"],
+            dp_cfg["diet"],
+        )
     ):
         inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
 
