@@ -11,10 +11,12 @@ penalty_mode: l1
 deviation_type: absolute
 components:
 - cropland
+- grassland
 - feed
 l1_costs:
-  cropland: 1.591927041258676
-  feed: 0.13049140097056353
+  cropland: 1.564181887678137
+  grassland: 0.15990866204242277
+  feed: 0.07454894173640202
 iterations: 3
 converged: true
-final_residual_log_inf: 0.012918798355152621
+final_residual_log_inf: 0.015471831446956581

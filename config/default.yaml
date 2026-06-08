@@ -105,10 +105,8 @@ deviation_penalty:
   land:
     enabled: true
     # Cropland and grassland carry separate, independently calibrated L1 costs
-    # (calibration components "cropland" and "grassland"). They are anchored to
-    # different baselines whose optimisation tensions differ -- e.g. the
-    # arid-cropland anchoring needs a stiffer crop penalty -- so a shared land
-    # L1 over-penalises one to satisfy the other.
+    # (their optimisation tensions differ, so a shared land L1 over-penalises
+    # one to satisfy the other).
     crops:
       enabled: true
       l1_cost: "calibrated"  # bn USD per Mha deviation; "calibrated" resolves from calibrated_yaml
@@ -117,14 +115,10 @@ deviation_penalty:
       enable_slack: false
       min_baseline: 0.000001  # Mha denominator floor for relative mode
     grassland:
-      # Grassland production carries NO deviation penalty: its area is pinned by
-      # the land balance whenever cropland is penalised (grassland deviation is
-      # slaved to the cropland L1, its own L1 is inert), so a separate penalty
-      # cannot calibrate it independently and only freezes legitimate
-      # policy-driven grazing responses. l1_cost is a numeric placeholder
-      # (unused while disabled; never "calibrated").
-      enabled: false
-      l1_cost: 0.1
+      # Anchored like cropland. Required because land_conversion (below) is
+      # disabled: without either, the zero-price optimum sheds ~20% of pasture.
+      enabled: true
+      l1_cost: "calibrated"  # bn USD per Mha deviation; resolves from calibrated_yaml
       l1_cost_factor: 1.0
       max_relative_deviation: 0.2
       enable_slack: false
@@ -166,7 +160,7 @@ deviation_penalty:
     # investigations.
     enabled: true       # Resolve the "calibrated" sentinel at solve time from calibrated_yaml
     generate: false     # Generate the calibrated file via the Broyden iteration (breaks DAG cycle when true)
-    components: ["cropland", "feed"]  # Non-empty subset of {cropland, grassland, feed, diet}
+    components: ["cropland", "grassland", "feed"]  # Non-empty subset of {cropland, grassland, feed, diet}
     target_deviation_pct: 5.0
     tolerance: 0.02
     max_iter: 8
