@@ -16,6 +16,7 @@ when those rules change, update here too.
 
 import copy
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
@@ -92,6 +93,53 @@ def validate_scenario_overrides(scenario_defs: dict) -> None:
             "The following overrides affect build-time structure and must be\n"
             "set at the base config level instead:\n" + "\n".join(errors)
         )
+
+
+def validate_scenario_config_schemas(
+    base_config: dict, scenario_defs: dict, project_root
+) -> None:
+    """Schema-validate the merged config of structurally distinct scenarios.
+
+    Scenario overrides are deep-merged into the base config with no key
+    checking, so an outdated or misspelled override (e.g. a pre-split
+    ``deviation_penalty`` layout) merges in silently and is ignored at
+    solve time. The config schema rejects unknown keys
+    (``additionalProperties: false``), so validating the merged config
+    catches such drift. Expanded samples from one generator template share
+    an identical override key structure; only one representative per
+    distinct structure is validated, keeping this cheap for GSA-sized
+    scenario sets.
+    """
+    # Lazy import: pulls in snakemake.utils, which is unavailable in the
+    # cluster shim context (tools/cluster-solve) that imports this module
+    # but never calls this function.
+    from workflow.validation.config_schema import validate_config_schema
+
+    seen_structures: set[tuple] = set()
+    for name, overrides in scenario_defs.items():
+        structure = tuple(sorted(_leaf_keys(overrides)))
+        if not structure or structure in seen_structures:
+            continue
+        seen_structures.add(structure)
+        merged = copy.deepcopy(dict(base_config))
+        _recursive_update(merged, overrides)
+        # Credentials are runtime secrets, irrelevant to override structure;
+        # stub them on the validation copy so callers without secrets (e.g.
+        # manifest export) can still validate.
+        if not merged.get("credentials"):
+            merged["credentials"] = {
+                "usda": {"api_key": "unused"},
+                "ecmwf": {"url": "unused", "key": "unused"},
+            }
+        try:
+            validate_config_schema(merged, Path(project_root))
+        except Exception as exc:
+            raise ValueError(
+                f"Scenario '{name}' produces an invalid merged config; check "
+                "the override structure against config/default.yaml and "
+                "config/schemas/config.schema.yaml.\n"
+                f"{str(exc)[:1500]}"
+            ) from exc
 
 
 # Canonical list of per-scenario parquet outputs that analyze_model

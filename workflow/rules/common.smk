@@ -11,6 +11,7 @@ import copy
 import csv
 import hashlib
 import json
+from pathlib import Path
 
 from scenario_generators import expand_scenario_defs
 
@@ -18,6 +19,7 @@ from workflow.scripts.solve_namespace import (
     SOLVE_TIME_CONFIG_PREFIXES,
     _is_solve_time_key,
     _leaf_keys,
+    validate_scenario_config_schemas,
     validate_scenario_overrides,
 )
 
@@ -74,6 +76,7 @@ def get_effective_config(scenario_name):
 
 
 validate_scenario_overrides(load_scenario_defs())
+validate_scenario_config_schemas(config, load_scenario_defs(), Path.cwd())
 
 
 def scenario_override_hash(scenario_name):
