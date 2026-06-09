@@ -1333,8 +1333,13 @@ def add_reforestation_cap_constraints(
     total at ``max_fraction * reforestable_area + buffer_mha``. The
     reforestable area is the sum of ``p_nom_max`` over the same links -- the
     country's baseline agricultural land that the model is allowed to spare.
+    Note that this denominator is total *spareable* agricultural area: it
+    includes land whose spared-land LEF is ~0 (no carbon credit), and sparing
+    such land counts against the cap. The parameter therefore bounds the
+    fraction of agricultural area retired to the spared sink, not the
+    fraction of biome-reforestable area.
 
-    ``max_fraction`` is the ``sensitivity.max_reforestation_fraction``
+    ``max_fraction`` is the ``land.reforestation_cap.max_fraction``
     parameter: at ``1.0`` the bound equals the existing per-link
     ``p_nom_max`` sum and is non-binding (skipped); at ``0.0`` no land may
     be reforested anywhere; intermediate values limit the concentration of
@@ -1347,10 +1352,13 @@ def add_reforestation_cap_constraints(
     between the cropland-baseline raster and the per-crop harvested/suitable
     tables), which the forced existing-land supply (``p_min_pu=1``) must route
     to the spared sink. Without a buffer this structural minimum makes a tight
-    cap infeasible for those countries (mostly micro-states; max ~0.7 Mha in
-    absolute terms). The additive buffer grandfathers that unavoidable
-    reforestation without perceptibly loosening the cap for the large
-    reforesters the parameter targets.
+    cap infeasible for those countries. The minimum is large in absolute terms
+    only where the spareable area is also large (max ~0.67 Mha, Spain, ~3% of
+    its spareable area), so the fractional term covers it even at low
+    fractions; the buffer exists for micro-states whose fractional allowance
+    is smaller than their (tiny) structural minimum. Verified on the current
+    build: at ``max_fraction=0.05`` with the default 0.05 Mha buffer, no
+    country's structural minimum exceeds its cap.
 
     Country-level (rather than per-link) granularity preserves the model's
     freedom to choose *which* land to spare within a country (highest
@@ -1369,10 +1377,13 @@ def add_reforestation_cap_constraints(
     """
     if max_fraction < 0.0 or max_fraction > 1.0:
         raise ValueError(
-            f"max_reforestation_fraction must be in [0, 1], got {max_fraction}"
+            "land.reforestation_cap.max_fraction must be in [0, 1], "
+            f"got {max_fraction}"
         )
     if buffer_mha < 0.0:
-        raise ValueError(f"reforestation_cap_buffer_mha must be >= 0, got {buffer_mha}")
+        raise ValueError(
+            f"land.reforestation_cap.buffer_mha must be >= 0, got {buffer_mha}"
+        )
     if max_fraction >= 1.0:
         logger.info(
             "Reforestation cap fraction %.3f >= 1.0; non-binding, skipping",
@@ -1389,21 +1400,19 @@ def add_reforestation_cap_constraints(
         return
 
     # ``country`` is populated at build time (build_model.py maps region ->
-    # country on spare links). Drop any link with a missing country so a
-    # build regression surfaces as fewer constrained links rather than a
-    # bogus empty-string group.
+    # country on spare links and fails the build on unmapped regions). A
+    # missing country here is a build regression; fail rather than drop,
+    # because dropping links from an upper bound silently uncaps their
+    # sparing (the constraint fails open).
     country = spare_links["country"].astype(str)
-    valid = country.str.len() > 0
-    if not valid.all():
-        logger.warning(
-            "%d spared-land links have no country; excluded from reforestation cap",
-            int((~valid).sum()),
+    invalid = (country.str.len() == 0) | (country == "nan")
+    if invalid.any():
+        raise ValueError(
+            f"{int(invalid.sum())} spared-land link(s) have no country tag "
+            f"(e.g. {spare_links.index[invalid][:5].tolist()}); the "
+            "reforestation cap cannot be applied. The build should tag every "
+            "spare_land / spare_existing_grassland link with a country."
         )
-        spare_links = spare_links[valid.to_numpy()]
-        country = spare_links["country"].astype(str)
-    if spare_links.empty:
-        logger.info("No spared-land links with a country; skipping reforestation cap")
-        return
 
     reforestable_per_country = (
         spare_links.assign(_country=country.to_numpy())

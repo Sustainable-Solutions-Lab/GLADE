@@ -6,6 +6,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from workflow.scripts.solve_model.production_stability import (
@@ -14,6 +15,7 @@ from workflow.scripts.solve_model.production_stability import (
     _production_and_baselines,
     add_animal_growth_cap_constraints,
     add_crop_growth_cap_constraints,
+    add_reforestation_cap_constraints,
 )
 
 
@@ -298,3 +300,76 @@ def test_crop_growth_cap_constrains_zero_baseline_groups():
     assert rows.loc["crop_growth_cap_wheat_USA", "constant"] == 0.0
     assert rows.loc["crop_growth_cap_rice_USA", "constant"] == 5.5
     assert rows.loc["crop_growth_cap_wheat_CAN", "constant"] == 0.000011
+
+
+def _make_spare_links_network():
+    """Network with spare links in two countries plus a non-spare link."""
+    links_df = pd.DataFrame(
+        {
+            "carrier": [
+                "spare_land",
+                "spare_land",
+                "spare_existing_grassland",
+                "crop_production",
+            ],
+            "country": ["USA", "CAN", "USA", "USA"],
+            "p_nom_max": [10.0, 4.0, 6.0, 99.0],
+        },
+        index=["spare_usa_crop", "spare_can_crop", "spare_usa_grass", "produce_usa"],
+    )
+    return _DummyNetwork(links_df)
+
+
+def test_reforestation_cap_groups_by_country():
+    """Cap should bound per-country spared dispatch at fraction * p_nom_max sum."""
+    n = _make_spare_links_network()
+
+    add_reforestation_cap_constraints(n, max_fraction=0.5, buffer_mha=0.1)
+
+    rows = pd.DataFrame(n.global_constraints.rows).set_index("name")
+    assert set(rows.index) == {
+        "reforestation_cap_CAN",
+        "reforestation_cap_USA",
+    }
+    assert (rows["sense"] == "<=").all()
+    # USA: 0.5 * (10 + 6) + 0.1; CAN: 0.5 * 4 + 0.1. The crop_production
+    # link's p_nom_max must not enter the reforestable denominator.
+    np.testing.assert_allclose(rows.loc["reforestation_cap_USA", "constant"], 8.1)
+    np.testing.assert_allclose(rows.loc["reforestation_cap_CAN", "constant"], 2.1)
+
+
+def test_reforestation_cap_noop_at_full_fraction():
+    """fraction >= 1.0 must skip the constraint entirely."""
+    n = _make_spare_links_network()
+
+    add_reforestation_cap_constraints(n, max_fraction=1.0, buffer_mha=0.05)
+
+    assert n.global_constraints.rows == []
+
+
+def test_reforestation_cap_rejects_missing_country():
+    """A spare link without a country tag must fail, not silently escape."""
+    links_df = pd.DataFrame(
+        {
+            "carrier": ["spare_land", "spare_land"],
+            "country": ["USA", ""],
+            "p_nom_max": [1.0, 2.0],
+        },
+        index=["tagged", "untagged"],
+    )
+    n = _DummyNetwork(links_df)
+
+    with pytest.raises(ValueError, match="no country tag"):
+        add_reforestation_cap_constraints(n, max_fraction=0.5, buffer_mha=0.0)
+
+
+def test_reforestation_cap_rejects_invalid_parameters():
+    """Out-of-range fraction or negative buffer must raise."""
+    n = _make_spare_links_network()
+
+    with pytest.raises(ValueError, match="max_fraction"):
+        add_reforestation_cap_constraints(n, max_fraction=1.5, buffer_mha=0.0)
+    with pytest.raises(ValueError, match="max_fraction"):
+        add_reforestation_cap_constraints(n, max_fraction=-0.1, buffer_mha=0.0)
+    with pytest.raises(ValueError, match="buffer_mha"):
+        add_reforestation_cap_constraints(n, max_fraction=0.5, buffer_mha=-1.0)

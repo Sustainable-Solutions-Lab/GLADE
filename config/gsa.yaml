@@ -22,7 +22,7 @@
 #     heavy emission weighting the unconstrained model reforests ~80-90% of
 #     some countries' agricultural area, so this tests sensitivity to
 #     disallowing such concentrated reforestation. Wired to the solve-time
-#     per-country constraint via sensitivity.max_reforestation_fraction.
+#     per-country constraint via land.reforestation_cap.max_fraction.
 #   - value_per_yll: 50-50000 log-uniform (slice parameter)
 #   - ghg_price:     5-500 log-uniform (slice parameter)
 #
@@ -120,7 +120,9 @@ scenarios:
           health_relative_risk:
             protective: "{rr_protective}"
             harmful: "{rr_harmful}"
-          max_reforestation_fraction: "{reforest_fraction}"
+        land:
+          reforestation_cap:
+            max_fraction: "{reforest_fraction}"
         health:
           value_per_yll: "{value_per_yll}"
         emissions:

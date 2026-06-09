@@ -412,7 +412,10 @@ rule solve_model:
         fix_within_group_ratios=lambda w: get_effective_config(w.scenario)[
             "food_groups"
         ]["fix_within_group_ratios"],
-        sensitivity=lambda w: get_effective_config(w.scenario).get("sensitivity", {}),
+        sensitivity=lambda w: get_effective_config(w.scenario)["sensitivity"],
+        reforestation_cap=lambda w: get_effective_config(w.scenario)["land"][
+            "reforestation_cap"
+        ],
         forage_calibration_enabled=lambda w: get_effective_config(w.scenario)[
             "grazing"
         ]["grassland_forage_calibration"]["enabled"],

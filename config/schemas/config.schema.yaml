@@ -292,7 +292,7 @@ properties:
 
   land:
     type: object
-    required: [regional_limit, land_use_cost_usd_per_ha, conversion_cost_forest_usd_per_ha, conversion_cost_nonforest_usd_per_ha, investment_horizon, discount_rate, filtering]
+    required: [regional_limit, reforestation_cap, land_use_cost_usd_per_ha, conversion_cost_forest_usd_per_ha, conversion_cost_nonforest_usd_per_ha, investment_horizon, discount_rate, filtering]
     additionalProperties: false
     properties:
       regional_limit:
@@ -300,6 +300,32 @@ properties:
         minimum: 0
         maximum: 1
         description: "Fraction of each region's potential cropland that is made available"
+      reforestation_cap:
+        type: object
+        required: [max_fraction, buffer_mha]
+        additionalProperties: false
+        description: "Per-country solve-time cap on spared land (reforestation)"
+        properties:
+          max_fraction:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: >
+              Maximum fraction of each country's spareable agricultural land
+              (spare_land cropland + spare_existing_grassland pasture) that
+              may be spared for carbon sequestration. 1.0 is a no-op; 0.0
+              forbids all reforestation. Applied as a solve-time aggregate
+              per-country constraint.
+          buffer_mha:
+            type: number
+            minimum: 0
+            description: >
+              Small additive per-country allowance (Mha) on top of
+              max_fraction * spareable area. Grandfathers the structural
+              minimum reforestation a few countries (mostly micro-states)
+              cannot avoid -- baseline agricultural land no modeled crop can
+              grow and no grassland can graze -- so a tight cap stays
+              feasible. 0.0 is no buffer.
       land_use_cost_usd_per_ha:
         type: number
         minimum: 0
@@ -2235,27 +2261,6 @@ properties:
         description: >
           Per-risk-factor quantile values in [0, 1] interpolating between GBD
           rr_low (q=0) and rr_high (q=1) for each dose-response curve.
-      max_reforestation_fraction:
-        type: number
-        minimum: 0
-        maximum: 1
-        description: >
-          Per-country cap on reforestation: the maximum fraction of each
-          country's reforestable agricultural land (spare_land cropland +
-          spare_existing_grassland pasture) that may be spared for carbon
-          sequestration. 1.0 (the default when absent) is a no-op; 0.0
-          forbids all reforestation. Applied as a solve-time aggregate
-          per-country constraint.
-      reforestation_cap_buffer_mha:
-        type: number
-        minimum: 0
-        description: >
-          Small additive per-country allowance (Mha) on top of
-          max_reforestation_fraction * reforestable_area. Grandfathers the
-          structural minimum reforestation a few countries (mostly
-          micro-states) cannot avoid -- baseline agricultural land no modeled
-          crop can grow and no grassland can graze -- so a tight cap stays
-          feasible. 0.0 (the default when absent) is no buffer.
 
 allOf:
   - not:

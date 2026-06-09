@@ -1616,14 +1616,11 @@ def run_solve(
         add_crop_growth_cap_constraints(n, crop_growth_cap_cfg)
 
     # Per-country reforestation cap: bounds total spared land (cropland +
-    # pasture) at a fraction of each country's reforestable agricultural
-    # area. Driven by the sensitivity parameter; absent or >= 1.0 is a no-op.
-    reforest_fraction = float(
-        (smk.params.sensitivity or {}).get("max_reforestation_fraction", 1.0)
-    )
-    reforest_buffer_mha = float(
-        (smk.params.sensitivity or {}).get("reforestation_cap_buffer_mha", 0.0)
-    )
+    # pasture) at a fraction of each country's spareable agricultural
+    # area. Configured via land.reforestation_cap; fraction >= 1.0 is a no-op.
+    reforest_cfg = smk.params.reforestation_cap
+    reforest_fraction = float(reforest_cfg["max_fraction"])
+    reforest_buffer_mha = float(reforest_cfg["buffer_mha"])
     with _phase("add_reforestation_cap_constraints"):
         add_reforestation_cap_constraints(n, reforest_fraction, reforest_buffer_mha)
 
@@ -1650,7 +1647,7 @@ def run_solve(
     value_per_yll = float(smk.params.health_value_per_yll)
     if health_enabled and value_per_yll > 0:
         # Extract per-risk-factor RR quantiles from sensitivity config
-        sensitivity_cfg = smk.params.sensitivity or {}
+        sensitivity_cfg = smk.params.sensitivity
         rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
 
         with _phase("add_health_objective"):
@@ -1827,7 +1824,7 @@ def run_solve(
 
         # Post-hoc health evaluation when value_per_yll == 0
         if health_enabled and value_per_yll == 0:
-            sensitivity_cfg = smk.params.sensitivity or {}
+            sensitivity_cfg = smk.params.sensitivity
             rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
             evaluate_health_posthoc(
                 n,

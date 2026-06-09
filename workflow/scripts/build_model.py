@@ -911,15 +911,25 @@ if __name__ == "__main__":
 
     # Tag spared-land links (cropland + existing-grassland sparing) with their
     # country so the solve-time per-country reforestation cap
-    # (sensitivity.max_reforestation_fraction) can group by it. These links are
+    # (land.reforestation_cap) can group by it. These links are
     # created without a country; every other geographic link already carries one.
+    # An unmapped region is a hard error: a spare link without a country would
+    # silently escape the cap (the constraint is an upper bound, so dropping
+    # links fails open).
     _spare_r2c = regions_df.set_index("region")["country"]
     _spare_mask = n.links.static["carrier"].isin(
         ["spare_land", "spare_existing_grassland"]
     )
-    n.links.static.loc[_spare_mask, "country"] = (
-        n.links.static.loc[_spare_mask, "region"].map(_spare_r2c).fillna("")
-    )
+    _spare_country = n.links.static.loc[_spare_mask, "region"].map(_spare_r2c)
+    if _spare_country.isna().any():
+        _missing = sorted(
+            n.links.static.loc[_spare_mask, "region"][_spare_country.isna()].unique()
+        )
+        raise ValueError(
+            f"Spared-land links reference {len(_missing)} region(s) missing "
+            f"from the region-to-country table: {_missing[:10]}"
+        )
+    n.links.static.loc[_spare_mask, "country"] = _spare_country
     # Per-(crop, country) supply-chain loss multiplier = 1 - loss_fraction
     # applied to crop_production efficiency. The loss rate is sourced from
     # the crop's *primary* food group (the food output with the highest

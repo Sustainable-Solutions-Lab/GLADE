@@ -197,6 +197,14 @@ optimal_taxes:
 # --- section: land ---
 land:
   regional_limit: 1.0 # fraction of each region's potential cropland that is made available.
+  # Per-country cap on spared land (reforestation), applied at solve time:
+  # total spared dispatch <= max_fraction * spareable area + buffer_mha.
+  # max_fraction 1.0 = no constraint; buffer_mha grandfathers the structural
+  # minimum sparing a few countries cannot avoid so a tight cap stays
+  # feasible. See add_reforestation_cap_constraints.
+  reforestation_cap:
+    max_fraction: 1.0
+    buffer_mha: 0.05
   land_use_cost_usd_per_ha: 0.0 # Small optional per-hectare land-use cost to regularize land allocation (set >0 to activate)
   conversion_cost_forest_usd_per_ha: 8000 # Overnight investment cost for converting forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
   conversion_cost_nonforest_usd_per_ha: 2000 # Overnight investment cost for converting non-forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
@@ -444,12 +452,8 @@ macronutrients: {}
 # --- section: sensitivity ---
 # Multiplicative adjustment factors for sensitivity analysis. Applied after
 # model construction. See config/schemas/config.schema.yaml for structure.
-# reforestation_cap_buffer_mha is not a factor: it is a small additive
-# per-country allowance for the reforestation cap (see
-# add_reforestation_cap_constraints), grandfathering the structural minimum
-# reforestation a few countries cannot avoid so a tight cap stays feasible.
-sensitivity:
-  reforestation_cap_buffer_mha: 0.05
+# Empty by default; populated by scenario overrides (e.g. GSA templates).
+sensitivity: {}
 
 # --- section: byproducts ---
 # Foods that are not for direct human consumption (excluded from food group tracking)
