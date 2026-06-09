@@ -65,6 +65,15 @@ scenarios:
           cal:
             equal_to_baseline: true
 
+# Per-country reforestation cap: no country may reforest more than 50% of
+# its current agricultural land. Matches the paper's surrogate sweeps
+# (reforest_fraction: 0.5 in paper/plotting_config.yaml) and the fixed-diet
+# counterpart, so the flexible GHG-price sweep (SI emissions-by-source) is
+# consistent with the capped response surfaces. Deep-merges with the
+# reforestation_cap_buffer_mha default from config/default.yaml.
+sensitivity:
+  max_reforestation_fraction: 0.5
+
 # Block-based diminishing marginal utility for food consumption (flexible diet).
 food_utility_piecewise:
   enabled: true

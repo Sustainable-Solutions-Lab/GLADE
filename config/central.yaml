@@ -53,6 +53,16 @@ scenarios:
       cal:
         equal_to_baseline: true
 
+# Per-country reforestation cap: no country may reforest more than 50% of
+# its current agricultural land (baseline cropland + existing pasture). Pins
+# the discrete central/reference/baseline solves to the same cap the paper's
+# surrogate sweeps use (reforest_fraction: 0.5 in
+# paper/plotting_config.yaml), so the central-scenario headline numbers stay
+# consistent with the capped response surfaces. Deep-merges with the
+# reforestation_cap_buffer_mha default from config/default.yaml.
+sensitivity:
+  max_reforestation_fraction: 0.5
+
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:
   enabled: true

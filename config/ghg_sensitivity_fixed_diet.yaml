@@ -41,6 +41,15 @@ scenarios:
         health:
           value_per_yll: 0
 
+# Per-country reforestation cap: no country may reforest more than 50% of
+# its current agricultural land. Matches the paper's surrogate sweeps
+# (reforest_fraction: 0.5 in paper/plotting_config.yaml) so the discrete
+# GHG-price sweep (figure 3, SI emissions-by-source) is consistent with the
+# capped response surfaces. Deep-merges with the reforestation_cap_buffer_mha
+# default from config/default.yaml.
+sensitivity:
+  max_reforestation_fraction: 0.5
+
 # Fix diet to baseline
 validation:
   enforce_baseline_diet: true
