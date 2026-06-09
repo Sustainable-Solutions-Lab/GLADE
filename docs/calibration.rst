@@ -147,7 +147,7 @@ workflow when their configuration blocks are enabled (the default):
   CSVs at build time (see :ref:`cost-calibration-correction`).
 * ``deviation_penalty.calibration.enabled: true`` resolves the sentinel
   ``"calibrated"`` on any of
-  ``deviation_penalty.{land,feed,diet}.l1_cost`` from
+  ``deviation_penalty.{land.crops,land.grassland,feed,diet}.l1_cost`` from
   ``data/curated/calibration/deviation_penalty.yaml`` at solve time
   (see :ref:`production-stability-bounds` for the config reference).
   Scenarios that want an explicit numeric value simply override the
@@ -385,7 +385,7 @@ The calibrated coefficients are written to
 ``data/curated/calibration/deviation_penalty.yaml`` under
 ``l1_costs.<component>`` and resolved at solve time wherever the
 sentinel ``"calibrated"`` appears in
-``deviation_penalty.{land,feed,diet}.l1_cost`` (see
+``deviation_penalty.{land.crops,land.grassland,feed,diet}.l1_cost`` (see
 :ref:`production-stability-bounds`).
 
 A per-iteration diagnostic CSV is written to
@@ -395,8 +395,9 @@ step.
 
 The set of components driven simultaneously is configured via
 ``deviation_penalty.calibration.components`` (default
-``[land, feed]``). Diet calibration is available as an opt-in
-``components: [land, feed, diet]`` profile for specific investigations
+``[cropland, grassland, feed]``). Diet calibration is available as an
+opt-in ``components: [cropland, grassland, feed, diet]`` profile for
+specific investigations
 where the priced optimum would otherwise reshuffle the diet
 substantially.
 

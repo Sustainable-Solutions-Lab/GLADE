@@ -642,29 +642,42 @@ Individual risk factor keys (e.g., ``whole_grains: 0.5``) remain supported and
 take precedence over group keys when both are specified. However, specifying
 both a group key and an individual key for the same risk factor raises an error.
 
+Reforestation cap fraction (``reforest_fraction``: 0.05--1.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A per-country cap on the fraction of spareable agricultural land
+(baseline cropland + existing pasture) that may be spared for carbon
+sequestration, wired to the solve-time constraint
+``land.reforestation_cap.max_fraction`` (see :ref:`reforestation-cap`).
+At ``1.0`` the cap is inactive; under heavy emission weighting the
+unconstrained model reforests 80--90% of some countries' agricultural
+area, so this parameter tests how strongly results depend on permitting
+such concentrated reforestation. Unlike the other parameters it is a
+policy/plausibility lever rather than an empirical uncertainty, so it is
+sampled uniformly over a wide range rather than from a fitted
+distribution. The ``sequestration`` output (net CO\ :sub:`2` from
+spared-land sequestration credits) is included as a Sobol target to
+capture its most direct effect.
+
 .. _sensitivity-prod-stability-cost:
 
-Deviation-penalty regime (``gsa-l1-low`` / ``gsa-l1-high`` scenario groups)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Deviation-penalty regime (companion ``gsa_l1.yaml`` config)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The L1 deviation-penalty regime is a structural modelling choice rather than
-an empirical uncertainty, so it is not sampled as a Sobol parameter. Instead,
-``config/gsa.yaml`` runs three independent scenario groups at fixed L1
-regimes:
-
-* ``gsa`` -- the calibrated central regime
-  (``deviation_penalty.{land,feed}.l1_cost: "calibrated"``).
-* ``gsa-l1-low`` -- ``l1_cost_factor = 1/sqrt(10) ~ 0.316`` on both land and
-  feed, i.e. roughly half an order of magnitude below the calibrated centre.
-* ``gsa-l1-high`` -- ``l1_cost_factor = sqrt(10) ~ 3.162``, half an order of
-  magnitude above.
-
-Each group has its own consumer-values baseline so that the piecewise food
-utility blocks are calibrated against the matching L1 regime. The three groups
-share the rest of the GSA design (parameters, sampling, slice parameters).
-Comparing Sobol indices across groups shows how sensitivity structure shifts
-with the stability regime, without spending Sobol degrees of freedom on a
-non-empirical axis.
+an empirical uncertainty, so it is not sampled as a Sobol parameter.
+``config/gsa.yaml`` runs the single calibrated central regime
+(``deviation_penalty.{land.crops,land.grassland,feed}.l1_cost:
+"calibrated"``). The lower/higher regimes
+(``l1_cost_factor = 1/sqrt(10)`` and ``sqrt(10)``, i.e. half an order of
+magnitude below/above the calibrated centre on cropland, grassland and
+feed) live in a companion config, ``gsa_l1.yaml``, maintained alongside
+the paper. Each regime has its own consumer-values baseline so that the
+piecewise food utility blocks are calibrated against the matching L1
+regime; the regimes share the rest of the GSA design (parameters,
+sampling, slice parameters). Comparing Sobol indices across regimes
+shows how sensitivity structure shifts with the stability regime,
+without spending Sobol degrees of freedom on a non-empirical axis.
 
 Policy slice parameters
 ~~~~~~~~~~~~~~~~~~~~~~~

@@ -135,7 +135,8 @@ deviation_penalty:
   feed:
     enabled: true
     # bn USD per Mt DM deviation; "calibrated" resolves from calibrated_yaml,
-    # null falls back to automatic Mha-equivalent scaling from land.l1_cost.
+    # null falls back to automatic Mha-equivalent scaling from the cropland
+    # l1_cost (land.crops.l1_cost).
     l1_cost: "calibrated"
     l1_cost_factor: 1.0
     max_relative_deviation: 0.2
@@ -155,9 +156,8 @@ deviation_penalty:
     # Iterative Broyden calibration of the L1 coefficients listed under
     # ``components``. Each iteration is one paired baseline+main solve;
     # converges in ~5-8 iterations from a warm start. The default subset
-    # is [land, feed], reproducing the production-stability calibration of
-    # the project's main workflow; diet calibration is opt-in for specific
-    # investigations.
+    # is [cropland, grassland, feed]; diet calibration is opt-in for
+    # specific investigations.
     enabled: true       # Resolve the "calibrated" sentinel at solve time from calibrated_yaml
     generate: false     # Generate the calibrated file via the Broyden iteration (breaks DAG cycle when true)
     components: ["cropland", "grassland", "feed"]  # Non-empty subset of {cropland, grassland, feed, diet}

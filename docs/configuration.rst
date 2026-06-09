@@ -369,17 +369,21 @@ according to ``food_utility_piecewise.decline_factor``.
 Deviation Penalty
 ^^^^^^^^^^^^^^^^^
 
-The ``deviation_penalty`` section anchors three independent quantities to
+The ``deviation_penalty`` section anchors four independent quantities to
 their observed baseline-year levels:
 
-* **land** -- crop + grassland production area (Mha).
+* **land.crops** -- crop production area (Mha).
+* **land.grassland** -- grassland production area (Mha).
 * **feed** -- animal_production feed use (Mt DM).
 * **diet** -- per-(food, country) food consumption (Mt).
 
-Together they let the model investigate what changes (improved health,
-reduced emissions, etc.) can be achieved with limited disruption to
-existing production and consumption patterns. The default profile
-calibrates land + feed via ``tools/calibrate stability``; diet is off
+Cropland and grassland carry separate, independently calibrated L1
+costs (their optimisation tensions differ, so a shared land L1
+over-penalises one to satisfy the other). Together they let the model
+investigate what changes (improved health, reduced emissions, etc.) can
+be achieved with limited disruption to existing production and
+consumption patterns. The default profile calibrates cropland,
+grassland and feed via ``tools/calibrate stability``; diet is off
 by default and is intended for specific investigations where the priced
 optimum would otherwise reshuffle the diet substantially while leaving
 land use approximately unchanged.
@@ -405,10 +409,16 @@ across components.
 * ``deviation_penalty.penalty_mode``: ``hard``, ``l1``, or ``quadratic``.
 * ``deviation_penalty.deviation_type``: ``absolute`` or ``relative``.
 * ``deviation_penalty.quadratic_cost``: shared coefficient for quadratic mode.
-* ``deviation_penalty.land.enabled`` / ``feed.enabled`` / ``diet.enabled``:
-  per-component switches.
-* ``deviation_penalty.<component>.l1_cost``: L1 penalty coefficient (or the
-  string ``"calibrated"`` to resolve from the calibration YAML).
+* ``deviation_penalty.land.enabled`` plus per-component switches
+  ``land.crops.enabled``, ``land.grassland.enabled``, ``feed.enabled``,
+  ``diet.enabled``. ``land.land_conversion.enabled`` (default ``false``)
+  would additionally penalise land-use transitions, but is kept off
+  because those carriers include sparing -- the penalty would tax
+  reforestation from a zero baseline.
+* ``deviation_penalty.<component>.l1_cost`` for the components
+  ``land.crops``, ``land.grassland``, ``feed``, ``diet``: L1 penalty
+  coefficient (or the string ``"calibrated"`` to resolve from the
+  calibration YAML).
 * ``deviation_penalty.<component>.l1_cost_factor``: multiplicative factor
   applied after sentinel resolution; lets scenarios scan around the
   calibrated central value without hard-coding absolute numbers.
@@ -429,8 +439,8 @@ across components.
   ``analysis/.../objective_breakdown.parquet``: production stability
   (land + feed L1) and diet stability.
 
-The default calibration (land + feed) is regenerated with
-``tools/calibrate stability`` and lands at
+The default calibration (cropland + grassland + feed) is regenerated
+with ``tools/calibrate stability`` and lands at
 ``data/curated/calibration/deviation_penalty.yaml`` (see
 :doc:`calibration`).
 
@@ -517,6 +527,31 @@ from grain-fed to forage-fed cattle even if total cattle output stays
 within ±10%. This is mostly desirable but can be over-restrictive for
 counterfactual scenarios that probe alternative feed regimes; raise
 ``max_relative_increase`` for such studies.
+
+.. _reforestation-cap:
+
+Reforestation Cap
+^^^^^^^^^^^^^^^^^
+
+``land.reforestation_cap`` bounds total spared land (``spare_land``
+cropland + ``spare_existing_grassland`` pasture) per country at
+``max_fraction`` times the country's spareable agricultural area, plus
+an additive ``buffer_mha`` allowance. Like the growth caps it is a
+solve-time aggregate constraint at country granularity, so the model
+keeps its freedom to choose *which* land to spare within a country.
+
+* ``max_fraction``: maximum spareable fraction (default ``1.0`` =
+  no constraint; ``0.0`` forbids all sparing).
+* ``buffer_mha``: small per-country allowance (default ``0.05``)
+  grandfathering the structural minimum sparing a few countries cannot
+  avoid (baseline agricultural land no modelled crop can grow and no
+  grassland can graze), so a tight cap stays feasible.
+
+``max_fraction`` is the GSA's ``reforest_fraction`` parameter (see
+:doc:`sensitivity_analysis`): under heavy emission weighting the
+unconstrained model reforests 80--90% of some countries' agricultural
+area, and the cap tests how results depend on disallowing such
+concentrated reforestation.
 
 Crop Selection
 ~~~~~~~~~~~~~~

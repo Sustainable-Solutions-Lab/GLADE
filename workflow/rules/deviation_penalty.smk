@@ -5,7 +5,7 @@
 """Iterative calibration of L1 deviation-penalty coefficients.
 
 Drives the per-component deviation percentages (any non-empty subset of
-{land, feed, diet}) simultaneously to the target percentage via Broyden's
+{cropland, grassland, feed, diet}) simultaneously to the target percentage via Broyden's
 method in log-log coordinates. Each iteration is one paired baseline+main
 solve, run in-process by the script.
 """

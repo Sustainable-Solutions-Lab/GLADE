@@ -318,9 +318,10 @@ this order:
    `slack_marginal_cost: 5.0` override for foods carrying structural
    FAOSTAT-vs-FBS mismatch beyond the band.
 5. **stability** — `config/calibration/stability.yaml` →
-   `prod_stability_l1.yaml` (calibrated L1 penalty costs; resolved at
-   solve time when `validation.production_stability.land_l1_cost` or
-   `.animal_feed_l1_cost` is the sentinel string `"calibrated"`).
+   `deviation_penalty.yaml` (calibrated L1 penalty costs for the
+   cropland, grassland and feed components; resolved at solve time
+   wherever `deviation_penalty.<component>.l1_cost` is the sentinel
+   string `"calibrated"`).
 
 Single entrypoint: `tools/calibrate` (`all` by default; `feed`,
 `food_waste`, `food_demand`, `cost`, `stability`, or `--check` for
