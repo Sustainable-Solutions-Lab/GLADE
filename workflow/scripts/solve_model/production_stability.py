@@ -35,6 +35,14 @@ import pypsa
 import xarray as xr
 import yaml
 
+from workflow.scripts.solve_namespace import (
+    CALIBRATED_SENTINEL,
+    DEVIATION_PENALTY_COMPONENT_PATHS,
+)
+from workflow.scripts.solve_namespace import (
+    deviation_penalty_component_block as _component_block,
+)
+
 logger = logging.getLogger(__name__)
 
 # Carriers representing land-use transitions (all have zero baseline).
@@ -45,27 +53,6 @@ LAND_CONVERSION_CARRIERS = [
     "spare_land",
     "spare_existing_grassland",
 ]
-
-CALIBRATED_SENTINEL = "calibrated"
-
-
-# Map each calibration component name to its config-block path within the
-# deviation_penalty dict. Cropland and grassland carry independent L1 costs but
-# live under the shared ``land`` block; feed and diet are top-level.
-COMPONENT_PATHS = {
-    "cropland": ("land", "crops"),
-    "grassland": ("land", "grassland"),
-    "feed": ("feed",),
-    "diet": ("diet",),
-}
-
-
-def _component_block(dp_cfg: dict, component: str) -> dict:
-    """Return the config sub-dict carrying ``component``'s l1_cost knobs."""
-    block = dp_cfg
-    for key in COMPONENT_PATHS[component]:
-        block = block[key]
-    return block
 
 
 def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> dict:
@@ -85,7 +72,7 @@ def resolve_calibrated_l1_costs(dp_cfg: dict, calibrated_yaml: str | None) -> di
     if dp_cfg.get("penalty_mode") != "l1":
         return dp_cfg
 
-    components = ("cropland", "grassland", "feed", "diet")
+    components = tuple(DEVIATION_PENALTY_COMPONENT_PATHS)
 
     def _needs_lookup() -> bool:
         return any(

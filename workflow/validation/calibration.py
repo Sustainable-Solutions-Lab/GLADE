@@ -15,6 +15,8 @@ is rejected here.
 
 from pathlib import Path
 
+from workflow.scripts.solve_namespace import deviation_penalty_uses_calibrated
+
 # Each entry describes one calibration section.
 #
 # - ``path``: tuple of keys to descend into ``config`` to reach the section.
@@ -120,16 +122,7 @@ def validate_calibration(config: dict, project_root: Path | None = None) -> None
     # regime the same number has the wrong physical interpretation, so gate
     # the calibrated sentinel to the mode it was fit in.
     dp_cfg = config["deviation_penalty"]
-    uses_calibrated = any(
-        block["l1_cost"] == "calibrated"
-        for block in (
-            dp_cfg["land"]["crops"],
-            dp_cfg["land"]["grassland"],
-            dp_cfg["feed"],
-            dp_cfg["diet"],
-        )
-    )
-    if uses_calibrated:
+    if deviation_penalty_uses_calibrated(dp_cfg):
         penalty_mode = dp_cfg.get("penalty_mode")
         deviation_type = dp_cfg.get("deviation_type")
         if penalty_mode != "l1" or deviation_type != "absolute":

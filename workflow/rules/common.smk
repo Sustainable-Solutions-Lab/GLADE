@@ -19,6 +19,7 @@ from workflow.scripts.solve_namespace import (
     SOLVE_TIME_CONFIG_PREFIXES,
     _is_solve_time_key,
     _leaf_keys,
+    deviation_penalty_uses_calibrated,
     validate_scenario_config_schemas,
     validate_scenario_overrides,
 )

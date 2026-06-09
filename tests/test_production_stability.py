@@ -4,10 +4,13 @@
 
 """Unit tests for production stability helper behavior."""
 
+import copy
+
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import yaml
 
 from workflow.scripts.solve_model.production_stability import (
     _animal_feed_and_baselines,
@@ -16,6 +19,7 @@ from workflow.scripts.solve_model.production_stability import (
     add_animal_growth_cap_constraints,
     add_crop_growth_cap_constraints,
     add_reforestation_cap_constraints,
+    resolve_calibrated_l1_costs,
 )
 
 
@@ -373,3 +377,59 @@ def test_reforestation_cap_rejects_invalid_parameters():
         add_reforestation_cap_constraints(n, max_fraction=-0.1, buffer_mha=0.0)
     with pytest.raises(ValueError, match="buffer_mha"):
         add_reforestation_cap_constraints(n, max_fraction=0.5, buffer_mha=-1.0)
+
+
+class TestResolveCalibratedL1Costs:
+    @pytest.fixture(scope="class")
+    def dp_cfg(self):
+        with open("config/default.yaml") as f:
+            return yaml.safe_load(f)["deviation_penalty"]
+
+    ARTEFACT = "data/curated/calibration/deviation_penalty.yaml"
+
+    def test_resolves_shipped_artefact(self, dp_cfg):
+        """Default config sentinels must resolve against the shipped artefact.
+
+        This is the drift guard for the component->config-block map: a
+        mismatch between the calibration components and the resolver's
+        paths (the e18c168 class of bug) fails here instead of at solve
+        time.
+        """
+        with open(self.ARTEFACT) as f:
+            artefact = yaml.safe_load(f)
+
+        resolved = resolve_calibrated_l1_costs(dp_cfg, self.ARTEFACT)
+
+        # Input must not be mutated
+        assert dp_cfg["land"]["crops"]["l1_cost"] == "calibrated"
+        assert resolved["land"]["crops"]["l1_cost"] == pytest.approx(
+            artefact["l1_costs"]["cropland"]
+        )
+        assert resolved["land"]["grassland"]["l1_cost"] == pytest.approx(
+            artefact["l1_costs"]["grassland"]
+        )
+        assert resolved["feed"]["l1_cost"] == pytest.approx(
+            artefact["l1_costs"]["feed"]
+        )
+
+    def test_applies_component_factor(self, dp_cfg):
+        cfg = copy.deepcopy(dp_cfg)
+        cfg["land"]["crops"]["l1_cost_factor"] = 2.0
+
+        resolved = resolve_calibrated_l1_costs(cfg, self.ARTEFACT)
+
+        with open(self.ARTEFACT) as f:
+            artefact = yaml.safe_load(f)
+        assert resolved["land"]["crops"]["l1_cost"] == pytest.approx(
+            2.0 * artefact["l1_costs"]["cropland"]
+        )
+        # Other components keep factor 1.0 and stay at the central value
+        assert resolved["feed"]["l1_cost"] == pytest.approx(
+            artefact["l1_costs"]["feed"]
+        )
+
+    def test_errors_when_component_missing_from_artefact(self, dp_cfg, tmp_path):
+        artefact = tmp_path / "partial.yaml"
+        artefact.write_text("components: [cropland]\nl1_costs:\n  cropland: 1.0\n")
+        with pytest.raises(ValueError, match="did not calibrate 'grassland'"):
+            resolve_calibrated_l1_costs(dp_cfg, str(artefact))

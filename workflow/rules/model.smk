@@ -296,17 +296,8 @@ def solve_model_inputs(w):
     # solve_model/production_stability.resolve_calibrated_l1_costs.
     dp_cfg = eff_cfg["deviation_penalty"]
     dp_cal_cfg = dp_cfg["calibration"]
-    if dp_cal_cfg["enabled"]:
-        if any(
-            block["l1_cost"] == "calibrated"
-            for block in (
-                dp_cfg["land"]["crops"],
-                dp_cfg["land"]["grassland"],
-                dp_cfg["feed"],
-                dp_cfg["diet"],
-            )
-        ):
-            inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
+    if dp_cal_cfg["enabled"] and deviation_penalty_uses_calibrated(dp_cfg):
+        inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
 
     return inputs
 

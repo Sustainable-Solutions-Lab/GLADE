@@ -95,6 +95,39 @@ def validate_scenario_overrides(scenario_defs: dict) -> None:
         )
 
 
+# Deviation-penalty calibration components and their config-block paths
+# within the deviation_penalty dict. Cropland and grassland carry independent
+# L1 costs but live under the shared ``land`` block; feed and diet are
+# top-level. Single source of truth shared by the solve-time resolver
+# (solve_model/production_stability), the solve-input builders
+# (workflow/rules/model.smk and build_scenario_entry below), and the config
+# validator (workflow/validation/calibration.py).
+DEVIATION_PENALTY_COMPONENT_PATHS = {
+    "cropland": ("land", "crops"),
+    "grassland": ("land", "grassland"),
+    "feed": ("feed",),
+    "diet": ("diet",),
+}
+
+CALIBRATED_SENTINEL = "calibrated"
+
+
+def deviation_penalty_component_block(dp_cfg: dict, component: str) -> dict:
+    """Return the config sub-dict carrying ``component``'s l1_cost knobs."""
+    block = dp_cfg
+    for key in DEVIATION_PENALTY_COMPONENT_PATHS[component]:
+        block = block[key]
+    return block
+
+
+def deviation_penalty_uses_calibrated(dp_cfg: dict) -> bool:
+    """Return True if any component's l1_cost is the calibrated sentinel."""
+    return any(
+        deviation_penalty_component_block(dp_cfg, c)["l1_cost"] == CALIBRATED_SENTINEL
+        for c in DEVIATION_PENALTY_COMPONENT_PATHS
+    )
+
+
 def validate_scenario_config_schemas(
     base_config: dict, scenario_defs: dict, project_root
 ) -> None:
@@ -330,15 +363,7 @@ def build_scenario_entry(
 
     dp_cfg = eff["deviation_penalty"]
     dp_cal_cfg = dp_cfg["calibration"]
-    if dp_cal_cfg["enabled"] and any(
-        block["l1_cost"] == "calibrated"
-        for block in (
-            dp_cfg["land"]["crops"],
-            dp_cfg["land"]["grassland"],
-            dp_cfg["feed"],
-            dp_cfg["diet"],
-        )
-    ):
+    if dp_cal_cfg["enabled"] and deviation_penalty_uses_calibrated(dp_cfg):
         inputs["deviation_penalty_calibration"] = dp_cal_cfg["calibrated_yaml"]
 
     if inline_analysis:
