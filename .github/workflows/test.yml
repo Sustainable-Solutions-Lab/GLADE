@@ -47,7 +47,13 @@ jobs:
           cache: true
           environments: dev
 
-      # Credential- and data-free: validates the full Snakemake DAG without
-      # executing any rule (see tests/test_workflow.py::test_workflow_dryrun).
+      # Validates the full Snakemake DAG without executing any rule (see
+      # tests/test_integration.py::test_workflow_dryrun). The credential gate
+      # at workflow startup is presence-only, so dummy values suffice; no rule
+      # that would actually call these APIs is ever run.
       - name: Snakemake dryrun test
+        env:
+          USDA_API_KEY: dummy
+          ECMWF_DATASTORES_URL: https://cds.climate.copernicus.eu/api
+          ECMWF_DATASTORES_KEY: dummy
         run: pixi run --environment dev pytest -m integration -k dryrun -v

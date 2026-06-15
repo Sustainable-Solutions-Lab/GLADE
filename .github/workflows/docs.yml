@@ -47,6 +47,9 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
+    # The github-pages environment only permits deploys from main, so skip the
+    # deploy on pull requests (the build-docs job still validates the docs).
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
