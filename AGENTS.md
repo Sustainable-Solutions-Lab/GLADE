@@ -277,7 +277,7 @@ pixi run -e dev pytest -v         # verbose output
 
 ### Notes
 
-- The **dryrun test** (`test_workflow_dryrun`) validates full DAG construction with `forceall=True` without executing anything — it does not require credentials or data.
+- The **dryrun test** (`test_workflow_dryrun`) validates full DAG construction with `forceall=True` without executing any rule. It makes no API calls, but the startup credential gate (presence-only, so dummy values work) and the manually-downloaded source files must still be satisfied for the DAG to resolve. See `.github/workflows/test.yml` for how CI stubs both.
 - The **execution test** (`test_build_solve_analyze`) runs the actual pipeline and requires USDA/ECMWF credentials for data downloads on first run.
 - Tests never delete `results/test/` or `.snakemake/`; Snakemake detects up-to-date outputs and skips them automatically. Subsequent runs are near-instant when code hasn't changed.
 - New unit tests go in `tests/test_*.py` alongside integration tests.
