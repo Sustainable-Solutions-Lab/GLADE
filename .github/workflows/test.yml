@@ -47,6 +47,19 @@ jobs:
           cache: true
           environments: dev
 
+      # The manually-downloaded, license-restricted source datasets (GDD, IHME)
+      # have no producing rule, so the DAG can't resolve unless the paths exist.
+      # A dryrun never reads their contents, so empty stubs suffice. Paths track
+      # the rules in workflow/rules/{diet,health}.smk (baseline_year: 2020).
+      - name: Stub manually-downloaded inputs
+        run: |
+          d=data/manually_downloaded
+          mkdir -p "$d" "$d/IHME_GBD_2023_RISK_EXPOSURE_DIET_1" "$d/IHME_GBD_2023_RISK_EXPOSURE_DIET_2"
+          touch "$d/GDD-IA-intake_grams_2020.csv" \
+                "$d/GDD-IA-intake_kcals_2020.csv" \
+                "$d/IHME-GBD_2023-death-rates-2020.csv" \
+                "$d/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX"
+
       # Validates the full Snakemake DAG without executing any rule (see
       # tests/test_integration.py::test_workflow_dryrun). The credential gate
       # at workflow startup is presence-only, so dummy values suffice; no rule
