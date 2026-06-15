@@ -50,16 +50,16 @@ The solved network (``results/{name}/solved/model_scen-{scenario}.nc``) is a PyP
 
    n = pypsa.Network("results/my_scenario/solved/model_scen-default.nc")
 
-   # Access component data
-   links_df = n.links  # All links (production, processing, trade)
-   buses_df = n.buses  # All buses (crops, foods, nutrients, land)
-   stores_df = n.stores  # Resource availability (land, water)
+   # Access static component data
+   links_df = n.links.static  # All links (production, processing, trade)
+   buses_df = n.buses.static  # All buses (crops, foods, nutrients, land)
+   stores_df = n.stores.static  # Resource availability (land, water)
 
-   # Optimal flows
-   link_flows = n.links_t.p0  # Power/flow on each link (time series if multi-period)
+   # Optimal flows (time-varying data)
+   link_flows = n.links.dynamic.p0  # Power/flow on each link (time series if multi-period)
 
    # Shadow prices (marginal costs)
-   bus_prices = n.buses_t.marginal_price  # Marginal value of each commodity
+   bus_prices = n.buses.dynamic.marginal_price  # Marginal value of each commodity
 
 Key Data Structures
 ~~~~~~~~~~~~~~~~~~~
