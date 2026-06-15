@@ -11,13 +11,18 @@
 
 [project]
 name = "glade-workflow"
-version = "0.0.1"
+dynamic = ["version"]
 description = "GLADE model workflow scripts"
 requires-python = ">=3.13"
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+# Version is derived from pixi.toml (the single source of truth) via
+# workflow.__version__; never hardcode a version literal here.
+[tool.setuptools.dynamic]
+version = { attr = "workflow.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]

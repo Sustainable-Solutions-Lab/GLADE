@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint, format & licensing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+          environments: dev
+
+      - name: Run prek hooks (ruff, snakefmt, reuse, furo-rst)
+        run: pixi run --environment dev prek run --all-files --show-diff-on-failure
+
+  dryrun:
+    name: Workflow dryrun (DAG construction)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+          environments: dev
+
+      # Credential- and data-free: validates the full Snakemake DAG without
+      # executing any rule (see tests/test_workflow.py::test_workflow_dryrun).
+      - name: Snakemake dryrun test
+        run: pixi run --environment dev pytest -m integration -k dryrun -v

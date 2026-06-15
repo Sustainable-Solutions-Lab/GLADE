@@ -125,3 +125,4 @@ Dietary constraints ensure that each country's population meets nutritional requ
 
    api/index
    development
+   changelog
