@@ -1106,10 +1106,12 @@ rule retrieve_burden_of_proof:
     (config.health.gbd_rei_id x gbd_cause_id). No login required; passes the
     Cloudflare edge check with a browser User-Agent. IHME data are
     non-redistributable, so the output lives in the gitignored download cache.
-    Run manually; do not auto-rerun.
+    Fetched automatically when the cached CSV is missing; since params track
+    only the GBD identifiers, it re-fetches only if those identifiers change.
     """
     params:
-        health=config["health"],
+        gbd_rei_id=config["health"]["gbd_rei_id"],
+        gbd_cause_id=config["health"]["gbd_cause_id"],
     output:
         curves="data/downloads/burden_of_proof/bop_rr_curves.csv",
     resources:

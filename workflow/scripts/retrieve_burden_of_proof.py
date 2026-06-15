@@ -127,9 +127,10 @@ def fetch_bop_curves(
 
 
 def main() -> None:
-    health_cfg = snakemake.params["health"]
-    rei_by_risk = {str(k): int(v) for k, v in health_cfg["gbd_rei_id"].items()}
-    cause_id_by_cause = {str(k): int(v) for k, v in health_cfg["gbd_cause_id"].items()}
+    rei_by_risk = {str(k): int(v) for k, v in snakemake.params["gbd_rei_id"].items()}
+    cause_id_by_cause = {
+        str(k): int(v) for k, v in snakemake.params["gbd_cause_id"].items()
+    }
 
     df = fetch_bop_curves(rei_by_risk, cause_id_by_cause)
     if df.empty:
