@@ -38,6 +38,14 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "PDDL-1.0"
 
+# Root LICENSE copy so GitHub detects the project license (it only scans the
+# repository root, not LICENSES/). The canonical text lives in LICENSES/.
+[[annotations]]
+path = "LICENSE"
+precedence = "override"
+SPDX-FileCopyrightText = "2007 Free Software Foundation, Inc."
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
 # IFA FUBC dataset (bundled due to Dryad API access restrictions)
 [[annotations]]
 path = "data/bundled/doi_10_5061_dryad_2rbnzs7qh__v20250311/**"

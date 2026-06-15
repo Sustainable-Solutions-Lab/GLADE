@@ -7,6 +7,8 @@
 import os
 import sys
 
+import tomllib
+
 # Add project root and scripts directory to path for autodoc
 sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("../workflow/scripts"))
@@ -15,7 +17,9 @@ sys.path.insert(0, os.path.abspath("../workflow/scripts"))
 project = "GLADE"
 copyright = "2026, Koen van Greevenbroek"
 author = "Koen van Greevenbroek"
-release = "0.1.0"
+# Single source of truth for the version lives in pixi.toml.
+with open(os.path.join(os.path.dirname(__file__), "..", "pixi.toml"), "rb") as _f:
+    release = tomllib.load(_f)["workspace"]["version"]
 
 # General configuration
 extensions = [

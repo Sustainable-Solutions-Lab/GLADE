@@ -3595,8 +3595,8 @@ packages:
   requires_python: '>=3.7'
 - pypi: ./
   name: glade-workflow
-  version: 0.0.1
-  sha256: 10b055687b2ffe890414843b1b67d10fc6865988d96f78e511e3efe43e50e2a8
+  version: 0.1.0
+  sha256: 0d231b4d83f21dde183df1f0784aec684efac22bd3c15e548258736c2300d4a5
   requires_python: '>=3.13'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/glib-tools-2.86.2-hf516916_0.conda

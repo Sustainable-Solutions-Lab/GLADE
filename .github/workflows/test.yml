@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint, format & licensing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+          environments: dev
+
+      - name: Run prek hooks (ruff, snakefmt, reuse, furo-rst)
+        run: pixi run --environment dev prek run --all-files --show-diff-on-failure
+
+  dryrun:
+    name: Workflow dryrun (DAG construction)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+          environments: dev
+
+      # The manually-downloaded, license-restricted source datasets (GDD, IHME)
+      # have no producing rule, so the DAG can't resolve unless the paths exist.
+      # A dryrun never reads their contents, so empty stubs suffice. Paths track
+      # the rules in workflow/rules/{diet,health}.smk (baseline_year: 2020).
+      - name: Stub manually-downloaded inputs
+        run: |
+          d=data/manually_downloaded
+          mkdir -p "$d" "$d/IHME_GBD_2023_RISK_EXPOSURE_DIET_1" "$d/IHME_GBD_2023_RISK_EXPOSURE_DIET_2"
+          touch "$d/GDD-IA-intake_grams_2020.csv" \
+                "$d/GDD-IA-intake_kcals_2020.csv" \
+                "$d/IHME-GBD_2023-death-rates-2020.csv" \
+                "$d/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX"
+
+      # Validates the full Snakemake DAG without executing any rule (see
+      # tests/test_integration.py::test_workflow_dryrun). The credential gate
+      # at workflow startup is presence-only, so dummy values suffice; no rule
+      # that would actually call these APIs is ever run.
+      - name: Snakemake dryrun test
+        env:
+          USDA_API_KEY: dummy
+          ECMWF_DATASTORES_URL: https://cds.climate.copernicus.eu/api
+          ECMWF_DATASTORES_KEY: dummy
+        run: pixi run --environment dev pytest -m integration -k dryrun -v

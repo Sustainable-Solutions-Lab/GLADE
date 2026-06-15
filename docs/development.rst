@@ -206,7 +206,7 @@ How It Works
 
 Tests call a shared helper ``run_snakemake_target()`` in ``tests/conftest.py`` that invokes the Snakemake Python API directly (no subprocess). The helper layers ``tests/config/test.yaml`` on top of ``config/default.yaml`` and targets specific output files.
 
-* **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing anything. Does not require credentials or downloaded data. Catches missing inputs, broken rules, and invalid wildcard patterns.
+* **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing any rule. Makes no API calls, but the startup credential gate (presence-only, so dummy values suffice) and the manually-downloaded source files must still be satisfied for the DAG to resolve. Catches missing inputs, broken rules, and invalid wildcard patterns.
 * **Execution test** (``test_build_solve_analyze``): Runs the actual pipeline through analysis for the default scenario. Requires USDA/ECMWF credentials for data downloads on first run.
 * **Plot test** (``test_plots``): Generates representative plots from solved model outputs.
 
@@ -431,3 +431,32 @@ Pull Request Process
 5. Open pull request with description of changes
 6. Address review feedback
 7. Merge once approved
+
+Releasing
+---------
+
+GLADE follows `Semantic Versioning <https://semver.org/>`_. While the model is
+pre-1.0, minor releases may still introduce breaking changes to configuration
+and outputs.
+
+The canonical version is the ``version`` field in ``pixi.toml``. The Python
+package version (``pyproject.toml`` ``dynamic`` attribute via
+``workflow.__version__``) and the documentation version (``docs/conf.py``)
+both derive from it, so a single bump there propagates everywhere.
+
+To cut a release (e.g. ``0.1.0``):
+
+1. Bump ``version`` in ``pixi.toml`` and run ``pixi install`` so the editable
+   install picks up the new version.
+2. Move the ``Unreleased`` entries in ``CHANGELOG.md`` into a new dated
+   version section and update the comparison links at the bottom.
+3. Set ``version`` and ``date-released`` in ``CITATION.cff``.
+4. Commit, then tag and push::
+
+       git tag -a v0.1.0 -m "GLADE 0.1.0"
+       git push origin main --tags
+
+5. Create the GitHub release from the tag, using the changelog section as the
+   release notes::
+
+       gh release create v0.1.0 --title "GLADE 0.1.0" --notes-file <(...)
