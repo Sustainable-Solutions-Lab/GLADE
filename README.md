@@ -10,6 +10,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 [![Docs](https://github.com/Sustainable-Solutions-Lab/GLADE/actions/workflows/docs.yml/badge.svg)](https://sustainable-solutions-lab.github.io/GLADE/)
 [![Release](https://img.shields.io/github/v/release/Sustainable-Solutions-Lab/GLADE?label=release)](https://github.com/Sustainable-Solutions-Lab/GLADE/releases)
+[![arXiv](https://img.shields.io/badge/arXiv-2606.15471-b31b1b.svg)](https://arxiv.org/abs/2606.15471)
 
 GLADE (**G**lobal **L**and, **A**griculture, **D**iet and **E**missions) is a global food-systems optimization model built on [PyPSA](https://pypsa.org/) and [Snakemake](https://snakemake.readthedocs.io). It explores environmental, nutritional, and economic trade-offs through a configuration-driven mixed integer linear program built around a reproducible workflow.
 
@@ -83,6 +84,25 @@ tools/smk -e gurobi -j4 --configfile config/validation.yaml
 - `results/` – Generated artifacts grouped by configuration (never hand-edit).
 
 Additional contribution guidance can be found in the documentation; dataset provenance is tracked in `docs/data_sources.rst`.
+
+## Citing GLADE
+
+If you use GLADE in your research, please cite the paper that introduces and applies the model:
+
+> van Greevenbroek, K., Davis, S. J., & Caldeira, K. (2026). *Reducing health and climate impacts of the global food system*. arXiv:2606.15471. https://doi.org/10.48550/arXiv.2606.15471
+
+```bibtex
+@article{vangreevenbroek2026glade,
+  title   = {Reducing health and climate impacts of the global food system},
+  author  = {van Greevenbroek, Koen and Davis, Steven J. and Caldeira, Ken},
+  year    = {2026},
+  journal = {arXiv preprint arXiv:2606.15471},
+  doi     = {10.48550/arXiv.2606.15471},
+  url     = {https://arxiv.org/abs/2606.15471}
+}
+```
+
+To cite the software itself, use the metadata in [`CITATION.cff`](CITATION.cff) (also exposed via the "Cite this repository" button on GitHub). See the [publications page](https://sustainable-solutions-lab.github.io/GLADE/publications.html) for a full list of work based on GLADE.
 
 ## License
 

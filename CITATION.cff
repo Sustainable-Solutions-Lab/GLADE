@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: CC0-1.0
 
 cff-version: 1.2.0
-message: "If you use this software, please cite it using these metadata."
+message: >-
+  If you use GLADE in your research, please cite the paper in
+  'preferred-citation'. To cite the software itself, use the metadata below.
 title: "GLADE"
 abstract: >-
   GLADE is a global food-systems optimization model built on PyPSA and
@@ -18,3 +20,17 @@ date-released: "2026-06-15"
 license: "GPL-3.0-or-later"
 repository-code: "https://github.com/Sustainable-Solutions-Lab/GLADE"
 url: "https://sustainable-solutions-lab.github.io/GLADE/"
+preferred-citation:
+  type: article
+  title: "Reducing health and climate impacts of the global food system"
+  authors:
+    - family-names: "van Greevenbroek"
+      given-names: "Koen"
+    - family-names: "Davis"
+      given-names: "Steven J."
+    - family-names: "Caldeira"
+      given-names: "Ken"
+  year: 2026
+  journal: "arXiv preprint arXiv:2606.15471"
+  doi: "10.48550/arXiv.2606.15471"
+  url: "https://arxiv.org/abs/2606.15471"

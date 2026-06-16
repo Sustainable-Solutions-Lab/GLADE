@@ -73,6 +73,7 @@ Dietary constraints ensure that each country's population meets nutritional requ
    introduction
    tutorial
    about
+   publications
 
 .. toctree::
    :hidden:
