@@ -65,6 +65,13 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC0-1.0"
 
+# Generated JSON data for the Carbon Price Dial web widget (no inline headers).
+[[annotations]]
+path = "web/carbon-dial/data/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
+SPDX-License-Identifier = "CC-BY-4.0"
+
 # Auto-generated benchmark outputs (gitignored)
 [[annotations]]
 path = "benchmarks/**"
