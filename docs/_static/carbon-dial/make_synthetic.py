@@ -10,7 +10,7 @@ as export_data.py (fixed vs flexible diet, each with diet + feed decomposition)
 so the front end is developed against this and swapped to the real export with
 no code changes.
 
-    pixi run python web/carbon-dial/make_synthetic.py
+    pixi run python docs/_static/carbon-dial/make_synthetic.py
 """
 
 import json

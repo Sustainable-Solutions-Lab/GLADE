@@ -40,7 +40,8 @@ function init(data, geo) {
     let i = 0;
     while (i < px.length - 1 && px[i + 1] < p) i++;
     const j = Math.min(i + 1, px.length - 1);
-    const t = px[j] === px[i] ? 0 : (p - px[i]) / (px[j] - px[i]);
+    let t = px[j] === px[i] ? 0 : (p - px[i]) / (px[j] - px[i]);
+    t = Math.max(0, Math.min(1, t));  // never extrapolate beyond the sweep
     const a = sc[i], b = sc[j];
     const dictLerp = (da, db) => {
       const o = {};
@@ -201,16 +202,21 @@ function init(data, geo) {
   const updateFeed = makeStrip("#feedChart", feedItems, "feed");
 
   // ---- logarithmic carbon-price scale ----
-  // The slider position p in [0,1] maps to price via an exponential so most of
-  // the travel sits at low prices (where the system responds most, and where
-  // the scenarios are densest). p=0 -> $0, p=1 -> $500.
-  const PMAX = 500, KCURV = 5, EK = Math.exp(KCURV);
-  const posToPrice = (p) => PMAX * (Math.exp(KCURV * p) - 1) / (EK - 1);
-  const priceToPos = (v) => Math.log(1 + (v / PMAX) * (EK - 1)) / KCURV;
+  // The slider position p in [0,1] maps to price geometrically (constant ratio
+  // per step), matching the roughly geometric spacing of the published sweep.
+  // The range is derived from the data and starts at the lowest published
+  // price rather than $0, so the slider can never drive an extrapolation below
+  // the cheapest scenario. p=0 -> PMIN, p=1 -> PMAX.
+  const allPrices = allModes.flatMap((m) => data.modes[m].prices);
+  const PMIN = Math.min(...allPrices), PMAX = Math.max(...allPrices);
+  const LR = Math.log(PMAX / PMIN);
+  const posToPrice = (p) => PMIN * Math.exp(LR * p);
+  const priceToPos = (v) => Math.log(v / PMIN) / LR;
   const SLIDER_RES = 1000;
 
   // ---- ticks (positioned on the log scale) ----
-  d3.select("#ticks").selectAll("span").data([0, 10, 25, 50, 100, 200, 500])
+  d3.select("#ticks").selectAll("span")
+    .data([5, 10, 25, 50, 100, 200, 500].filter((d) => d >= PMIN && d <= PMAX))
     .join("span")
     .style("left", (d) => `${priceToPos(d) * 100}%`)
     .text((d) => "$" + d);
@@ -248,7 +254,7 @@ function init(data, geo) {
 
   // optional deep-link: ?price=200&mode=flexible
   const q = new URLSearchParams(location.search);
-  price = Math.max(0, Math.min(500, +q.get("price") || 0));
+  price = Math.max(PMIN, Math.min(PMAX, +q.get("price") || PMIN));
   if (allModes.includes(q.get("mode"))) {
     mode = q.get("mode");
     d3.selectAll("#modeToggle .toggle__btn")

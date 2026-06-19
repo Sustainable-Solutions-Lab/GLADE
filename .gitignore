@@ -46,7 +46,7 @@ uv.lock
 /tools/private/
 
 # Git worktrees created under the repo (e.g. by agents/tasks)
-.worktrees/
+/.worktrees/
 
 # Agent-local working memory (not project content)
-memory/
+/memory/

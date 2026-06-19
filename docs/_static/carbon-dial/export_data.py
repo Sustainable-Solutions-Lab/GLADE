@@ -21,7 +21,7 @@ Each solved network (~60k buses, ~140 MB) is processed in its own subprocess so
 memory is fully released between scenarios; the orchestrator only assembles the
 small per-scenario results, the geometry and the normalisation.
 
-    pixi run python web/carbon-dial/export_data.py
+    pixi run python docs/_static/carbon-dial/export_data.py
 """
 
 from concurrent.futures import ThreadPoolExecutor
