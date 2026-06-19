@@ -19,25 +19,19 @@ in; only the fixed-diet sweep is wired up so far (flexible to come).
 
 ## Layout
 
-The **published widget** (what the docs serve) lives under
-`docs/_static/carbon-dial/`:
+Everything lives in this one directory, `docs/_static/carbon-dial/`:
 
 | File | Purpose |
 |------|---------|
 | `index.html`, `style.css`, `app.js` | The widget. |
 | `lib/d3.min.js` | Bundled D3 v7 (no CDN dependency). |
 | `data/{data.json,regions.geojson}` | Generated data the page fetches. |
+| `export_data.py` | Build `data/` from the paper's solved networks (one subprocess per network; writes into the sibling `data/`). |
+| `make_synthetic.py` | Generate synthetic `data/` for UI development. |
 
 It is embedded in the docs at `docs/carbon_price_dial.rst` (an `<iframe>` into
 `_static/carbon-dial/index.html`, with the page's right-hand TOC hidden so the
 dashboard gets the full width).
-
-The **generators** live here in `web/carbon-dial/`:
-
-| File | Purpose |
-|------|---------|
-| `export_data.py` | Build `data/` from the paper's solved networks (one subprocess per network; writes into `docs/_static/carbon-dial/data/`). |
-| `make_synthetic.py` | Generate synthetic `data/` for UI development. |
 
 ## Data source
 
@@ -65,11 +59,11 @@ python -m http.server 8123
 #    tar xzf GLADE-paper-data.tar.gz -C .cache/zenodo/extract \
 #      GLADE-paper-data/results/ghg_sensitivity_fixed_diet/{solved,analysis} \
 #      GLADE-paper-data/processing/central/regions.geojson
-# 2. Export (writes docs/_static/carbon-dial/data/):
-pixi run python web/carbon-dial/export_data.py
+# 2. Export (writes the sibling data/ directory):
+pixi run python docs/_static/carbon-dial/export_data.py
 
 # Synthetic data for UI work instead:
-pixi run python web/carbon-dial/make_synthetic.py
+pixi run python docs/_static/carbon-dial/make_synthetic.py
 ```
 
 When the flexible-diet sweep is solved, add its tree under

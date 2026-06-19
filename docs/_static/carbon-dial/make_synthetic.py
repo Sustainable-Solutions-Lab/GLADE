@@ -19,9 +19,9 @@ from pathlib import Path
 import geopandas as gpd
 import yaml
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG = REPO / "config" / "default.yaml"
-OUT_DIR = REPO / "docs" / "_static" / "carbon-dial" / "data"
+OUT_DIR = Path(__file__).resolve().parent / "data"
 
 PRICES = [
     0,

@@ -40,12 +40,12 @@ import yaml
 # them); several run concurrently. Each peaks at ~1.5 GB.
 MAX_PARALLEL = 4
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 ARCHIVE_ROOT = REPO / ".cache" / "zenodo" / "extract" / "GLADE-paper-data"
 DEFAULT_CONFIG = REPO / "config" / "default.yaml"
-# Published widget assets live under the docs static tree; this writes the data
-# the front end fetches.
-OUT_DIR = REPO / "docs" / "_static" / "carbon-dial" / "data"
+# This script sits next to the published widget assets; write the data the
+# front end fetches into the sibling data/ directory.
+OUT_DIR = Path(__file__).resolve().parent / "data"
 
 MODE_TREES = {
     "fixed": "ghg_sensitivity_fixed_diet",
