@@ -65,12 +65,13 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
 SPDX-License-Identifier = "CC0-1.0"
 
-# Generated JSON data for the Carbon Price Dial web widget (no inline headers).
+# Vendored D3 (minified) for the Carbon Price Dial widget. Overrides the
+# docs/_static/** aggregate above, which would otherwise mislabel it.
 [[annotations]]
-path = "web/carbon-dial/data/**"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 Koen van Greevenbroek"
-SPDX-License-Identifier = "CC-BY-4.0"
+path = "docs/_static/carbon-dial/lib/d3.min.js"
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2023 Mike Bostock"
+SPDX-License-Identifier = "ISC"
 
 # Auto-generated benchmark outputs (gitignored)
 [[annotations]]

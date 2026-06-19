@@ -34,3 +34,17 @@ figcaption p {
     border-top: 1px solid var(--color-background-border);
     padding-top: 0.5em;
 }
+
+/* Launch button for the interactive Carbon Price Dial */
+.cd-launch {
+    display: inline-block;
+    margin: 0.4rem 0 1.2rem;
+    padding: 0.65em 1.3em;
+    border-radius: 8px;
+    background: #3b745f;
+    color: #fff !important;
+    font-weight: 600;
+    text-decoration: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.cd-launch:hover { background: #2f5d4c; }

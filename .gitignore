@@ -44,3 +44,9 @@ uv.lock
 # Project-private workspace (per-investigation configs, scripts, scratch data
 # and notebooks that should not pollute the main repo). Not version-controlled.
 /tools/private/
+
+# Git worktrees created under the repo (e.g. by agents/tasks)
+.worktrees/
+
+# Agent-local working memory (not project content)
+memory/

@@ -17,6 +17,7 @@ SPDX-License-Identifier: CC-BY-4.0
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 .dial {
   font-family: var(--sans);
@@ -62,7 +63,33 @@ SPDX-License-Identifier: CC-BY-4.0
   color: #fff;
   box-shadow: var(--shadow);
 }
+.dial__control-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
 .dial__price { display: flex; align-items: baseline; gap: 10px; }
+
+/* fixed/flexible diet toggle */
+.toggle {
+  display: inline-flex; background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px; padding: 3px;
+}
+.toggle__btn {
+  border: 0; background: transparent; color: #fff;
+  font: inherit; font-size: 0.85rem; font-weight: 600;
+  padding: 7px 16px; border-radius: 999px; cursor: pointer;
+  opacity: 0.82; transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.toggle__btn.is-active {
+  background: #fff; color: var(--green); opacity: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.toggle__btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.toggle__soon {
+  margin-left: 6px; font-size: 0.6rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  vertical-align: 1px; opacity: 0.85;
+}
 .dial__price-value {
   font-size: 3rem;
   font-weight: 750;
@@ -99,30 +126,17 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 2px 6px rgba(0,0,0,0.25); cursor: grab;
 }
 .dial__ticks {
-  display: flex; justify-content: space-between;
-  font-size: 0.72rem; opacity: 0.8; font-variant-numeric: tabular-nums;
+  position: relative; height: 1.1em; margin-top: 2px;
+  font-size: 0.72rem; opacity: 0.85; font-variant-numeric: tabular-nums;
 }
-.dial__caption {
-  margin: 14px 0 0;
-  font-size: 0.95rem;
-  min-height: 1.4em;
-  font-weight: 500;
+.dial__ticks span {
+  position: absolute; transform: translateX(-50%); white-space: nowrap;
 }
-
-/* --- grid of cards --- */
-.dial__grid {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  grid-template-areas:
-    "map emissions"
-    "map curve"
-    "diet diet";
-  gap: 16px;
-}
-.card--map { grid-area: map; }
-.card--emissions { grid-area: emissions; }
-.card--curve { grid-area: curve; }
-.card--diet { grid-area: diet; }
+/* --- stacked layout: two maps, then chart pair, then diet & feed strips --- */
+.dial__content { display: flex; flex-direction: column; gap: 16px; }
+.dial__maps, .dial__pair { display: flex; gap: 16px; align-items: stretch; }
+.dial__maps > .card { flex: 1; min-width: 0; }
+.dial__pair > .card { flex: 1; min-width: 0; }
 
 .card {
   background: var(--card);
@@ -151,6 +165,11 @@ input[type="range"]::-moz-range-thumb {
 .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
 .legend__item { display: flex; align-items: center; gap: 5px; font-size: 0.74rem; color: var(--muted); }
 .legend__swatch { width: 11px; height: 11px; border-radius: 3px; }
+.legend--gradient { align-items: center; gap: 8px; font-size: 0.74rem; color: var(--muted); }
+.legend__bar {
+  flex: 0 0 120px; height: 11px; border-radius: 3px;
+  border: 1px solid var(--line);
+}
 
 .bignum {
   display: flex; align-items: baseline; gap: 8px;
@@ -174,8 +193,5 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 760px) {
-  .dial__grid {
-    grid-template-columns: 1fr;
-    grid-template-areas: "map" "emissions" "curve" "diet";
-  }
+  .dial__grid { flex-direction: column; }
 }

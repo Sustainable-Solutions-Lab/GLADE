@@ -18,6 +18,8 @@ GLADE (**G**lobal **L**and, **A**griculture, **D**iet and **E**missions) is a gl
 
 *Dominant crop group, land-use intensity, and livestock protein output at a $50/t CO₂-equivalent GHG price — one snapshot from a scenario sweep made possible by the model.*
 
+**▶ [Try the interactive Carbon Price Dial](https://sustainable-solutions-lab.github.io/GLADE/carbon_price_dial.html)** — drag one slider and watch croplands, grazing land, diets, animal feed and emissions reorganise as a global carbon price rises.
+
 ## Documentation
 
 Full documentation (model design, configuration reference, data provenance, API) is published at <https://sustainable-solutions-lab.github.io/GLADE/>. There, you can also find more information on installation as well as download tutorial Jupyter notebooks to learn more about how to run GLADE and analyze results.
