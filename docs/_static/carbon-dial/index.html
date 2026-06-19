@@ -28,11 +28,17 @@ SPDX-License-Identifier: CC-BY-4.0
           <span class="dial__price-value" id="priceValue">0</span>
           <span class="dial__price-unit">USD / t CO<sub>2</sub>-eq</span>
         </div>
+        <!-- Diet-mode toggle hidden until the flexible-diet sweep is available.
+             Restore this block (and add the flexible results to data.json) to
+             re-enable switching between fixed and flexible diets; app.js already
+             wires up #modeToggle when present.
         <div class="toggle" id="modeToggle" role="group" aria-label="Diet mode">
           <button data-mode="fixed" class="toggle__btn is-active">Fixed diet</button>
           <button data-mode="flexible" class="toggle__btn"
             title="Flexible-diet results coming soon">Flexible diet<span class="toggle__soon">soon</span></button>
         </div>
+        -->
+        <span class="dial__mode-note">Fixed diet &middot; held at the 2020 baseline</span>
       </div>
       <input type="range" id="slider" min="0" max="1000" value="0" step="1" />
       <div class="dial__ticks" id="ticks"></div>
@@ -74,9 +80,10 @@ SPDX-License-Identifier: CC-BY-4.0
 
       <div class="card card--diet">
         <div class="card__title">Global diet
-          <span class="card__hint" id="dietHint">Mt / yr &middot; plant-based &rarr; animal-based</span>
+          <span class="card__hint" id="dietHint">g / person / day &middot; plant-based &rarr; animal-based</span>
         </div>
         <svg id="dietChart"></svg>
+        <div class="strip-legend" id="dietLegend"></div>
       </div>
 
       <div class="card card--feed">
@@ -84,12 +91,35 @@ SPDX-License-Identifier: CC-BY-4.0
           <span class="card__hint">Mt dry matter / yr &middot; by source</span>
         </div>
         <svg id="feedChart"></svg>
+        <div class="strip-legend" id="feedLegend"></div>
       </div>
     </section>
 
     <footer class="dial__foot">
-      <span>GLADE &middot; global food-system optimisation</span>
-      <span id="footNote"></span>
+      <div class="dial__defs">
+        <p><strong>Fixed diet.</strong> Consumption is pinned to the 2020
+          baseline; production, land use, animal feed and emissions still
+          re-optimise as the price rises. A flexible-diet mode, where the diet
+          also re-optimises, is coming soon.</p>
+        <p><strong>Net emissions.</strong> All greenhouse gases (CO<sub>2</sub>,
+          CH<sub>4</sub>, N<sub>2</sub>O) as CO<sub>2</sub>-equivalent, including
+          land-use change and sequestration credits from spared land.</p>
+        <p><strong>Diet &amp; feed.</strong> Diet is the global-average
+          per-capita intake (g/person/day); animal feed is total dry matter
+          (Mt/yr) by source.</p>
+        <p><strong>Maps.</strong> Cropland is coloured by its dominant crop
+          group and faded by cropland area per unit land; pasture is shaded by
+          grazing-land area per unit land.</p>
+        <p><strong>Data.</strong> The GLADE paper's published fixed-diet
+          carbon-price sweep
+          (<a href="https://doi.org/10.5281/zenodo.20617942" target="_blank"
+            rel="noopener">Zenodo 10.5281/zenodo.20617942</a>); the dial
+          interpolates between solved scenarios.</p>
+      </div>
+      <div class="dial__foot-meta">
+        <span>GLADE &middot; global food-system optimisation</span>
+        <span id="footNote"></span>
+      </div>
     </footer>
   </div>
 

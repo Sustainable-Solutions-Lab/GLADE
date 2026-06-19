@@ -168,14 +168,29 @@ function init(data, geo) {
   function updateCurve(s) { curveDot.attr("cx", cx(s.netEmissions)).attr("cy", cy(s.cost)); }
 
   // ---- generic stacked horizontal strip (diet, feed) ----
-  function makeStrip(svgId, items, valueKey) {
-    // items: [{key,label?,color}]; valueKey: scenario field ("diet"/"feed")
+  // Every item is annotated in the legend below the strip (swatch + name + live
+  // value), so even slivers too thin to hold an in-bar label are still
+  // identified. In-bar labels are kept for segments wide enough to fit them, as
+  // a quick at-a-glance read of the dominant groups.
+  function makeStrip(svgId, legendId, items, valueKey) {
+    // items: [{key,label?,color,animal}]; valueKey: scenario field ("diet"/"feed")
     const DW = 1100, DH = 74, dm = { t: 6, r: 10, b: 24, l: 10 };
     const svg = d3.select(svgId).attr("viewBox", `0 0 ${DW} ${DH}`);
     const totalMax = d3.max(allScen, (s) =>
       d3.sum(items, (it) => s[valueKey][it.key] || 0));
     const x = d3.scaleLinear().domain([0, totalMax]).range([dm.l, DW - dm.r]);
     const gBars = svg.append("g"), gLab = svg.append("g");
+
+    // Static legend (built once); only the value text changes on each render.
+    const legItems = d3.select(legendId).selectAll("div.strip-legend__item")
+      .data(items, (d) => d.key).join("div")
+      .attr("class", (d) => "strip-legend__item" + (d.animal ? " is-animal" : ""));
+    legItems.append("span").attr("class", "strip-legend__swatch")
+      .style("background", (d) => d.color);
+    legItems.append("span").attr("class", "strip-legend__label").text((d) => d.label || d.key);
+    const legVals = legItems.append("span").attr("class", "strip-legend__val");
+    const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+
     return (s) => {
       let acc = 0;
       const segs = items.map((it) => {
@@ -194,12 +209,13 @@ function init(data, geo) {
         .attr("text-anchor", "middle").style("font-size", "11px")
         .style("font-weight", (d) => d.animal ? 700 : 500).style("fill", "#475650")
         .text((d) => d.label || d.key);
+      legVals.text((d) => fmt(s[valueKey][d.key] || 0));
     };
   }
   const dietItems = foodGroups.map((g) => ({ key: g.key, label: g.label, color: g.color, animal: g.animal }));
   const feedItems = feedCats.map((f) => ({ key: f.key, label: f.key, color: f.color, animal: false }));
-  const updateDiet = makeStrip("#dietChart", dietItems, "diet");
-  const updateFeed = makeStrip("#feedChart", feedItems, "feed");
+  const updateDiet = makeStrip("#dietChart", "#dietLegend", dietItems, "diet");
+  const updateFeed = makeStrip("#feedChart", "#feedLegend", feedItems, "feed");
 
   // ---- logarithmic carbon-price scale ----
   // The slider position p in [0,1] maps to price geometrically (constant ratio
@@ -229,8 +245,8 @@ function init(data, geo) {
     const s = interp(mode, price);
     priceValue.textContent = Math.round(price);
     dietHint.textContent = mode === "fixed"
-      ? "Mt / yr - held at the 2020 baseline in this mode"
-      : "Mt / yr - plant-based to animal-based";
+      ? "g / person / day - held at the 2020 baseline in this mode"
+      : "g / person / day - plant-based to animal-based";
     updateMap(s); updatePasture(s); updateEmissions(s); updateCurve(s);
     updateDiet(s); updateFeed(s);
   }
@@ -263,16 +279,4 @@ function init(data, geo) {
   slider.value = Math.round(priceToPos(price) * SLIDER_RES);
   styleCurve();
   render();
-
-  // When embedded in an iframe (the docs page), report our height so the
-  // parent can size the iframe to fit without an inner scrollbar.
-  function postHeight() {
-    if (window.parent !== window) {
-      window.parent.postMessage(
-        { carbonDialHeight: document.body.scrollHeight }, "*");
-    }
-  }
-  window.addEventListener("load", postHeight);
-  window.addEventListener("resize", postHeight);
-  postHeight();
 }

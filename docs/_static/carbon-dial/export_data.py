@@ -12,8 +12,8 @@ current GLADE ``extract_*`` analysis functions so the widget matches the paper
 figures exactly.
 
 Per carbon-price scenario the output carries: net emissions by category,
-food-system cost, diet by food group (Mt), animal feed by the paper's six
-source categories (Mt DM, summed over the accounted/unaccounted split), and a
+food-system cost, diet by food group (g/person/day), animal feed by the paper's
+six source categories (Mt DM, summed over the accounted/unaccounted split), and a
 per-region dominant-crop-group index plus cropland and pasture land-use
 intensities so the two maps fade as land is spared.
 
@@ -147,6 +147,8 @@ def run_worker(nc_path, analysis_dir, out_path):
         extract_feed_by_source,
         extract_land_use,
     )
+    from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE
+    from workflow.scripts.population import get_total_population
 
     crop_to_group, _ = crop_group_mapping()
     n = pypsa.Network(str(nc_path))
@@ -167,16 +169,20 @@ def run_worker(nc_path, analysis_dir, out_path):
     ob = extract_objective_breakdown(n).iloc[0]
     cost = float(sum(float(ob[c]) for c in COST_COMPONENTS if c in ob.index))
 
-    # Diet by food group (global Mt): the consume-link p0 (food withdrawn),
-    # grouped by the food_group column. Equivalent to
-    # extract_food_group_consumption's consumption_mt but ~400x faster, since it
-    # skips the heavy n.statistics call and the per-capita / nutrient flows.
+    # Diet by food group: the consume-link p0 (food withdrawn), grouped by the
+    # food_group column. Equivalent to extract_food_group_consumption's
+    # consumption_mt but ~400x faster, since it skips the heavy n.statistics
+    # call and the per-capita / nutrient flows. Reported as global-average
+    # per-capita daily intake (g/person/day) -- the same convention as
+    # extract_health_impacts -- rather than Mt/yr.
     links = n.links.static
     consume = links[links["carrier"] == "food_consumption"]
     snapshot = n.snapshots[-1]
     flow = n.links.dynamic.p0.loc[snapshot].reindex(consume.index).abs()
+    pop = get_total_population(n)
     diet = {
-        k: float(v) for k, v in flow.groupby(consume["food_group"].values).sum().items()
+        k: float(v) * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * pop)
+        for k, v in flow.groupby(consume["food_group"].values).sum().items()
     }
 
     fbs = extract_feed_by_source(n)

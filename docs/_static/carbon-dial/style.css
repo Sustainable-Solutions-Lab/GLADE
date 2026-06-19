@@ -18,6 +18,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+body { margin: 0; }
 
 .dial {
   font-family: var(--sans);
@@ -54,8 +55,11 @@ SPDX-License-Identifier: CC-BY-4.0
   font-weight: 600;
 }
 
-/* --- carbon price control --- */
+/* --- carbon price control (pinned to the top while the dashboard scrolls) --- */
 .dial__control {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   margin: 26px 0 22px;
   padding: 22px 26px 18px;
   background: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
@@ -89,6 +93,9 @@ SPDX-License-Identifier: CC-BY-4.0
   margin-left: 6px; font-size: 0.6rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.04em;
   vertical-align: 1px; opacity: 0.85;
+}
+.dial__mode-note {
+  font-size: 0.85rem; font-weight: 600; opacity: 0.85;
 }
 .dial__price-value {
   font-size: 3rem;
@@ -181,15 +188,48 @@ input[type="range"]::-moz-range-thumb {
 
 #emiChart, #curveChart, #dietChart { width: 100%; display: block; }
 
+/* Strip legends: annotate every food/feed group, including slivers too thin
+   to carry an in-bar label. Swatch + name + live value, wrapping as needed. */
+.strip-legend {
+  display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 10px;
+}
+.strip-legend__item {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.74rem; color: var(--muted);
+}
+.strip-legend__swatch {
+  width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto;
+}
+.strip-legend__val {
+  font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
+}
+.strip-legend__item.is-animal .strip-legend__label {
+  font-weight: 700; color: var(--ink);
+}
+
 .tick text { fill: var(--muted); font-size: 0.7rem; }
 .tick line { stroke: var(--line); }
 .axis path { stroke: var(--line); }
 
 .dial__foot {
-  display: flex; justify-content: space-between;
   margin-top: 22px; padding-top: 12px;
   border-top: 1px solid var(--line);
   font-size: 0.78rem; color: var(--muted);
+}
+/* Definitions for the curious reader: understated, same muted footer type. */
+.dial__defs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2px 26px;
+}
+.dial__defs p { margin: 4px 0; line-height: 1.5; max-width: 60ch; }
+.dial__defs strong { color: var(--ink); font-weight: 650; }
+.dial__defs a { color: var(--green); text-decoration: none; }
+.dial__defs a:hover { text-decoration: underline; }
+.dial__foot-meta {
+  display: flex; justify-content: space-between; gap: 12px;
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 @media (max-width: 760px) {
