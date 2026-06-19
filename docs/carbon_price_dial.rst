@@ -15,7 +15,7 @@ Interactive: the Carbon Price Dial
       entry keeps a label. */
    .content h1 { display: none; }
    .toc-drawer { display: none !important; }
-   .content { width: auto !important; max-width: none !important; }
+   .content { width: 100% !important; max-width: none !important; }
    </style>
    <iframe id="carbonDialFrame" title="GLADE Carbon Price Dial"
            src="_static/carbon-dial/index.html" loading="lazy"

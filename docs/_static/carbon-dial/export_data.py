@@ -105,15 +105,19 @@ EMISSION_CATEGORIES = [
     "Fertilizer & residues (N2O)",
     "Sequestration",
 ]
-COST_COMPONENTS = [
-    "crop_production",
-    "animal_production",
-    "feed_conversion",
-    "fertilizer",
-    "land_use",
-    "processing",
-    "trade",
-    "resource_supply",
+# The model objective is split into three lines that sum exactly to it:
+#   - Social cost of carbon: the GHG store term (carbon price * net emissions);
+#     goes strongly negative at high prices as net emissions turn negative.
+#   - Resistance to change: the soft anchor/preference penalties (production
+#     stability deviation penalty + any consumer-value / diet-stability loss).
+#   - Production cost: everything else (all real production / trade / processing
+#     / resource / slack costs), recovered as objective - scc - resistance.
+SCC_KEY = "ghg_cost"
+RESISTANCE_KEYS = ["production_stability", "consumer_values", "diet_stability"]
+COST_PARTS = [
+    ("production", "Production cost", "#3b745f"),
+    ("resistance", "Resistance to change", "#d08b3f"),
+    ("scc", "Social cost of carbon", "#7570B3"),
 ]
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -166,8 +170,16 @@ def run_worker(nc_path, analysis_dir, out_path):
         elif gas == "n2o":
             emis["Fertilizer & residues (N2O)"] += val
 
+    # Objective decomposition (bn USD): three parts that sum to n.objective.
     ob = extract_objective_breakdown(n).iloc[0]
-    cost = float(sum(float(ob[c]) for c in COST_COMPONENTS if c in ob.index))
+    objective = float(n.objective)
+    scc = float(ob.get(SCC_KEY, 0.0))
+    resistance = float(sum(float(ob.get(k, 0.0)) for k in RESISTANCE_KEYS))
+    cost_parts = {
+        "production": objective - scc - resistance,
+        "resistance": resistance,
+        "scc": scc,
+    }
 
     # Diet by food group: the consume-link p0 (food withdrawn), grouped by the
     # food_group column. Equivalent to extract_food_group_consumption's
@@ -209,7 +221,8 @@ def run_worker(nc_path, analysis_dir, out_path):
         json.dumps(
             {
                 "emissions": emis,
-                "cost": cost,
+                "objective": objective,
+                "costParts": cost_parts,
                 "diet": diet,
                 "feed": feed,
                 "areaByRegion": area_by_region,
@@ -326,7 +339,10 @@ def main():
                         k: round(v / 1000.0, 4) for k, v in w["emissions"].items()
                     },
                     "netEmissions": round(sum(w["emissions"].values()) / 1000.0, 4),
-                    "cost": round(w["cost"], 2),
+                    "objective": round(w["objective"], 1),
+                    "costParts": {
+                        k: round(float(w["costParts"][k]), 1) for k, _, _ in COST_PARTS
+                    },
                     "diet": {k: round(v, 2) for k, v in w["diet"].items()},
                     "feed": {
                         k: round(float(w["feed"].get(k, 0.0)), 2) for k in feed_keys
@@ -352,7 +368,8 @@ def main():
                     "price": r["price"],
                     "emissions": r["emissions"],
                     "netEmissions": r["netEmissions"],
-                    "cost": r["cost"],
+                    "objective": r["objective"],
+                    "costParts": r["costParts"],
                     "diet": r["diet"],
                     "feed": r["feed"],
                     "regionGroup": r["_grp"].tolist(),
@@ -372,6 +389,9 @@ def main():
                 for k, lbl, c, a in FOOD_GROUPS
             ],
             "feedCats": [{"key": k, "color": c} for k, c in FEED_CATS],
+            "costParts": [
+                {"key": k, "label": lbl, "color": c} for k, lbl, c in COST_PARTS
+            ],
             "emissionCategories": EMISSION_CATEGORIES,
             "source": "GLADE paper data (Zenodo 10.5281/zenodo.20617942)",
         },

@@ -53,7 +53,8 @@ function init(data, geo) {
     return {
       emissions: dictLerp(a.emissions, b.emissions),
       netEmissions: lerp(a.netEmissions, b.netEmissions, t),
-      cost: lerp(a.cost, b.cost, t),
+      objective: lerp(a.objective, b.objective, t),
+      costParts: dictLerp(a.costParts, b.costParts),
       diet: dictLerp(a.diet, b.diet),
       feed: dictLerp(a.feed, b.feed),
       regionGroup: near.regionGroup,
@@ -135,37 +136,68 @@ function init(data, geo) {
     nv.parentElement.classList.toggle("is-negative", net < 0);
   }
 
-  // ---- COST vs EMISSIONS CURVE (both modes drawn; active highlighted) ----
+  // ---- OBJECTIVE DECOMPOSITION vs CARBON PRICE ----
+  // Three component lines (production cost, resistance to change, social cost of
+  // carbon) that sum to the model objective, plus the total. The social cost of
+  // carbon (price x net emissions) goes strongly negative once net emissions
+  // turn negative, so the y-axis spans negatives with an emphasized zero line.
   const CW = 330, CH = 170, cm = { t: 14, r: 14, b: 30, l: 46 };
   const curveSvg = d3.select("#curveChart").attr("viewBox", `0 0 ${CW} ${CH}`);
-  const cx = d3.scaleLinear().domain(d3.extent(allScen, (s) => s.netEmissions)).nice()
+  const costKeys = meta.costParts.map((c) => c.key);
+  const costColor = {};
+  meta.costParts.forEach((c) => { costColor[c.key] = c.color; });
+  const xc = d3.scaleLog().domain(d3.extent(allScen, (s) => s.price))
     .range([cm.l, CW - cm.r]);
-  const cy = d3.scaleLinear().domain(d3.extent(allScen, (s) => s.cost)).nice()
-    .range([CH - cm.b, cm.t]);
-  curveSvg.append("g").attr("class", "axis").attr("transform", `translate(0,${CH - cm.b})`)
-    .call(d3.axisBottom(cx).ticks(4));
+  let yLo = 0, yHi = 0;
+  allScen.forEach((s) => {
+    yHi = Math.max(yHi, s.objective, ...costKeys.map((k) => s.costParts[k]));
+    yLo = Math.min(yLo, s.objective, ...costKeys.map((k) => s.costParts[k]));
+  });
+  const yc = d3.scaleLinear().domain([yLo * 1.06, yHi * 1.06]).range([CH - cm.b, cm.t]);
   curveSvg.append("g").attr("class", "axis").attr("transform", `translate(${cm.l},0)`)
-    .call(d3.axisLeft(cy).ticks(4).tickFormat((d) => (d / 1000).toFixed(1) + "T"));
+    .call(d3.axisLeft(yc).ticks(5).tickFormat((d) => (d / 1000).toFixed(1) + "T"));
+  curveSvg.append("g").attr("class", "axis").attr("transform", `translate(0,${CH - cm.b})`)
+    .call(d3.axisBottom(xc).tickValues([5, 25, 100, 500]).tickFormat((d) => "$" + d));
   curveSvg.append("text").attr("x", (CW + cm.l) / 2).attr("y", CH - 4)
     .attr("text-anchor", "middle").style("font-size", "9.5px").style("fill", "#9aa8a2")
-    .text("Net emissions (Gt CO₂-eq)");
-  const lineGen = d3.line().x((s) => cx(s.netEmissions)).y((s) => cy(s.cost))
-    .curve(d3.curveCatmullRom);
-  const curvePaths = {};
-  allModes.forEach((m) => {
-    curvePaths[m] = curveSvg.append("path").datum(data.modes[m].scenarios)
-      .attr("d", lineGen).attr("fill", "none").attr("stroke-width", 2);
+    .text("Carbon price (USD / t)");
+  // Emphasized zero baseline.
+  curveSvg.append("line").attr("x1", cm.l).attr("x2", CW - cm.r)
+    .attr("y1", yc(0)).attr("y2", yc(0)).attr("stroke", "#9aa8a2");
+  const mkLine = (accessor) => d3.line().x((s) => xc(s.price)).y((s) => yc(accessor(s)));
+  const compLine = {}, compPath = {};
+  costKeys.forEach((k) => {
+    compLine[k] = mkLine((s) => s.costParts[k]);
+    compPath[k] = curveSvg.append("path").attr("fill", "none")
+      .attr("stroke", costColor[k]).attr("stroke-width", 1.6);
   });
-  const curveDot = curveSvg.append("circle").attr("r", 5.5)
-    .attr("fill", "#3b745f").attr("stroke", "#fff").attr("stroke-width", 2);
-  function styleCurve() {
-    allModes.forEach((m) => curvePaths[m]
-      .attr("stroke", m === mode ? "#3b745f" : "#d4ded9")
-      .attr("stroke-dasharray", m === mode ? null : "2,3")
-      .raise());
-    curveDot.raise();
+  const totalLineGen = mkLine((s) => s.objective);
+  const totalPath = curveSvg.append("path").attr("fill", "none")
+    .attr("stroke", "#1f2a26").attr("stroke-width", 2.4);
+  const costDot = curveSvg.append("circle").attr("r", 5)
+    .attr("fill", "#1f2a26").attr("stroke", "#fff").attr("stroke-width", 2);
+
+  // Legend below the chart doubles as the live value readout (sum + parts).
+  const costLegendItems = meta.costParts
+    .concat([{ key: "objective", label: "Total (objective)", color: "#1f2a26" }]);
+  const costLeg = d3.select("#costLegend").selectAll("div.strip-legend__item")
+    .data(costLegendItems, (d) => d.key).join("div")
+    .attr("class", (d) => "strip-legend__item" + (d.key === "objective" ? " is-animal" : ""));
+  costLeg.append("span").attr("class", "strip-legend__swatch").style("background", (d) => d.color);
+  costLeg.append("span").attr("class", "strip-legend__label").text((d) => d.label);
+  const costLegVals = costLeg.append("span").attr("class", "strip-legend__val");
+  const fmtT = (v) => (v < 0 ? "-" : "") + Math.abs(v / 1000).toFixed(2) + "T";
+
+  function drawCostLines() {
+    const sc = data.modes[mode].scenarios;
+    costKeys.forEach((k) => compPath[k].datum(sc).attr("d", compLine[k]));
+    totalPath.datum(sc).attr("d", totalLineGen).raise();
+    costDot.raise();
   }
-  function updateCurve(s) { curveDot.attr("cx", cx(s.netEmissions)).attr("cy", cy(s.cost)); }
+  function updateCost(s) {
+    costDot.attr("cx", xc(price)).attr("cy", yc(s.objective));
+    costLegVals.text((d) => fmtT(d.key === "objective" ? s.objective : s.costParts[d.key]));
+  }
 
   // ---- generic stacked horizontal strip (diet, feed) ----
   // Every item is annotated in the legend below the strip (swatch + name + live
@@ -247,7 +279,7 @@ function init(data, geo) {
     dietHint.textContent = mode === "fixed"
       ? "g / person / day - held at the 2020 baseline in this mode"
       : "g / person / day - plant-based to animal-based";
-    updateMap(s); updatePasture(s); updateEmissions(s); updateCurve(s);
+    updateMap(s); updatePasture(s); updateEmissions(s); updateCost(s);
     updateDiet(s); updateFeed(s);
   }
   slider.addEventListener("input", (e) => {
@@ -264,7 +296,7 @@ function init(data, geo) {
       mode = m;
       d3.selectAll("#modeToggle .toggle__btn")
         .classed("is-active", function () { return this.dataset.mode === mode; });
-      styleCurve(); render();
+      drawCostLines(); render();
     });
   });
 
@@ -277,6 +309,6 @@ function init(data, geo) {
       .classed("is-active", function () { return this.dataset.mode === mode; });
   }
   slider.value = Math.round(priceToPos(price) * SLIDER_RES);
-  styleCurve();
+  drawCostLines();
   render();
 }
