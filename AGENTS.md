@@ -29,7 +29,7 @@ Provide clear expectations and a safe, efficient workflow so agents can make sma
 - `notebooks/`: Exploratory analyses and sanity-check visualisations.
 - `results/`: Auto-generated artifacts organized as `results/{config_name}/`; never hand-edit. Rerun the relevant target instead.
 - `tests/`: pytest integration tests using the Snakemake Python API; run via `pixi run -e dev test`.
-- `vendor/`: Custom branches of PyPSA and linopy for reference, though not used as local dependencies.
+- `vendor/`: Local clones of our custom PyPSA and linopy forks. The build pins them by git tag in `pixi.toml` (e.g. `linopy v0.8.0+glade`), but these clones are where fork development and testing happen -- see "Developing the vendored forks" below.
 
 The paper manuscript and its figure notebooks live in a separate repo at `../paper/` (sibling of this one). Those notebooks import from `workflow/` via `sys.path` and read from `results/` here — see `../paper/notebooks/README.md` for the exact configs and Snakemake targets each figure depends on. Do not re-add a `paper/` submodule or reintroduce `notebooks/paper_figures/` here.
 
@@ -188,6 +188,33 @@ See `workflow/scripts/build_model/__init__.py` for the complete reference.
 - Dependency manager: `pixi` (see `pixi.toml`).
 - Lint/format: `ruff` for Python, `snakefmt` for Snakemake files (auto-enforced via hooks; no manual action usually needed).
 - Workflow engine: `snakemake` (run via `tools/smk` wrapper by default).
+
+### Developing the vendored forks (linopy / PyPSA)
+
+`pixi.toml` pins `linopy` and `pypsa` to git tags on our forks
+(`koen-vg/linopy`, `koen-vg/PyPSA`), e.g. `linopy = { git = ..., tag =
+"v0.8.0+glade" }`. We keep `+glade` tags that are upstream releases plus a small
+set of GLADE-specific commits (for linopy: MIP fixed duals and `_mip_start`).
+
+The standard procedure when changing a fork (e.g. bumping linopy to a new
+upstream release and rebasing our commits onto it) is:
+
+1. Work in the local clone under `vendor/<fork>/` (it has its own git remotes:
+   `origin` = our fork, `upstream` = the original project). Rebase/cherry-pick
+   our `+glade` commits onto the new upstream tag on a fresh branch, and run the
+   fork's own test suite there (linopy uses `uv`: `uv sync --extra dev` then
+   `.venv/bin/python -m pytest`).
+2. Install the local clone into the GLADE pixi env **temporarily** to test the
+   integration before publishing a tag:
+   `pixi run -e dev pip install -e vendor/linopy --no-deps --no-build-isolation`.
+   Iterate and run GLADE's tests against it.
+3. Once it checks out, push the branch and a new `vX.Y.Z+glade` tag to our fork,
+   update the `tag = ...` pin in `pixi.toml`, and run `pixi install` to refresh
+   `pixi.lock` to the new commit. Commit `pixi.toml` + `pixi.lock` together.
+
+Because the pin and lock reference an exact remote commit, the tag must be
+pushed before `pixi install` can relock against it. Do fork work in a separate
+git worktree so it doesn't disturb a checkout being used for other work.
 
 ### Available Environments
 
