@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+SPDX-License-Identifier: CC-BY-4.0
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GLADE - The Carbon Price Dial</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="dial" id="dial">
+    <header class="dial__head">
+      <h1>What if we put a price on food's carbon?</h1>
+      <p class="dial__sub">
+        Drag the dial to set a global greenhouse-gas price and watch how the
+        world's croplands, diets, animal feed and emissions reorganise as the
+        <strong>GLADE</strong> model re-optimises the food system.
+        <span class="dial__synthetic" id="syntheticFlag" hidden>placeholder data</span>
+      </p>
+    </header>
+
+    <section class="dial__control">
+      <div class="dial__control-row">
+        <div class="dial__price">
+          <span class="dial__price-value" id="priceValue">0</span>
+          <span class="dial__price-unit">USD / t CO<sub>2</sub>-eq</span>
+        </div>
+        <!-- Diet-mode toggle hidden until the flexible-diet sweep is available.
+             Restore this block (and add the flexible results to data.json) to
+             re-enable switching between fixed and flexible diets; app.js already
+             wires up #modeToggle when present.
+        <div class="toggle" id="modeToggle" role="group" aria-label="Diet mode">
+          <button data-mode="fixed" class="toggle__btn is-active">Fixed diet</button>
+          <button data-mode="flexible" class="toggle__btn"
+            title="Flexible-diet results coming soon">Flexible diet<span class="toggle__soon">soon</span></button>
+        </div>
+        -->
+        <span class="dial__mode-note">Fixed diet &middot; held at the 2020 baseline</span>
+      </div>
+      <input type="range" id="slider" min="0" max="1000" value="0" step="1" />
+      <div class="dial__ticks" id="ticks"></div>
+    </section>
+
+    <section class="dial__content">
+      <div class="dial__maps">
+        <div class="card card--map">
+          <div class="card__title">Cropland use
+            <span class="card__hint">colour = main crop group &middot; fade = cropland per land area</span>
+          </div>
+          <div class="map-wrap"><svg id="map"></svg></div>
+          <div class="legend" id="legend"></div>
+        </div>
+
+        <div class="card card--map">
+          <div class="card__title">Pasture &amp; grazing land
+            <span class="card__hint">shade = pasture per land area</span>
+          </div>
+          <div class="map-wrap"><svg id="mapPasture"></svg></div>
+          <div class="legend legend--gradient" id="legendPasture">
+            <span>less</span><span class="legend__bar" id="pastureBar"></span><span>more</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dial__pair">
+        <div class="card card--emissions">
+          <div class="card__title">Net food-system emissions</div>
+          <div class="bignum"><span id="netValue">0</span><small>Gt CO<sub>2</sub>-eq / yr</small></div>
+          <svg id="emiChart"></svg>
+        </div>
+
+        <div class="card card--curve">
+          <div class="card__title">System cost
+            <span class="card__hint">USD trillion / yr &middot; objective = the three components summed</span>
+          </div>
+          <svg id="curveChart"></svg>
+          <div class="strip-legend" id="costLegend"></div>
+        </div>
+      </div>
+
+      <div class="card card--diet">
+        <div class="card__title">Global diet
+          <span class="card__hint" id="dietHint">g / person / day &middot; plant-based &rarr; animal-based</span>
+        </div>
+        <svg id="dietChart"></svg>
+        <div class="strip-legend" id="dietLegend"></div>
+      </div>
+
+      <div class="card card--feed">
+        <div class="card__title">Animal feed
+          <span class="card__hint">Mt dry matter / yr &middot; by source</span>
+        </div>
+        <svg id="feedChart"></svg>
+        <div class="strip-legend" id="feedLegend"></div>
+      </div>
+    </section>
+
+    <footer class="dial__foot">
+      <div class="dial__defs">
+        <p><strong>Fixed diet.</strong> Consumption is pinned to the 2020
+          baseline; production, land use, animal feed and emissions still
+          re-optimise as the price rises. A flexible-diet mode, where the diet
+          also re-optimises, is coming soon.</p>
+        <p><strong>Net emissions.</strong> All greenhouse gases (CO<sub>2</sub>,
+          CH<sub>4</sub>, N<sub>2</sub>O) as CO<sub>2</sub>-equivalent, including
+          land-use change and sequestration credits from spared land.</p>
+        <p><strong>Diet &amp; feed.</strong> Diet is the global-average
+          per-capita intake (g/person/day); animal feed is total dry matter
+          (Mt/yr) by source.</p>
+        <p><strong>System cost.</strong> The model objective, split into three
+          terms that sum to it: <em>production cost</em> (growing, processing,
+          trade and supplying food); <em>resistance to change</em> (penalties
+          for deviating from observed production, plus any consumer-value loss);
+          and the <em>social cost of carbon</em> (the carbon price times net
+          emissions, which turns negative as the system reaches net-negative
+          emissions and earns sequestration credits).</p>
+        <p><strong>Maps.</strong> Cropland is coloured by its dominant crop
+          group and faded by cropland area per unit land; pasture is shaded by
+          grazing-land area per unit land.</p>
+        <p><strong>Data.</strong> The GLADE paper's published fixed-diet
+          carbon-price sweep
+          (<a href="https://doi.org/10.5281/zenodo.20617942" target="_blank"
+            rel="noopener">Zenodo 10.5281/zenodo.20617942</a>); the dial
+          interpolates between solved scenarios.</p>
+      </div>
+      <div class="dial__foot-meta">
+        <span>GLADE &middot; global food-system optimisation</span>
+        <span id="footNote"></span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="lib/d3.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

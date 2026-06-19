@@ -1,0 +1,237 @@
+/*
+SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+SPDX-License-Identifier: CC-BY-4.0
+*/
+
+:root {
+  --green: #3b745f;
+  --green-light: #5fa285;
+  --ink: #1f2a26;
+  --muted: #6b7a74;
+  --line: #e3e8e5;
+  --bg: #f7f9f8;
+  --card: #ffffff;
+  --shadow: 0 1px 3px rgba(31, 42, 38, 0.08), 0 6px 18px rgba(31, 42, 38, 0.06);
+  --radius: 14px;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+
+.dial {
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 22px 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dial__head h1 {
+  font-size: clamp(1.5rem, 3.2vw, 2.3rem);
+  line-height: 1.12;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+.dial__sub {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.dial__sub strong { color: var(--green); font-weight: 650; }
+.dial__synthetic {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fff3cd;
+  color: #8a6d00;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* --- carbon price control (pinned to the top while the dashboard scrolls) --- */
+.dial__control {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 26px 0 22px;
+  padding: 22px 26px 18px;
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
+  border-radius: var(--radius);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.dial__control-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.dial__price { display: flex; align-items: baseline; gap: 10px; }
+
+/* fixed/flexible diet toggle */
+.toggle {
+  display: inline-flex; background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px; padding: 3px;
+}
+.toggle__btn {
+  border: 0; background: transparent; color: #fff;
+  font: inherit; font-size: 0.85rem; font-weight: 600;
+  padding: 7px 16px; border-radius: 999px; cursor: pointer;
+  opacity: 0.82; transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.toggle__btn.is-active {
+  background: #fff; color: var(--green); opacity: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.toggle__btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.toggle__soon {
+  margin-left: 6px; font-size: 0.6rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  vertical-align: 1px; opacity: 0.85;
+}
+.dial__mode-note {
+  font-size: 0.85rem; font-weight: 600; opacity: 0.85;
+}
+.dial__price-value {
+  font-size: 3rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.dial__price-value::before { content: "$"; font-size: 1.6rem; opacity: 0.8; font-weight: 600; }
+.dial__price-unit { font-size: 0.95rem; opacity: 0.85; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 18px 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--green);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--green);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25); cursor: grab;
+}
+.dial__ticks {
+  position: relative; height: 1.1em; margin-top: 2px;
+  font-size: 0.72rem; opacity: 0.85; font-variant-numeric: tabular-nums;
+}
+.dial__ticks span {
+  position: absolute; transform: translateX(-50%); white-space: nowrap;
+}
+/* --- stacked layout: two maps, then chart pair, then diet & feed strips --- */
+.dial__content { display: flex; flex-direction: column; gap: 16px; }
+.dial__maps, .dial__pair { display: flex; gap: 16px; align-items: stretch; }
+.dial__maps > .card { flex: 1; min-width: 0; }
+.dial__pair > .card { flex: 1; min-width: 0; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  box-shadow: var(--shadow);
+}
+.card__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+}
+.card__hint {
+  text-transform: none; letter-spacing: 0; font-weight: 500;
+  font-size: 0.72rem; color: #9aa8a2;
+}
+
+.map-wrap { width: 100%; }
+#map { width: 100%; height: auto; display: block; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.legend__item { display: flex; align-items: center; gap: 5px; font-size: 0.74rem; color: var(--muted); }
+.legend__swatch { width: 11px; height: 11px; border-radius: 3px; }
+.legend--gradient { align-items: center; gap: 8px; font-size: 0.74rem; color: var(--muted); }
+.legend__bar {
+  flex: 0 0 120px; height: 11px; border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+.bignum {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 2.4rem; font-weight: 750; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; line-height: 1; margin-bottom: 6px;
+}
+.bignum small { font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+.bignum.is-negative { color: var(--green); }
+
+#emiChart, #curveChart, #dietChart { width: 100%; display: block; }
+
+/* Strip legends: annotate every food/feed group, including slivers too thin
+   to carry an in-bar label. Swatch + name + live value, wrapping as needed. */
+.strip-legend {
+  display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 10px;
+}
+.strip-legend__item {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.74rem; color: var(--muted);
+}
+.strip-legend__swatch {
+  width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto;
+}
+.strip-legend__val {
+  font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
+}
+.strip-legend__item.is-animal .strip-legend__label {
+  font-weight: 700; color: var(--ink);
+}
+
+.tick text { fill: var(--muted); font-size: 0.7rem; }
+.tick line { stroke: var(--line); }
+.axis path { stroke: var(--line); }
+
+.dial__foot {
+  margin-top: 22px; padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem; color: var(--muted);
+}
+/* Definitions for the curious reader: understated, same muted footer type. */
+.dial__defs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2px 26px;
+}
+.dial__defs p { margin: 4px 0; line-height: 1.5; max-width: 60ch; }
+.dial__defs strong { color: var(--ink); font-weight: 650; }
+.dial__defs a { color: var(--green); text-decoration: none; }
+.dial__defs a:hover { text-decoration: underline; }
+.dial__foot-meta {
+  display: flex; justify-content: space-between; gap: 12px;
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 760px) {
+  .dial__grid { flex-direction: column; }
+}

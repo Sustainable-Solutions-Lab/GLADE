@@ -23,6 +23,15 @@ programming** to find the combination of production, conversion, trade, and
 consumption choices that best achieves a specified objective while respecting
 physical constraints on land, water, yields, and nutritional adequacy.
 
+For a hands-on feel of what the model produces, try the
+:doc:`interactive Carbon Price Dial <carbon_price_dial>` -- drag a single
+slider and watch croplands, grazing land, diets, animal feed and emissions
+reorganise as a global carbon price rises.
+
+.. raw:: html
+
+   <a class="cd-launch" href="carbon_price_dial.html">&#9658;&nbsp; Open the Carbon Price Dial</a>
+
 Modeling approach
 -----------------
 

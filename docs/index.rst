@@ -13,6 +13,10 @@ GLADE (Global Land, Agriculture, Diet and Emissions) is a global food systems op
 
    Dominant crop group, land-use intensity, and livestock protein output under increasing carbon pricing. The animation sweeps from no carbon price ($0/tCO\ :sub:`2`-eq) through moderate ($50) and high ($200) to very high ($500). Circles show animal-product protein output per country (area proportional to Mt protein); colour indicates feed conversion ratio (green = efficient, red = inefficient). As carbon prices rise, cropland contracts and livestock production concentrates in more efficient systems.
 
+.. raw:: html
+
+   <a class="cd-launch" href="carbon_price_dial.html">&#9658;&nbsp; Try the interactive Carbon Price Dial</a>
+
 ----
 
 Global scope and spatial resolution
@@ -113,6 +117,7 @@ Dietary constraints ensure that each country's population meets nutritional requ
    :caption: Outputs & evaluation
    :maxdepth: 2
 
+   carbon_price_dial
    results
    analysis
    validation
