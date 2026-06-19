@@ -81,3 +81,38 @@ def test_mip_start_is_honoured() -> None:
     status, condition = m.solve(solver_name="highs")
     assert (status, condition) == ("ok", "optimal")
     assert float(m.objective.value) == pytest.approx(opt)
+
+
+def test_pypsa_create_model_freezes_and_solves() -> None:
+    """Guard the CSR-frozen-constraints path used in solve_model/core.py.
+
+    ``solve_model`` calls ``n.optimize.create_model(freeze_constraints=True)``;
+    this checks that PyPSA still forwards the kwarg to ``linopy.Model`` (so the
+    constraints are stored as ``CSRConstraint``) and that the frozen model
+    solves with identical results to an unfrozen one.
+    """
+    pypsa = pytest.importorskip("pypsa")
+    from linopy.constraints import CSRConstraint
+
+    def solve(freeze: bool) -> tuple[float, float, set[str]]:
+        n = pypsa.Network()
+        n.add("Bus", "b")
+        n.add("Generator", "cheap", bus="b", p_nom=50, marginal_cost=10)
+        n.add("Generator", "exp", bus="b", p_nom=100, marginal_cost=50)
+        n.add("Load", "l", bus="b", p_set=120)
+        n.optimize.create_model(
+            include_objective_constant=False, freeze_constraints=freeze
+        )
+        types = {type(c).__name__ for c in n.model.constraints.data.values()}
+        status, condition = n.model.solve(solver_name="highs", io_api="direct")
+        assert (status, condition) == ("ok", "optimal")
+        n.optimize.assign_solution()
+        n.optimize.assign_duals()
+        return float(n.model.objective.value), types
+
+    obj_unfrozen, types_unfrozen = solve(False)
+    obj_frozen, types_frozen = solve(True)
+
+    assert types_frozen == {CSRConstraint.__name__}
+    assert types_unfrozen == {"Constraint"}
+    assert obj_frozen == pytest.approx(obj_unfrozen)
