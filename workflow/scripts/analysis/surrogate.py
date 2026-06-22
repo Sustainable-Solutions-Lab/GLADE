@@ -4,8 +4,8 @@
 
 """Shared surrogate model module for sensitivity analysis.
 
-Fits one of several surrogate types (PCE, RF, MARS, XGBoost) to the
-scalar outputs of the GSA Sobol design and persists the result as a
+Fits one of several surrogate types (PCE, RF, MARS, XGBoost, ReLU MLP) to
+the scalar outputs of the GSA Sobol design and persists the result as a
 self-contained bundle that downstream rules (Sobol index computation,
 policy-sweep plots, notebooks) can load and re-use.
 
@@ -24,8 +24,12 @@ from typing import Any, Callable
 import chaospy as cp
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LarsCV
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 from workflow.scenario_generators import build_joint_distribution
@@ -34,11 +38,12 @@ from workflow.scripts.analysis.mars import Earth
 logger = logging.getLogger(__name__)
 
 
-SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "mars", "xgb")
+SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "mars", "xgb", "mlp")
 # Methods that natively accept a 2-D target and train all outputs with a
 # shared structure.  XGBoost uses ``multi_strategy='multi_output_tree'``;
-# sklearn's RandomForestRegressor accepts ``y`` of shape ``(n, n_out)``.
-_MULTI_OUTPUT_METHODS: tuple[str, ...] = ("xgb", "rf")
+# sklearn's RandomForestRegressor and MLPRegressor accept ``y`` of shape
+# ``(n, n_out)``.
+_MULTI_OUTPUT_METHODS: tuple[str, ...] = ("xgb", "rf", "mlp")
 
 
 @dataclass
@@ -48,7 +53,7 @@ class SurrogateBundle:
     Attributes
     ----------
     method
-        Surrogate type: one of ``pce``, ``rf``, ``mars``, ``xgb``.
+        Surrogate type: one of ``pce``, ``rf``, ``mars``, ``xgb``, ``mlp``.
     generator_spec
         Full generator spec the surrogate was trained against.  Carries
         parameter names, distribution specs, slice parameters, and
@@ -64,6 +69,8 @@ class SurrogateBundle:
         - ``pce``: ``{coefficients, multi_indices, max_degree, cross_truncation}``
         - ``rf``: fitted :class:`RandomForestRegressor`
         - ``xgb``: fitted :class:`XGBRegressor`
+        - ``mlp``: fitted :class:`~sklearn.pipeline.Pipeline`
+          (log + standardize + :class:`MLPRegressor`)
         - ``mars``: ``{earth: Earth, log_transform: bool}``
 
     validation
@@ -328,6 +335,91 @@ def fit_random_forest_multi(
     }
 
 
+class LogColumns(BaseEstimator, TransformerMixin):
+    """Natural-log transform a fixed subset of input columns.
+
+    First stage of the MLP input pipeline: log-uniform parameters (e.g.
+    ``value_per_yll``, ``ghg_price``) span several orders of magnitude, so
+    feeding them raw makes the post-standardization feature heavy-tailed
+    and the response strongly nonlinear in raw space.  Logging them first
+    turns a log-uniform marginal into a uniform one and the typically
+    log-linear response into a near-linear one.  Tree methods are invariant
+    to monotone rescalings so they skip this; the MLP is not.
+    """
+
+    def __init__(self, log_indices: tuple[int, ...] = ()):
+        self.log_indices = list(log_indices)
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, x):
+        x = np.asarray(x, dtype=float).copy()
+        for j in self.log_indices:
+            x[:, j] = np.log(x[:, j])
+        return x
+
+
+def fit_mlp_multi(
+    x_design: np.ndarray,
+    y_mat: np.ndarray,
+    log_indices: list[int],
+    hidden_layer_sizes: tuple[int, ...] = (256, 128, 64),
+    solver: str = "adam",
+    alpha: float = 1e-4,
+    max_iter: int = 3000,
+    learning_rate_init: float = 1e-3,
+    early_stopping: bool = True,
+    n_iter_no_change: int = 40,
+    random_state: int = 42,
+) -> dict:
+    """Fit a single multi-output ReLU MLP for all outputs jointly.
+
+    The estimator is a :class:`~sklearn.pipeline.Pipeline` that logs the
+    log-uniform input columns, standardizes all inputs, and regresses the
+    (caller-standardized) ``y_mat`` with a ReLU
+    :class:`~sklearn.neural_network.MLPRegressor`.  A ReLU MLP is a
+    continuous piecewise-linear map, so predictions have smooth, non-
+    staircased gradients (unlike the piecewise-constant tree surrogates).
+    ``predict`` returns a ``(n_samples, n_outputs)`` matrix in the
+    standardized target space, matching the other multi-output methods.
+
+    ``solver='adam'`` is the default: it scales to the full ~14k-sample
+    design and, with ``early_stopping`` on a held-out 10%, outperforms
+    full-batch lbfgs (which converges to poorer multi-output minima here).
+    ``early_stopping``/``n_iter_no_change`` apply only to the stochastic
+    solvers (ignored by lbfgs).
+    """
+    mlp_kwargs: dict[str, Any] = {
+        "hidden_layer_sizes": hidden_layer_sizes,
+        "activation": "relu",
+        "solver": solver,
+        "alpha": alpha,
+        "max_iter": max_iter,
+        "random_state": random_state,
+    }
+    if solver in ("adam", "sgd"):
+        mlp_kwargs.update(
+            learning_rate_init=learning_rate_init,
+            early_stopping=early_stopping,
+            n_iter_no_change=n_iter_no_change,
+            validation_fraction=0.1,
+        )
+    model = Pipeline(
+        [
+            ("log", LogColumns(tuple(log_indices))),
+            ("scaler", StandardScaler()),
+            ("mlp", MLPRegressor(**mlp_kwargs)),
+        ]
+    )
+    model.fit(x_design, y_mat)
+    return {
+        "model": model,
+        "n_iter": int(model.named_steps["mlp"].n_iter_),
+        "n_samples": len(y_mat),
+    }
+
+
 def fit_mars(
     x_design: np.ndarray,
     y: np.ndarray,
@@ -383,7 +475,7 @@ def fit_bundle(
     """
     if method not in SUPPORTED_METHODS:
         raise ValueError(
-            f"Unknown surrogate method '{method}'. " f"Supported: {SUPPORTED_METHODS}"
+            f"Unknown surrogate method '{method}'. Supported: {SUPPORTED_METHODS}"
         )
 
     vector_columns = vector_columns or set()
@@ -397,6 +489,14 @@ def fit_bundle(
 
     joint_dist, param_names = build_joint_distribution(generator_spec)
     method_options = dict(method_config.get("method_options", {}))
+
+    # Input columns the MLP should log-transform first (log-uniform params).
+    params_spec = generator_spec["parameters"]
+    log_indices = [
+        i
+        for i, name in enumerate(param_names)
+        if params_spec[name].get("distribution") == "log_uniform"
+    ]
 
     n_total = len(x_design)
     n_holdout = int(n_total * holdout_fraction)
@@ -427,6 +527,7 @@ def fit_bundle(
             available_columns,
             method_options,
             n_threads,
+            log_indices,
         )
     else:
         for col in available_columns:
@@ -539,6 +640,7 @@ def _fit_multi_output(
     available_columns: list[str],
     opts: dict,
     n_jobs: int,
+    log_indices: list[int],
 ) -> tuple[dict[str, Any], dict[str, dict]]:
     """Fit a single shared-structure estimator for all outputs.
 
@@ -588,6 +690,20 @@ def _fit_multi_output(
         )
         shared_model = fit_result["model"]
         extra_val = {"n_estimators": fit_result["n_estimators"]}
+    elif method == "mlp":
+        fit_result = fit_mlp_multi(
+            x_train,
+            y_train_std,
+            log_indices,
+            hidden_layer_sizes=tuple(opts.get("hidden_layer_sizes", (256, 128, 64))),
+            solver=opts.get("solver", "adam"),
+            alpha=opts.get("alpha", 1e-4),
+            max_iter=opts.get("max_iter", 3000),
+            learning_rate_init=opts.get("learning_rate_init", 1e-3),
+            n_iter_no_change=opts.get("n_iter_no_change", 40),
+        )
+        shared_model = fit_result["model"]
+        extra_val = {"n_iter": fit_result["n_iter"]}
     else:
         raise AssertionError(f"unsupported multi-output method {method!r}")
 
@@ -732,7 +848,7 @@ def predict(bundle: SurrogateBundle, output: str, x: np.ndarray) -> np.ndarray:
         )
         basis = np.array([poly(*x.T) for poly in expansion]).T
         return basis @ model["coefficients"]
-    elif method in ("rf", "xgb"):
+    elif method in ("rf", "xgb", "mlp"):
         return model.predict(x)
     elif method == "mars":
         raw = model["earth"].predict(x)
@@ -767,7 +883,7 @@ def predictor(
             return basis @ coefs
 
         return _predict
-    elif method in ("rf", "xgb"):
+    elif method in ("rf", "xgb", "mlp"):
         return model.predict
     elif method == "mars":
         earth = model["earth"]
