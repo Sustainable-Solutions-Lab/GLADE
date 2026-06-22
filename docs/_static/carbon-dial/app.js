@@ -26,11 +26,6 @@ function init(data, geo) {
   let mode = allModes[0];
   let price = 0;
 
-  if (meta.synthetic) {
-    document.getElementById("syntheticFlag").hidden = false;
-    document.getElementById("footNote").textContent = "placeholder data";
-  }
-
   const allScen = allModes.flatMap((m) => data.modes[m].scenarios);
 
   // ---- interpolation within a mode ----
@@ -56,6 +51,7 @@ function init(data, geo) {
       objective: lerp(a.objective, b.objective, t),
       costParts: dictLerp(a.costParts, b.costParts),
       diet: dictLerp(a.diet, b.diet),
+      dietKcal: dictLerp(a.dietKcal || {}, b.dietKcal || {}),
       feed: dictLerp(a.feed, b.feed),
       regionGroup: near.regionGroup,
       regionIntensity: a.regionIntensity.map((v, k) =>
@@ -204,13 +200,18 @@ function init(data, geo) {
   // value), so even slivers too thin to hold an in-bar label are still
   // identified. In-bar labels are kept for segments wide enough to fit them, as
   // a quick at-a-glance read of the dominant groups.
-  function makeStrip(svgId, legendId, items, valueKey) {
-    // items: [{key,label?,color,animal}]; valueKey: scenario field ("diet"/"feed")
+  function makeStrip(svgId, legendId, items, valueKeys) {
+    // items: [{key,label?,color,animal}]; valueKeys: the scenario fields this
+    // strip can display ("diet"/"dietKcal"/"feed"). The active key is passed to
+    // the returned updater so the strip can switch units (each key keeps its
+    // own full-width scale, from the max total across all scenarios).
     const DW = 1100, DH = 74, dm = { t: 6, r: 10, b: 24, l: 10 };
     const svg = d3.select(svgId).attr("viewBox", `0 0 ${DW} ${DH}`);
-    const totalMax = d3.max(allScen, (s) =>
-      d3.sum(items, (it) => s[valueKey][it.key] || 0));
-    const x = d3.scaleLinear().domain([0, totalMax]).range([dm.l, DW - dm.r]);
+    const xByKey = {};
+    valueKeys.forEach((vk) => {
+      const totalMax = d3.max(allScen, (s) => d3.sum(items, (it) => s[vk][it.key] || 0));
+      xByKey[vk] = d3.scaleLinear().domain([0, totalMax || 1]).range([dm.l, DW - dm.r]);
+    });
     const gBars = svg.append("g"), gLab = svg.append("g");
 
     // Static legend (built once); only the value text changes on each render.
@@ -223,7 +224,8 @@ function init(data, geo) {
     const legVals = legItems.append("span").attr("class", "strip-legend__val");
     const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
 
-    return (s) => {
+    return (s, valueKey) => {
+      const x = xByKey[valueKey];
       let acc = 0;
       const segs = items.map((it) => {
         const v = s[valueKey][it.key] || 0;
@@ -246,8 +248,13 @@ function init(data, geo) {
   }
   const dietItems = foodGroups.map((g) => ({ key: g.key, label: g.label, color: g.color, animal: g.animal }));
   const feedItems = feedCats.map((f) => ({ key: f.key, label: f.key, color: f.color, animal: false }));
-  const updateDiet = makeStrip("#dietChart", "#dietLegend", dietItems, "diet");
-  const updateFeed = makeStrip("#feedChart", "#feedLegend", feedItems, "feed");
+  // The diet strip can display mass (g) or energy (kcal); the feed strip is mass only.
+  const hasKcal = allScen.every((s) => s.dietKcal);
+  const dietKeys = hasKcal ? ["diet", "dietKcal"] : ["diet"];
+  let dietUnit = "g";  // "g" -> diet, "kcal" -> dietKcal
+  const dietKey = () => (dietUnit === "kcal" ? "dietKcal" : "diet");
+  const updateDiet = makeStrip("#dietChart", "#dietLegend", dietItems, dietKeys);
+  const updateFeed = makeStrip("#feedChart", "#feedLegend", feedItems, ["feed"]);
 
   // ---- logarithmic carbon-price scale ----
   // The slider position p in [0,1] maps to price geometrically (constant ratio
@@ -276,38 +283,58 @@ function init(data, geo) {
   function render() {
     const s = interp(mode, price);
     priceValue.textContent = Math.round(price);
-    dietHint.textContent = mode === "fixed"
-      ? "g / person / day - held at the 2020 baseline in this mode"
-      : "g / person / day - plant-based to animal-based";
+    const unitLabel = dietUnit === "kcal" ? "kcal / person / day" : "g / person / day";
+    dietHint.textContent = unitLabel + (mode === "fixed"
+      ? " - held at the 2020 baseline in this mode"
+      : " - plant-based to animal-based");
     updateMap(s); updatePasture(s); updateEmissions(s); updateCost(s);
-    updateDiet(s); updateFeed(s);
+    updateDiet(s, dietKey()); updateFeed(s, "feed");
   }
   slider.addEventListener("input", (e) => {
     price = posToPrice(+e.target.value / SLIDER_RES); render();
   });
 
-  // mode toggle (disable buttons whose mode is absent from the data)
-  d3.selectAll("#modeToggle .toggle__btn").each(function () {
-    const m = this.dataset.mode;
-    if (!allModes.includes(m)) { this.disabled = true; this.style.opacity = 0.4; }
-    this.classList.toggle("is-active", m === mode);
-    this.addEventListener("click", () => {
-      if (!allModes.includes(m) || m === mode) return;
-      mode = m;
-      d3.selectAll("#modeToggle .toggle__btn")
-        .classed("is-active", function () { return this.dataset.mode === mode; });
-      drawCostLines(); render();
-    });
-  });
+  // Two-state toggles: a click anywhere in the control flips to the other
+  // option (so the same spot can be clicked repeatedly to switch back and
+  // forth), not only when the inactive button is hit.
 
-  // optional deep-link: ?price=200&mode=flexible
-  const q = new URLSearchParams(location.search);
-  price = Math.max(PMIN, Math.min(PMAX, +q.get("price") || PMIN));
-  if (allModes.includes(q.get("mode"))) {
-    mode = q.get("mode");
+  // mode toggle (fixed / flexible); buttons whose mode is absent are disabled
+  const syncModeButtons = () =>
     d3.selectAll("#modeToggle .toggle__btn")
       .classed("is-active", function () { return this.dataset.mode === mode; });
+  d3.selectAll("#modeToggle .toggle__btn").each(function () {
+    if (!allModes.includes(this.dataset.mode)) { this.disabled = true; this.style.opacity = 0.4; }
+  });
+  syncModeButtons();
+  if (allModes.length > 1) {
+    document.getElementById("modeToggle").addEventListener("click", () => {
+      mode = allModes.find((m) => m !== mode) || mode;
+      syncModeButtons();
+      drawCostLines(); render();
+    });
   }
+
+  // diet unit toggle (g / kcal); disabled if the data lacks calorie figures
+  const syncUnitButtons = () =>
+    d3.selectAll("#dietUnitToggle .unit-toggle__btn")
+      .classed("is-active", function () { return this.dataset.unit === dietUnit; });
+  d3.selectAll("#dietUnitToggle .unit-toggle__btn").each(function () {
+    if (this.dataset.unit === "kcal" && !hasKcal) { this.disabled = true; this.style.opacity = 0.4; }
+  });
+  syncUnitButtons();
+  if (hasKcal) {
+    document.getElementById("dietUnitToggle").addEventListener("click", () => {
+      dietUnit = dietUnit === "kcal" ? "g" : "kcal";
+      syncUnitButtons();
+      render();
+    });
+  }
+
+  // optional deep-link: ?price=200&mode=flexible&unit=kcal
+  const q = new URLSearchParams(location.search);
+  price = Math.max(PMIN, Math.min(PMAX, +q.get("price") || PMIN));
+  if (allModes.includes(q.get("mode"))) { mode = q.get("mode"); syncModeButtons(); }
+  if (q.get("unit") === "kcal" && hasKcal) { dietUnit = "kcal"; syncUnitButtons(); }
   slider.value = Math.round(priceToPos(price) * SLIDER_RES);
   drawCostLines();
   render();

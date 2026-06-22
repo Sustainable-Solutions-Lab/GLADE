@@ -51,8 +51,10 @@ exclude_patterns = [
     ".DS_Store",
     ".uv-cache",
     "*/.uv-cache/*",
-    # Developer README for the docs directory; not part of the rendered site.
+    # Developer READMEs (docs root and asset subdirs, e.g. _static/carbon-dial);
+    # not part of the rendered site.
     "README.md",
+    "**/README.md",
 ]
 
 # HTML output options

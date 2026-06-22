@@ -5,11 +5,17 @@
 
 """Export compact JSON for the interactive "Carbon Price Dial" web widget.
 
-Reads the paper's published GHG carbon-price sweep directly from the solved
-networks of the data reproduction package (Zenodo DOI 10.5281/zenodo.20617942),
-extracted under ``ARCHIVE_ROOT`` below, and computes every quantity with the
-current GLADE ``extract_*`` analysis functions so the widget matches the paper
-figures exactly.
+Reads the GHG carbon-price sweeps (a fixed-diet and a flexible-diet tree)
+directly from the solved networks and computes every quantity with the current
+GLADE ``extract_*`` analysis functions so the widget matches the paper figures
+exactly.
+
+The data are taken from the paper's published reproduction package (Zenodo DOI
+10.5281/zenodo.20617942) when it is extracted under ``ARCHIVE_ROOT`` below.
+Otherwise the script falls back to the local ``results/`` tree -- useful for the
+flexible-diet sweep, whose heavy solved networks are not shipped in the Zenodo
+deposition (only its ``net_emissions`` parquets are) but which are reproduced
+locally by solving ``config/ghg_sensitivity_flexible_diet.yaml``.
 
 Per carbon-price scenario the output carries: net emissions by category,
 food-system cost, diet by food group (g/person/day), animal feed by the paper's
@@ -43,6 +49,10 @@ MAX_PARALLEL = 4
 REPO = Path(__file__).resolve().parents[3]
 ARCHIVE_ROOT = REPO / ".cache" / "zenodo" / "extract" / "GLADE-paper-data"
 DEFAULT_CONFIG = REPO / "config" / "default.yaml"
+# Prefer the extracted Zenodo deposition; fall back to the local repo (the
+# flexible-diet solved networks live only there). Both layouts expose
+# ``results/`` and ``processing/`` at their root.
+DATA_ROOT = ARCHIVE_ROOT if ARCHIVE_ROOT.is_dir() else REPO
 # This script sits next to the published widget assets; write the data the
 # front end fetches into the sibling data/ directory.
 OUT_DIR = Path(__file__).resolve().parent / "data"
@@ -52,7 +62,7 @@ MODE_TREES = {
     "flexible": "ghg_sensitivity_flexible_diet",
 }
 MODE_LABELS = {"fixed": "Fixed diet", "flexible": "Flexible diet"}
-REGIONS_GEOJSON = ARCHIVE_ROOT / "processing" / "central" / "regions.geojson"
+REGIONS_GEOJSON = DATA_ROOT / "processing" / "central" / "regions.geojson"
 
 EXCLUDED_MAP_GROUPS = {"Feed crops"}
 
@@ -105,15 +115,24 @@ EMISSION_CATEGORIES = [
     "Fertilizer & residues (N2O)",
     "Sequestration",
 ]
-# The model objective is split into three lines that sum exactly to it:
+# The displayed "system cost" is split into three lines that sum to it:
 #   - Social cost of carbon: the GHG store term (carbon price * net emissions);
 #     goes strongly negative at high prices as net emissions turn negative.
-#   - Resistance to change: the soft anchor/preference penalties (production
-#     stability deviation penalty + any consumer-value / diet-stability loss).
-#   - Production cost: everything else (all real production / trade / processing
-#     / resource / slack costs), recovered as objective - scc - resistance.
+#   - Resistance to change: the soft anchor/preference deviation penalties --
+#     the production- and diet-stability L1 terms, plus the *change* in consumer
+#     value relative to the reference (lowest-price) diet. The piecewise
+#     food-utility term is a large negative absolute utility, so only its
+#     deviation (cv - cv_ref) is a meaningful cost; the near-constant absolute
+#     level is dropped. Mirrors the paper's deviation-penalty surface
+#     (paper/scripts/ed_cost_surfaces_data.py).
+#   - Production cost: all remaining real costs (production / trade / processing
+#     / resource / slack), the residual objective - scc - stability - cv.
+# The displayed total is production + resistance + scc, equal to the model
+# objective minus the constant reference consumer value (cv_ref). For the
+# fixed-diet sweep cv is zero throughout, so it is exactly the objective.
 SCC_KEY = "ghg_cost"
-RESISTANCE_KEYS = ["production_stability", "consumer_values", "diet_stability"]
+STABILITY_KEYS = ["production_stability", "diet_stability"]
+CV_KEY = "consumer_values"
 COST_PARTS = [
     ("production", "Production cost", "#3b745f"),
     ("resistance", "Resistance to change", "#d08b3f"),
@@ -151,7 +170,11 @@ def run_worker(nc_path, analysis_dir, out_path):
         extract_feed_by_source,
         extract_land_use,
     )
-    from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE
+    from workflow.scripts.constants import (
+        DAYS_PER_YEAR,
+        GRAMS_PER_MEGATONNE,
+        PJ_TO_KCAL,
+    )
     from workflow.scripts.population import get_total_population
 
     crop_to_group, _ = crop_group_mapping()
@@ -170,31 +193,47 @@ def run_worker(nc_path, analysis_dir, out_path):
         elif gas == "n2o":
             emis["Fertilizer & residues (N2O)"] += val
 
-    # Objective decomposition (bn USD): three parts that sum to n.objective.
+    # Objective components (bn USD). The widget regroups these into production /
+    # resistance / scc in the orchestrator, where the per-mode reference diet
+    # (cv_ref) is known; see the COST_PARTS comment above.
     ob = extract_objective_breakdown(n).iloc[0]
     objective = float(n.objective)
     scc = float(ob.get(SCC_KEY, 0.0))
-    resistance = float(sum(float(ob.get(k, 0.0)) for k in RESISTANCE_KEYS))
-    cost_parts = {
-        "production": objective - scc - resistance,
-        "resistance": resistance,
-        "scc": scc,
-    }
+    stability = float(sum(float(ob.get(k, 0.0)) for k in STABILITY_KEYS))
+    consumer_value = float(ob.get(CV_KEY, 0.0))
 
     # Diet by food group: the consume-link p0 (food withdrawn), grouped by the
     # food_group column. Equivalent to extract_food_group_consumption's
     # consumption_mt but ~400x faster, since it skips the heavy n.statistics
     # call and the per-capita / nutrient flows. Reported as global-average
-    # per-capita daily intake (g/person/day) -- the same convention as
-    # extract_health_impacts -- rather than Mt/yr.
+    # per-capita daily intake -- the same convention as extract_health_impacts
+    # -- both by mass (g/person/day) and by energy (kcal/person/day).
     links = n.links.static
     consume = links[links["carrier"] == "food_consumption"]
     snapshot = n.snapshots[-1]
     flow = n.links.dynamic.p0.loc[snapshot].reindex(consume.index).abs()
     pop = get_total_population(n)
+    groups = consume["food_group"].values
     diet = {
         k: float(v) * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * pop)
-        for k, v in flow.groupby(consume["food_group"].values).sum().items()
+        for k, v in flow.groupby(groups).sum().items()
+    }
+
+    # Calorie intake: each food_consumption link outputs energy (PJ/yr) onto its
+    # nutrient:cal bus; locate that bus by name rather than position and use its
+    # efficiency. PJ -> kcal, then per-capita daily.
+    bus_cols = [c for c in consume.columns if c.startswith("bus")]
+    cal_eff = None
+    for bcol in bus_cols:
+        if consume[bcol].astype(str).str.startswith("nutrient:cal:").all():
+            i = bcol[len("bus") :]
+            cal_eff = consume["efficiency" if i == "1" else f"efficiency{i}"]
+            break
+    if cal_eff is None:
+        raise ValueError("No nutrient:cal bus on food_consumption links.")
+    cal_pj = (flow * cal_eff.astype(float)).groupby(groups).sum()
+    diet_kcal = {
+        k: float(v) * PJ_TO_KCAL / (DAYS_PER_YEAR * pop) for k, v in cal_pj.items()
     }
 
     fbs = extract_feed_by_source(n)
@@ -222,8 +261,11 @@ def run_worker(nc_path, analysis_dir, out_path):
             {
                 "emissions": emis,
                 "objective": objective,
-                "costParts": cost_parts,
+                "scc": scc,
+                "stability": stability,
+                "consumerValue": consumer_value,
                 "diet": diet,
+                "dietKcal": diet_kcal,
                 "feed": feed,
                 "areaByRegion": area_by_region,
                 "domByRegion": dom_by_region,
@@ -301,7 +343,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         jobs = []  # (mode, price, nc, adir, out_path)
         for mode, tname in MODE_TREES.items():
-            scens = discover_scenarios(ARCHIVE_ROOT / "results" / tname)
+            scens = discover_scenarios(DATA_ROOT / "results" / tname)
             if not scens:
                 logger.warning(
                     "mode %s: no solved networks under results/%s", mode, tname
@@ -311,7 +353,10 @@ def main():
                 jobs.append((mode, price, nc, adir, Path(tmp) / f"{mode}_{price}.json"))
 
         if not jobs:
-            raise SystemExit("No solved networks found; extract the archive first.")
+            raise SystemExit(
+                f"No solved networks found under {DATA_ROOT}/results; extract the "
+                "Zenodo archive or solve the sweeps locally first."
+            )
 
         def _run(job):
             mode, price, nc, adir, out = job
@@ -339,14 +384,15 @@ def main():
                         k: round(v / 1000.0, 4) for k, v in w["emissions"].items()
                     },
                     "netEmissions": round(sum(w["emissions"].values()) / 1000.0, 4),
-                    "objective": round(w["objective"], 1),
-                    "costParts": {
-                        k: round(float(w["costParts"][k]), 1) for k, _, _ in COST_PARTS
-                    },
                     "diet": {k: round(v, 2) for k, v in w["diet"].items()},
+                    "dietKcal": {k: round(v, 1) for k, v in w["dietKcal"].items()},
                     "feed": {
                         k: round(float(w["feed"].get(k, 0.0)), 2) for k in feed_keys
                     },
+                    "_obj": float(w["objective"]),
+                    "_scc": float(w["scc"]),
+                    "_stab": float(w["stability"]),
+                    "_cv": float(w["consumerValue"]),
                     "_area": area,
                     "_grp": grp,
                     "_pasture": pasture,
@@ -359,18 +405,30 @@ def main():
     denom_p = (max_frac_p * land_area_mha) if max_frac_p > 0 else land_area_mha
     modes = {}
     for mode, recs in raw.items():
+        # Reference diet for the consumer-value deviation: the lowest-price
+        # (closest to no-policy) scenario in this sweep. Fixed diet has cv == 0
+        # throughout, so cv_ref is 0 and the displayed total is the objective.
+        cv_ref = min(recs, key=lambda r: r["price"])["_cv"]
         scenarios = []
         for r in recs:
             inten = np.clip(r["_area"] / denom, 0.0, 1.0)
             inten_p = np.clip(r["_pasture"] / denom_p, 0.0, 1.0)
+            scc = r["_scc"]
+            resistance = r["_stab"] + (r["_cv"] - cv_ref)
+            production = r["_obj"] - r["_scc"] - r["_stab"] - r["_cv"]
             scenarios.append(
                 {
                     "price": r["price"],
                     "emissions": r["emissions"],
                     "netEmissions": r["netEmissions"],
-                    "objective": r["objective"],
-                    "costParts": r["costParts"],
+                    "objective": round(production + resistance + scc, 1),
+                    "costParts": {
+                        "production": round(production, 1),
+                        "resistance": round(resistance, 1),
+                        "scc": round(scc, 1),
+                    },
                     "diet": r["diet"],
+                    "dietKcal": r["dietKcal"],
                     "feed": r["feed"],
                     "regionGroup": r["_grp"].tolist(),
                     "regionIntensity": [round(float(x), 2) for x in inten],
