@@ -89,14 +89,6 @@ body { margin: 0; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 .toggle__btn:disabled { cursor: not-allowed; opacity: 0.55; }
-.toggle__soon {
-  margin-left: 6px; font-size: 0.6rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
-  vertical-align: 1px; opacity: 0.85;
-}
-.dial__mode-note {
-  font-size: 0.85rem; font-weight: 600; opacity: 0.85;
-}
 .dial__price-value {
   font-size: 3rem;
   font-weight: 750;

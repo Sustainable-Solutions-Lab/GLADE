@@ -14,8 +14,9 @@ carbon-price scenarios.
 
 It is a **static** front end (HTML + CSS + D3, no backend): GLADE is solved
 offline for a sweep of carbon prices and the results are exported to a small
-JSON the page interpolates over. A fixed-diet / flexible-diet toggle is built
-in; only the fixed-diet sweep is wired up so far (flexible to come).
+JSON the page interpolates over. A fixed-diet / flexible-diet toggle switches
+between two such sweeps -- one with consumption pinned to the 2020 baseline, one
+where the diet re-optimises with the carbon price.
 
 ## Layout
 
@@ -35,12 +36,17 @@ dashboard gets the full width).
 
 ## Data source
 
-The real data are the paper's published **fixed-diet** carbon-price sweep from
-the model-output deposition on Zenodo (DOI `10.5281/zenodo.20617942`).
-`export_data.py` reads the solved networks extracted under
-`.cache/zenodo/extract/GLADE-paper-data/` and computes net emissions, cost,
-diet, feed (the paper's six source categories), and per-region cropland /
-pasture intensities with the current `extract_*` analysis functions.
+The data are the paper's **fixed-diet** and **flexible-diet** carbon-price
+sweeps. `export_data.py` reads each tree's solved networks and computes net
+emissions, cost, diet, feed (the paper's six source categories), and per-region
+cropland / pasture intensities with the current `extract_*` analysis functions.
+
+It reads from the model-output deposition on Zenodo (DOI
+`10.5281/zenodo.20617942`) when it is extracted under
+`.cache/zenodo/extract/GLADE-paper-data/`, and otherwise falls back to the local
+`results/` tree. The flexible-diet sweep's solved networks are *not* shipped in
+the Zenodo deposition (only its `net_emissions` parquets are), so its widget
+data comes from solving `config/ghg_sensitivity_flexible_diet.yaml` locally.
 
 ## Run locally
 
@@ -53,19 +59,25 @@ python -m http.server 8123
 ## Regenerate data
 
 ```bash
-# 1. Download + extract the Zenodo deposition (once):
+# Fixed-diet sweep: download + extract the Zenodo deposition (once), OR solve
+# config/ghg_sensitivity_fixed_diet.yaml locally:
 #    curl -L -o GLADE-paper-data.tar.gz \
 #      https://zenodo.org/api/records/20617942/files/GLADE-paper-data.tar.gz/content
 #    tar xzf GLADE-paper-data.tar.gz -C .cache/zenodo/extract \
 #      GLADE-paper-data/results/ghg_sensitivity_fixed_diet/{solved,analysis} \
 #      GLADE-paper-data/processing/central/regions.geojson
-# 2. Export (writes the sibling data/ directory):
+#
+# Flexible-diet sweep: not in the deposition, solve it locally:
+#    tools/smk -e gurobi -j4 --configfile config/ghg_sensitivity_flexible_diet.yaml \
+#      -- solve_all_scenarios analyze_all_scenarios
+#
+# Export (prefers the extracted archive, else the local results/ tree; writes
+# the sibling data/ directory):
 pixi run python docs/_static/carbon-dial/export_data.py
 
 # Synthetic data for UI work instead:
 pixi run python docs/_static/carbon-dial/make_synthetic.py
 ```
 
-When the flexible-diet sweep is solved, add its tree under
-`results/ghg_sensitivity_flexible_diet` (or the archive equivalent) and re-run
-the export; the front end's "Flexible diet" toggle activates automatically.
+The front end's diet-mode toggle activates each mode present in `data.json`; a
+mode whose tree is missing at export time is disabled automatically.

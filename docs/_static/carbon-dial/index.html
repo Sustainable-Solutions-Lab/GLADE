@@ -28,17 +28,15 @@ SPDX-License-Identifier: CC-BY-4.0
           <span class="dial__price-value" id="priceValue">0</span>
           <span class="dial__price-unit">USD / t CO<sub>2</sub>-eq</span>
         </div>
-        <!-- Diet-mode toggle hidden until the flexible-diet sweep is available.
-             Restore this block (and add the flexible results to data.json) to
-             re-enable switching between fixed and flexible diets; app.js already
-             wires up #modeToggle when present.
+        <!-- app.js wires up #modeToggle: it disables any mode missing from
+             data.json and switches the dashboard between the fixed- and
+             flexible-diet sweeps. -->
         <div class="toggle" id="modeToggle" role="group" aria-label="Diet mode">
-          <button data-mode="fixed" class="toggle__btn is-active">Fixed diet</button>
+          <button data-mode="fixed" class="toggle__btn is-active"
+            title="Consumption pinned to the 2020 baseline">Fixed diet</button>
           <button data-mode="flexible" class="toggle__btn"
-            title="Flexible-diet results coming soon">Flexible diet<span class="toggle__soon">soon</span></button>
+            title="Diet re-optimises with the carbon price">Flexible diet</button>
         </div>
-        -->
-        <span class="dial__mode-note">Fixed diet &middot; held at the 2020 baseline</span>
       </div>
       <input type="range" id="slider" min="0" max="1000" value="0" step="1" />
       <div class="dial__ticks" id="ticks"></div>
@@ -74,7 +72,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
         <div class="card card--curve">
           <div class="card__title">System cost
-            <span class="card__hint">USD trillion / yr &middot; objective = the three components summed</span>
+            <span class="card__hint">USD trillion / yr &middot; the three components summed</span>
           </div>
           <svg id="curveChart"></svg>
           <div class="strip-legend" id="costLegend"></div>
@@ -100,10 +98,11 @@ SPDX-License-Identifier: CC-BY-4.0
 
     <footer class="dial__foot">
       <div class="dial__defs">
-        <p><strong>Fixed diet.</strong> Consumption is pinned to the 2020
-          baseline; production, land use, animal feed and emissions still
-          re-optimise as the price rises. A flexible-diet mode, where the diet
-          also re-optimises, is coming soon.</p>
+        <p><strong>Fixed vs flexible diet.</strong> Under <em>fixed diet</em>,
+          consumption is pinned to the 2020 baseline; production, land use,
+          animal feed and emissions still re-optimise as the price rises. Under
+          <em>flexible diet</em>, the diet also re-optimises, shifting in
+          response to the carbon price alone (health is left unvalued).</p>
         <p><strong>Net emissions.</strong> All greenhouse gases (CO<sub>2</sub>,
           CH<sub>4</sub>, N<sub>2</sub>O) as CO<sub>2</sub>-equivalent, including
           land-use change and sequestration credits from spared land.</p>
@@ -113,10 +112,11 @@ SPDX-License-Identifier: CC-BY-4.0
         <p><strong>System cost.</strong> The model objective, split into three
           terms that sum to it: <em>production cost</em> (growing, processing,
           trade and supplying food); <em>resistance to change</em> (penalties
-          for deviating from observed production, plus any consumer-value loss);
-          and the <em>social cost of carbon</em> (the carbon price times net
-          emissions, which turns negative as the system reaches net-negative
-          emissions and earns sequestration credits).</p>
+          for deviating from observed production, plus -- under flexible diet --
+          the loss of consumer value relative to the starting diet); and the
+          <em>social cost of carbon</em> (the carbon price times net emissions,
+          which turns negative as the system reaches net-negative emissions and
+          earns sequestration credits).</p>
         <p><strong>Maps.</strong> Cropland is coloured by its dominant crop
           group and faded by cropland area per unit land; pasture is shaded by
           grazing-land area per unit land.</p>
