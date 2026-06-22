@@ -26,11 +26,6 @@ function init(data, geo) {
   let mode = allModes[0];
   let price = 0;
 
-  if (meta.synthetic) {
-    document.getElementById("syntheticFlag").hidden = false;
-    document.getElementById("footNote").textContent = "placeholder data";
-  }
-
   const allScen = allModes.flatMap((m) => data.modes[m].scenarios);
 
   // ---- interpolation within a mode ----

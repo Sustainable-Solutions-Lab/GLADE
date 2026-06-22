@@ -44,16 +44,6 @@ body { margin: 0; }
   line-height: 1.55;
 }
 .dial__sub strong { color: var(--green); font-weight: 650; }
-.dial__synthetic {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: #fff3cd;
-  color: #8a6d00;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
 
 /* --- carbon price control (pinned to the top while the dashboard scrolls) --- */
 .dial__control {

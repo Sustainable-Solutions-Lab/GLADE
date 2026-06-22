@@ -28,7 +28,6 @@ Everything lives in this one directory, `docs/_static/carbon-dial/`:
 | `lib/d3.min.js` | Bundled D3 v7 (no CDN dependency). |
 | `data/{data.json,regions.geojson}` | Generated data the page fetches. |
 | `export_data.py` | Build `data/` from the paper's solved networks (one subprocess per network; writes into the sibling `data/`). |
-| `make_synthetic.py` | Generate synthetic `data/` for UI development. |
 
 It is embedded in the docs at `docs/carbon_price_dial.rst` (an `<iframe>` into
 `_static/carbon-dial/index.html`, with the page's right-hand TOC hidden so the
@@ -74,9 +73,6 @@ python -m http.server 8123
 # Export (prefers the extracted archive, else the local results/ tree; writes
 # the sibling data/ directory):
 pixi run python docs/_static/carbon-dial/export_data.py
-
-# Synthetic data for UI work instead:
-pixi run python docs/_static/carbon-dial/make_synthetic.py
 ```
 
 The front end's diet-mode toggle activates each mode present in `data.json`; a
