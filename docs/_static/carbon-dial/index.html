@@ -82,6 +82,10 @@ SPDX-License-Identifier: CC-BY-4.0
       <div class="card card--diet">
         <div class="card__title">Global diet
           <span class="card__hint" id="dietHint">g / person / day &middot; plant-based &rarr; animal-based</span>
+          <span class="unit-toggle" id="dietUnitToggle" role="group" aria-label="Diet unit">
+            <button data-unit="g" class="unit-toggle__btn is-active">g</button>
+            <button data-unit="kcal" class="unit-toggle__btn">kcal</button>
+          </span>
         </div>
         <svg id="dietChart"></svg>
         <div class="strip-legend" id="dietLegend"></div>
@@ -107,7 +111,8 @@ SPDX-License-Identifier: CC-BY-4.0
           CH<sub>4</sub>, N<sub>2</sub>O) as CO<sub>2</sub>-equivalent, including
           land-use change and sequestration credits from spared land.</p>
         <p><strong>Diet &amp; feed.</strong> Diet is the global-average
-          per-capita intake (g/person/day); animal feed is total dry matter
+          per-capita intake, shown by mass (g/person/day) or food energy
+          (kcal/person/day) via the toggle; animal feed is total dry matter
           (Mt/yr) by source.</p>
         <p><strong>System cost.</strong> The model objective, split into three
           terms that sum to it: <em>production cost</em> (growing, processing,

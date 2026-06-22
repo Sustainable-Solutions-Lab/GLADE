@@ -170,7 +170,11 @@ def run_worker(nc_path, analysis_dir, out_path):
         extract_feed_by_source,
         extract_land_use,
     )
-    from workflow.scripts.constants import DAYS_PER_YEAR, GRAMS_PER_MEGATONNE
+    from workflow.scripts.constants import (
+        DAYS_PER_YEAR,
+        GRAMS_PER_MEGATONNE,
+        PJ_TO_KCAL,
+    )
     from workflow.scripts.population import get_total_population
 
     crop_to_group, _ = crop_group_mapping()
@@ -202,16 +206,34 @@ def run_worker(nc_path, analysis_dir, out_path):
     # food_group column. Equivalent to extract_food_group_consumption's
     # consumption_mt but ~400x faster, since it skips the heavy n.statistics
     # call and the per-capita / nutrient flows. Reported as global-average
-    # per-capita daily intake (g/person/day) -- the same convention as
-    # extract_health_impacts -- rather than Mt/yr.
+    # per-capita daily intake -- the same convention as extract_health_impacts
+    # -- both by mass (g/person/day) and by energy (kcal/person/day).
     links = n.links.static
     consume = links[links["carrier"] == "food_consumption"]
     snapshot = n.snapshots[-1]
     flow = n.links.dynamic.p0.loc[snapshot].reindex(consume.index).abs()
     pop = get_total_population(n)
+    groups = consume["food_group"].values
     diet = {
         k: float(v) * GRAMS_PER_MEGATONNE / (DAYS_PER_YEAR * pop)
-        for k, v in flow.groupby(consume["food_group"].values).sum().items()
+        for k, v in flow.groupby(groups).sum().items()
+    }
+
+    # Calorie intake: each food_consumption link outputs energy (PJ/yr) onto its
+    # nutrient:cal bus; locate that bus by name rather than position and use its
+    # efficiency. PJ -> kcal, then per-capita daily.
+    bus_cols = [c for c in consume.columns if c.startswith("bus")]
+    cal_eff = None
+    for bcol in bus_cols:
+        if consume[bcol].astype(str).str.startswith("nutrient:cal:").all():
+            i = bcol[len("bus") :]
+            cal_eff = consume["efficiency" if i == "1" else f"efficiency{i}"]
+            break
+    if cal_eff is None:
+        raise ValueError("No nutrient:cal bus on food_consumption links.")
+    cal_pj = (flow * cal_eff.astype(float)).groupby(groups).sum()
+    diet_kcal = {
+        k: float(v) * PJ_TO_KCAL / (DAYS_PER_YEAR * pop) for k, v in cal_pj.items()
     }
 
     fbs = extract_feed_by_source(n)
@@ -243,6 +265,7 @@ def run_worker(nc_path, analysis_dir, out_path):
                 "stability": stability,
                 "consumerValue": consumer_value,
                 "diet": diet,
+                "dietKcal": diet_kcal,
                 "feed": feed,
                 "areaByRegion": area_by_region,
                 "domByRegion": dom_by_region,
@@ -362,6 +385,7 @@ def main():
                     },
                     "netEmissions": round(sum(w["emissions"].values()) / 1000.0, 4),
                     "diet": {k: round(v, 2) for k, v in w["diet"].items()},
+                    "dietKcal": {k: round(v, 1) for k, v in w["dietKcal"].items()},
                     "feed": {
                         k: round(float(w["feed"].get(k, 0.0)), 2) for k in feed_keys
                     },
@@ -404,6 +428,7 @@ def main():
                         "scc": round(scc, 1),
                     },
                     "diet": r["diet"],
+                    "dietKcal": r["dietKcal"],
                     "feed": r["feed"],
                     "regionGroup": r["_grp"].tolist(),
                     "regionIntensity": [round(float(x), 2) for x in inten],
