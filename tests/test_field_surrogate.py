@@ -48,6 +48,29 @@ GEN_SPEC = {
 N_REGIONS = 60
 FIELD = "cropland"
 
+# fit_bundle indexes method_options directly (config is assumed complete), so
+# tests supply the full option set per method, mirroring config/default.yaml.
+_METHOD_OPTIONS = {
+    "mlp": {
+        "hidden_layer_sizes": [256, 128, 64],
+        "solver": "adam",
+        "alpha": 1e-4,
+        "max_iter": 3000,
+        "learning_rate_init": 1e-3,
+        "n_iter_no_change": 40,
+    },
+    "xgb": {
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.02,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "early_stopping_rounds": 50,
+    },
+    "rf": {"n_estimators": 128},
+}
+
 
 def _build_design(n: int = 600, noise: float = 0.0):
     """Design + a synthetic rank-4 spatial field with smooth score functions.
@@ -88,11 +111,7 @@ def _field_specs(df):
 def test_field_reconstruction(method):
     """Surrogate should reconstruct the low-rank field to high holdout R2."""
     x, df = _build_design()
-    cfg = {"method_options": {}}
-    if method == "xgb":
-        cfg["method_options"] = {"n_estimators": 300, "max_depth": 3}
-    elif method == "rf":
-        cfg["method_options"] = {"n_estimators": 128}
+    cfg = {"method_options": _METHOD_OPTIONS[method]}
     bundle = fit_bundle(
         method=method,
         x_design=x,
@@ -135,7 +154,7 @@ def test_field_save_load_roundtrip(tmp_path: Path):
         outputs_df=df,
         available_columns=["total_cost"],
         generator_spec=GEN_SPEC,
-        method_config={"method_options": {}},
+        method_config={"method_options": _METHOD_OPTIONS["mlp"]},
         holdout_fraction=0.2,
         field_specs=_field_specs(df),
     )

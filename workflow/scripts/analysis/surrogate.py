@@ -402,7 +402,6 @@ def fit_mlp_multi(
     alpha: float = 1e-4,
     max_iter: int = 3000,
     learning_rate_init: float = 1e-3,
-    early_stopping: bool = True,
     n_iter_no_change: int = 40,
     random_state: int = 42,
 ) -> dict:
@@ -434,7 +433,7 @@ def fit_mlp_multi(
     if solver in ("adam", "sgd"):
         mlp_kwargs.update(
             learning_rate_init=learning_rate_init,
-            early_stopping=early_stopping,
+            early_stopping=True,
             n_iter_no_change=n_iter_no_change,
             validation_fraction=0.1,
         )
@@ -661,12 +660,13 @@ def fit_bundle(
         )
         field_pred = decoder.decode(scores_pred)
         ss_res = float(np.sum((true_field - field_pred) ** 2))
+        # Baseline is the train-fitted PCA mean field (not the holdout's own
+        # mean): this scores reconstruction against predicting the mean field,
+        # so it is comparable across the train/holdout split.
         ss_tot = float(np.sum((true_field - decoder.mean) ** 2))
         recon_r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        score_r2 = [
-            validation[sc].get("r2_test") or validation[sc].get("r2_train")
-            for sc in decoder.score_columns
-        ]
+        pc1 = decoder.score_columns[0]
+        pc1_r2 = validation[pc1].get("r2_test") or validation[pc1].get("r2_train")
         validation[fname] = {
             "output": fname,
             "kind": "field",
@@ -675,7 +675,7 @@ def fit_bundle(
             "explained_variance": float(decoder.explained_variance_ratio.sum()),
             "field_recon_r2": recon_r2,
             "validation_error": 1.0 - recon_r2,
-            "pc1_r2_test": float(score_r2[0]) if score_r2 else None,
+            "pc1_r2_test": float(pc1_r2) if pc1_r2 is not None else None,
             "n_train": n_train,
             "n_test": n_holdout,
             "method": method,
@@ -743,8 +743,8 @@ def _fit_field_pca(
 
 
 def _fit_pce_one(x_train, y_train, x_test, y_test, joint_dist, opts, n_jobs):
-    max_degree = opts.get("max_degree", 3)
-    cross_truncation = opts.get("cross_truncation", 0.5)
+    max_degree = opts["max_degree"]
+    cross_truncation = opts["cross_truncation"]
     result = fit_pce(
         x_train, y_train, joint_dist, max_degree, cross_truncation, n_jobs=n_jobs
     )
@@ -827,13 +827,13 @@ def _fit_multi_output(
             y_train_std,
             x_val=x_test,
             y_val_mat=y_test_std,
-            n_estimators=opts.get("n_estimators", 5000),
-            max_depth=opts.get("max_depth", 4),
-            learning_rate=opts.get("learning_rate", 0.02),
-            subsample=opts.get("subsample", 0.8),
-            colsample_bytree=opts.get("colsample_bytree", 0.8),
-            min_child_weight=opts.get("min_child_weight", 5),
-            early_stopping_rounds=opts.get("early_stopping_rounds", 50),
+            n_estimators=opts["n_estimators"],
+            max_depth=opts["max_depth"],
+            learning_rate=opts["learning_rate"],
+            subsample=opts["subsample"],
+            colsample_bytree=opts["colsample_bytree"],
+            min_child_weight=opts["min_child_weight"],
+            early_stopping_rounds=opts["early_stopping_rounds"],
             n_jobs=n_jobs,
         )
         shared_model = fit_result["model"]
@@ -842,7 +842,7 @@ def _fit_multi_output(
         fit_result = fit_random_forest_multi(
             x_train,
             y_train_std,
-            n_estimators=opts.get("n_estimators", 500),
+            n_estimators=opts["n_estimators"],
             n_jobs=n_jobs,
         )
         shared_model = fit_result["model"]
@@ -852,12 +852,12 @@ def _fit_multi_output(
             x_train,
             y_train_std,
             log_indices,
-            hidden_layer_sizes=tuple(opts.get("hidden_layer_sizes", (256, 128, 64))),
-            solver=opts.get("solver", "adam"),
-            alpha=opts.get("alpha", 1e-4),
-            max_iter=opts.get("max_iter", 3000),
-            learning_rate_init=opts.get("learning_rate_init", 1e-3),
-            n_iter_no_change=opts.get("n_iter_no_change", 40),
+            hidden_layer_sizes=tuple(opts["hidden_layer_sizes"]),
+            solver=opts["solver"],
+            alpha=opts["alpha"],
+            max_iter=opts["max_iter"],
+            learning_rate_init=opts["learning_rate_init"],
+            n_iter_no_change=opts["n_iter_no_change"],
         )
         shared_model = fit_result["model"]
         extra_val = {"n_iter": fit_result["n_iter"]}
@@ -904,17 +904,17 @@ def _fit_multi_output(
 
 
 def _fit_mars_one(x_train, y_train, x_test, y_test, col, opts):
-    log_transform_outputs = set(opts.get("log_transform", []))
+    log_transform_outputs = set(opts["log_transform"])
     use_log = col in log_transform_outputs
 
     y_train_fit = np.log1p(y_train) if use_log else y_train
     result = fit_mars(
         x_train,
         y_train_fit,
-        max_terms=opts.get("max_terms", 50),
-        max_degree=opts.get("max_degree", 2),
-        penalty=opts.get("penalty", 3.0),
-        n_knots=opts.get("n_knots", 25),
+        max_terms=opts["max_terms"],
+        max_degree=opts["max_degree"],
+        penalty=opts["penalty"],
+        n_knots=opts["n_knots"],
     )
 
     earth_model = result["model"]

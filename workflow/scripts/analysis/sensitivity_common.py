@@ -142,6 +142,9 @@ def sobol_columns(
     ``sobol_cfg["outputs"]`` lists OutputSpec names.  Scalar names map to
     themselves; vector names expand to all of their per-element columns
     that are actually present in ``available`` (the bundle's column set).
+    Field names expand the same way, but their ``available`` columns are
+    the PCA *score* columns (``{name}.pcNN``), so listing a field requests
+    Sobol indices on its leading spatial modes rather than raw elements.
     """
     by_name = {spec.name: spec for spec in specs}
     allow: list[str] = []
@@ -438,22 +441,6 @@ def vector_output_columns(
     out: set[str] = set()
     for spec in specs:
         if spec.kind != "vector":
-            continue
-        prefix = f"{spec.name}{VECTOR_KEY_SEP}"
-        out.update(c for c in outputs_df.columns if c.startswith(prefix))
-    return out
-
-
-def field_output_columns(specs: list[OutputSpec], outputs_df: pd.DataFrame) -> set[str]:
-    """Subset of ``expanded_output_columns`` originating from field specs.
-
-    These are the raw per-element spatial columns; the surrogate does not
-    train on them directly but PCA-compresses each field's matrix and trains
-    on the resulting scores (see ``surrogate.fit_bundle``).
-    """
-    out: set[str] = set()
-    for spec in specs:
-        if spec.kind != "field":
             continue
         prefix = f"{spec.name}{VECTOR_KEY_SEP}"
         out.update(c for c in outputs_df.columns if c.startswith(prefix))

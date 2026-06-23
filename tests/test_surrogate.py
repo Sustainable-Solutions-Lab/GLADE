@@ -39,6 +39,19 @@ GEN_SPEC = {
 
 _COLUMNS = ["total_cost", "co2", "ch4", "n2o", "land_use", "yll"]
 
+# fit_bundle indexes method_options directly (config is assumed complete), so
+# tests spell out the full option set per method, mirroring config/default.yaml.
+# n_estimators is varied per test; the rest are shared.
+_XGB_OPTS = {
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "early_stopping_rounds": 50,
+}
+_MARS_OPTS = {"penalty": 3.0, "n_knots": 25, "log_transform": []}
+
 
 def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     """Deterministic design + scalar outputs matching OUTPUT_COLUMNS shape."""
@@ -71,8 +84,8 @@ def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     [
         ("pce", {"method_options": {"max_degree": 3, "cross_truncation": 0.8}}),
         ("rf", {"method_options": {"n_estimators": 64}}),
-        ("mars", {"method_options": {"max_terms": 20, "max_degree": 2}}),
-        ("xgb", {"method_options": {"n_estimators": 200, "max_depth": 3}}),
+        ("mars", {"method_options": {"max_terms": 20, "max_degree": 2, **_MARS_OPTS}}),
+        ("xgb", {"method_options": {"n_estimators": 200, **_XGB_OPTS}}),
     ],
 )
 def test_bundle_save_load_predict_parity(tmp_path: Path, method, method_config):
@@ -169,7 +182,7 @@ def test_xgb_handles_vector_outputs():
         outputs_df=outputs_df,
         available_columns=cols,
         generator_spec=GEN_SPEC,
-        method_config={"method_options": {"n_estimators": 100, "max_depth": 3}},
+        method_config={"method_options": {"n_estimators": 100, **_XGB_OPTS}},
         holdout_fraction=0.2,
         n_threads=1,
         vector_columns={"foods.wheat", "foods.rice"},

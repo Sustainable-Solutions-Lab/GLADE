@@ -137,7 +137,7 @@ scenarios:
 sensitivity_analysis:
   holdout_fraction: 0.15
   threads: 6
-  default_surrogate: xgb
+  default_surrogate: mlp
   # GSA solves run outside Snakemake on the cluster (tools/batch-solve), so the
   # surrogate fit reads scenarios from disk rather than declaring every output.
   discover_scenarios_on_disk: true

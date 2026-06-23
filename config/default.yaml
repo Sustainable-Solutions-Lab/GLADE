@@ -1743,7 +1743,7 @@ sensitivity_analysis:
   threads: 6
   # Method downstream consumers (uncertainty-band plots, notebooks) use when
   # no explicit choice is given. Must match a key under ``methods``.
-  default_surrogate: xgb
+  default_surrogate: mlp
   # When false (default), the surrogate-fit rule declares every Sobol scenario
   # the generator promises so Snakemake drives the full solve→analyse→
   # surrogate chain in a single invocation (the canonical Snakemake idiom).
@@ -1769,6 +1769,7 @@ sensitivity_analysis:
   methods:
     pce:
       method_options:
+        max_degree: 3
         cross_truncation: 0.8
     rf:
       method_options:
@@ -1779,6 +1780,7 @@ sensitivity_analysis:
         max_degree: 2
         penalty: 3.0
         n_knots: 25
+        log_transform: []  # output names fitted in log space (default: none)
     xgb:
       method_options:
         n_estimators: 5000
@@ -1789,7 +1791,7 @@ sensitivity_analysis:
         min_child_weight: 5
         early_stopping_rounds: 50
     # ReLU multilayer perceptron (multi-output). Continuous piecewise-linear
-    # surrogate: ~50x smaller and ~15x faster at inference than xgb, with
+    # surrogate: much smaller on disk and faster at inference than xgb, with
     # smooth (non-staircased) gradients. Log-uniform inputs are log-transformed
     # then all inputs standardized inside the fitted pipeline.
     mlp:
