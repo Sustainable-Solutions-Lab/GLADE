@@ -1774,13 +1774,6 @@ sensitivity_analysis:
     rf:
       method_options:
         n_estimators: 500
-    mars:
-      method_options:
-        max_terms: 50
-        max_degree: 2
-        penalty: 3.0
-        n_knots: 25
-        log_transform: []  # output names fitted in log space (default: none)
     xgb:
       method_options:
         n_estimators: 5000
@@ -1814,7 +1807,8 @@ sensitivity_analysis:
   #   label:    human-readable axis label used by plots
   #   units:    axis-label suffix used by uncertainty-band plots
   # Order here defines the display order in Sobol plots.  Vector
-  # outputs are fit by xgb/rf only; pce/mars hard-fail at fit time.
+  # outputs are fit by the multi-output methods (xgb/rf/mlp) only; pce
+  # hard-fails at fit time.
   outputs:
     total_cost:
       source: objective_breakdown.parquet

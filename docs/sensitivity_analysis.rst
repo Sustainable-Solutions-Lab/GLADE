@@ -32,10 +32,13 @@ This implementation supports four surrogate modelling approaches:
 
 - **Polynomial Chaos Expansion (PCE)**: Computes Sobol indices analytically
   from a polynomial approximation to the model response.
-- **Random Forest (RF)**, **XGBoost (XGB)**, and
-  **Multivariate Adaptive Regression Splines (MARS)**: Tree- and
-  spline-based regressors; Sobol indices are computed via Saltelli
-  pick-freeze Monte Carlo on the fitted surrogate.
+- **Random Forest (RF)** and **XGBoost (XGB)**: Tree-based regressors.
+- **ReLU multilayer perceptron (MLP)**: A continuous piecewise-linear
+  regressor with smooth gradients; much smaller on disk than the tree
+  surrogates and the default for downstream consumers.
+
+For the three regressors, Sobol indices are computed via Saltelli
+pick-freeze Monte Carlo on the fitted surrogate.
 
 All four share a single fitting pipeline (the ``build_surrogate`` rule)
 that persists the trained model as a pickled :class:`SurrogateBundle`
@@ -898,7 +901,7 @@ notebooks (policy sweeps, uncertainty-band plots).
 
 Output paths use two wildcards: ``{group}`` identifies the scenario sampling
 group (e.g., ``gsa``, ``gsa-l1-low``) and ``{method}`` selects the surrogate
-type (``pce``, ``rf``, ``mars``, ``xgb``).  All methods consume the same
+type (``pce``, ``rf``, ``xgb``, ``mlp``).  All methods consume the same
 solved scenarios, and ``sensitivity_analysis.default_surrogate`` selects the
 surrogate downstream consumers (notebooks, uncertainty plots) load by
 default.
@@ -967,11 +970,11 @@ surrogate fit rather than the Sobol indices).
    ``r2_test``, float, "R² on holdout data (null if holdout disabled)"
    ``n_train``, int, "Number of training samples"
    ``n_test``, int, "Number of holdout samples"
-   ``method``, string, "Surrogate method (``pce``, ``rf``, ``mars``, ``xgb``)"
+   ``method``, string, "Surrogate method (``pce``, ``rf``, ``xgb``, ``mlp``)"
 
 Additional method-specific columns: ``loo_error``, ``n_terms``,
 ``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators``
-(RF); ``n_estimators`` (XGB); ``gcv``, ``n_basis`` (MARS).
+(RF); ``n_estimators`` (XGB); ``n_iter`` (MLP).
 
 Spatial field outputs (PCA)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

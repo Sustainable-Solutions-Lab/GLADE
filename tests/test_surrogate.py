@@ -50,7 +50,6 @@ _XGB_OPTS = {
     "min_child_weight": 5,
     "early_stopping_rounds": 50,
 }
-_MARS_OPTS = {"penalty": 3.0, "n_knots": 25, "log_transform": []}
 
 
 def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
@@ -84,7 +83,6 @@ def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     [
         ("pce", {"method_options": {"max_degree": 3, "cross_truncation": 0.8}}),
         ("rf", {"method_options": {"n_estimators": 64}}),
-        ("mars", {"method_options": {"max_terms": 20, "max_degree": 2, **_MARS_OPTS}}),
         ("xgb", {"method_options": {"n_estimators": 200, **_XGB_OPTS}}),
     ],
 )
@@ -149,19 +147,20 @@ def test_unknown_method_raises():
         )
 
 
-@pytest.mark.parametrize("method", ["pce", "mars"])
-def test_vector_outputs_blocked_for_scalar_only_methods(method):
-    """PCE and MARS must reject any vector-derived columns."""
+def test_vector_outputs_blocked_for_scalar_only_methods():
+    """PCE must reject any vector-derived columns."""
     x, outputs_df = _build_design(n=64)
     outputs_df["foods.wheat"] = outputs_df["total_cost"] * 0.001
     with pytest.raises(NotImplementedError, match="does not support vector outputs"):
         fit_bundle(
-            method=method,
+            method="pce",
             x_design=x,
             outputs_df=outputs_df,
             available_columns=[*_COLUMNS, "foods.wheat"],
             generator_spec=GEN_SPEC,
-            method_config={"method_options": {"max_terms": 8, "max_degree": 1}},
+            method_config={
+                "method_options": {"max_degree": 1, "cross_truncation": 0.5}
+            },
             holdout_fraction=0.0,
             n_threads=1,
             vector_columns={"foods.wheat"},

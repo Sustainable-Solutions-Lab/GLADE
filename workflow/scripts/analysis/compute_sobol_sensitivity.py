@@ -4,7 +4,7 @@
 
 """Compute Sobol sensitivity indices from a persisted surrogate bundle.
 
-The surrogate (PCE, RF, MARS, or XGBoost) is built in the
+The surrogate (PCE, RF, XGBoost, or MLP) is built in the
 ``build_surrogate`` rule; this script loads it and emits three parquet
 files: global Sobol indices, conditional indices per slice parameter,
 and joint conditional indices across all slice parameters.

@@ -4,7 +4,7 @@
 
 """Shared surrogate model module for sensitivity analysis.
 
-Fits one of several surrogate types (PCE, RF, MARS, XGBoost, ReLU MLP) to
+Fits one of several surrogate types (PCE, RF, XGBoost, ReLU MLP) to
 the scalar outputs of the GSA Sobol design and persists the result as a
 self-contained bundle that downstream rules (Sobol index computation,
 policy-sweep plots, notebooks) can load and re-use.
@@ -35,12 +35,11 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 from workflow.scenario_generators import build_joint_distribution
-from workflow.scripts.analysis.mars import Earth
 
 logger = logging.getLogger(__name__)
 
 
-SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "mars", "xgb", "mlp")
+SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "xgb", "mlp")
 # Methods that natively accept a 2-D target and train all outputs with a
 # shared structure.  XGBoost uses ``multi_strategy='multi_output_tree'``;
 # sklearn's RandomForestRegressor and MLPRegressor accept ``y`` of shape
@@ -55,7 +54,7 @@ class SurrogateBundle:
     Attributes
     ----------
     method
-        Surrogate type: one of ``pce``, ``rf``, ``mars``, ``xgb``, ``mlp``.
+        Surrogate type: one of ``pce``, ``rf``, ``xgb``, ``mlp``.
     generator_spec
         Full generator spec the surrogate was trained against.  Carries
         parameter names, distribution specs, slice parameters, and
@@ -73,7 +72,6 @@ class SurrogateBundle:
         - ``xgb``: fitted :class:`XGBRegressor`
         - ``mlp``: fitted :class:`~sklearn.pipeline.Pipeline`
           (log + standardize + :class:`MLPRegressor`)
-        - ``mars``: ``{earth: Earth, log_transform: bool}``
 
     validation
         Per-output dict of fit-quality metrics (keys vary by method).
@@ -452,31 +450,6 @@ def fit_mlp_multi(
     }
 
 
-def fit_mars(
-    x_design: np.ndarray,
-    y: np.ndarray,
-    max_terms: int = 50,
-    max_degree: int = 2,
-    penalty: float = 3.0,
-    n_knots: int = 25,
-) -> dict:
-    """Fit a MARS regressor with GCV-based model selection."""
-    model = Earth(
-        max_terms=max_terms,
-        max_degree=max_degree,
-        penalty=penalty,
-        n_knots=n_knots,
-    )
-    model.fit(x_design, y)
-    return {
-        "model": model,
-        "validation_error": model.gcv_,
-        "r2": model.score(x_design, y),
-        "n_basis": len(model.basis_),
-        "n_samples": len(y),
-    }
-
-
 # ---------------------------------------------------------------------------
 # Bundle construction: train/test split + per-method dispatch.
 # ---------------------------------------------------------------------------
@@ -502,8 +475,8 @@ def fit_bundle(
 
     ``vector_columns``, if supplied, names columns originating from
     vector outputs.  Vector outputs are only supported by the
-    multi-output methods (``xgb``, ``rf``, ``mlp``); requesting ``pce`` or
-    ``mars`` on a bundle that contains any vector column raises
+    multi-output methods (``xgb``, ``rf``, ``mlp``); requesting ``pce``
+    on a bundle that contains any vector column raises
     :class:`NotImplementedError`.
 
     ``field_specs`` maps each ``kind: field`` output name to
@@ -613,10 +586,6 @@ def fit_bundle(
                     joint_dist,
                     method_options,
                     n_threads,
-                )
-            elif method == "mars":
-                payload, val = _fit_mars_one(
-                    x_train, y_train, x_test, y_test, col, method_options
                 )
             else:
                 raise AssertionError(f"unreachable method {method!r}")
@@ -903,46 +872,6 @@ def _fit_multi_output(
     return models, validation
 
 
-def _fit_mars_one(x_train, y_train, x_test, y_test, col, opts):
-    log_transform_outputs = set(opts["log_transform"])
-    use_log = col in log_transform_outputs
-
-    y_train_fit = np.log1p(y_train) if use_log else y_train
-    result = fit_mars(
-        x_train,
-        y_train_fit,
-        max_terms=opts["max_terms"],
-        max_degree=opts["max_degree"],
-        penalty=opts["penalty"],
-        n_knots=opts["n_knots"],
-    )
-
-    earth_model = result["model"]
-    if x_test is not None and y_test is not None:
-        raw_pred = earth_model.predict(x_test)
-        y_pred = np.expm1(raw_pred) if use_log else raw_pred
-        ss_res = np.sum((y_test - y_pred) ** 2)
-        ss_tot = np.sum((y_test - np.mean(y_test)) ** 2)
-        r2_test = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        holdout_error = 1 - r2_test
-    else:
-        r2_test = None
-        holdout_error = None
-
-    gcv_error = result["validation_error"]
-    validation_error = holdout_error if holdout_error is not None else gcv_error
-
-    payload = {"earth": earth_model, "log_transform": use_log}
-    val = {
-        "validation_error": validation_error,
-        "gcv": gcv_error,
-        "r2_train": result["r2"],
-        "r2_test": r2_test,
-        "n_basis": result["n_basis"],
-    }
-    return payload, val
-
-
 # ---------------------------------------------------------------------------
 # Persistence.
 # ---------------------------------------------------------------------------
@@ -985,8 +914,7 @@ def validation_dataframe(bundle: SurrogateBundle) -> pd.DataFrame:
 def predict(bundle: SurrogateBundle, output: str, x: np.ndarray) -> np.ndarray:
     """Predict ``output`` at physical-space design matrix ``x``.
 
-    Returns an array of shape ``(len(x),)`` in the original output space
-    (log-transformed MARS is back-transformed automatically).
+    Returns an array of shape ``(len(x),)`` in the original output space.
     """
     if output not in bundle.models:
         raise KeyError(
@@ -1007,9 +935,6 @@ def predict(bundle: SurrogateBundle, output: str, x: np.ndarray) -> np.ndarray:
         return basis @ model["coefficients"]
     elif method in ("rf", "xgb", "mlp"):
         return model.predict(x)
-    elif method == "mars":
-        raw = model["earth"].predict(x)
-        return np.expm1(raw) if model["log_transform"] else raw
     else:
         raise AssertionError(f"unreachable method {method!r}")
 
@@ -1042,11 +967,6 @@ def predictor(
         return _predict
     elif method in ("rf", "xgb", "mlp"):
         return model.predict
-    elif method == "mars":
-        earth = model["earth"]
-        if model["log_transform"]:
-            return lambda x: np.expm1(earth.predict(x))
-        return earth.predict
     else:
         raise AssertionError(f"unreachable method {method!r}")
 
@@ -1264,7 +1184,7 @@ def conditional_sobol_mc(
 ) -> list[tuple[np.ndarray, np.ndarray, float]]:
     """Batch-estimate conditional Sobol indices across a grid of slice values.
 
-    Mirrors the RF/XGB/MARS routine: reuses the same A/B free-parameter
+    Mirrors the RF/XGB routine: reuses the same A/B free-parameter
     matrices across all grid points, processed in batches to reduce the
     number of predict() calls.
     """

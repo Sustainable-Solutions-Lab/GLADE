@@ -416,7 +416,7 @@ rule compute_sobol_sensitivity:
 
     Loads the pickle produced by ``build_surrogate`` and evaluates Sobol
     indices: analytically for PCE, Saltelli pick-freeze MC for the
-    regressor-based surrogates (RF, MARS, XGB).
+    regressor-based surrogates (RF, XGB, MLP).
 
     The {group} wildcard identifies the scenario sampling group (e.g.,
     "gsa"); {method} selects which surrogate to use.

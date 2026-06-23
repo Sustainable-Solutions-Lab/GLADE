@@ -169,7 +169,7 @@ def test_field_save_load_roundtrip(tmp_path: Path):
 
 
 def test_field_requires_multi_output_method():
-    """pce/mars cannot do fields (PCA scores are multi-output)."""
+    """pce cannot do fields (PCA scores are multi-output)."""
     x, df = _build_design()
     with pytest.raises(NotImplementedError):
         fit_bundle(
