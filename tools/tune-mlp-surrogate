@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Sweep MLP surrogate hyperparameters over an already-solved GSA design.
+
+Loads one sensitivity group's design + per-scenario analysis outputs *once*,
+then refits the MLP surrogate for each config in a grid and records per-output
+holdout R2 -- with a focus on the emission outputs (co2, ch4, n2o,
+sequestration) whose fits drive the carbon-dial smoothness, plus the mean
+scalar R2 and mean field-reconstruction R2 so a smoother config that quietly
+hurts everything else is visible.
+
+This mirrors the loading in ``workflow/scripts/analysis/build_surrogate.py`` but
+loops :func:`fit_bundle` over many ``method_options`` instead of fitting once.
+It does not write a bundle; it writes a results table (CSV) for picking the
+production config.  Run it on the cluster where the analysis outputs live::
+
+    pixi run -e gurobi python tools/tune-mlp-surrogate config/gsa.yaml gsa \
+        -o results/gsa/surrogates/mlp_tuning_gsa.csv -j 16
+
+Each row is one (config x output-of-interest) measurement; ``mean_scalar_r2``
+and ``mean_field_recon_r2`` are repeated per config for convenience.
+"""
+
+import argparse
+import logging
+from pathlib import Path
+import sys
+import time
+
+import numpy as np
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "workflow"))
+
+from workflow.scripts.analysis.sensitivity_common import (  # noqa: E402
+    expanded_output_columns,
+    field_columns_by_spec,
+    load_scenario_outputs,
+    parse_outputs_spec,
+    reconstruct_samples,
+    vector_output_columns,
+)
+from workflow.scripts.analysis.surrogate import fit_bundle  # noqa: E402
+from workflow.scripts.solve_namespace import (  # noqa: E402
+    default_path_roots,
+    load_merged_config,
+)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("tune-mlp")
+
+# Emission outputs that feed the dial's aggregate GHG curve; ch4 is the current
+# weak link (holdout R2 ~0.68 vs ~0.92 for the others).
+EMISSION_OUTPUTS = ["co2", "ch4", "n2o", "sequestration"]
+
+# Hyperparameter grid.  Each entry is a label plus a partial method_options
+# dict; missing keys fall back to BASE below.  Keep this list curated rather
+# than a full cross-product so the sweep stays tractable (each fit is minutes;
+# ensemble_size multiplies that).
+BASE = {
+    "hidden_layer_sizes": [256, 128, 64],
+    "solver": "adam",
+    "alpha": 1e-4,
+    "max_iter": 3000,
+    "learning_rate_init": 1e-3,
+    "n_iter_no_change": 40,
+    "activation": "relu",
+    "ensemble_size": 1,
+}
+
+GRID = [
+    ("baseline", {}),
+    # --- activation (A1) ---
+    ("tanh", {"activation": "tanh"}),
+    # --- ensemble (A3), both activations ---
+    ("relu_ens3", {"ensemble_size": 3}),
+    ("relu_ens5", {"ensemble_size": 5}),
+    ("tanh_ens3", {"activation": "tanh", "ensemble_size": 3}),
+    ("tanh_ens5", {"activation": "tanh", "ensemble_size": 5}),
+    # --- L2 regularization sweep (relu) ---
+    ("relu_a1e-3", {"alpha": 1e-3}),
+    ("relu_a3e-3", {"alpha": 3e-3}),
+    ("relu_a1e-2", {"alpha": 1e-2}),
+    # --- capacity (relu) ---
+    ("relu_wide", {"hidden_layer_sizes": [512, 256, 128]}),
+    ("relu_deep", {"hidden_layer_sizes": [256, 256, 128, 64]}),
+    # --- combinations most likely to be smooth *and* accurate ---
+    ("tanh_ens5_a1e-3", {"activation": "tanh", "ensemble_size": 5, "alpha": 1e-3}),
+    ("relu_ens5_a1e-3", {"ensemble_size": 5, "alpha": 1e-3}),
+    ("relu_ens5_wide", {"ensemble_size": 5, "hidden_layer_sizes": [512, 256, 128]}),
+]
+
+
+def discover_scenarios(analysis_dir: Path, generator_spec: dict) -> list[str]:
+    """Scenario names whose analysis dir exists, in generator (sample) order."""
+    import re
+
+    pattern = re.escape(generator_spec["name"]).replace(r"\{sample_id\}", r"\d+") + "$"
+    prefix = generator_spec["name"].removesuffix("{sample_id}")
+    names = []
+    for d in analysis_dir.glob("scen-*"):
+        s = d.name.removeprefix("scen-")
+        if re.match(pattern, s):
+            names.append(s)
+    # Order by integer sample id so the design rows align with reconstruction.
+    names.sort(key=lambda s: int(s.removeprefix(prefix)))
+    return names
+
+
+def load_design_and_outputs(config: dict, group: str, n_threads: int):
+    """Load (x_design, outputs_df, columns metadata) once for the group."""
+    generators = [
+        g
+        for g in (config.get("scenarios") or {}).get("_generators", [])
+        if g.get("mode") == "sensitivity"
+    ]
+    matches = [g for g in generators if g["name"].split("_{")[0] == group]
+    if not matches:
+        avail = [g["name"].split("_{")[0] for g in generators]
+        raise ValueError(f"No sensitivity generator for group '{group}'. Have: {avail}")
+    generator_spec = dict(matches[0])
+
+    path_roots = default_path_roots(config)
+    analysis_dir = Path(path_roots["results"]) / config["name"] / "analysis"
+    if not analysis_dir.is_dir():
+        raise FileNotFoundError(f"Analysis dir not found: {analysis_dir}")
+
+    scenario_names = discover_scenarios(analysis_dir, generator_spec)
+    if not scenario_names:
+        raise ValueError(f"No scenarios on disk under {analysis_dir} for '{group}'")
+    logger.info("Discovered %d scenarios for group '%s'", len(scenario_names), group)
+
+    x_design_full = reconstruct_samples(generator_spec)
+    prefix = generator_spec["name"].removesuffix("{sample_id}")
+    sample_indices = np.array([int(s.removeprefix(prefix)) for s in scenario_names])
+    x_design = x_design_full[sample_indices]
+
+    outputs_spec = parse_outputs_spec(dict(config["sensitivity_analysis"]["outputs"]))
+    outputs_df = load_scenario_outputs(
+        analysis_dir, scenario_names, outputs_spec, n_workers=n_threads
+    )
+    logger.info("Loaded outputs for %d scenarios", len(outputs_df))
+
+    output_columns = expanded_output_columns(outputs_spec, outputs_df)
+    vector_columns = vector_output_columns(outputs_spec, outputs_df)
+    field_cols_by_spec = field_columns_by_spec(outputs_spec, outputs_df)
+    field_columns = {c for cols in field_cols_by_spec.values() for c in cols}
+    spec_by_name = {s.name: s for s in outputs_spec}
+    field_specs = {
+        name: {"columns": cols, "n_components": spec_by_name[name].n_components}
+        for name, cols in field_cols_by_spec.items()
+    }
+    train_columns = [c for c in output_columns if c not in field_columns]
+
+    # Drop scenarios with any NaN scalar/vector output (broken solves).
+    failed_mask = outputs_df[train_columns].isna().any(axis=1)
+    if int(failed_mask.sum()) > 0:
+        logger.warning("Dropping %d NaN scenarios", int(failed_mask.sum()))
+        outputs_df = outputs_df[~failed_mask].reset_index(drop=True)
+        x_design = x_design[~failed_mask.values]
+
+    return {
+        "x_design": x_design,
+        "outputs_df": outputs_df,
+        "generator_spec": generator_spec,
+        "train_columns": train_columns,
+        "vector_columns": vector_columns,
+        "field_specs": field_specs,
+    }
+
+
+def evaluate_config(data: dict, label: str, opts: dict, holdout: float, n_threads: int):
+    """Fit one config and return summary metric rows."""
+    method_options = {**BASE, **opts}
+    t0 = time.time()
+    bundle = fit_bundle(
+        method="mlp",
+        x_design=data["x_design"],
+        outputs_df=data["outputs_df"],
+        available_columns=data["train_columns"],
+        generator_spec=data["generator_spec"],
+        method_config={"method_options": method_options},
+        holdout_fraction=holdout,
+        n_threads=n_threads,
+        vector_columns=data["vector_columns"],
+        field_specs=data["field_specs"],
+    )
+    elapsed = time.time() - t0
+
+    val = bundle.validation
+    field_names = set(data["field_specs"])
+    scalar_names = [c for c in data["train_columns"] if c not in data["vector_columns"]]
+
+    def r2(name):
+        v = val.get(name, {})
+        return v.get("r2_test") if v.get("r2_test") is not None else v.get("r2_train")
+
+    scalar_r2 = [r2(c) for c in scalar_names if r2(c) is not None]
+    field_recon = [
+        val[f]["field_recon_r2"] for f in field_names if "field_recon_r2" in val[f]
+    ]
+    mean_scalar = float(np.mean(scalar_r2)) if scalar_r2 else float("nan")
+    mean_field = float(np.mean(field_recon)) if field_recon else float("nan")
+
+    logger.info(
+        "[%s] %.0fs  ch4=%.3f co2=%.3f n2o=%.3f seq=%.3f  mean_scalar=%.3f mean_field=%.3f",
+        label,
+        elapsed,
+        r2("ch4") or float("nan"),
+        r2("co2") or float("nan"),
+        r2("n2o") or float("nan"),
+        r2("sequestration") or float("nan"),
+        mean_scalar,
+        mean_field,
+    )
+
+    rows = []
+    for out in EMISSION_OUTPUTS:
+        rows.append(
+            {
+                "config": label,
+                "output": out,
+                "r2_test": r2(out),
+                "mean_scalar_r2": mean_scalar,
+                "mean_field_recon_r2": mean_field,
+                "fit_seconds": elapsed,
+                **method_options,
+            }
+        )
+    return rows
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("configfile", help="Group config YAML (e.g. config/gsa.yaml)")
+    parser.add_argument(
+        "group", help="Sensitivity group (e.g. gsa, gsa-l1-low, gsa-fd)"
+    )
+    parser.add_argument("-o", "--output", required=True, help="Results CSV path")
+    parser.add_argument("-j", "--threads", type=int, default=8)
+    parser.add_argument(
+        "--holdout", type=float, default=0.1, help="Holdout fraction (default 0.1)"
+    )
+    parser.add_argument(
+        "--only", nargs="*", help="Only run these config labels from the grid"
+    )
+    args = parser.parse_args()
+
+    from threadpoolctl import threadpool_limits
+
+    threadpool_limits(limits=args.threads)
+
+    default_config = PROJECT_ROOT / "config" / "default.yaml"
+    config = load_merged_config(default_config, Path(args.configfile).resolve())
+
+    data = load_design_and_outputs(config, args.group, args.threads)
+
+    grid = GRID
+    if args.only:
+        grid = [(lbl, opts) for lbl, opts in GRID if lbl in set(args.only)]
+
+    all_rows = []
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    for label, opts in grid:
+        rows = evaluate_config(data, label, opts, args.holdout, args.threads)
+        all_rows.extend(rows)
+        # Write incrementally so a timeout still leaves partial results.
+        pd.DataFrame(all_rows).to_csv(out_path, index=False)
+
+    logger.info("Wrote %d rows to %s", len(all_rows), out_path)
+    # Print a compact pivot for quick reading in the job log.
+    df = pd.DataFrame(all_rows)
+    pivot = df.pivot_table(index="config", columns="output", values="r2_test")
+    summary = df.drop_duplicates("config").set_index("config")[
+        ["mean_scalar_r2", "mean_field_recon_r2", "fit_seconds"]
+    ]
+    logger.info("R2(test) by config:\n%s", pivot.to_string())
+    logger.info("Summary:\n%s", summary.to_string())
+
+
+if __name__ == "__main__":
+    main()

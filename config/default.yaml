@@ -1795,6 +1795,11 @@ sensitivity_analysis:
         max_iter: 3000
         learning_rate_init: 0.001
         n_iter_no_change: 40
+        # "relu" is piecewise-linear (kinked); "tanh" is C-infinity smooth.
+        activation: relu
+        # Number of seed-perturbed members averaged into one surrogate; >1
+        # smooths and de-noises the response (see AveragingEnsemble).
+        ensemble_size: 1
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"

@@ -391,6 +391,25 @@ class LogColumns(BaseEstimator, TransformerMixin):
         return x
 
 
+class AveragingEnsemble:
+    """Average the (standardized) predictions of several fitted estimators.
+
+    Fitting K MLPs that differ only in random seed and averaging their
+    predictions both smooths and de-noises the surrogate: a single ReLU net is
+    piecewise-linear and need not be monotone, and each member places its kinks
+    (and its residual wiggle) differently, so the mean is markedly smoother and
+    lower-variance.  ``predict`` returns the mean ``(n_samples, n_outputs)``
+    matrix, so an ensemble is a drop-in replacement for a single estimator in
+    :class:`MultiOutputPayload`.
+    """
+
+    def __init__(self, models: list):
+        self.models = list(models)
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return np.mean([m.predict(x) for m in self.models], axis=0)
+
+
 def fit_mlp_multi(
     x_design: np.ndarray,
     y_mat: np.ndarray,
@@ -401,18 +420,24 @@ def fit_mlp_multi(
     max_iter: int = 3000,
     learning_rate_init: float = 1e-3,
     n_iter_no_change: int = 40,
+    activation: str = "relu",
+    ensemble_size: int = 1,
     random_state: int = 42,
 ) -> dict:
-    """Fit a single multi-output ReLU MLP for all outputs jointly.
+    """Fit a multi-output MLP (or a seed-averaged ensemble) for all outputs.
 
-    The estimator is a :class:`~sklearn.pipeline.Pipeline` that logs the
+    Each member is a :class:`~sklearn.pipeline.Pipeline` that logs the
     log-uniform input columns, standardizes all inputs, and regresses the
-    (caller-standardized) ``y_mat`` with a ReLU
-    :class:`~sklearn.neural_network.MLPRegressor`.  A ReLU MLP is a
-    continuous piecewise-linear map, so predictions have smooth, non-
-    staircased gradients (unlike the piecewise-constant tree surrogates).
-    ``predict`` returns a ``(n_samples, n_outputs)`` matrix in the
-    standardized target space, matching the other multi-output methods.
+    (caller-standardized) ``y_mat`` with an :class:`~sklearn.neural_network.
+    MLPRegressor`.  A ``relu`` MLP is a continuous piecewise-linear map (smooth,
+    non-staircased gradients unlike the tree surrogates); ``tanh`` makes it
+    C-infinity smooth at some cost to sharp-response accuracy.  ``predict``
+    returns a ``(n_samples, n_outputs)`` matrix in the standardized target
+    space, matching the other multi-output methods.
+
+    ``ensemble_size > 1`` fits that many members with consecutive seeds and
+    wraps them in an :class:`AveragingEnsemble`; the averaged response is
+    smoother and less prone to non-monotone wiggle than any single net.
 
     ``solver='adam'`` is the default: it scales to the full ~14k-sample
     design and, with ``early_stopping`` on a held-out 10%, outperforms
@@ -420,32 +445,42 @@ def fit_mlp_multi(
     ``early_stopping``/``n_iter_no_change`` apply only to the stochastic
     solvers (ignored by lbfgs).
     """
-    mlp_kwargs: dict[str, Any] = {
-        "hidden_layer_sizes": hidden_layer_sizes,
-        "activation": "relu",
-        "solver": solver,
-        "alpha": alpha,
-        "max_iter": max_iter,
-        "random_state": random_state,
-    }
-    if solver in ("adam", "sgd"):
-        mlp_kwargs.update(
-            learning_rate_init=learning_rate_init,
-            early_stopping=True,
-            n_iter_no_change=n_iter_no_change,
-            validation_fraction=0.1,
+    if ensemble_size < 1:
+        raise ValueError(f"ensemble_size must be >= 1, got {ensemble_size}")
+
+    def make_member(seed: int) -> Pipeline:
+        mlp_kwargs: dict[str, Any] = {
+            "hidden_layer_sizes": hidden_layer_sizes,
+            "activation": activation,
+            "solver": solver,
+            "alpha": alpha,
+            "max_iter": max_iter,
+            "random_state": seed,
+        }
+        if solver in ("adam", "sgd"):
+            mlp_kwargs.update(
+                learning_rate_init=learning_rate_init,
+                early_stopping=True,
+                n_iter_no_change=n_iter_no_change,
+                validation_fraction=0.1,
+            )
+        return Pipeline(
+            [
+                ("log", LogColumns(tuple(log_indices))),
+                ("scaler", StandardScaler()),
+                ("mlp", MLPRegressor(**mlp_kwargs)),
+            ]
         )
-    model = Pipeline(
-        [
-            ("log", LogColumns(tuple(log_indices))),
-            ("scaler", StandardScaler()),
-            ("mlp", MLPRegressor(**mlp_kwargs)),
-        ]
-    )
-    model.fit(x_design, y_mat)
+
+    members = [make_member(random_state + k) for k in range(ensemble_size)]
+    for m in members:
+        m.fit(x_design, y_mat)
+
+    model = members[0] if ensemble_size == 1 else AveragingEnsemble(members)
+    n_iter = int(np.mean([m.named_steps["mlp"].n_iter_ for m in members]))
     return {
         "model": model,
-        "n_iter": int(model.named_steps["mlp"].n_iter_),
+        "n_iter": n_iter,
         "n_samples": len(y_mat),
     }
 
@@ -832,6 +867,8 @@ def _fit_multi_output(
             max_iter=opts["max_iter"],
             learning_rate_init=opts["learning_rate_init"],
             n_iter_no_change=opts["n_iter_no_change"],
+            activation=opts["activation"],
+            ensemble_size=opts["ensemble_size"],
         )
         shared_model = fit_result["model"]
         extra_val = {"n_iter": fit_result["n_iter"]}
