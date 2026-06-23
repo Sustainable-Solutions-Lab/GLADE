@@ -15,6 +15,7 @@ variance decomposition, all others use Saltelli pick-freeze Monte Carlo.
 """
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from itertools import product
 import logging
 from pathlib import Path
@@ -25,6 +26,7 @@ import chaospy as cp
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LarsCV
 from sklearn.neural_network import MLPRegressor
@@ -77,6 +79,12 @@ class SurrogateBundle:
         Per-output dict of fit-quality metrics (keys vary by method).
     n_train, n_test
         Training and holdout sample counts.
+    field_decoders
+        Per-field PCA decoders (keyed by field-output name).  Empty unless
+        the config declares ``kind: field`` outputs.  ``output_columns``
+        then contains the per-field PCA *score* columns (the surrogate's
+        actual targets) rather than the thousands of raw spatial elements;
+        :func:`predict_field` reconstructs the full field from the scores.
     """
 
     method: str
@@ -87,6 +95,31 @@ class SurrogateBundle:
     validation: dict[str, dict]
     n_train: int
     n_test: int
+    field_decoders: dict[str, "FieldDecoder"] = dataclass_field(default_factory=dict)
+
+
+@dataclass
+class FieldDecoder:
+    """PCA decoder reconstructing a high-dimensional spatial field from scores.
+
+    A ``field`` output (e.g. per-region cropland area) is compressed by PCA
+    fit on the training rows: the surrogate predicts ``n_components`` score
+    columns and the full field is reconstructed as
+    ``scores @ components + mean``.  ``keys`` are the field element labels
+    (e.g. region ids) in the column order the components were fit on.
+    """
+
+    name: str
+    keys: list[str]
+    score_columns: list[str]
+    mean: np.ndarray  # (n_keys,)
+    components: np.ndarray  # (n_components, n_keys)
+    explained_variance_ratio: np.ndarray  # (n_components,)
+
+    def decode(self, scores: np.ndarray) -> np.ndarray:
+        """Reconstruct the field ``(n_samples, n_keys)`` from ``(n_samples, k)`` scores."""
+        scores = np.atleast_2d(scores)
+        return scores @ self.components + self.mean
 
 
 @dataclass
@@ -460,6 +493,7 @@ def fit_bundle(
     holdout_fraction: float,
     n_threads: int = 1,
     vector_columns: set[str] | None = None,
+    field_specs: dict[str, dict] | None = None,
 ) -> SurrogateBundle:
     """Fit a :class:`SurrogateBundle` for all available output columns.
 
@@ -469,9 +503,16 @@ def fit_bundle(
 
     ``vector_columns``, if supplied, names columns originating from
     vector outputs.  Vector outputs are only supported by the
-    multi-output methods (``xgb``, ``rf``); requesting ``pce`` or
+    multi-output methods (``xgb``, ``rf``, ``mlp``); requesting ``pce`` or
     ``mars`` on a bundle that contains any vector column raises
     :class:`NotImplementedError`.
+
+    ``field_specs`` maps each ``kind: field`` output name to
+    ``{"columns": [...], "n_components": k}``.  Each field's raw spatial
+    columns (already present in ``outputs_df``) are PCA-compressed -- the
+    PCA is fit on the training rows only and the surrogate is trained to
+    predict the ``k`` score columns instead of the thousands of raw
+    elements.  Like vector outputs, fields require a multi-output method.
     """
     if method not in SUPPORTED_METHODS:
         raise ValueError(
@@ -479,11 +520,12 @@ def fit_bundle(
         )
 
     vector_columns = vector_columns or set()
-    if vector_columns and method not in _MULTI_OUTPUT_METHODS:
+    field_specs = field_specs or {}
+    if (vector_columns or field_specs) and method not in _MULTI_OUTPUT_METHODS:
+        kinds = "vector" if vector_columns else "field"
         raise NotImplementedError(
-            f"Method '{method}' does not support vector outputs; "
-            f"vector columns present: {sorted(vector_columns)[:3]}... "
-            f"Use one of {_MULTI_OUTPUT_METHODS} or remove the vector "
+            f"Method '{method}' does not support {kinds} outputs; "
+            f"use one of {_MULTI_OUTPUT_METHODS} or remove the vector/field "
             f"specs from sensitivity_analysis.outputs."
         )
 
@@ -501,17 +543,46 @@ def fit_bundle(
     n_total = len(x_design)
     n_holdout = int(n_total * holdout_fraction)
     n_train = n_total - n_holdout
+
+    # PCA-compress field outputs (fit on training rows only).  Each field's
+    # raw spatial columns are replaced, as surrogate targets, by its PCA
+    # score columns; the raw columns are retained in ``outputs_df`` for
+    # reconstruction validation below.
+    field_decoders: dict[str, FieldDecoder] = {}
+    train_columns = list(available_columns)
+    work_df = outputs_df
+    if field_specs:
+        score_data: dict[str, np.ndarray] = {}
+        for fname, fspec in field_specs.items():
+            decoder, scores_all = _fit_field_pca(
+                fname, fspec["columns"], outputs_df, n_train, fspec["n_components"]
+            )
+            field_decoders[fname] = decoder
+            for j, sc in enumerate(decoder.score_columns):
+                score_data[sc] = scores_all[:, j]
+            train_columns.extend(decoder.score_columns)
+            logger.info(
+                "Field '%s': PCA %d elements -> %d components "
+                "(%.4f cumulative explained variance)",
+                fname,
+                len(decoder.keys),
+                len(decoder.score_columns),
+                float(decoder.explained_variance_ratio.sum()),
+            )
+        work_df = outputs_df.assign(**score_data)
+
     x_train = x_design[:n_train]
     x_test = x_design[n_train:] if n_holdout > 0 else None
-    outputs_train = outputs_df.iloc[:n_train]
-    outputs_test = outputs_df.iloc[n_train:] if n_holdout > 0 else None
+    outputs_train = work_df.iloc[:n_train]
+    outputs_test = work_df.iloc[n_train:] if n_holdout > 0 else None
 
     logger.info(
-        "Bundle fit (%s): %d train, %d holdout, %d outputs",
+        "Bundle fit (%s): %d train, %d holdout, %d targets (%d fields)",
         method,
         n_train,
         n_holdout,
-        len(available_columns),
+        len(train_columns),
+        len(field_decoders),
     )
 
     models: dict[str, Any] = {}
@@ -524,7 +595,7 @@ def fit_bundle(
             x_test,
             outputs_train,
             outputs_test,
-            available_columns,
+            train_columns,
             method_options,
             n_threads,
             log_indices,
@@ -554,18 +625,20 @@ def fit_bundle(
             models[col] = payload
             validation[col] = val
 
+    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
     for col, val in validation.items():
         val["output"] = col
         val["n_train"] = n_train
         val["n_test"] = n_holdout
         val["method"] = method
 
-        # Vector elements (e.g. minor foods) often have tiny global mass
-        # and noisy targets; only flag genuinely poor scalar fits at the
-        # warning level, log vector outliers more quietly.
-        threshold = 0.25 if col in vector_columns else 0.1
+        # Vector elements (e.g. minor foods) and PCA score columns often have
+        # tiny mass / noisy higher-order modes; only flag genuinely poor
+        # scalar fits at the warning level, log the rest more quietly.
+        quiet = col in vector_columns or col in score_columns
+        threshold = 0.25 if quiet else 0.1
         if val["validation_error"] > threshold:
-            level = logger.info if col in vector_columns else logger.warning
+            level = logger.info if quiet else logger.warning
             level(
                 "High validation error (%.3f) for '%s' (%s)",
                 val["validation_error"],
@@ -573,16 +646,100 @@ def fit_bundle(
                 method,
             )
 
+    # Field reconstruction validation: predict the score columns on the
+    # holdout, decode to the full field, and score against the true field.
+    for fname, decoder in field_decoders.items():
+        cols = field_specs[fname]["columns"]
+        if x_test is not None:
+            true_field = outputs_df[cols].iloc[n_train:].values.astype(float)
+            x_eval = x_test
+        else:
+            true_field = outputs_df[cols].iloc[:n_train].values.astype(float)
+            x_eval = x_train
+        scores_pred = np.column_stack(
+            [models[sc].predict(x_eval) for sc in decoder.score_columns]
+        )
+        field_pred = decoder.decode(scores_pred)
+        ss_res = float(np.sum((true_field - field_pred) ** 2))
+        ss_tot = float(np.sum((true_field - decoder.mean) ** 2))
+        recon_r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        score_r2 = [
+            validation[sc].get("r2_test") or validation[sc].get("r2_train")
+            for sc in decoder.score_columns
+        ]
+        validation[fname] = {
+            "output": fname,
+            "kind": "field",
+            "n_components": len(decoder.score_columns),
+            "n_elements": len(decoder.keys),
+            "explained_variance": float(decoder.explained_variance_ratio.sum()),
+            "field_recon_r2": recon_r2,
+            "validation_error": 1.0 - recon_r2,
+            "pc1_r2_test": float(score_r2[0]) if score_r2 else None,
+            "n_train": n_train,
+            "n_test": n_holdout,
+            "method": method,
+        }
+        logger.info(
+            "Field '%s' reconstruction R2 (holdout)=%.4f [%d PCs, %.4f explained var]",
+            fname,
+            recon_r2,
+            len(decoder.score_columns),
+            float(decoder.explained_variance_ratio.sum()),
+        )
+
     return SurrogateBundle(
         method=method,
         generator_spec=dict(generator_spec),
         param_names=param_names,
-        output_columns=list(available_columns),
+        output_columns=list(train_columns),
         models=models,
         validation=validation,
         n_train=n_train,
         n_test=n_holdout,
+        field_decoders=field_decoders,
     )
+
+
+def _fit_field_pca(
+    name: str,
+    columns: list[str],
+    outputs_df: pd.DataFrame,
+    n_train: int,
+    n_components: int,
+) -> tuple[FieldDecoder, np.ndarray]:
+    """Fit a PCA decoder for one field on the training rows and score all rows.
+
+    Returns the :class:`FieldDecoder` and the ``(n_total, k)`` score matrix
+    (scores for every row, computed with the train-fitted PCA).
+    """
+    field_matrix = outputs_df[columns].values.astype(float)
+    n_keys = field_matrix.shape[1]
+    k = min(int(n_components), n_keys, n_train)
+    if k < int(n_components):
+        logger.warning(
+            "Field '%s': requested %d components capped to %d "
+            "(n_elements=%d, n_train=%d)",
+            name,
+            n_components,
+            k,
+            n_keys,
+            n_train,
+        )
+    pca = PCA(n_components=k, random_state=0)
+    pca.fit(field_matrix[:n_train])
+    scores_all = pca.transform(field_matrix)
+    keys = [c[len(name) + 1 :] for c in columns]  # strip "{name}." prefix
+    score_columns = [f"{name}.pc{i:02d}" for i in range(k)]
+    decoder = FieldDecoder(
+        name=name,
+        keys=keys,
+        score_columns=score_columns,
+        mean=pca.mean_.copy(),
+        components=pca.components_.copy(),
+        explained_variance_ratio=pca.explained_variance_ratio_.copy(),
+    )
+    return decoder, scores_all
 
 
 def _fit_pce_one(x_train, y_train, x_test, y_test, joint_dist, opts, n_jobs):
@@ -892,6 +1049,37 @@ def predictor(
         return earth.predict
     else:
         raise AssertionError(f"unreachable method {method!r}")
+
+
+def predict_field(
+    bundle: SurrogateBundle, field_name: str, x: np.ndarray
+) -> np.ndarray:
+    """Predict a full spatial field at design matrix ``x``.
+
+    Predicts the field's PCA score columns through the surrogate, then
+    reconstructs the dense field via the stored :class:`FieldDecoder`.
+    Returns an array of shape ``(len(x), n_elements)`` in the original field
+    units; ``field_element_keys`` gives the matching element (e.g. region)
+    labels for the columns.
+    """
+    if field_name not in bundle.field_decoders:
+        raise KeyError(
+            f"No field decoder for '{field_name}' "
+            f"(have {sorted(bundle.field_decoders)})"
+        )
+    decoder = bundle.field_decoders[field_name]
+    scores = np.column_stack([predict(bundle, sc, x) for sc in decoder.score_columns])
+    return decoder.decode(scores)
+
+
+def field_element_keys(bundle: SurrogateBundle, field_name: str) -> list[str]:
+    """Element (e.g. region) labels for the columns of :func:`predict_field`."""
+    if field_name not in bundle.field_decoders:
+        raise KeyError(
+            f"No field decoder for '{field_name}' "
+            f"(have {sorted(bundle.field_decoders)})"
+        )
+    return list(bundle.field_decoders[field_name].keys)
 
 
 # ---------------------------------------------------------------------------

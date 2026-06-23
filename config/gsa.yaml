@@ -177,6 +177,32 @@ sensitivity_analysis:
       reducer: pivot_row
       label: Objective breakdown
       units: bn USD
+    # Spatial fields: per-region land use (~700 regions each).  Too high-
+    # dimensional to train element-by-element, so they are PCA-compressed and
+    # the surrogate predicts n_components scores; predict_field reconstructs the
+    # full map. ~20-30 components capture >99% of variance (see docs).
+    cropland_by_region:
+      kind: field
+      source: land_use.parquet
+      reducer: region_field
+      value_col: area_mha
+      key_col: region
+      exclude_col: crop
+      exclude_value: grassland
+      n_components: 30
+      label: Cropland area by region
+      units: Mha
+    grazing_by_region:
+      kind: field
+      source: land_use.parquet
+      reducer: region_field
+      value_col: area_mha
+      key_col: region
+      include_col: crop
+      include_value: grassland
+      n_components: 30
+      label: Grazing area by region
+      units: Mha
 
 # Block-based diminishing marginal utility for food consumption
 food_utility_piecewise:

@@ -2011,8 +2011,12 @@ properties:
           properties:
             kind:
               type: string
-              enum: [scalar, vector]
-              description: "Output cardinality.  Scalar reducers return a float; vector reducers return a dict[str, float] expanded to one column per element."
+              enum: [scalar, vector, field]
+              description: "Output cardinality.  Scalar reducers return a float; vector reducers return a dict[str, float] expanded to one column per element; field outputs are high-dimensional spatial dict[str, float] vectors PCA-compressed at fit time (the surrogate predicts n_components scores and reconstructs the full field)."
+            n_components:
+              type: integer
+              minimum: 1
+              description: "Required for kind: field.  Number of PCA components (scores) the surrogate predicts; the dense field is reconstructed from these."
             source:
               type: string
               description: "Parquet filename under analysis/scen-<scenario>/"

@@ -73,14 +73,15 @@ class OutputSpec:
     reducer: str
     label: str
     units: str
-    kind: str  # "scalar" | "vector"
+    kind: str  # "scalar" | "vector" | "field"
     reducer_kwargs: dict[str, Any]
+    n_components: int | None = None  # PCA rank for "field" outputs
 
 
 # Keys consumed directly by OutputSpec; everything else in an output entry
 # is forwarded verbatim to the reducer as keyword arguments.
 _RESERVED_KEYS: frozenset[str] = frozenset(
-    {"source", "reducer", "label", "units", "kind"}
+    {"source", "reducer", "label", "units", "kind", "n_components"}
 )
 
 
@@ -94,9 +95,16 @@ def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
     for name, entry in cfg.items():
         kwargs = {k: v for k, v in entry.items() if k not in _RESERVED_KEYS}
         kind = entry.get("kind", "scalar")
-        if kind not in ("scalar", "vector"):
+        if kind not in ("scalar", "vector", "field"):
             raise ValueError(
-                f"Output '{name}': unknown kind '{kind}' (expected 'scalar' or 'vector')"
+                f"Output '{name}': unknown kind '{kind}' "
+                f"(expected 'scalar', 'vector' or 'field')"
+            )
+        n_components = entry.get("n_components")
+        if kind == "field" and not n_components:
+            raise ValueError(
+                f"Field output '{name}' requires a positive 'n_components' "
+                f"(PCA rank); got {n_components!r}"
             )
         specs.append(
             OutputSpec(
@@ -107,6 +115,7 @@ def parse_outputs_spec(cfg: dict) -> list[OutputSpec]:
                 units=entry["units"],
                 kind=kind,
                 reducer_kwargs=kwargs,
+                n_components=n_components,
             )
         )
     return specs
@@ -272,6 +281,52 @@ def _pivot_column(path: Path, *, key_col: str, value_col: str) -> dict[str, floa
     return out
 
 
+@register("region_field")
+def _region_field(
+    path: Path,
+    *,
+    value_col: str,
+    key_col: str = "region",
+    include_col: str | None = None,
+    include_value: str | None = None,
+    exclude_col: str | None = None,
+    exclude_value: str | None = None,
+) -> dict[str, float]:
+    """Group ``value_col`` by ``key_col`` into a spatial field, with optional
+    row filtering.
+
+    Vector-style reducer intended for high-dimensional spatial outputs (e.g.
+    per-region cropland or grazing area from ``land_use.parquet``).  Keep rows
+    where ``include_col == include_value`` (if given) and drop rows where
+    ``exclude_col == exclude_value`` (if given), then sum ``value_col`` per
+    ``key_col``.  Returns ``{}`` for missing/empty parquets.  The full field is
+    PCA-compressed at surrogate-fit time (see ``surrogate.fit_bundle``); a
+    ``field`` OutputSpec must set ``n_components``.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    schema = pq.read_schema(path)
+    needed = [key_col, value_col]
+    if include_col:
+        needed.append(include_col)
+    if exclude_col:
+        needed.append(exclude_col)
+    if any(c not in schema.names for c in needed):
+        return {}
+    table = pq.read_table(path, columns=sorted(set(needed)))
+    if table.num_rows == 0:
+        return {}
+    df = table.to_pandas()
+    if include_col is not None:
+        df = df[df[include_col] == include_value]
+    if exclude_col is not None:
+        df = df[df[exclude_col] != exclude_value]
+    if df.empty:
+        return {}
+    grouped = df.groupby(key_col)[value_col].sum()
+    return {str(k): float(v) for k, v in grouped.items()}
+
+
 # ---------------------------------------------------------------------------
 # Scenario output loading.
 # ---------------------------------------------------------------------------
@@ -387,3 +442,38 @@ def vector_output_columns(
         prefix = f"{spec.name}{VECTOR_KEY_SEP}"
         out.update(c for c in outputs_df.columns if c.startswith(prefix))
     return out
+
+
+def field_output_columns(specs: list[OutputSpec], outputs_df: pd.DataFrame) -> set[str]:
+    """Subset of ``expanded_output_columns`` originating from field specs.
+
+    These are the raw per-element spatial columns; the surrogate does not
+    train on them directly but PCA-compresses each field's matrix and trains
+    on the resulting scores (see ``surrogate.fit_bundle``).
+    """
+    out: set[str] = set()
+    for spec in specs:
+        if spec.kind != "field":
+            continue
+        prefix = f"{spec.name}{VECTOR_KEY_SEP}"
+        out.update(c for c in outputs_df.columns if c.startswith(prefix))
+    return out
+
+
+def field_columns_by_spec(
+    specs: list[OutputSpec], outputs_df: pd.DataFrame
+) -> dict[str, list[str]]:
+    """Ordered per-element columns for each field spec, keyed by spec name.
+
+    Element columns follow their sorted order (matching the loader), so the
+    column order is a stable key index a fitted PCA decoder can rely on.
+    """
+    by_spec: dict[str, list[str]] = {}
+    for spec in specs:
+        if spec.kind != "field":
+            continue
+        prefix = f"{spec.name}{VECTOR_KEY_SEP}"
+        cols = [c for c in outputs_df.columns if c.startswith(prefix)]
+        if cols:
+            by_spec[spec.name] = cols
+    return by_spec

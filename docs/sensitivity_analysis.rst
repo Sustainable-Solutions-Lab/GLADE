@@ -973,6 +973,40 @@ Additional method-specific columns: ``loo_error``, ``n_terms``,
 ``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators``
 (RF); ``n_estimators`` (XGB); ``gcv``, ``n_basis`` (MARS).
 
+Spatial field outputs (PCA)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+High-dimensional spatial outputs -- e.g. per-region cropland or grazing
+area (~700 regions) -- are declared with ``kind: field`` and an
+``n_components`` PCA rank.  Training a separate model per region is wasteful;
+instead ``build_surrogate`` fits a PCA on the field matrix (training rows
+only) and the multi-output surrogate predicts the ``n_components`` score
+columns alongside the scalar/vector targets.  ``surrogate.predict_field``
+reconstructs the dense field as ``scores @ components + mean`` and
+``surrogate.field_element_keys`` returns the matching region labels.  Field
+outputs require a multi-output method (``rf``, ``xgb``, ``mlp``).
+
+Per-region land-use fields are strongly low-rank: ~20-30 components capture
+over 99% of the variance, so the PCA adds negligible reconstruction error and
+the field's accuracy is governed by how well the surrogate predicts the
+leading scores.  The validation parquet carries one extra row per field with
+``field_recon_r2`` (holdout reconstruction R²), ``explained_variance``,
+``n_components``, and ``n_elements``.
+
+.. code-block:: yaml
+
+   cropland_by_region:
+     kind: field
+     source: land_use.parquet
+     reducer: region_field      # group value_col by key_col, with row filters
+     value_col: area_mha
+     key_col: region
+     exclude_col: crop          # everything except grassland = cropland
+     exclude_value: grassland
+     n_components: 30
+     label: Cropland area by region
+     units: Mha
+
 **Plots**
 
 Three types of sensitivity plots are generated per (group, method):
