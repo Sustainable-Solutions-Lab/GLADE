@@ -15,30 +15,51 @@ SPDX-License-Identifier: CC-BY-4.0
     <header class="dial__head">
       <h1>What if we put a price on food's carbon?</h1>
       <p class="dial__sub">
-        Drag the dial to set a global greenhouse-gas price and watch how the
-        world's croplands, diets, animal feed and emissions reorganise as the
-        <strong>GLADE</strong> model re-optimises the food system.
+        Set a global greenhouse-gas price - and, under a flexible diet, how much
+        a year of healthy life is worth - and watch the world's croplands,
+        diets, animal feed, emissions and health burden reorganise as the
+        <strong>GLADE</strong> model re-optimises the food system. Everything
+        updates live from a neural-network surrogate of the model.
       </p>
     </header>
 
     <section class="dial__control">
       <div class="dial__control-row">
         <div class="dial__price">
+          <span class="dial__price-label">Carbon price</span>
           <span class="dial__price-value" id="priceValue">0</span>
           <span class="dial__price-unit">USD / t CO<sub>2</sub>-eq</span>
         </div>
         <!-- app.js wires up #modeToggle: it disables any mode missing from
-             data.json and switches the dashboard between the fixed- and
-             flexible-diet sweeps. -->
+             surrogate.json and switches the dashboard between the fixed- and
+             flexible-diet surrogates. -->
         <div class="toggle" id="modeToggle" role="group" aria-label="Diet mode">
           <button data-mode="fixed" class="toggle__btn is-active"
             title="Consumption pinned to the 2020 baseline">Fixed diet</button>
           <button data-mode="flexible" class="toggle__btn"
-            title="Diet re-optimises with the carbon price">Flexible diet</button>
+            title="Diet re-optimises with the carbon price and health valuation">Flexible diet</button>
         </div>
       </div>
       <input type="range" id="slider" min="0" max="1000" value="0" step="1" />
       <div class="dial__ticks" id="ticks"></div>
+
+      <!-- Value of a statistical life-year: only meaningful under flexible
+           diet (health is unvalued when the diet is fixed), so app.js greys
+           this row and the health-burden readouts in fixed-diet mode. -->
+      <div class="dial__control-row dial__control-row--yll yll-only">
+        <div class="dial__price">
+          <span class="dial__price-label">Value of a life-year</span>
+          <span class="dial__price-value" id="yllValue">0</span>
+          <span class="dial__price-unit">USD / year of life</span>
+        </div>
+        <div class="dial__stat">
+          <span class="dial__stat-value" id="yllOut">–</span>
+          <small>million years of life lost / yr</small>
+        </div>
+      </div>
+      <input type="range" id="yllSlider" min="0" max="1000" value="0" step="1"
+        class="yll-only slider--yll" />
+      <div class="dial__ticks yll-only" id="yllTicks"></div>
     </section>
 
     <section class="dial__content">
@@ -71,7 +92,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
         <div class="card card--curve">
           <div class="card__title">System cost
-            <span class="card__hint">USD trillion / yr &middot; the three components summed</span>
+            <span class="card__hint">USD trillion / yr &middot; the components summed</span>
           </div>
           <svg id="curveChart"></svg>
           <div class="strip-legend" id="costLegend"></div>
@@ -113,22 +134,30 @@ SPDX-License-Identifier: CC-BY-4.0
           per-capita intake, shown by mass (g/person/day) or food energy
           (kcal/person/day) via the toggle; animal feed is total dry matter
           (Mt/yr) by source.</p>
-        <p><strong>System cost.</strong> The model objective, split into three
-          terms that sum to it: <em>production cost</em> (growing, processing,
-          trade and supplying food); <em>resistance to change</em> (penalties
-          for deviating from observed production, plus -- under flexible diet --
-          the loss of consumer value relative to the starting diet); and the
+        <p><strong>System cost.</strong> The model objective, split into terms
+          that sum to it: <em>production cost</em> (growing, processing, trade
+          and supplying food); <em>resistance to change</em> (penalties for
+          deviating from observed production, plus -- under flexible diet -- the
+          loss of consumer value relative to the starting diet); the
           <em>social cost of carbon</em> (the carbon price times net emissions,
           which turns negative as the system reaches net-negative emissions and
-          earns sequestration credits).</p>
+          earns sequestration credits); and, under flexible diet, the
+          <em>health burden</em> (the value of a life-year times the
+          diet-attributable years of life lost).</p>
+        <p><strong>Health.</strong> Under flexible diet, the model trades diet
+          cost against diet-related health: the readout shows the
+          diet-attributable years of life lost (million YLL / yr), and the
+          value-of-a-life-year dial sets how strongly that burden is priced into
+          the optimisation. With a fixed diet, health is not valued, so the dial
+          and readout are inactive.</p>
         <p><strong>Maps.</strong> Cropland is coloured by its dominant crop
           group and faded by cropland area per unit land; pasture is shaded by
           grazing-land area per unit land.</p>
-        <p><strong>Data.</strong> The GLADE paper's published fixed-diet
-          carbon-price sweep
-          (<a href="https://doi.org/10.5281/zenodo.20617942" target="_blank"
-            rel="noopener">Zenodo 10.5281/zenodo.20617942</a>); the dial
-          interpolates between solved scenarios.</p>
+        <p><strong>Method.</strong> Values come from a multilayer-perceptron
+          surrogate trained on a large global sensitivity ensemble of GLADE
+          solves, evaluated live in your browser as you move the dials (no
+          interpolation between precomputed scenarios). Non-dial uncertainties
+          are held at their central estimates.</p>
       </div>
       <div class="dial__foot-meta">
         <span>GLADE &middot; global food-system optimisation</span>

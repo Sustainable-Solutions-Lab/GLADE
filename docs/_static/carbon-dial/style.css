@@ -61,7 +61,12 @@ body { margin: 0; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
 }
-.dial__price { display: flex; align-items: baseline; gap: 10px; }
+.dial__price { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dial__price-label {
+  flex-basis: 100%;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600; opacity: 0.82; margin-bottom: -2px;
+}
 
 /* fixed/flexible diet toggle */
 .toggle {
@@ -120,6 +125,26 @@ input[type="range"]::-moz-range-thumb {
 }
 .dial__ticks span {
   position: absolute; transform: translateX(-50%); white-space: nowrap;
+}
+
+/* --- value-of-a-life-year sub-control (flexible diet only) --- */
+.dial__control-row--yll {
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+.dial__control-row--yll .dial__price-value { font-size: 2.1rem; }
+.dial__control-row--yll .dial__price-value::before { font-size: 1.1rem; }
+.dial__stat { text-align: right; line-height: 1.15; }
+.dial__stat-value {
+  display: block; font-size: 1.9rem; font-weight: 750;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+}
+.dial__stat small { font-size: 0.74rem; opacity: 0.85; }
+/* Health is unvalued under a fixed diet: grey the value-of-life dial and the
+   health-burden readouts so it reads as inactive (rather than vanishing). */
+.mode-no-yll .yll-only {
+  opacity: 0.32; pointer-events: none; filter: grayscale(0.4);
+  transition: opacity 0.2s;
 }
 /* --- stacked layout: two maps, then chart pair, then diet & feed strips --- */
 .dial__content { display: flex; flex-direction: column; gap: 16px; }
