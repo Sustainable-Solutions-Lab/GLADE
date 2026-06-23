@@ -1789,19 +1789,26 @@ sensitivity_analysis:
     # then all inputs standardized inside the fitted pipeline.
     mlp:
       method_options:
-        hidden_layer_sizes: [256, 128, 64]
+        # Wide net: needed so one shared MLP can fit the scalar/vector outputs
+        # AND the hundreds of field PCA-score targets well (narrower nets trade
+        # field reconstruction for emission accuracy).
+        hidden_layer_sizes: [512, 256, 128]
         solver: adam
         alpha: 0.0001
         max_iter: 3000
         learning_rate_init: 0.001
         n_iter_no_change: 40
-        # "relu" is piecewise-linear (kinked); "tanh" is C-infinity smooth.
+        # "relu" won the activation sweep outright; soft-ReLU variants (softplus,
+        # gelu, silu) gave no accuracy gain on emissions and are not in sklearn.
         activation: relu
-        # Number of seed-perturbed members averaged into one surrogate; >1
-        # smooths and de-noises the response (see AveragingEnsemble). 3 members
-        # lift the emission fits (ch4 ~0.97->0.98) and smooth the carbon-dial
-        # curves at ~3x fit cost.
+        # Seed-averaged members; >1 de-noises and smooths the dial curves.
         ensemble_size: 3
+        # Loss weight on every NON-field-score (scalar/vector) target relative
+        # to the ~330 field PCA-score targets. At weight 1 the field targets
+        # dominate the shared MSE and emissions collapse (ch4 holdout ~0.64);
+        # 15 roughly equalizes the two blocks' gradient mass and restores
+        # emissions (ch4 ~0.99) while keeping field reconstruction ~0.96.
+        scalar_loss_weight: 15
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"

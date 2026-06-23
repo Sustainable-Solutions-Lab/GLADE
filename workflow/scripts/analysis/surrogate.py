@@ -600,7 +600,16 @@ def fit_bundle(
     models: dict[str, Any] = {}
     validation: dict[str, dict] = {}
 
+    # Field PCA-score targets, so _fit_multi_output can down-weight them
+    # relative to the scalar/vector outputs (carbon-dial loss balancing).
+    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
+
     if method in _MULTI_OUTPUT_METHODS:
+        # Only the MLP path applies scalar/field loss balancing (it is the dial
+        # surrogate); xgb/rf train unweighted.
+        priority_weight = (
+            float(method_options["scalar_loss_weight"]) if method == "mlp" else 1.0
+        )
         models, validation = _fit_multi_output(
             method,
             x_train,
@@ -611,6 +620,8 @@ def fit_bundle(
             method_options,
             n_threads,
             log_indices,
+            priority_weight=priority_weight,
+            field_score_columns=score_columns,
         )
     else:
         for col in available_columns:
@@ -633,7 +644,6 @@ def fit_bundle(
             models[col] = payload
             validation[col] = val
 
-    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
     for col, val in validation.items():
         val["output"] = col
         val["n_train"] = n_train
@@ -807,6 +817,8 @@ def _fit_multi_output(
     opts: dict,
     n_jobs: int,
     log_indices: list[int],
+    priority_weight: float = 1.0,
+    field_score_columns: set[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, dict]]:
     """Fit a single shared-structure estimator for all outputs.
 
@@ -816,7 +828,18 @@ def _fit_multi_output(
     per-output payload is a :class:`MultiOutputPayload` holding the shared
     estimator plus the column index and per-output mean/std.  Validation
     metrics are computed per output on the original (unstandardized) scale.
+
+    ``priority_weight`` (> 1) up-weights every NON-field-score target (the
+    scalar/vector outputs) relative to the field PCA-score targets in the
+    shared squared-error objective.  Because the estimator minimizes total
+    SE over standardized columns, scaling a column by ``sqrt(w)`` multiplies
+    its loss contribution by ``w``; folding ``1/sqrt(w)`` back into the
+    payload's ``target_std`` makes prediction invert it transparently.  This
+    is how the carbon-dial bundle keeps emission/diet/cost fits sharp despite
+    co-training with the hundreds of field-score targets that would otherwise
+    dominate the loss (ch4 holdout R2 ~0.64 at w=1 -> ~0.99 at w=15).
     """
+    field_score_columns = field_score_columns or set()
     y_train = outputs_train[available_columns].values.astype(float)
     y_test = (
         outputs_test[available_columns].values.astype(float)
@@ -827,8 +850,21 @@ def _fit_multi_output(
     target_std = y_train.std(axis=0)
     # Constant columns would lead to divide-by-zero; fall back to unit scale.
     safe_std = np.where(target_std > 0, target_std, 1.0)
-    y_train_std = (y_train - target_mean) / safe_std
-    y_test_std = (y_test - target_mean) / safe_std if y_test is not None else None
+    # Per-target loss weight applied in standardized space: sqrt(w) on the
+    # priority (non-field-score) columns, 1 on the field-score columns.
+    sqrt_w = np.where(
+        [c not in field_score_columns for c in available_columns],
+        np.sqrt(priority_weight),
+        1.0,
+    )
+    y_train_std = (y_train - target_mean) / safe_std * sqrt_w
+    y_test_std = (
+        (y_test - target_mean) / safe_std * sqrt_w if y_test is not None else None
+    )
+    # The estimator predicts in the weighted-standardized space; dividing the
+    # per-output std by sqrt(w) makes MultiOutputPayload.predict invert both
+    # the standardization and the weighting in one multiply.
+    payload_std = safe_std / sqrt_w
 
     if method == "xgb":
         fit_result = fit_xgboost_multi(
@@ -882,7 +918,7 @@ def _fit_multi_output(
             model=shared_model,
             output_index=j,
             target_mean=float(target_mean[j]),
-            target_std=float(safe_std[j]),
+            target_std=float(payload_std[j]),
         )
         y_train_col = y_train[:, j]
         y_pred_train = payload.predict(x_train)
@@ -906,7 +942,7 @@ def _fit_multi_output(
         if method == "rf":
             oob_pred_col = shared_model.oob_prediction_[:, j]
             val["oob_error"] = 1.0 - _r2(
-                y_train_col, oob_pred_col * safe_std[j] + target_mean[j]
+                y_train_col, oob_pred_col * payload_std[j] + target_mean[j]
             )
         models[col] = payload
         validation[col] = val
