@@ -18,6 +18,7 @@ import numpy as np
 
 from workflow.scripts.analysis.sensitivity_common import (
     expanded_output_columns,
+    field_columns_by_spec,
     load_scenario_outputs,
     parse_outputs_spec,
     reconstruct_samples,
@@ -70,15 +71,31 @@ def run(snakemake) -> None:
 
     output_columns = expanded_output_columns(outputs_spec, outputs_df)
     vector_columns = vector_output_columns(outputs_spec, outputs_df)
-    n_scalar = len(output_columns) - len(vector_columns)
+
+    # Field outputs are PCA-compressed inside fit_bundle, so their raw spatial
+    # columns are not trained on directly: split them off and pass the per-field
+    # column lists + PCA rank instead.
+    field_cols_by_spec = field_columns_by_spec(outputs_spec, outputs_df)
+    field_columns = {c for cols in field_cols_by_spec.values() for c in cols}
+    spec_by_name = {s.name: s for s in outputs_spec}
+    field_specs = {
+        name: {"columns": cols, "n_components": spec_by_name[name].n_components}
+        for name, cols in field_cols_by_spec.items()
+    }
+    train_columns = [c for c in output_columns if c not in field_columns]
+    n_scalar = len(train_columns) - len(vector_columns)
     logger.info(
-        "Output columns: %d scalar, %d vector elements", n_scalar, len(vector_columns)
+        "Output columns: %d scalar, %d vector elements, %d fields (%d raw elements)",
+        n_scalar,
+        len(vector_columns),
+        len(field_specs),
+        len(field_columns),
     )
 
-    # Drop scenarios where any scalar output failed.  Vector outputs use
-    # zero-fill semantics (an absent food == zero global mass), so a NaN
-    # there genuinely signals a broken solve and we treat it identically.
-    failed_mask = outputs_df[output_columns].isna().any(axis=1)
+    # Drop scenarios where any scalar/vector output failed.  Vector and field
+    # outputs use zero-fill semantics (an absent element == zero), so a NaN in
+    # the scalar/vector training columns genuinely signals a broken solve.
+    failed_mask = outputs_df[train_columns].isna().any(axis=1)
     n_failed = int(failed_mask.sum())
     if n_failed > 0:
         failed_scenarios = outputs_df.loc[failed_mask, "scenario"].tolist()
@@ -97,12 +114,13 @@ def run(snakemake) -> None:
         method=method,
         x_design=x_design,
         outputs_df=outputs_df,
-        available_columns=output_columns,
+        available_columns=train_columns,
         generator_spec=generator_spec,
         method_config=method_config,
         holdout_fraction=holdout_fraction,
         n_threads=n_threads,
         vector_columns=vector_columns,
+        field_specs=field_specs,
     )
 
     save_bundle(bundle, Path(snakemake.output.surrogate))

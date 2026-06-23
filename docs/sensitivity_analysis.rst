@@ -28,122 +28,24 @@ A parameter with :math:`S_1 \approx S_T` influences the output mainly through
 its direct effect. A parameter with :math:`S_T \gg S_1` is involved in
 significant interactions with other parameters.
 
-This implementation supports four surrogate modelling approaches:
-
-- **Polynomial Chaos Expansion (PCE)**: Computes Sobol indices analytically
-  from a polynomial approximation to the model response.
-- **Random Forest (RF)**, **XGBoost (XGB)**, and
-  **Multivariate Adaptive Regression Splines (MARS)**: Tree- and
-  spline-based regressors; Sobol indices are computed via Saltelli
-  pick-freeze Monte Carlo on the fitted surrogate.
-
-All four share a single fitting pipeline (the ``build_surrogate`` rule)
-that persists the trained model as a pickled :class:`SurrogateBundle`
-alongside a validation parquet.  The bundle is the single artifact
-consumed by downstream rules and notebooks: Sobol-index computation,
-uncertainty-band plots, and policy sweeps all load the bundle instead of
-refitting.  Which surrogate is used for a given downstream consumer is
-controlled by ``sensitivity_analysis.default_surrogate`` in the config.
+Because every sample requires a full model build and solve, Sobol indices
+are not estimated directly on the model. Instead a cheap **surrogate** is
+fitted to the solved samples and the indices are computed from it. Four
+surrogate methods are available (``pce``, ``rf``, ``xgb``, ``mlp``); how they
+are fitted, validated, and stored is described in
+:doc:`surrogate_modelling`. This page covers the experimental design, the
+Sobol indices themselves, and how to read them.
 
 
-Methodology
------------
+Computing Sobol Indices
+-----------------------
 
-Polynomial Chaos Expansion
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Once a surrogate is fitted (:doc:`surrogate_modelling`), Sobol indices are
+extracted from it by one of two routes. The PCE surrogate gives them in
+closed form from its coefficients; the regression surrogates (RF, XGB, MLP)
+give them by Monte Carlo sampling of the fitted predictor.
 
-The central idea is to approximate the model's input-output mapping as a
-polynomial in the uncertain inputs. If :math:`\mathbf{X} = (X_1, \ldots, X_d)`
-are the uncertain parameters and :math:`Y` is a scalar output, the PCE
-representation is:
-
-.. math::
-
-   Y \approx \sum_{\boldsymbol{\alpha}} c_{\boldsymbol{\alpha}}\,
-   \Psi_{\boldsymbol{\alpha}}(\mathbf{X})
-
-where :math:`\boldsymbol{\alpha} = (\alpha_1, \ldots, \alpha_d)` is a
-multi-index, :math:`c_{\boldsymbol{\alpha}}` are scalar coefficients, and
-:math:`\Psi_{\boldsymbol{\alpha}}` are multivariate orthonormal polynomials
-with respect to the joint input distribution. Each
-:math:`\Psi_{\boldsymbol{\alpha}}` is a product of univariate orthonormal
-polynomials:
-
-.. math::
-
-   \Psi_{\boldsymbol{\alpha}}(\mathbf{X}) =
-   \prod_{i=1}^d \psi_{\alpha_i}^{(i)}(X_i)
-
-where :math:`\psi_k^{(i)}` is the degree-:math:`k` orthonormal polynomial for
-the marginal distribution of :math:`X_i`. For uniform inputs these are
-(normalised) Legendre polynomials; for normal inputs, Hermite polynomials.
-
-The orthonormality property
-:math:`\mathbb{E}[\Psi_{\boldsymbol{\alpha}} \Psi_{\boldsymbol{\beta}}] =
-\delta_{\boldsymbol{\alpha}\boldsymbol{\beta}}` is what makes the variance
-decomposition exact: the variance of the expansion is simply the sum of
-squared coefficients. Once the coefficients are known, Sobol indices follow
-directly without further model evaluations.
-
-The polynomial basis is generated using `chaospy
-<https://chaospy.readthedocs.io/>`_. A **cross-truncation** parameter
-:math:`q \in (0, 1]` controls the multi-index set: lower values favour
-lower-order interaction terms, keeping the basis compact. The default is
-:math:`q = 0.5`.
-
-
-Sparse Fitting via LARS
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-With many parameters and moderate polynomial degree, the number of candidate
-basis terms can exceed the number of model samples. Rather than requiring a
-full tensor-product design, the implementation uses **Least Angle Regression
-(LARS)** with cross-validation to select a sparse subset of active terms.
-
-LARS incrementally adds basis terms that are most correlated with the current
-residual, using cross-validation to choose the optimal number of active terms.
-This produces a parsimonious expansion that captures the dominant polynomial
-structure without overfitting.
-
-The fitting uses `sklearn.linear_model.LarsCV
-<https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LarsCV.html>`_
-with 5-fold cross-validation.
-
-**Validation**: Surrogate quality is assessed through multiple metrics:
-
-- **Holdout error**: When ``holdout_fraction > 0`` (recommended), the tail of
-  the Sobol sequence is reserved as held-out test data. The surrogate is fitted
-  on the remaining training samples and evaluated on the holdout set. This gives
-  an honest, out-of-sample error estimate. Using the tail preserves the
-  space-filling quality of the training design (Sobol sequences front-load
-  coverage).
-- **Leave-one-out error** (PCE only): A relative error computed via the hat
-  matrix without refitting. Reported alongside holdout error for comparison.
-- **Out-of-bag R²** (RF only): The OOB score from bootstrap aggregation.
-  Reported alongside holdout error for comparison.
-- **R-squared** (:math:`R^2`): Coefficient of determination on training data.
-
-The primary ``validation_error`` field in output files is the holdout error when
-available, falling back to LOO (PCE) or OOB (RF) error otherwise.
-
-Random Forest
-~~~~~~~~~~~~~
-
-As an alternative to PCE, a **Random Forest** ensemble can be fitted to the
-same model samples. Sobol indices are computed via Monte Carlo integration:
-for each parameter, the marginal effect is estimated by permuting that
-parameter's values while holding others fixed, then comparing the variance
-reduction.
-
-Random Forests are non-parametric and can capture non-smooth or discontinuous
-model responses that polynomials may miss. However, they are more expensive to
-evaluate conditionally (requiring Monte Carlo samples at each grid point) and
-produce noisier sensitivity estimates.
-
-The implementation uses `sklearn.ensemble.RandomForestRegressor
-<https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html>`_
-with OOB scoring enabled.
-
+.. _sobol-from-pce:
 
 Sobol Indices from PCE Coefficients
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,6 +82,21 @@ These indices satisfy :math:`0 \le S_{1,i} \le S_{T,i} \le 1` and
 :math:`\sum_i S_{1,i} \le 1` (with equality when there are no interactions).
 
 
+Sobol Indices by Monte Carlo
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The regression surrogates (RF, XGB, MLP) have no analytic variance
+decomposition, so their Sobol indices are estimated by **Saltelli
+pick-freeze Monte Carlo** on the fitted predictor. Two large sample matrices
+``A`` and ``B`` are drawn from the joint input distribution; for each
+parameter, a hybrid matrix re-uses one column from one matrix and the rest
+from the other, and the resulting variance contrasts estimate :math:`S_1`
+and :math:`S_T`. Because the surrogate is cheap to evaluate, the Monte Carlo
+sample size (``sobol.n_mc_global``) can be large enough to keep the estimator
+noise small. This route is more expensive and noisier than the PCE analytic
+one, which is the trade-off for handling non-smooth responses.
+
+
 Conditional Sensitivity Analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -205,9 +122,10 @@ non-slice parameter is active. The result is a set of Sobol indices for the
 remaining parameters, conditional on the policy choices — showing how
 sensitivity patterns shift as policy values change.
 
-For **RF**, conditioning is done via Monte Carlo: slice parameters are held
-fixed while remaining parameters are sampled from their marginal distributions,
-and Sobol indices are computed from the resulting predictions.
+For the **regression surrogates** (RF, XGB, MLP), conditioning is done via
+Monte Carlo: slice parameters are held fixed while remaining parameters are
+sampled from their marginal distributions, and Sobol indices are computed
+from the resulting predictions.
 
 
 Experimental Design
@@ -313,24 +231,26 @@ distributions rather than fixed value lists.
            emissions:
              ghg_price: "{ghg_price}"
 
-   # Surrogate fitting methods (applied independently to the same scenarios)
+   # Surrogate fitting + Sobol settings (see surrogate_modelling for methods)
    sensitivity_analysis:
      holdout_fraction: 0.15
+     default_surrogate: mlp
+     sobol:
+       outputs: [total_cost, co2, ch4, n2o, land_use, yll]
+       grid_resolution: 15     # conditional-Sobol grid points per slice axis
+       n_mc_global: 16384      # Monte Carlo sample size for global indices
+       n_mc_conditional: 2048  # Monte Carlo sample size per conditioning point
      methods:
-       pce:
-         grid_resolution: 50
-         method_options:
-           n_mc_conditional: 4096
-           cross_truncation: 0.8
-       rf:
-         grid_resolution: 50
-         method_options:
-           n_estimators: 500
+       # ... per-method hyperparameters; see Surrogate Modelling
+     outputs:
+       # ... surrogate target declarations; see Surrogate Modelling
 
 The generator defines only the scenario sampling design (parameters,
-distributions, sample count). Surrogate method configuration lives in
-the separate ``sensitivity_analysis`` section, allowing multiple methods
-to be applied to the same solved scenarios without duplication.
+distributions, sample count). The surrogate methods fitted on those
+scenarios, their hyperparameters, and the output targets are configured in
+the ``sensitivity_analysis`` section and documented in
+:doc:`surrogate_modelling`; the ``sobol`` sub-block below holds the
+Sobol-index settings shared across methods.
 
 Health relative risk parameters use a **quantile parameterization**: each
 ``rr_<risk_factor>`` value is a quantile :math:`q \in [0, 1]` that interpolates
@@ -366,21 +286,19 @@ parameter per risk factor produces cause-specific adjustments automatically.
   are substituted with sampled values. Type is preserved when the placeholder
   is the entire value.
 
-**``sensitivity_analysis`` field reference**:
+**``sensitivity_analysis.sobol`` field reference** (the Sobol-index settings;
+the surrogate-fitting fields -- ``methods``, ``outputs``,
+``default_surrogate``, ``holdout_fraction``, ``discover_scenarios_on_disk`` --
+are documented in :doc:`surrogate_modelling`):
 
-- ``holdout_fraction``: Fraction of samples reserved for out-of-sample
-  validation (e.g., 0.15 for 15%). Set to 0 to disable holdout.
-- ``methods``: Mapping of method names (``pce``, ``rf``) to method-specific
-  config. Each method entry supports:
-
-  - ``grid_resolution`` (default: 100): Number of grid points for conditional
-    Sobol evaluation along each slice parameter axis.
-  - ``method_options``: Method-specific hyperparameters:
-
-    - **PCE**: ``max_degree`` (default: 3), ``cross_truncation`` (default: 0.5),
-      ``n_mc_conditional`` (default: 4096).
-    - **RF**: ``n_estimators`` (default: 500), ``n_mc_global`` (default: 16384),
-      ``n_mc_conditional`` (default: 8192).
+- ``outputs``: Allowlist of output names whose Sobol indices are computed and
+  plotted. Vector and field outputs are excluded by default because the
+  per-element fan-out across Monte Carlo samples blows up.
+- ``grid_resolution``: Number of grid points for conditional Sobol evaluation
+  along each slice-parameter axis.
+- ``n_mc_global``: Monte Carlo sample size for global indices (regression
+  surrogates only; PCE is analytic).
+- ``n_mc_conditional``: Monte Carlo sample size per conditioning point.
 
 
 .. _sensitivity-parameter-ranges:
@@ -850,9 +768,9 @@ Running the Analysis
 --------------------
 
 The sensitivity analysis has four stages: build sampled scenarios, solve
-them, fit a surrogate over the scalar outputs, and compute Sobol indices
-(or other diagnostics) from the surrogate. Snakemake handles all
-dependencies automatically.
+them, fit a surrogate over the declared outputs (:doc:`surrogate_modelling`),
+and compute Sobol indices (or other diagnostics) from the surrogate.
+Snakemake handles all dependencies automatically.
 
 **Run the full pipeline** (build + solve + analyze for all samples):
 
@@ -864,14 +782,14 @@ dependencies automatically.
 
 .. code-block:: bash
 
-   # XGBoost surrogate for the default scenario group
+   # MLP surrogate for the default scenario group
    tools/smk -j4 --configfile config/gsa.yaml -- \
-       results/gsa/surrogates/surrogate_gsa_xgb.pkl
+       results/gsa/surrogates/surrogate_gsa_mlp.pkl
 
-The ``build_surrogate`` rule writes a pickled :class:`SurrogateBundle` (the
-trained model, generator spec, and parameter metadata) plus a flat
-validation parquet.  The bundle is consumed by downstream rules and
-notebooks (policy sweeps, uncertainty-band plots).
+The ``build_surrogate`` rule writes a pickled
+``SurrogateBundle`` plus a
+validation parquet (see :doc:`surrogate_modelling`); the bundle is what the
+Sobol computation, policy sweeps, and uncertainty-band plots consume.
 
 .. note::
 
@@ -894,11 +812,11 @@ notebooks (policy sweeps, uncertainty-band plots).
 .. code-block:: bash
 
    tools/smk -j4 --configfile config/gsa.yaml -- \
-       results/gsa/analysis/sobol_global_indices_gsa_xgb.parquet
+       results/gsa/analysis/sobol_global_indices_gsa_mlp.parquet
 
 Output paths use two wildcards: ``{group}`` identifies the scenario sampling
 group (e.g., ``gsa``, ``gsa-l1-low``) and ``{method}`` selects the surrogate
-type (``pce``, ``rf``, ``mars``, ``xgb``).  All methods consume the same
+type (``pce``, ``rf``, ``xgb``, ``mlp``).  All methods consume the same
 solved scenarios, and ``sensitivity_analysis.default_surrogate`` selects the
 surrogate downstream consumers (notebooks, uncertainty plots) load by
 default.
@@ -913,15 +831,10 @@ default.
 Output Files
 ------------
 
-Per (group, method) combination, the workflow writes:
-
-- A pickled surrogate bundle at
-  ``results/{name}/surrogates/surrogate_{group}_{method}.pkl``.  Loaded via
-  :func:`workflow.scripts.analysis.surrogate.load_bundle`.
-- A flat validation parquet at
-  ``results/{name}/surrogates/surrogate_validation_{group}_{method}.parquet``
-  (surrogate fit quality per output target).
-- Three Sobol parquets at ``results/{name}/analysis/``:
+Per (group, method) combination, the surrogate fit writes a pickled bundle
+and a validation parquet under ``results/{name}/surrogates/`` (see
+:doc:`surrogate_modelling`). The Sobol computation then writes three parquets
+under ``results/{name}/analysis/``:
 
 **sobol_global_indices_{group}_{method}.parquet** — Global Sobol indices
 
@@ -954,24 +867,9 @@ One row per (output, parameter, conditioning-value combination).
 Same schema as above, but conditioned on *all* slice parameters simultaneously
 over a 2D grid. Used by the dominant factor phase diagram plot.
 
-**surrogate_validation_{group}_{method}.parquet** — Surrogate quality metrics
-(lives under ``surrogates/``, not ``analysis/``, because it describes the
-surrogate fit rather than the Sobol indices).
-
-.. csv-table::
-   :header: Column, Type, Description
-
-   ``output``, string, "Output metric"
-   ``validation_error``, float, "Primary error metric (holdout error when available)"
-   ``r2_train``, float, "R² on training data"
-   ``r2_test``, float, "R² on holdout data (null if holdout disabled)"
-   ``n_train``, int, "Number of training samples"
-   ``n_test``, int, "Number of holdout samples"
-   ``method``, string, "Surrogate method (``pce``, ``rf``, ``mars``, ``xgb``)"
-
-Additional method-specific columns: ``loo_error``, ``n_terms``,
-``n_active_terms``, ``max_degree`` (PCE); ``oob_error``, ``n_estimators``
-(RF); ``n_estimators`` (XGB); ``gcv``, ``n_basis`` (MARS).
+The surrogate bundle and its validation parquet (fit-quality metrics per
+target, including spatial ``field`` reconstruction) are described in
+:doc:`surrogate_modelling`.
 
 **Plots**
 
@@ -1006,19 +904,18 @@ Interpreting Results
 **Example interpretation**: If ``yield_factor`` has :math:`S_1 = 0.6` for
 ``co2``, then 60% of the variance in net CO\u2082 emissions is explained by
 crop yield uncertainty alone.  Total GHG emissions are the sum of the
-``co2``, ``ch4``, and ``n2o`` outputs (all in MtCO\u2082eq); for tree methods
-(RF, XGBoost) fit with a shared multi-output structure, that sum is also the
-direct surrogate prediction for total emissions, as linear relations between
-outputs are preserved exactly under MSE loss.
+``co2``, ``ch4``, and ``n2o`` outputs (all in MtCO\u2082eq); for the
+multi-output tree methods (RF, XGBoost) that sum is also recovered as the
+direct surrogate prediction for total emissions, because linear relations
+between outputs are preserved exactly under MSE loss (the smooth MLP and PCE
+preserve them only approximately).
 
-**Validation quality**:
-
-- Validation error < 0.1 indicates a reliable surrogate.
-- Validation error > 0.1 suggests the surrogate approximation is insufficient.
-  For PCE, consider increasing samples or polynomial degree. For RF, consider
-  increasing the number of estimators. Comparing PCE and RF errors can reveal
-  whether the issue is model non-smoothness (where RF may outperform PCE) or
-  insufficient data.
+**Validation quality**: see :doc:`surrogate_modelling` for the full set of
+fit-quality metrics. As a quick guide, a validation error below 0.1 indicates
+a reliable surrogate; if it is higher, increase the sample count, or for PCE
+the polynomial degree. Comparing a smooth method (PCE/MLP) against a tree
+method (RF/XGB) reveals whether the difficulty is response non-smoothness
+(where the trees may do better) or simply insufficient data.
 
 **Conditional indices**: These show how sensitivity patterns shift with policy
 choices. For instance, at low GHG prices, yield uncertainty may dominate

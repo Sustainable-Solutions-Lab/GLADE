@@ -4,8 +4,8 @@
 
 """Shared surrogate model module for sensitivity analysis.
 
-Fits one of several surrogate types (PCE, RF, MARS, XGBoost) to the
-scalar outputs of the GSA Sobol design and persists the result as a
+Fits one of several surrogate types (PCE, RF, XGBoost, ReLU MLP) to
+the scalar outputs of the GSA Sobol design and persists the result as a
 self-contained bundle that downstream rules (Sobol index computation,
 policy-sweep plots, notebooks) can load and re-use.
 
@@ -15,6 +15,7 @@ variance decomposition, all others use Saltelli pick-freeze Monte Carlo.
 """
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from itertools import product
 import logging
 from pathlib import Path
@@ -24,21 +25,26 @@ from typing import Any, Callable
 import chaospy as cp
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LarsCV
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 from workflow.scenario_generators import build_joint_distribution
-from workflow.scripts.analysis.mars import Earth
 
 logger = logging.getLogger(__name__)
 
 
-SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "mars", "xgb")
+SUPPORTED_METHODS: tuple[str, ...] = ("pce", "rf", "xgb", "mlp")
 # Methods that natively accept a 2-D target and train all outputs with a
 # shared structure.  XGBoost uses ``multi_strategy='multi_output_tree'``;
-# sklearn's RandomForestRegressor accepts ``y`` of shape ``(n, n_out)``.
-_MULTI_OUTPUT_METHODS: tuple[str, ...] = ("xgb", "rf")
+# sklearn's RandomForestRegressor and MLPRegressor accept ``y`` of shape
+# ``(n, n_out)``.
+_MULTI_OUTPUT_METHODS: tuple[str, ...] = ("xgb", "rf", "mlp")
 
 
 @dataclass
@@ -48,7 +54,7 @@ class SurrogateBundle:
     Attributes
     ----------
     method
-        Surrogate type: one of ``pce``, ``rf``, ``mars``, ``xgb``.
+        Surrogate type: one of ``pce``, ``rf``, ``xgb``, ``mlp``.
     generator_spec
         Full generator spec the surrogate was trained against.  Carries
         parameter names, distribution specs, slice parameters, and
@@ -64,12 +70,19 @@ class SurrogateBundle:
         - ``pce``: ``{coefficients, multi_indices, max_degree, cross_truncation}``
         - ``rf``: fitted :class:`RandomForestRegressor`
         - ``xgb``: fitted :class:`XGBRegressor`
-        - ``mars``: ``{earth: Earth, log_transform: bool}``
+        - ``mlp``: fitted :class:`~sklearn.pipeline.Pipeline`
+          (log + standardize + :class:`MLPRegressor`)
 
     validation
         Per-output dict of fit-quality metrics (keys vary by method).
     n_train, n_test
         Training and holdout sample counts.
+    field_decoders
+        Per-field PCA decoders (keyed by field-output name).  Empty unless
+        the config declares ``kind: field`` outputs.  ``output_columns``
+        then contains the per-field PCA *score* columns (the surrogate's
+        actual targets) rather than the thousands of raw spatial elements;
+        :func:`predict_field` reconstructs the full field from the scores.
     """
 
     method: str
@@ -80,6 +93,31 @@ class SurrogateBundle:
     validation: dict[str, dict]
     n_train: int
     n_test: int
+    field_decoders: dict[str, "FieldDecoder"] = dataclass_field(default_factory=dict)
+
+
+@dataclass
+class FieldDecoder:
+    """PCA decoder reconstructing a high-dimensional spatial field from scores.
+
+    A ``field`` output (e.g. per-region cropland area) is compressed by PCA
+    fit on the training rows: the surrogate predicts ``n_components`` score
+    columns and the full field is reconstructed as
+    ``scores @ components + mean``.  ``keys`` are the field element labels
+    (e.g. region ids) in the column order the components were fit on.
+    """
+
+    name: str
+    keys: list[str]
+    score_columns: list[str]
+    mean: np.ndarray  # (n_keys,)
+    components: np.ndarray  # (n_components, n_keys)
+    explained_variance_ratio: np.ndarray  # (n_components,)
+
+    def decode(self, scores: np.ndarray) -> np.ndarray:
+        """Reconstruct the field ``(n_samples, n_keys)`` from ``(n_samples, k)`` scores."""
+        scores = np.atleast_2d(scores)
+        return scores @ self.components + self.mean
 
 
 @dataclass
@@ -328,28 +366,87 @@ def fit_random_forest_multi(
     }
 
 
-def fit_mars(
+class LogColumns(BaseEstimator, TransformerMixin):
+    """Natural-log transform a fixed subset of input columns.
+
+    First stage of the MLP input pipeline: log-uniform parameters (e.g.
+    ``value_per_yll``, ``ghg_price``) span several orders of magnitude, so
+    feeding them raw makes the post-standardization feature heavy-tailed
+    and the response strongly nonlinear in raw space.  Logging them first
+    turns a log-uniform marginal into a uniform one and the typically
+    log-linear response into a near-linear one.  Tree methods are invariant
+    to monotone rescalings so they skip this; the MLP is not.
+    """
+
+    def __init__(self, log_indices: tuple[int, ...] = ()):
+        self.log_indices = list(log_indices)
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, x):
+        x = np.asarray(x, dtype=float).copy()
+        for j in self.log_indices:
+            x[:, j] = np.log(x[:, j])
+        return x
+
+
+def fit_mlp_multi(
     x_design: np.ndarray,
-    y: np.ndarray,
-    max_terms: int = 50,
-    max_degree: int = 2,
-    penalty: float = 3.0,
-    n_knots: int = 25,
+    y_mat: np.ndarray,
+    log_indices: list[int],
+    hidden_layer_sizes: tuple[int, ...] = (256, 128, 64),
+    solver: str = "adam",
+    alpha: float = 1e-4,
+    max_iter: int = 3000,
+    learning_rate_init: float = 1e-3,
+    n_iter_no_change: int = 40,
+    random_state: int = 42,
 ) -> dict:
-    """Fit a MARS regressor with GCV-based model selection."""
-    model = Earth(
-        max_terms=max_terms,
-        max_degree=max_degree,
-        penalty=penalty,
-        n_knots=n_knots,
+    """Fit a single multi-output ReLU MLP for all outputs jointly.
+
+    The estimator is a :class:`~sklearn.pipeline.Pipeline` that logs the
+    log-uniform input columns, standardizes all inputs, and regresses the
+    (caller-standardized) ``y_mat`` with a ReLU
+    :class:`~sklearn.neural_network.MLPRegressor`.  A ReLU MLP is a
+    continuous piecewise-linear map, so predictions have smooth, non-
+    staircased gradients (unlike the piecewise-constant tree surrogates).
+    ``predict`` returns a ``(n_samples, n_outputs)`` matrix in the
+    standardized target space, matching the other multi-output methods.
+
+    ``solver='adam'`` is the default: it scales to the full ~14k-sample
+    design and, with ``early_stopping`` on a held-out 10%, outperforms
+    full-batch lbfgs (which converges to poorer multi-output minima here).
+    ``early_stopping``/``n_iter_no_change`` apply only to the stochastic
+    solvers (ignored by lbfgs).
+    """
+    mlp_kwargs: dict[str, Any] = {
+        "hidden_layer_sizes": hidden_layer_sizes,
+        "activation": "relu",
+        "solver": solver,
+        "alpha": alpha,
+        "max_iter": max_iter,
+        "random_state": random_state,
+    }
+    if solver in ("adam", "sgd"):
+        mlp_kwargs.update(
+            learning_rate_init=learning_rate_init,
+            early_stopping=True,
+            n_iter_no_change=n_iter_no_change,
+            validation_fraction=0.1,
+        )
+    model = Pipeline(
+        [
+            ("log", LogColumns(tuple(log_indices))),
+            ("scaler", StandardScaler()),
+            ("mlp", MLPRegressor(**mlp_kwargs)),
+        ]
     )
-    model.fit(x_design, y)
+    model.fit(x_design, y_mat)
     return {
         "model": model,
-        "validation_error": model.gcv_,
-        "r2": model.score(x_design, y),
-        "n_basis": len(model.basis_),
-        "n_samples": len(y),
+        "n_iter": int(model.named_steps["mlp"].n_iter_),
+        "n_samples": len(y_mat),
     }
 
 
@@ -368,6 +465,7 @@ def fit_bundle(
     holdout_fraction: float,
     n_threads: int = 1,
     vector_columns: set[str] | None = None,
+    field_specs: dict[str, dict] | None = None,
 ) -> SurrogateBundle:
     """Fit a :class:`SurrogateBundle` for all available output columns.
 
@@ -377,41 +475,86 @@ def fit_bundle(
 
     ``vector_columns``, if supplied, names columns originating from
     vector outputs.  Vector outputs are only supported by the
-    multi-output methods (``xgb``, ``rf``); requesting ``pce`` or
-    ``mars`` on a bundle that contains any vector column raises
+    multi-output methods (``xgb``, ``rf``, ``mlp``); requesting ``pce``
+    on a bundle that contains any vector column raises
     :class:`NotImplementedError`.
+
+    ``field_specs`` maps each ``kind: field`` output name to
+    ``{"columns": [...], "n_components": k}``.  Each field's raw spatial
+    columns (already present in ``outputs_df``) are PCA-compressed -- the
+    PCA is fit on the training rows only and the surrogate is trained to
+    predict the ``k`` score columns instead of the thousands of raw
+    elements.  Like vector outputs, fields require a multi-output method.
     """
     if method not in SUPPORTED_METHODS:
         raise ValueError(
-            f"Unknown surrogate method '{method}'. " f"Supported: {SUPPORTED_METHODS}"
+            f"Unknown surrogate method '{method}'. Supported: {SUPPORTED_METHODS}"
         )
 
     vector_columns = vector_columns or set()
-    if vector_columns and method not in _MULTI_OUTPUT_METHODS:
+    field_specs = field_specs or {}
+    if (vector_columns or field_specs) and method not in _MULTI_OUTPUT_METHODS:
+        kinds = "vector" if vector_columns else "field"
         raise NotImplementedError(
-            f"Method '{method}' does not support vector outputs; "
-            f"vector columns present: {sorted(vector_columns)[:3]}... "
-            f"Use one of {_MULTI_OUTPUT_METHODS} or remove the vector "
+            f"Method '{method}' does not support {kinds} outputs; "
+            f"use one of {_MULTI_OUTPUT_METHODS} or remove the vector/field "
             f"specs from sensitivity_analysis.outputs."
         )
 
     joint_dist, param_names = build_joint_distribution(generator_spec)
     method_options = dict(method_config.get("method_options", {}))
 
+    # Input columns the MLP should log-transform first (log-uniform params).
+    params_spec = generator_spec["parameters"]
+    log_indices = [
+        i
+        for i, name in enumerate(param_names)
+        if params_spec[name].get("distribution") == "log_uniform"
+    ]
+
     n_total = len(x_design)
     n_holdout = int(n_total * holdout_fraction)
     n_train = n_total - n_holdout
+
+    # PCA-compress field outputs (fit on training rows only).  Each field's
+    # raw spatial columns are replaced, as surrogate targets, by its PCA
+    # score columns; the raw columns are retained in ``outputs_df`` for
+    # reconstruction validation below.
+    field_decoders: dict[str, FieldDecoder] = {}
+    train_columns = list(available_columns)
+    work_df = outputs_df
+    if field_specs:
+        score_data: dict[str, np.ndarray] = {}
+        for fname, fspec in field_specs.items():
+            decoder, scores_all = _fit_field_pca(
+                fname, fspec["columns"], outputs_df, n_train, fspec["n_components"]
+            )
+            field_decoders[fname] = decoder
+            for j, sc in enumerate(decoder.score_columns):
+                score_data[sc] = scores_all[:, j]
+            train_columns.extend(decoder.score_columns)
+            logger.info(
+                "Field '%s': PCA %d elements -> %d components "
+                "(%.4f cumulative explained variance)",
+                fname,
+                len(decoder.keys),
+                len(decoder.score_columns),
+                float(decoder.explained_variance_ratio.sum()),
+            )
+        work_df = outputs_df.assign(**score_data)
+
     x_train = x_design[:n_train]
     x_test = x_design[n_train:] if n_holdout > 0 else None
-    outputs_train = outputs_df.iloc[:n_train]
-    outputs_test = outputs_df.iloc[n_train:] if n_holdout > 0 else None
+    outputs_train = work_df.iloc[:n_train]
+    outputs_test = work_df.iloc[n_train:] if n_holdout > 0 else None
 
     logger.info(
-        "Bundle fit (%s): %d train, %d holdout, %d outputs",
+        "Bundle fit (%s): %d train, %d holdout, %d targets (%d fields)",
         method,
         n_train,
         n_holdout,
-        len(available_columns),
+        len(train_columns),
+        len(field_decoders),
     )
 
     models: dict[str, Any] = {}
@@ -424,9 +567,10 @@ def fit_bundle(
             x_test,
             outputs_train,
             outputs_test,
-            available_columns,
+            train_columns,
             method_options,
             n_threads,
+            log_indices,
         )
     else:
         for col in available_columns:
@@ -443,28 +587,26 @@ def fit_bundle(
                     method_options,
                     n_threads,
                 )
-            elif method == "mars":
-                payload, val = _fit_mars_one(
-                    x_train, y_train, x_test, y_test, col, method_options
-                )
             else:
                 raise AssertionError(f"unreachable method {method!r}")
 
             models[col] = payload
             validation[col] = val
 
+    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
     for col, val in validation.items():
         val["output"] = col
         val["n_train"] = n_train
         val["n_test"] = n_holdout
         val["method"] = method
 
-        # Vector elements (e.g. minor foods) often have tiny global mass
-        # and noisy targets; only flag genuinely poor scalar fits at the
-        # warning level, log vector outliers more quietly.
-        threshold = 0.25 if col in vector_columns else 0.1
+        # Vector elements (e.g. minor foods) and PCA score columns often have
+        # tiny mass / noisy higher-order modes; only flag genuinely poor
+        # scalar fits at the warning level, log the rest more quietly.
+        quiet = col in vector_columns or col in score_columns
+        threshold = 0.25 if quiet else 0.1
         if val["validation_error"] > threshold:
-            level = logger.info if col in vector_columns else logger.warning
+            level = logger.info if quiet else logger.warning
             level(
                 "High validation error (%.3f) for '%s' (%s)",
                 val["validation_error"],
@@ -472,21 +614,106 @@ def fit_bundle(
                 method,
             )
 
+    # Field reconstruction validation: predict the score columns on the
+    # holdout, decode to the full field, and score against the true field.
+    for fname, decoder in field_decoders.items():
+        cols = field_specs[fname]["columns"]
+        if x_test is not None:
+            true_field = outputs_df[cols].iloc[n_train:].values.astype(float)
+            x_eval = x_test
+        else:
+            true_field = outputs_df[cols].iloc[:n_train].values.astype(float)
+            x_eval = x_train
+        scores_pred = np.column_stack(
+            [models[sc].predict(x_eval) for sc in decoder.score_columns]
+        )
+        field_pred = decoder.decode(scores_pred)
+        ss_res = float(np.sum((true_field - field_pred) ** 2))
+        # Baseline is the train-fitted PCA mean field (not the holdout's own
+        # mean): this scores reconstruction against predicting the mean field,
+        # so it is comparable across the train/holdout split.
+        ss_tot = float(np.sum((true_field - decoder.mean) ** 2))
+        recon_r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        pc1 = decoder.score_columns[0]
+        pc1_r2 = validation[pc1].get("r2_test") or validation[pc1].get("r2_train")
+        validation[fname] = {
+            "output": fname,
+            "kind": "field",
+            "n_components": len(decoder.score_columns),
+            "n_elements": len(decoder.keys),
+            "explained_variance": float(decoder.explained_variance_ratio.sum()),
+            "field_recon_r2": recon_r2,
+            "validation_error": 1.0 - recon_r2,
+            "pc1_r2_test": float(pc1_r2) if pc1_r2 is not None else None,
+            "n_train": n_train,
+            "n_test": n_holdout,
+            "method": method,
+        }
+        logger.info(
+            "Field '%s' reconstruction R2 (holdout)=%.4f [%d PCs, %.4f explained var]",
+            fname,
+            recon_r2,
+            len(decoder.score_columns),
+            float(decoder.explained_variance_ratio.sum()),
+        )
+
     return SurrogateBundle(
         method=method,
         generator_spec=dict(generator_spec),
         param_names=param_names,
-        output_columns=list(available_columns),
+        output_columns=list(train_columns),
         models=models,
         validation=validation,
         n_train=n_train,
         n_test=n_holdout,
+        field_decoders=field_decoders,
     )
 
 
+def _fit_field_pca(
+    name: str,
+    columns: list[str],
+    outputs_df: pd.DataFrame,
+    n_train: int,
+    n_components: int,
+) -> tuple[FieldDecoder, np.ndarray]:
+    """Fit a PCA decoder for one field on the training rows and score all rows.
+
+    Returns the :class:`FieldDecoder` and the ``(n_total, k)`` score matrix
+    (scores for every row, computed with the train-fitted PCA).
+    """
+    field_matrix = outputs_df[columns].values.astype(float)
+    n_keys = field_matrix.shape[1]
+    k = min(int(n_components), n_keys, n_train)
+    if k < int(n_components):
+        logger.warning(
+            "Field '%s': requested %d components capped to %d "
+            "(n_elements=%d, n_train=%d)",
+            name,
+            n_components,
+            k,
+            n_keys,
+            n_train,
+        )
+    pca = PCA(n_components=k, random_state=0)
+    pca.fit(field_matrix[:n_train])
+    scores_all = pca.transform(field_matrix)
+    keys = [c[len(name) + 1 :] for c in columns]  # strip "{name}." prefix
+    score_columns = [f"{name}.pc{i:02d}" for i in range(k)]
+    decoder = FieldDecoder(
+        name=name,
+        keys=keys,
+        score_columns=score_columns,
+        mean=pca.mean_.copy(),
+        components=pca.components_.copy(),
+        explained_variance_ratio=pca.explained_variance_ratio_.copy(),
+    )
+    return decoder, scores_all
+
+
 def _fit_pce_one(x_train, y_train, x_test, y_test, joint_dist, opts, n_jobs):
-    max_degree = opts.get("max_degree", 3)
-    cross_truncation = opts.get("cross_truncation", 0.5)
+    max_degree = opts["max_degree"]
+    cross_truncation = opts["cross_truncation"]
     result = fit_pce(
         x_train, y_train, joint_dist, max_degree, cross_truncation, n_jobs=n_jobs
     )
@@ -539,6 +766,7 @@ def _fit_multi_output(
     available_columns: list[str],
     opts: dict,
     n_jobs: int,
+    log_indices: list[int],
 ) -> tuple[dict[str, Any], dict[str, dict]]:
     """Fit a single shared-structure estimator for all outputs.
 
@@ -568,13 +796,13 @@ def _fit_multi_output(
             y_train_std,
             x_val=x_test,
             y_val_mat=y_test_std,
-            n_estimators=opts.get("n_estimators", 5000),
-            max_depth=opts.get("max_depth", 4),
-            learning_rate=opts.get("learning_rate", 0.02),
-            subsample=opts.get("subsample", 0.8),
-            colsample_bytree=opts.get("colsample_bytree", 0.8),
-            min_child_weight=opts.get("min_child_weight", 5),
-            early_stopping_rounds=opts.get("early_stopping_rounds", 50),
+            n_estimators=opts["n_estimators"],
+            max_depth=opts["max_depth"],
+            learning_rate=opts["learning_rate"],
+            subsample=opts["subsample"],
+            colsample_bytree=opts["colsample_bytree"],
+            min_child_weight=opts["min_child_weight"],
+            early_stopping_rounds=opts["early_stopping_rounds"],
             n_jobs=n_jobs,
         )
         shared_model = fit_result["model"]
@@ -583,11 +811,25 @@ def _fit_multi_output(
         fit_result = fit_random_forest_multi(
             x_train,
             y_train_std,
-            n_estimators=opts.get("n_estimators", 500),
+            n_estimators=opts["n_estimators"],
             n_jobs=n_jobs,
         )
         shared_model = fit_result["model"]
         extra_val = {"n_estimators": fit_result["n_estimators"]}
+    elif method == "mlp":
+        fit_result = fit_mlp_multi(
+            x_train,
+            y_train_std,
+            log_indices,
+            hidden_layer_sizes=tuple(opts["hidden_layer_sizes"]),
+            solver=opts["solver"],
+            alpha=opts["alpha"],
+            max_iter=opts["max_iter"],
+            learning_rate_init=opts["learning_rate_init"],
+            n_iter_no_change=opts["n_iter_no_change"],
+        )
+        shared_model = fit_result["model"]
+        extra_val = {"n_iter": fit_result["n_iter"]}
     else:
         raise AssertionError(f"unsupported multi-output method {method!r}")
 
@@ -628,46 +870,6 @@ def _fit_multi_output(
         validation[col] = val
 
     return models, validation
-
-
-def _fit_mars_one(x_train, y_train, x_test, y_test, col, opts):
-    log_transform_outputs = set(opts.get("log_transform", []))
-    use_log = col in log_transform_outputs
-
-    y_train_fit = np.log1p(y_train) if use_log else y_train
-    result = fit_mars(
-        x_train,
-        y_train_fit,
-        max_terms=opts.get("max_terms", 50),
-        max_degree=opts.get("max_degree", 2),
-        penalty=opts.get("penalty", 3.0),
-        n_knots=opts.get("n_knots", 25),
-    )
-
-    earth_model = result["model"]
-    if x_test is not None and y_test is not None:
-        raw_pred = earth_model.predict(x_test)
-        y_pred = np.expm1(raw_pred) if use_log else raw_pred
-        ss_res = np.sum((y_test - y_pred) ** 2)
-        ss_tot = np.sum((y_test - np.mean(y_test)) ** 2)
-        r2_test = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        holdout_error = 1 - r2_test
-    else:
-        r2_test = None
-        holdout_error = None
-
-    gcv_error = result["validation_error"]
-    validation_error = holdout_error if holdout_error is not None else gcv_error
-
-    payload = {"earth": earth_model, "log_transform": use_log}
-    val = {
-        "validation_error": validation_error,
-        "gcv": gcv_error,
-        "r2_train": result["r2"],
-        "r2_test": r2_test,
-        "n_basis": result["n_basis"],
-    }
-    return payload, val
 
 
 # ---------------------------------------------------------------------------
@@ -712,8 +914,7 @@ def validation_dataframe(bundle: SurrogateBundle) -> pd.DataFrame:
 def predict(bundle: SurrogateBundle, output: str, x: np.ndarray) -> np.ndarray:
     """Predict ``output`` at physical-space design matrix ``x``.
 
-    Returns an array of shape ``(len(x),)`` in the original output space
-    (log-transformed MARS is back-transformed automatically).
+    Returns an array of shape ``(len(x),)`` in the original output space.
     """
     if output not in bundle.models:
         raise KeyError(
@@ -732,11 +933,8 @@ def predict(bundle: SurrogateBundle, output: str, x: np.ndarray) -> np.ndarray:
         )
         basis = np.array([poly(*x.T) for poly in expansion]).T
         return basis @ model["coefficients"]
-    elif method in ("rf", "xgb"):
+    elif method in ("rf", "xgb", "mlp"):
         return model.predict(x)
-    elif method == "mars":
-        raw = model["earth"].predict(x)
-        return np.expm1(raw) if model["log_transform"] else raw
     else:
         raise AssertionError(f"unreachable method {method!r}")
 
@@ -767,15 +965,41 @@ def predictor(
             return basis @ coefs
 
         return _predict
-    elif method in ("rf", "xgb"):
+    elif method in ("rf", "xgb", "mlp"):
         return model.predict
-    elif method == "mars":
-        earth = model["earth"]
-        if model["log_transform"]:
-            return lambda x: np.expm1(earth.predict(x))
-        return earth.predict
     else:
         raise AssertionError(f"unreachable method {method!r}")
+
+
+def predict_field(
+    bundle: SurrogateBundle, field_name: str, x: np.ndarray
+) -> np.ndarray:
+    """Predict a full spatial field at design matrix ``x``.
+
+    Predicts the field's PCA score columns through the surrogate, then
+    reconstructs the dense field via the stored :class:`FieldDecoder`.
+    Returns an array of shape ``(len(x), n_elements)`` in the original field
+    units; ``field_element_keys`` gives the matching element (e.g. region)
+    labels for the columns.
+    """
+    if field_name not in bundle.field_decoders:
+        raise KeyError(
+            f"No field decoder for '{field_name}' "
+            f"(have {sorted(bundle.field_decoders)})"
+        )
+    decoder = bundle.field_decoders[field_name]
+    scores = np.column_stack([predict(bundle, sc, x) for sc in decoder.score_columns])
+    return decoder.decode(scores)
+
+
+def field_element_keys(bundle: SurrogateBundle, field_name: str) -> list[str]:
+    """Element (e.g. region) labels for the columns of :func:`predict_field`."""
+    if field_name not in bundle.field_decoders:
+        raise KeyError(
+            f"No field decoder for '{field_name}' "
+            f"(have {sorted(bundle.field_decoders)})"
+        )
+    return list(bundle.field_decoders[field_name].keys)
 
 
 # ---------------------------------------------------------------------------
@@ -960,7 +1184,7 @@ def conditional_sobol_mc(
 ) -> list[tuple[np.ndarray, np.ndarray, float]]:
     """Batch-estimate conditional Sobol indices across a grid of slice values.
 
-    Mirrors the RF/XGB/MARS routine: reuses the same A/B free-parameter
+    Mirrors the RF/XGB routine: reuses the same A/B free-parameter
     matrices across all grid points, processed in batches to reduce the
     number of predict() calls.
     """

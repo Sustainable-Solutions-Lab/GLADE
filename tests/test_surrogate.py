@@ -39,6 +39,18 @@ GEN_SPEC = {
 
 _COLUMNS = ["total_cost", "co2", "ch4", "n2o", "land_use", "yll"]
 
+# fit_bundle indexes method_options directly (config is assumed complete), so
+# tests spell out the full option set per method, mirroring config/default.yaml.
+# n_estimators is varied per test; the rest are shared.
+_XGB_OPTS = {
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "early_stopping_rounds": 50,
+}
+
 
 def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     """Deterministic design + scalar outputs matching OUTPUT_COLUMNS shape."""
@@ -71,8 +83,7 @@ def _build_design(n: int = 256) -> tuple[np.ndarray, pd.DataFrame]:
     [
         ("pce", {"method_options": {"max_degree": 3, "cross_truncation": 0.8}}),
         ("rf", {"method_options": {"n_estimators": 64}}),
-        ("mars", {"method_options": {"max_terms": 20, "max_degree": 2}}),
-        ("xgb", {"method_options": {"n_estimators": 200, "max_depth": 3}}),
+        ("xgb", {"method_options": {"n_estimators": 200, **_XGB_OPTS}}),
     ],
 )
 def test_bundle_save_load_predict_parity(tmp_path: Path, method, method_config):
@@ -136,19 +147,20 @@ def test_unknown_method_raises():
         )
 
 
-@pytest.mark.parametrize("method", ["pce", "mars"])
-def test_vector_outputs_blocked_for_scalar_only_methods(method):
-    """PCE and MARS must reject any vector-derived columns."""
+def test_vector_outputs_blocked_for_scalar_only_methods():
+    """PCE must reject any vector-derived columns."""
     x, outputs_df = _build_design(n=64)
     outputs_df["foods.wheat"] = outputs_df["total_cost"] * 0.001
     with pytest.raises(NotImplementedError, match="does not support vector outputs"):
         fit_bundle(
-            method=method,
+            method="pce",
             x_design=x,
             outputs_df=outputs_df,
             available_columns=[*_COLUMNS, "foods.wheat"],
             generator_spec=GEN_SPEC,
-            method_config={"method_options": {"max_terms": 8, "max_degree": 1}},
+            method_config={
+                "method_options": {"max_degree": 1, "cross_truncation": 0.5}
+            },
             holdout_fraction=0.0,
             n_threads=1,
             vector_columns={"foods.wheat"},
@@ -169,7 +181,7 @@ def test_xgb_handles_vector_outputs():
         outputs_df=outputs_df,
         available_columns=cols,
         generator_spec=GEN_SPEC,
-        method_config={"method_options": {"n_estimators": 100, "max_depth": 3}},
+        method_config={"method_options": {"n_estimators": 100, **_XGB_OPTS}},
         holdout_fraction=0.2,
         n_threads=1,
         vector_columns={"foods.wheat", "foods.rice"},

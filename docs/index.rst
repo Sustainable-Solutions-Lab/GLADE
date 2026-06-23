@@ -123,6 +123,7 @@ Dietary constraints ensure that each country's population meets nutritional requ
    validation
    calibration
    sensitivity_analysis
+   surrogate_modelling
 
 .. toctree::
    :hidden:

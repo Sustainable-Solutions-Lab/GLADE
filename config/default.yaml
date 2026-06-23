@@ -1743,7 +1743,7 @@ sensitivity_analysis:
   threads: 6
   # Method downstream consumers (uncertainty-band plots, notebooks) use when
   # no explicit choice is given. Must match a key under ``methods``.
-  default_surrogate: xgb
+  default_surrogate: mlp
   # When false (default), the surrogate-fit rule declares every Sobol scenario
   # the generator promises so Snakemake drives the full solve→analyse→
   # surrogate chain in a single invocation (the canonical Snakemake idiom).
@@ -1769,16 +1769,11 @@ sensitivity_analysis:
   methods:
     pce:
       method_options:
+        max_degree: 3
         cross_truncation: 0.8
     rf:
       method_options:
         n_estimators: 500
-    mars:
-      method_options:
-        max_terms: 50
-        max_degree: 2
-        penalty: 3.0
-        n_knots: 25
     xgb:
       method_options:
         n_estimators: 5000
@@ -1788,6 +1783,18 @@ sensitivity_analysis:
         colsample_bytree: 0.8
         min_child_weight: 5
         early_stopping_rounds: 50
+    # ReLU multilayer perceptron (multi-output). Continuous piecewise-linear
+    # surrogate: much smaller on disk and faster at inference than xgb, with
+    # smooth (non-staircased) gradients. Log-uniform inputs are log-transformed
+    # then all inputs standardized inside the fitted pipeline.
+    mlp:
+      method_options:
+        hidden_layer_sizes: [256, 128, 64]
+        solver: adam
+        alpha: 0.0001
+        max_iter: 3000
+        learning_rate_init: 0.001
+        n_iter_no_change: 40
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"
@@ -1800,7 +1807,8 @@ sensitivity_analysis:
   #   label:    human-readable axis label used by plots
   #   units:    axis-label suffix used by uncertainty-band plots
   # Order here defines the display order in Sobol plots.  Vector
-  # outputs are fit by xgb/rf only; pce/mars hard-fail at fit time.
+  # outputs are fit by the multi-output methods (xgb/rf/mlp) only; pce
+  # hard-fails at fit time.
   outputs:
     total_cost:
       source: objective_breakdown.parquet

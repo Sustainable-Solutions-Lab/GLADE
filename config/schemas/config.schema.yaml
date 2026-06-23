@@ -2002,7 +2002,7 @@ properties:
     properties:
       outputs:
         type: object
-        description: "Surrogate targets extracted from each scenario.  Each entry is either scalar (one float per scenario) or vector (a dict[str, float] expanded to one column per element).  See workflow/scripts/analysis/sensitivity_common.py for available reducers."
+        description: "Surrogate targets extracted from each scenario.  Each entry is scalar (one float per scenario), vector (a dict[str, float] expanded to one column per element), or field (a high-dimensional spatial dict PCA-compressed at fit time).  See workflow/scripts/analysis/sensitivity_common.py for available reducers."
         minProperties: 1
         additionalProperties:
           type: object
@@ -2011,14 +2011,18 @@ properties:
           properties:
             kind:
               type: string
-              enum: [scalar, vector]
-              description: "Output cardinality.  Scalar reducers return a float; vector reducers return a dict[str, float] expanded to one column per element."
+              enum: [scalar, vector, field]
+              description: "Output cardinality.  Scalar reducers return a float; vector reducers return a dict[str, float] expanded to one column per element; field outputs are high-dimensional spatial dict[str, float] vectors PCA-compressed at fit time (the surrogate predicts n_components scores and reconstructs the full field)."
+            n_components:
+              type: integer
+              minimum: 1
+              description: "Required for kind: field.  Number of PCA components (scores) the surrogate predicts; the dense field is reconstructed from these."
             source:
               type: string
               description: "Parquet filename under analysis/scen-<scenario>/"
             reducer:
               type: string
-              description: "Name of a reducer registered in sensitivity_common.REDUCERS (row_sum, column_sum, filter_sum, pivot_column)"
+              description: "Name of a reducer registered in sensitivity_common.REDUCERS (e.g. row_sum, column_sum, filter_sum, pivot_column, pivot_row, region_field)"
             label:
               type: string
               description: "Axis label used in plots"
