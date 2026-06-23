@@ -541,7 +541,12 @@ def fit_bundle(
                 len(decoder.score_columns),
                 float(decoder.explained_variance_ratio.sum()),
             )
-        work_df = outputs_df.assign(**score_data)
+        # Append all PCA score columns in one concat. A chained ``assign`` would
+        # insert the (potentially hundreds of) score columns one at a time into
+        # an already very wide frame, re-fragmenting and copying it each time
+        # (O(columns^2)); concatenating once is linear.
+        scores_df = pd.DataFrame(score_data, index=outputs_df.index)
+        work_df = pd.concat([outputs_df, scores_df], axis=1)
 
     x_train = x_design[:n_train]
     x_test = x_design[n_train:] if n_holdout > 0 else None
