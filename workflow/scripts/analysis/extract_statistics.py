@@ -736,6 +736,7 @@ _FEED_SOURCE_LABELS = {
     "protein_crop": "Oilseed cakes",
     "food_byproduct": "Food by-products",
     "exog_forage_cal": "Exog. forage (calibration)",
+    "exog_roughage_cal": "Exog. roughage (calibration)",
     "exog_protein_cal": "Exog. protein (calibration)",
     "exog_browse": "Exog. browse / leaves",
     "exog_swill": "Exog. swill",
@@ -834,9 +835,11 @@ def extract_feed_by_source(n: pypsa.Network) -> pd.DataFrame:
       target feed category.
     - ``Food by-products``: ``feed_conversion`` from a ``food:`` bus
       (DDGS, oilseed meals, brans, molasses, etc.).
-    - ``Exog. forage (calibration)``, ``Exog. protein (calibration)``:
-      calibration-residual generators on the forage / protein feed
-      buses (carriers ``exogenous_forage_cal`` / ``exogenous_protein_cal``).
+    - ``Exog. forage (calibration)``, ``Exog. roughage (calibration)``,
+      ``Exog. protein (calibration)``: calibration-residual generators on
+      the forage / roughage / protein feed buses (carriers
+      ``exogenous_forage_cal`` / ``exogenous_roughage_cal`` /
+      ``exogenous_protein_cal``).
     - ``Exog. browse / leaves``: ``exogenous_feed`` generators on the
       ``ruminant_roughage`` bus (GLEAM's LEAVES + browse + other items
       the model does not produce endogenously).
