@@ -1,0 +1,127 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Carbon-price dial surrogate overlay
+# -----------------------------------
+# Extra surrogate OUTPUTS consumed only by the documentation carbon-price dial
+# (docs/_static/carbon-dial). This file declares no model, scenario, or GSA
+# design -- it is layered on top of gsa.yaml OR gsa_fixed_diet.yaml as a second
+# config file at surrogate-construction time, deep-merging into
+# sensitivity_analysis.outputs. Pass both files to a SINGLE --configfile flag
+# (Snakemake's --configfile is nargs='+'; a second --configfile flag would
+# replace rather than merge, dropping the base config):
+#
+#   tools/smk -e gurobi -j4 \
+#     --configfile config/gsa.yaml config/carbon_dial_surrogate.yaml \
+#     --allowed-rules build_surrogate -- \
+#     results/gsa/surrogates/surrogate_gsa_mlp.pkl
+#
+#   tools/smk -e gurobi -j4 \
+#     --configfile config/gsa_fixed_diet.yaml config/carbon_dial_surrogate.yaml \
+#     --allowed-rules build_surrogate -- \
+#     results/gsa_fixed_diet/surrogates/surrogate_gsa-fd_mlp.pkl
+#
+# The fitted bundle is a superset of the canonical surrogate (downstream
+# Sobol/paper plots read a subset, so they are unaffected). All outputs are
+# read from the existing on-disk analysis -- no re-solve is required.
+sensitivity_analysis:
+  outputs:
+    # Cost decomposition, sequestration credit, and total cropland/grazing
+    # spatial fields. gsa.yaml already declares these in core (identical, so
+    # the merge is a no-op there); gsa_fixed_diet.yaml does not, so the overlay
+    # brings the fixed-diet surrogate to parity with the flexible one.
+    sequestration:
+      source: net_emissions.parquet
+      reducer: filter_sum
+      filter_col: source
+      filter_value: "Carbon sequestration"
+      value_col: mtco2eq
+      label: Carbon sequestration
+      units: "MtCO\u2082eq"
+    objective_breakdown:
+      kind: vector
+      source: objective_breakdown.parquet
+      reducer: pivot_row
+      label: Objective breakdown
+      units: bn USD
+    cropland_by_region:
+      kind: field
+      source: land_use.parquet
+      reducer: region_field
+      value_col: area_mha
+      key_col: region
+      exclude_col: crop
+      exclude_value: grassland
+      n_components: 30
+      label: Cropland area by region
+      units: Mha
+    grazing_by_region:
+      kind: field
+      source: land_use.parquet
+      reducer: region_field
+      value_col: area_mha
+      key_col: region
+      include_col: crop
+      include_value: grassland
+      n_components: 30
+      label: Grazing area by region
+      units: Mha
+    # Per-food dietary energy, for the dial's kcal diet strip (the mass strip
+    # reuses the existing `foods` output). Global PJ/yr; the per-capita/day
+    # conversion is done downstream in the dial export.
+    foods_energy:
+      kind: vector
+      source: food_consumption.parquet
+      reducer: pivot_column
+      key_col: food
+      value_col: cal_pj
+      label: Food energy (global)
+      units: PJ
+    # Per-region cropland area by crop group (PCA-compressed spatial fields).
+    # The dial map colours each region by its dominant group (argmax over these
+    # fields). Crop lists mirror plotting.crop_groups (Feed crops excluded);
+    # crops absent from land_use.parquet are ignored by the membership filter.
+    cropland_cereals_by_region: &cropgroup_field
+      kind: field
+      source: land_use.parquet
+      reducer: region_field
+      value_col: area_mha
+      key_col: region
+      include_col: crop
+      include_values: [wheat, dryland-rice, wetland-rice, maize, barley, oat, rye, sorghum, buckwheat, foxtail-millet, pearl-millet]
+      n_components: 20
+      label: Cereals cropland by region
+      units: Mha
+    cropland_legumes_by_region:
+      <<: *cropgroup_field
+      include_values: [soybean, dry-pea, chickpea, cowpea, gram, phaseolus-bean, pigeonpea]
+      label: Legumes cropland by region
+    cropland_roots_tubers_by_region:
+      <<: *cropgroup_field
+      include_values: [white-potato, sweet-potato, cassava, yam, plantain]
+      label: Roots & tubers cropland by region
+    cropland_vegetables_by_region:
+      <<: *cropgroup_field
+      include_values: [tomato, carrot, onion, cabbage]
+      label: Vegetables cropland by region
+    cropland_fruits_by_region:
+      <<: *cropgroup_field
+      include_values: [banana, watermelon, mango, citrus, coconut, apple]
+      label: Fruits cropland by region
+    cropland_oilseeds_by_region:
+      <<: *cropgroup_field
+      include_values: [sunflower, rapeseed, groundnut, sesame, oil-palm, olive]
+      label: Oilseeds cropland by region
+    cropland_sugar_crops_by_region:
+      <<: *cropgroup_field
+      include_values: [sugarcane, sugarbeet]
+      label: Sugar crops cropland by region
+    cropland_stimulants_by_region:
+      <<: *cropgroup_field
+      include_values: [cocoa, coffee, tea]
+      label: Stimulants cropland by region
+    cropland_fiber_crops_by_region:
+      <<: *cropgroup_field
+      include_values: [cotton]
+      label: Fiber crops cropland by region

@@ -292,6 +292,7 @@ def _region_field(
     key_col: str = "region",
     include_col: str | None = None,
     include_value: str | None = None,
+    include_values: list | None = None,
     exclude_col: str | None = None,
     exclude_value: str | None = None,
 ) -> dict[str, float]:
@@ -300,11 +301,12 @@ def _region_field(
 
     Vector-style reducer intended for high-dimensional spatial outputs (e.g.
     per-region cropland or grazing area from ``land_use.parquet``).  Keep rows
-    where ``include_col == include_value`` (if given) and drop rows where
-    ``exclude_col == exclude_value`` (if given), then sum ``value_col`` per
-    ``key_col``.  Returns ``{}`` for missing/empty parquets.  The full field is
-    PCA-compressed at surrogate-fit time (see ``surrogate.fit_bundle``); a
-    ``field`` OutputSpec must set ``n_components``.
+    where ``include_col`` matches (``== include_value``, or ``in
+    include_values`` when a list is given -- e.g. all crops of one crop group)
+    and drop rows where ``exclude_col == exclude_value`` (if given), then sum
+    ``value_col`` per ``key_col``.  Returns ``{}`` for missing/empty parquets.
+    The full field is PCA-compressed at surrogate-fit time (see
+    ``surrogate.fit_bundle``); a ``field`` OutputSpec must set ``n_components``.
     """
     if not path.exists() or path.stat().st_size == 0:
         return {}
@@ -321,7 +323,10 @@ def _region_field(
         return {}
     df = table.to_pandas()
     if include_col is not None:
-        df = df[df[include_col] == include_value]
+        if include_values is not None:
+            df = df[df[include_col].isin(include_values)]
+        else:
+            df = df[df[include_col] == include_value]
     if exclude_col is not None:
         df = df[df[exclude_col] != exclude_value]
     if df.empty:
