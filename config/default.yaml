@@ -1798,8 +1798,10 @@ sensitivity_analysis:
         # "relu" is piecewise-linear (kinked); "tanh" is C-infinity smooth.
         activation: relu
         # Number of seed-perturbed members averaged into one surrogate; >1
-        # smooths and de-noises the response (see AveragingEnsemble).
-        ensemble_size: 1
+        # smooths and de-noises the response (see AveragingEnsemble). 3 members
+        # lift the emission fits (ch4 ~0.97->0.98) and smooth the carbon-dial
+        # curves at ~3x fit cost.
+        ensemble_size: 3
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"
