@@ -3,7 +3,7 @@
 //
 // Carbon Price Dial - interactive GLADE widget.
 // Two sliders (carbon price + value of a statistical life-year) and a
-// fixed/flexible-diet toggle drive a synced world map, net-emissions bar,
+// constant/flexible-diet toggle drive a synced world map, net-emissions bar,
 // cost-vs-emissions curve, diet strip, feed strip and a years-of-life-lost
 // readout. Everything is computed live in the browser by evaluating the GLADE
 // MLP surrogate directly (no precomputed scenarios, no interpolation).
@@ -111,10 +111,23 @@ function init(data, geo) {
 
   const hasYll = (mm) => "value_per_yll" in modes[mm].sliders;
 
+  // Shared "advanced" parameter state (by name), defaulting to nominal. These
+  // are the design inputs other than the live carbon-price / YLL sliders; the
+  // optional collapsed panel lets the user move them off nominal.
+  const advanced = {};
+  const advancedAll = [];  // ordered union across modes; rows absent from the
+  const advancedSeen = new Set();  // active mode are shown greyed, not removed.
+  allModes.forEach((mm) => (modes[mm].advanced || []).forEach((a) => {
+    if (!advancedSeen.has(a.name)) { advancedSeen.add(a.name); advancedAll.push(a); }
+    if (!(a.name in advanced)) advanced[a.name] = a.nominal;
+  }));
+
   // ===== core: evaluate the surrogate at the current operating point =====
   function evaluate(mm, ghgPrice, valueYll) {
     const M = modes[mm];
     const x = Float64Array.from(M.nominal);
+    // advanced overrides (only the params present in this mode's design)
+    for (const a of M.advanced || []) x[a.index] = advanced[a.name];
     x[M.sliders.ghg_price.index] = ghgPrice;
     if ("value_per_yll" in M.sliders) x[M.sliders.value_per_yll.index] = valueYll;
     const std = forward(M, x);
@@ -432,7 +445,7 @@ function init(data, geo) {
   if (allModes.length > 1) {
     document.getElementById("modeToggle").addEventListener("click", () => {
       mode = allModes.find((m) => m !== mode) || mode;
-      syncModeButtons(); applyModeClass(); drawCostLines(); render();
+      syncModeButtons(); applyModeClass(); buildAdvanced(); drawCostLines(); render();
     });
   }
 
@@ -441,6 +454,47 @@ function init(data, geo) {
     d3.selectAll("#dietUnitToggle .unit-toggle__btn").classed("is-active", function () { return this.dataset.unit === dietUnit; });
   document.getElementById("dietUnitToggle").addEventListener("click", () => {
     dietUnit = dietUnit === "kcal" ? "g" : "kcal"; syncUnitButtons(); render();
+  });
+
+  // ---- advanced parameter sliders (optional, collapsed) ----
+  // Multiplicative factors read "x1.05"; quantile-style params (nominal != 1)
+  // read as a plain 2-decimal value.
+  const fmtAdv = (a, v) => (a.nominal === 1 ? "x" + v.toFixed(2) : v.toFixed(2));
+  function buildAdvanced() {
+    const inMode = new Set((modes[mode].advanced || []).map((a) => a.name));
+    const cont = d3.select("#advancedSliders");
+    cont.selectAll("*").remove();
+    advancedAll.forEach((a) => {
+      const active = inMode.has(a.name);
+      const lr = a.log ? Math.log(a.max / a.min) : 0;
+      const posToVal = (p) => (a.log ? a.min * Math.exp(lr * p) : a.min + (a.max - a.min) * p);
+      const valToPos = (v) => (a.log ? Math.log(v / a.min) / lr : (v - a.min) / (a.max - a.min));
+      const row = cont.append("div").attr("class", "adv-row").classed("is-disabled", !active);
+      const head = row.append("div").attr("class", "adv-row__head");
+      head.append("span").attr("class", "adv-row__label").text(a.label);
+      const valEl = head.append("span").attr("class", "adv-row__val")
+        .classed("is-off", !active || advanced[a.name] === a.nominal)
+        .text(active ? fmtAdv(a, advanced[a.name]) : "n/a");
+      const inp = row.append("input").attr("type", "range").attr("min", 0).attr("max", RES).attr("step", 1)
+        .attr("class", "adv-row__slider")
+        .property("value", Math.round(valToPos(advanced[a.name]) * RES));
+      if (active) {
+        inp.on("input", function () {
+          const v = posToVal(+this.value / RES);
+          advanced[a.name] = v;
+          valEl.text(fmtAdv(a, v)).classed("is-off", false);
+          drawCostLines(); render();
+        });
+      } else {
+        inp.property("disabled", true);
+        row.attr("title", "Only applies under a flexible diet");
+      }
+    });
+  }
+  const advReset = document.getElementById("advReset");
+  if (advReset) advReset.addEventListener("click", () => {
+    advancedAll.forEach((a) => { advanced[a.name] = a.nominal; });
+    buildAdvanced(); drawCostLines(); render();
   });
 
   // ---- deep link: ?price=200&yll=5000&mode=flexible&unit=kcal ----
@@ -452,5 +506,5 @@ function init(data, geo) {
 
   slider.value = Math.round(priceScale.valToPos(price) * RES);
   if (yllSlider && yllScale) yllSlider.value = Math.round(yllScale.valToPos(yll) * RES);
-  syncModeButtons(); syncUnitButtons(); applyModeClass(); drawCostLines(); render();
+  syncModeButtons(); syncUnitButtons(); applyModeClass(); buildAdvanced(); drawCostLines(); render();
 }

@@ -91,6 +91,22 @@ NOMINAL = {
     "reforest_fraction": 0.5,
 }
 
+# Human-readable labels for the "advanced" parameters surfaced as optional,
+# collapsed sliders in the dial.  Anything not in SLIDER_PARAMS and present in a
+# bundle's design becomes an advanced slider; a missing label falls back to the
+# raw parameter name.
+ADVANCED_LABELS = {
+    "yield_factor": "Crop yields",
+    "ch4_factor": "Methane emission factors",
+    "n2o_factor": "Nitrous-oxide emission factors",
+    "luc_factor": "Land-use-change emissions",
+    "flw_factor": "Food loss & waste",
+    "fcr_factor": "Livestock feed-conversion",
+    "rr_protective": "Diet-health risk: protective foods",
+    "rr_harmful": "Diet-health risk: harmful foods",
+    "reforest_fraction": "Reforestation cap",
+}
+
 SCALAR_OUTPUTS = ["co2", "ch4", "n2o", "sequestration", "total_cost", "yll"]
 OBJ_PARTS = [
     "ghg_cost",
@@ -263,6 +279,33 @@ def nominal_vector(bundle):
     return params, nominal, sliders
 
 
+def advanced_params(bundle):
+    """Optional collapsed sliders: every non-SLIDER_PARAMS design parameter.
+
+    Each entry carries the input-vector index, range, nominal value, whether it
+    is log-uniform (so the UI uses a log slider), and a display label.  The dial
+    pins these at nominal unless the user opens the advanced panel and moves one.
+    """
+    params = list(bundle.param_names)
+    spec = bundle.generator_spec["parameters"]
+    out = []
+    for j, p in enumerate(params):
+        if p in SLIDER_PARAMS:
+            continue
+        out.append(
+            {
+                "name": p,
+                "index": j,
+                "min": float(spec[p]["lower"]),
+                "max": float(spec[p]["upper"]),
+                "nominal": float(NOMINAL[p]),
+                "log": spec[p].get("distribution") == "log_uniform",
+                "label": ADVANCED_LABELS.get(p, p),
+            }
+        )
+    return out
+
+
 def build_mode(bundle):
     """Assemble the JSON-serializable weights/decoders for one surrogate."""
     mlp = extract_mlp(bundle)
@@ -303,6 +346,7 @@ def build_mode(bundle):
         "params": params,
         "nominal": nominal.tolist(),
         "sliders": sliders,
+        "advanced": advanced_params(bundle),
         "logIndices": mlp["log_indices"],
         "scalerMean": b64(mlp["scaler_mean"]),
         "scalerScale": b64(mlp["scaler_scale"]),

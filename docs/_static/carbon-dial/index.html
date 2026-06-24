@@ -31,11 +31,11 @@ SPDX-License-Identifier: CC-BY-4.0
           <span class="dial__price-unit">USD / t CO<sub>2</sub>-eq</span>
         </div>
         <!-- app.js wires up #modeToggle: it disables any mode missing from
-             surrogate.json and switches the dashboard between the fixed- and
-             flexible-diet surrogates. -->
+             surrogate.json and switches the dashboard between the constant-
+             (internal key "fixed") and flexible-diet surrogates. -->
         <div class="toggle" id="modeToggle" role="group" aria-label="Diet mode">
           <button data-mode="fixed" class="toggle__btn is-active"
-            title="Consumption pinned to the 2020 baseline">Fixed diet</button>
+            title="Consumption pinned to the 2020 baseline">Constant diet</button>
           <button data-mode="flexible" class="toggle__btn"
             title="Diet re-optimises with the carbon price and health valuation">Flexible diet</button>
         </div>
@@ -44,8 +44,8 @@ SPDX-License-Identifier: CC-BY-4.0
       <div class="dial__ticks" id="ticks"></div>
 
       <!-- Value of a statistical life-year: only meaningful under flexible
-           diet (health is unvalued when the diet is fixed), so app.js greys
-           this row and the health-burden readouts in fixed-diet mode. -->
+           diet (health is unvalued under a constant diet), so app.js greys
+           this row and the health-burden readouts in constant-diet mode. -->
       <div class="dial__control-row dial__control-row--yll yll-only">
         <div class="dial__price">
           <span class="dial__price-label">Value of a life-year</span>
@@ -60,6 +60,18 @@ SPDX-License-Identifier: CC-BY-4.0
       <input type="range" id="yllSlider" min="0" max="1000" value="0" step="1"
         class="yll-only slider--yll" />
       <div class="dial__ticks yll-only" id="yllTicks"></div>
+
+      <!-- Optional advanced inputs: the surrogate's other uncertainty
+           parameters, held at their central estimate unless opened. app.js
+           populates #advancedSliders for the active diet mode. -->
+      <details class="dial__advanced" id="advanced">
+        <summary>
+          Advanced: other model uncertainties
+          <small>held at central estimates &middot; click to adjust</small>
+        </summary>
+        <div class="adv-grid" id="advancedSliders"></div>
+        <button type="button" class="adv-reset" id="advReset">Reset to central estimates</button>
+      </details>
     </section>
 
     <section class="dial__content">
@@ -122,10 +134,10 @@ SPDX-License-Identifier: CC-BY-4.0
 
     <footer class="dial__foot">
       <div class="dial__defs">
-        <p><strong>Fixed vs flexible diet.</strong> Under <em>fixed diet</em>,
-          consumption is pinned to the 2020 baseline; production, land use,
-          animal feed and emissions still re-optimise as the price rises. Under
-          <em>flexible diet</em>, the diet also re-optimises, shifting in
+        <p><strong>Constant vs flexible diet.</strong> Under <em>constant
+          diet</em>, consumption is pinned to the 2020 baseline; production, land
+          use, animal feed and emissions still re-optimise as the price rises.
+          Under <em>flexible diet</em>, the diet also re-optimises, shifting in
           response to the carbon price alone (health is left unvalued).</p>
         <p><strong>Net emissions.</strong> All greenhouse gases (CO<sub>2</sub>,
           CH<sub>4</sub>, N<sub>2</sub>O) as CO<sub>2</sub>-equivalent, including
@@ -148,8 +160,8 @@ SPDX-License-Identifier: CC-BY-4.0
           cost against diet-related health: the readout shows the
           diet-attributable years of life lost (million YLL / yr), and the
           value-of-a-life-year dial sets how strongly that burden is priced into
-          the optimisation. With a fixed diet, health is not valued, so the dial
-          and readout are inactive.</p>
+          the optimisation. With a constant diet, health is not valued, so the
+          dial and readout are inactive.</p>
         <p><strong>Maps.</strong> Cropland is coloured by its dominant crop
           group and faded by cropland area per unit land; pasture is shaded by
           grazing-land area per unit land.</p>
