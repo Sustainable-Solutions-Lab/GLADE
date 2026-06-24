@@ -28,9 +28,10 @@ function b64f32(s) {
 // ---- decode one mode's weights + per-field reconstruction structures ----
 function prepMode(m, geo) {
   const logSet = new Set(m.logIndices);
-  const layers = m.layers.map((l) => ({
+  // One layer-list per ensemble member; forward() averages their outputs.
+  const members = m.members.map((layers) => layers.map((l) => ({
     w: b64f32(l.w), b: b64f32(l.b), nIn: l.nIn, nOut: l.nOut,
-  }));
+  })));
   const fields = {};
   for (const [fn, fd] of Object.entries(m.fields)) {
     const keyIndex = new Map(fd.keys.map((k, i) => [k, i]));
@@ -44,28 +45,38 @@ function prepMode(m, geo) {
     };
   }
   return {
-    ...m, logSet, layers, fields,
+    ...m, logSet, members, fields,
     scalerMean: b64f32(m.scalerMean), scalerScale: b64f32(m.scalerScale),
   };
 }
 
 // ---- MLP forward pass: raw input vector -> standardized output vector ----
+// Standardize the input once, run every ensemble member, average their
+// (standardized) outputs -- mirrors AveragingEnsemble.predict.
 function forward(M, x) {
-  let h = new Float64Array(x.length);
+  const h0 = new Float64Array(x.length);
   for (let i = 0; i < x.length; i++) {
     const v = M.logSet.has(i) ? Math.log(x[i]) : x[i];
-    h[i] = (v - M.scalerMean[i]) / M.scalerScale[i];
+    h0[i] = (v - M.scalerMean[i]) / M.scalerScale[i];
   }
-  for (let k = 0; k < M.layers.length; k++) {
-    const L = M.layers[k], out = new Float64Array(L.nOut), last = k === M.layers.length - 1;
-    for (let o = 0; o < L.nOut; o++) {
-      let s = L.b[o];
-      for (let i = 0; i < L.nIn; i++) s += h[i] * L.w[i * L.nOut + o];
-      out[o] = last ? s : (s > 0 ? s : 0);  // ReLU on hidden layers only
+  let acc = null;
+  for (const layers of M.members) {
+    let h = h0;
+    for (let k = 0; k < layers.length; k++) {
+      const L = layers[k], out = new Float64Array(L.nOut), last = k === layers.length - 1;
+      for (let o = 0; o < L.nOut; o++) {
+        let s = L.b[o];
+        for (let i = 0; i < L.nIn; i++) s += h[i] * L.w[i * L.nOut + o];
+        out[o] = last ? s : (s > 0 ? s : 0);  // ReLU on hidden layers only
+      }
+      h = out;
     }
-    h = out;
+    if (acc === null) acc = h;
+    else for (let o = 0; o < acc.length; o++) acc[o] += h[o];
   }
-  return h;
+  const inv = 1 / M.members.length;
+  for (let o = 0; o < acc.length; o++) acc[o] *= inv;
+  return acc;
 }
 
 function init(data, geo) {

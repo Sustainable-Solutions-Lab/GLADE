@@ -164,36 +164,72 @@ def b64(arr):
 
 
 def extract_mlp(bundle):
-    """Pull the shared pipeline weights out of the MLP bundle."""
+    """Pull the (possibly ensembled) MLP weights out of the bundle.
+
+    A single-net bundle's shared model is a ``Pipeline``; an ensemble
+    (``ensemble_size > 1``) wraps several pipelines in an ``AveragingEnsemble``
+    (it exposes them as ``.models``).  All members share the same log step and
+    the same data-only ``StandardScaler``, so those are serialized once and only
+    the per-member network weights differ.  The browser averages the members'
+    standardized outputs, exactly as ``AveragingEnsemble.predict`` does.
+    """
     if bundle.method != "mlp":
         raise ValueError(f"expected an mlp bundle, got method={bundle.method!r}")
-    pipe = next(iter(bundle.models.values())).model
-    mlp = pipe.named_steps["mlp"]
-    if mlp.activation != "relu" or mlp.out_activation_ != "identity":
-        raise ValueError(
-            f"unexpected MLP activations: {mlp.activation}/{mlp.out_activation_}"
+    model = next(iter(bundle.models.values())).model
+    pipes = list(model.models) if hasattr(model, "models") else [model]
+
+    base = pipes[0]
+    log_indices = list(base.named_steps["log"].log_indices)
+    scaler_mean = np.asarray(base.named_steps["scaler"].mean_, float)
+    scaler_scale = np.asarray(base.named_steps["scaler"].scale_, float)
+
+    members = []
+    for pipe in pipes:
+        mlp = pipe.named_steps["mlp"]
+        if mlp.activation != "relu" or mlp.out_activation_ != "identity":
+            raise ValueError(
+                f"unexpected MLP activations: {mlp.activation}/{mlp.out_activation_}"
+            )
+        scaler = pipe.named_steps["scaler"]
+        if not (
+            np.allclose(scaler.mean_, scaler_mean)
+            and np.allclose(scaler.scale_, scaler_scale)
+        ):
+            raise ValueError("ensemble members have differing input scalers")
+        members.append(
+            {
+                "weights": [np.asarray(w, float) for w in mlp.coefs_],
+                "biases": [np.asarray(b, float) for b in mlp.intercepts_],
+            }
         )
+
     return {
-        "log_indices": list(pipe.named_steps["log"].log_indices),
-        "scaler_mean": np.asarray(pipe.named_steps["scaler"].mean_, float),
-        "scaler_scale": np.asarray(pipe.named_steps["scaler"].scale_, float),
-        "weights": [np.asarray(w, float) for w in mlp.coefs_],
-        "biases": [np.asarray(b, float) for b in mlp.intercepts_],
+        "log_indices": log_indices,
+        "scaler_mean": scaler_mean,
+        "scaler_scale": scaler_scale,
+        "members": members,
     }
 
 
 def _js_forward(mlp, x_row):
-    """Reference for the JS forward pass: raw input row -> standardized MLP out."""
+    """Reference for the JS forward pass: raw input row -> standardized MLP out.
+
+    Mirrors the browser: standardize once, run each ensemble member, average.
+    """
     x = np.array(x_row, float)
     for j in mlp["log_indices"]:
         x[j] = np.log(x[j])
-    h = (x - mlp["scaler_mean"]) / mlp["scaler_scale"]
-    n = len(mlp["weights"])
-    for k in range(n):
-        h = h @ mlp["weights"][k] + mlp["biases"][k]
-        if k < n - 1:
-            h = np.maximum(h, 0.0)
-    return h
+    h0 = (x - mlp["scaler_mean"]) / mlp["scaler_scale"]
+    outs = []
+    for member in mlp["members"]:
+        h = h0
+        n = len(member["weights"])
+        for k in range(n):
+            h = h @ member["weights"][k] + member["biases"][k]
+            if k < n - 1:
+                h = np.maximum(h, 0.0)
+        outs.append(h)
+    return np.mean(outs, axis=0)
 
 
 def output_entry(bundle, name):
@@ -270,16 +306,21 @@ def build_mode(bundle):
         "logIndices": mlp["log_indices"],
         "scalerMean": b64(mlp["scaler_mean"]),
         "scalerScale": b64(mlp["scaler_scale"]),
-        "layers": [
-            {
-                "w": b64(w.reshape(-1)),
-                "nIn": int(w.shape[0]),
-                "nOut": int(w.shape[1]),
-                "b": b64(b),
-            }
-            for w, b in zip(mlp["weights"], mlp["biases"])
+        # One entry per ensemble member; each is a list of layers. The browser
+        # runs every member from the shared standardized input and averages.
+        "members": [
+            [
+                {
+                    "w": b64(w.reshape(-1)),
+                    "nIn": int(w.shape[0]),
+                    "nOut": int(w.shape[1]),
+                    "b": b64(b),
+                }
+                for w, b in zip(member["weights"], member["biases"])
+            ]
+            for member in mlp["members"]
         ],
-        "nMlpOut": int(mlp["weights"][-1].shape[1]),
+        "nMlpOut": int(mlp["members"][0]["weights"][-1].shape[1]),
         "outMap": out_map,
         "vectors": vectors,
         "fields": fields,
