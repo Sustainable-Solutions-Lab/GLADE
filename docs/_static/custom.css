@@ -48,3 +48,46 @@ figcaption p {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 .cd-launch:hover { background: #2f5d4c; }
+
+/* GitHub link and version in sidebar */
+.sidebar-github {
+    margin: 0 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+}
+
+.sidebar-version {
+    font-size: 0.78rem;
+    color: var(--color-foreground-muted);
+}
+
+.sidebar-github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.35em 0.85em;
+    border-radius: 4px;
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-background-border);
+    color: var(--color-foreground-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebar-github-link:hover {
+    background: var(--color-brand-primary);
+    border-color: var(--color-brand-primary);
+    color: white !important;
+    text-decoration: none;
+}
+
+.sidebar-github-icon {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+    flex-shrink: 0;
+}

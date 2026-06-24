@@ -118,6 +118,22 @@ FIGURE_BASE_URL = (
     f"https://github.com/{GITHUB_REPO}/releases/download/{FIGURE_RELEASE_TAG}"
 )
 
+html_sidebars = {
+    "**": [
+        "sidebar/brand.html",
+        "sidebar/github.html",
+        "sidebar/search.html",
+        "sidebar/scroll-start.html",
+        "sidebar/navigation.html",
+        "sidebar/scroll-end.html",
+        "sidebar/variant-selector.html",
+    ]
+}
+
+html_context = {
+    "github_repo_url": f"https://github.com/{GITHUB_REPO}",
+}
+
 # When building locally, automatically use local figures if they exist.
 # This means .rst files can always contain remote URLs (the committed state)
 # and local builds will transparently use local figures without manual switching.
