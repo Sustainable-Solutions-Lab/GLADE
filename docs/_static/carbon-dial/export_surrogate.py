@@ -8,7 +8,7 @@
 The interactive "Carbon Price Dial" evaluates the GLADE MLP surrogate *directly*
 in the browser -- no precomputed scenario grid, no interpolation. This script
 extracts, from each fitted ``SurrogateBundle`` (built with the
-``config/carbon_dial_surrogate.yaml`` overlay), everything a tiny JS forward
+``docs/config/carbon_dial_surrogate.yaml`` overlay), everything a tiny JS forward
 pass needs:
 
   * the shared MLP pipeline: log-transformed input indices, the StandardScaler
@@ -411,7 +411,7 @@ def parity_check(bundle, mlp, n=8):
 
 def grid_design(bundle, n_price=24, n_yll=12):
     """Coarse slider grid (nominal elsewhere) for computing display ranges."""
-    params, nominal, sliders = nominal_vector(bundle)
+    _params, nominal, sliders = nominal_vector(bundle)
     rows = [nominal.copy()]
 
     def logspace(lo, hi, k):
@@ -444,7 +444,7 @@ def panel_ranges(bundle, food2group, grams_f, kcal_f):
     drags. cv_ref (consumer-value deviation baseline) is taken at the lowest
     carbon price for each YLL level.
     """
-    x, prices, ylls, pj, yj = grid_design(bundle)
+    x, prices, _ylls, _pj, yj = grid_design(bundle)
 
     def col(name):
         return predict(bundle, name, x) if name in bundle.models else np.zeros(len(x))

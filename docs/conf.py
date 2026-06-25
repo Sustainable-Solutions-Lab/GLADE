@@ -139,6 +139,30 @@ html_context = {
 # and local builds will transparently use local figures without manual switching.
 LOCAL_FIGURES_DIR = os.path.join(os.path.dirname(__file__), "_static", "figures")
 
+# The carbon-price dial fetches this surrogate bundle at runtime (app.js ->
+# data/surrogate.json). At 9 MB and regenerated whenever the GSA is re-solved,
+# it is hosted on the doc-figures release rather than tracked in git (see
+# docs/_static/carbon-dial/README.md). Locally it is produced by
+# export_surrogate.py; on the docs builder (e.g. ReadTheDocs) it is missing, so
+# we fetch it into _static before Sphinx copies the static tree to the output.
+CARBON_DIAL_DATA = os.path.join(
+    os.path.dirname(__file__), "_static", "carbon-dial", "data", "surrogate.json"
+)
+CARBON_DIAL_SURROGATE_URL = f"{FIGURE_BASE_URL}/surrogate.json"
+
+
+def _ensure_carbon_dial_surrogate():
+    """Download the dial surrogate into _static if it is not present locally."""
+    if os.path.exists(CARBON_DIAL_DATA):
+        return
+    import urllib.request
+
+    os.makedirs(os.path.dirname(CARBON_DIAL_DATA), exist_ok=True)
+    try:
+        urllib.request.urlretrieve(CARBON_DIAL_SURROGATE_URL, CARBON_DIAL_DATA)
+    except Exception as exc:  # a missing dial must not fail the build
+        print(f"WARNING: could not fetch carbon-dial surrogate.json: {exc}")
+
 
 def _use_local_figures(app, docname, source):
     """Replace remote figure URLs with local paths when local figures exist."""
@@ -147,4 +171,5 @@ def _use_local_figures(app, docname, source):
 
 
 def setup(app):
+    _ensure_carbon_dial_surrogate()
     app.connect("source-read", _use_local_figures)

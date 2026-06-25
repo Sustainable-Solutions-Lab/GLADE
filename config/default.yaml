@@ -1789,10 +1789,7 @@ sensitivity_analysis:
     # then all inputs standardized inside the fitted pipeline.
     mlp:
       method_options:
-        # Wide net: needed so one shared MLP can fit the scalar/vector outputs
-        # AND the hundreds of field PCA-score targets well (narrower nets trade
-        # field reconstruction for emission accuracy).
-        hidden_layer_sizes: [512, 256, 128]
+        hidden_layer_sizes: [256, 128, 64]
         solver: adam
         alpha: 0.0001
         max_iter: 3000
@@ -1801,14 +1798,11 @@ sensitivity_analysis:
         # "relu" won the activation sweep outright; soft-ReLU variants (softplus,
         # gelu, silu) gave no accuracy gain on emissions and are not in sklearn.
         activation: relu
-        # Seed-averaged members; >1 de-noises and smooths the dial curves.
-        ensemble_size: 3
-        # Loss weight on every NON-field-score (scalar/vector) target relative
-        # to the ~330 field PCA-score targets. At weight 1 the field targets
-        # dominate the shared MSE and emissions collapse (ch4 holdout ~0.64);
-        # 15 roughly equalizes the two blocks' gradient mass and restores
-        # emissions (ch4 ~0.99) while keeping field reconstruction ~0.96.
-        scalar_loss_weight: 15
+        # Neutral defaults so a plain mlp build works standalone. The carbon
+        # dial overrides ensemble_size, scalar_loss_weight and the net width via
+        # docs/config/carbon_dial_surrogate.yaml (its only mlp consumer).
+        ensemble_size: 1  # seed-averaged members; >1 de-noises/smooths outputs
+        scalar_loss_weight: 1  # up-weight scalar/vector vs field-score targets
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"

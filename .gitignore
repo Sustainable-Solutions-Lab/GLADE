@@ -30,6 +30,9 @@ vendor
 notes/
 notes.org
 docs/_static/figures/*
+# Carbon-dial surrogate bundle: 9 MB, regenerated; hosted on the doc-figures
+# release and fetched at build time (see docs/_static/carbon-dial/README.md).
+docs/_static/carbon-dial/data/surrogate.json
 
 # Secrets (never commit credentials)
 config/secrets.yaml

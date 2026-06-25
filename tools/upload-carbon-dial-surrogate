@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
+# Upload the carbon-dial surrogate bundle to the doc-figures GitHub release.
+#
+# surrogate.json is ~9 MB and regenerated whenever the GSA is re-solved, so it
+# is not tracked in git. The docs build (conf.py) fetches it from this release;
+# regenerate locally with export_surrogate.py, then run this to publish it.
+#
+# Usage: tools/upload-carbon-dial-surrogate [RELEASE_TAG]
+# Default tag: doc-figures
+
+set -euo pipefail
+
+RELEASE_TAG="${1:-doc-figures}"
+SURROGATE="docs/_static/carbon-dial/data/surrogate.json"
+
+if ! command -v gh &> /dev/null; then
+    echo "Error: gh (GitHub CLI) is not installed."
+    echo "Install with: sudo dnf install gh  (or brew install gh on macOS)"
+    exit 1
+fi
+
+if ! gh auth status &> /dev/null; then
+    echo "Error: Not authenticated with GitHub CLI."
+    echo "Run: gh auth login"
+    exit 1
+fi
+
+if [ ! -f "$SURROGATE" ]; then
+    echo "Error: $SURROGATE not found."
+    echo "Regenerate it first with:"
+    echo "  pixi run -e dev python docs/_static/carbon-dial/export_surrogate.py"
+    exit 1
+fi
+
+# The doc-figures release is created by tools/upload-doc-figures; reuse it.
+if ! gh release view "$RELEASE_TAG" &> /dev/null; then
+    echo "Creating release: $RELEASE_TAG"
+    gh release create "$RELEASE_TAG" \
+        --title "Documentation Figures" \
+        --notes "Auto-generated documentation assets for Sphinx docs. Do not use this release for the code itself." \
+        --latest=false
+fi
+
+echo "Uploading $(du -h "$SURROGATE" | cut -f1) surrogate.json to release $RELEASE_TAG..."
+gh release upload "$RELEASE_TAG" "$SURROGATE" --clobber
+
+echo ""
+echo "Done. Available at:"
+echo "https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/download/$RELEASE_TAG/surrogate.json"
