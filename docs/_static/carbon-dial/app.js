@@ -191,7 +191,7 @@ function init(data, geo) {
       if (col < 0) { vals[fi] = 0; continue; }
       let s = f.mean[col];
       for (let c = 0; c < f.nComp; c++) s += scores[c] * f.comp[c * f.nKeys + col];
-      vals[fi] = s;
+      vals[fi] = Math.max(0, s);  // PCA reconstruction can dip below 0; area >= 0
     }
     return vals;
   }
@@ -210,7 +210,9 @@ function init(data, geo) {
       regionIntensity[i] = Math.max(0, Math.min(1, crop[i] / (meta.cropMaxFrac * landByFeat[i])));
       regionPasture[i] = Math.max(0, Math.min(1, past[i] / (meta.pastureMaxFrac * landByFeat[i])));
     }
-    return { regionGroup, regionIntensity, regionPasture };
+    // crop/past/groupAreas (raw Mha, aligned to geo features) feed the hover
+    // tooltip's per-region land-use breakdown; the region* arrays drive fills.
+    return { regionGroup, regionIntensity, regionPasture, cropMha: crop, pastMha: past, groupAreas };
   }
 
   // Full scenario object consumed by the panels.
@@ -244,6 +246,77 @@ function init(data, geo) {
   }
   const cropPaths = buildMap("#map");
   const pasturePaths = buildMap("#mapPasture");
+
+  // ---- per-region hover tooltip (land-use breakdown) ----
+  // The maps are land-use only (emissions/diet/feed/cost are global scalars),
+  // so the tooltip reports cropland (split by crop group) and grazing area for
+  // the hovered region, read live from the last rendered scenario.
+  const tip = d3.select("body").append("div").attr("class", "map-tip").style("display", "none");
+  let lastScenario = null;
+  const featIndex = new Map(geo.features.map((f, i) => [f, i]));
+  const fmtMha = (v) => (v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2));
+  const pctOf = (v, tot) => (tot > 0 ? Math.round(100 * v / tot) : 0);
+
+  const countryNames = meta.countryNames || {};
+  function tipHead(d) {
+    const name = countryNames[d.properties.country] || d.properties.country;
+    return `<div class="map-tip__head">${name}`
+      + `<span>${d.properties.region}</span></div>`;
+  }
+  function tipMetric(label, v, area) {
+    const share = isFinite(area) ? ` <span>${pctOf(v, area)}% of land</span>` : "";
+    return `<div class="map-tip__metric">${label} <b>${fmtMha(v)} Mha</b>${share}</div>`;
+  }
+  function tipCropland(i, d) {
+    if (!lastScenario) return "";
+    const total = lastScenario.cropMha[i];
+    const rows = meta.mapGroups
+      .map((g, gi) => ({ name: g.name, color: g.color, v: lastScenario.groupAreas[gi][i] }))
+      .filter((r) => r.v > 1e-4).sort((a, b) => b.v - a.v);
+    let html = tipHead(d) + tipMetric("Cropland", total, landByFeat[i]);
+    if (rows.length) {
+      html += `<div class="map-tip__rows">` + rows.map((r) =>
+        `<div class="map-tip__row"><span class="map-tip__sw" style="background:${r.color}"></span>`
+        + `<span class="map-tip__name">${r.name}</span>`
+        + `<span class="map-tip__val">${fmtMha(r.v)}</span>`
+        + `<span class="map-tip__share">${pctOf(r.v, total)}%</span></div>`).join("") + `</div>`;
+    } else {
+      html += `<div class="map-tip__empty">No cropland</div>`;
+    }
+    return html;
+  }
+  function tipPasture(i, d) {
+    if (!lastScenario) return "";
+    return tipHead(d) + tipMetric("Pasture &amp; grazing", lastScenario.pastMha[i], landByFeat[i]);
+  }
+  function attachTip(paths, builder) {
+    // Outline the hovered region: dark stroke + raise so it sits above
+    // neighbours; restore the thin white border on leave.
+    let hovered = null;
+    const clearHover = () => {
+      if (hovered) d3.select(hovered).attr("stroke", "#fff").attr("stroke-width", 0.2);
+      hovered = null;
+    };
+    paths
+      .style("cursor", "default")
+      .on("mousemove", (event, d) => {
+        const node = event.currentTarget;
+        if (node !== hovered) {
+          clearHover();
+          hovered = node;
+          d3.select(node).attr("stroke", "#1f2a26").attr("stroke-width", 1.2).raise();
+        }
+        tip.html(builder(featIndex.get(d), d)).style("display", "block");
+        const pad = 14, w = tip.node().offsetWidth, h = tip.node().offsetHeight;
+        let x = event.clientX + pad, y = event.clientY + pad;
+        if (x + w > window.innerWidth) x = event.clientX - pad - w;
+        if (y + h > window.innerHeight) y = event.clientY - pad - h;
+        tip.style("left", `${x}px`).style("top", `${y}px`);
+      })
+      .on("mouseleave", () => { clearHover(); tip.style("display", "none"); });
+  }
+  attachTip(cropPaths, tipCropland);
+  attachTip(pasturePaths, tipPasture);
 
   const legend = d3.select("#legend");
   meta.mapGroups.forEach((g) => {
@@ -418,6 +491,7 @@ function init(data, geo) {
 
   function render() {
     const s = scenario(mode, price, yll);
+    lastScenario = s;  // hover tooltip reads per-region land use from this
     priceValue.textContent = Math.round(price);
     if (yllValue) yllValue.textContent = yll ? Math.round(yll).toLocaleString() : "–";
     dietHint.textContent = (dietUnit === "kcal" ? "kcal / person / day" : "g / person / day")
