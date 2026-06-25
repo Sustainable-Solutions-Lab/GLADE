@@ -493,6 +493,26 @@ def panel_ranges(bundle, food2group, grams_f, kcal_f):
     }
 
 
+def country_names():
+    """ISO3 -> human-readable country name for every code in regions.geojson.
+
+    The dial's region tooltip shows full names instead of bare alpha-3 codes;
+    the short ``common_name`` is preferred over the formal ``name`` when present
+    (e.g. "Bolivia" over "Bolivia, Plurinational State of").
+    """
+    import pycountry
+
+    geo = json.loads((OUT_DIR / "regions.geojson").read_text())
+    codes = {f["properties"]["country"] for f in geo["features"]}
+    names = {}
+    for c in codes:
+        rec = pycountry.countries.get(alpha_3=c)
+        if rec is None:
+            raise ValueError(f"no country name for ISO3 code {c!r}")
+        names[c] = getattr(rec, "common_name", None) or rec.name
+    return names
+
+
 def region_land_areas():
     """Per-region land area (Mha) from the widget's regions.geojson.
 
@@ -608,6 +628,7 @@ def main():
     meta = {k: v for k, v in common.items() if k not in ("pop", "food2group")}
     meta["modes"] = list(modes.keys())
     meta["regionArea"] = {k: float(v) for k, v in region_area.items()}
+    meta["countryNames"] = country_names()
     meta["cropMaxFrac"] = crop_max_frac
     meta["pastureMaxFrac"] = pasture_max_frac
     out = {"meta": meta, "modes": modes}
