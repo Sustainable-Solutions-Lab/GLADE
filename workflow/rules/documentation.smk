@@ -102,9 +102,9 @@ rule doc_fig_intro_global_coverage:
 
 
 rule doc_fig_model_topology:
-    """Generate high-level model topology diagram showing material flows."""
+    """Generate high-level conceptual model topology diagram (material flows)."""
     input:
-        model=f"<results>/{DOC_FIG_NAME}/build/model.nc",
+        style=DOC_FIG_STYLE,
     output:
         svg="docs/_static/figures/model_topology.svg",
         png="docs/_static/figures/model_topology.png",
@@ -118,7 +118,7 @@ rule doc_fig_model_topology:
     benchmark:
         "<benchmarks>/shared/doc_fig_model_topology.tsv"
     script:
-        "../scripts/visualize_model_topology.py"
+        "../scripts/doc_figures/model_topology.py"
 
 
 rule doc_fig_land_flows:
