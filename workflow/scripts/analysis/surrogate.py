@@ -391,6 +391,25 @@ class LogColumns(BaseEstimator, TransformerMixin):
         return x
 
 
+class AveragingEnsemble:
+    """Average the (standardized) predictions of several fitted estimators.
+
+    Fitting K MLPs that differ only in random seed and averaging their
+    predictions both smooths and de-noises the surrogate: a single ReLU net is
+    piecewise-linear and need not be monotone, and each member places its kinks
+    (and its residual wiggle) differently, so the mean is markedly smoother and
+    lower-variance.  ``predict`` returns the mean ``(n_samples, n_outputs)``
+    matrix, so an ensemble is a drop-in replacement for a single estimator in
+    :class:`MultiOutputPayload`.
+    """
+
+    def __init__(self, models: list):
+        self.models = list(models)
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return np.mean([m.predict(x) for m in self.models], axis=0)
+
+
 def fit_mlp_multi(
     x_design: np.ndarray,
     y_mat: np.ndarray,
@@ -401,18 +420,24 @@ def fit_mlp_multi(
     max_iter: int = 3000,
     learning_rate_init: float = 1e-3,
     n_iter_no_change: int = 40,
+    activation: str = "relu",
+    ensemble_size: int = 1,
     random_state: int = 42,
 ) -> dict:
-    """Fit a single multi-output ReLU MLP for all outputs jointly.
+    """Fit a multi-output MLP (or a seed-averaged ensemble) for all outputs.
 
-    The estimator is a :class:`~sklearn.pipeline.Pipeline` that logs the
+    Each member is a :class:`~sklearn.pipeline.Pipeline` that logs the
     log-uniform input columns, standardizes all inputs, and regresses the
-    (caller-standardized) ``y_mat`` with a ReLU
-    :class:`~sklearn.neural_network.MLPRegressor`.  A ReLU MLP is a
-    continuous piecewise-linear map, so predictions have smooth, non-
-    staircased gradients (unlike the piecewise-constant tree surrogates).
-    ``predict`` returns a ``(n_samples, n_outputs)`` matrix in the
-    standardized target space, matching the other multi-output methods.
+    (caller-standardized) ``y_mat`` with an :class:`~sklearn.neural_network.
+    MLPRegressor`.  A ``relu`` MLP is a continuous piecewise-linear map (smooth,
+    non-staircased gradients unlike the tree surrogates); ``tanh`` makes it
+    C-infinity smooth at some cost to sharp-response accuracy.  ``predict``
+    returns a ``(n_samples, n_outputs)`` matrix in the standardized target
+    space, matching the other multi-output methods.
+
+    ``ensemble_size > 1`` fits that many members with consecutive seeds and
+    wraps them in an :class:`AveragingEnsemble`; the averaged response is
+    smoother and less prone to non-monotone wiggle than any single net.
 
     ``solver='adam'`` is the default: it scales to the full ~14k-sample
     design and, with ``early_stopping`` on a held-out 10%, outperforms
@@ -420,32 +445,42 @@ def fit_mlp_multi(
     ``early_stopping``/``n_iter_no_change`` apply only to the stochastic
     solvers (ignored by lbfgs).
     """
-    mlp_kwargs: dict[str, Any] = {
-        "hidden_layer_sizes": hidden_layer_sizes,
-        "activation": "relu",
-        "solver": solver,
-        "alpha": alpha,
-        "max_iter": max_iter,
-        "random_state": random_state,
-    }
-    if solver in ("adam", "sgd"):
-        mlp_kwargs.update(
-            learning_rate_init=learning_rate_init,
-            early_stopping=True,
-            n_iter_no_change=n_iter_no_change,
-            validation_fraction=0.1,
+    if ensemble_size < 1:
+        raise ValueError(f"ensemble_size must be >= 1, got {ensemble_size}")
+
+    def make_member(seed: int) -> Pipeline:
+        mlp_kwargs: dict[str, Any] = {
+            "hidden_layer_sizes": hidden_layer_sizes,
+            "activation": activation,
+            "solver": solver,
+            "alpha": alpha,
+            "max_iter": max_iter,
+            "random_state": seed,
+        }
+        if solver in ("adam", "sgd"):
+            mlp_kwargs.update(
+                learning_rate_init=learning_rate_init,
+                early_stopping=True,
+                n_iter_no_change=n_iter_no_change,
+                validation_fraction=0.1,
+            )
+        return Pipeline(
+            [
+                ("log", LogColumns(tuple(log_indices))),
+                ("scaler", StandardScaler()),
+                ("mlp", MLPRegressor(**mlp_kwargs)),
+            ]
         )
-    model = Pipeline(
-        [
-            ("log", LogColumns(tuple(log_indices))),
-            ("scaler", StandardScaler()),
-            ("mlp", MLPRegressor(**mlp_kwargs)),
-        ]
-    )
-    model.fit(x_design, y_mat)
+
+    members = [make_member(random_state + k) for k in range(ensemble_size)]
+    for m in members:
+        m.fit(x_design, y_mat)
+
+    model = members[0] if ensemble_size == 1 else AveragingEnsemble(members)
+    n_iter = int(np.mean([m.named_steps["mlp"].n_iter_ for m in members]))
     return {
         "model": model,
-        "n_iter": int(model.named_steps["mlp"].n_iter_),
+        "n_iter": n_iter,
         "n_samples": len(y_mat),
     }
 
@@ -541,7 +576,12 @@ def fit_bundle(
                 len(decoder.score_columns),
                 float(decoder.explained_variance_ratio.sum()),
             )
-        work_df = outputs_df.assign(**score_data)
+        # Append all PCA score columns in one concat. A chained ``assign`` would
+        # insert the (potentially hundreds of) score columns one at a time into
+        # an already very wide frame, re-fragmenting and copying it each time
+        # (O(columns^2)); concatenating once is linear.
+        scores_df = pd.DataFrame(score_data, index=outputs_df.index)
+        work_df = pd.concat([outputs_df, scores_df], axis=1)
 
     x_train = x_design[:n_train]
     x_test = x_design[n_train:] if n_holdout > 0 else None
@@ -560,7 +600,16 @@ def fit_bundle(
     models: dict[str, Any] = {}
     validation: dict[str, dict] = {}
 
+    # Field PCA-score targets, so _fit_multi_output can down-weight them
+    # relative to the scalar/vector outputs (carbon-dial loss balancing).
+    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
+
     if method in _MULTI_OUTPUT_METHODS:
+        # Only the MLP path applies scalar/field loss balancing (it is the dial
+        # surrogate); xgb/rf train unweighted.
+        priority_weight = (
+            float(method_options["scalar_loss_weight"]) if method == "mlp" else 1.0
+        )
         models, validation = _fit_multi_output(
             method,
             x_train,
@@ -571,6 +620,8 @@ def fit_bundle(
             method_options,
             n_threads,
             log_indices,
+            priority_weight=priority_weight,
+            field_score_columns=score_columns,
         )
     else:
         for col in available_columns:
@@ -593,7 +644,6 @@ def fit_bundle(
             models[col] = payload
             validation[col] = val
 
-    score_columns = {sc for d in field_decoders.values() for sc in d.score_columns}
     for col, val in validation.items():
         val["output"] = col
         val["n_train"] = n_train
@@ -767,6 +817,8 @@ def _fit_multi_output(
     opts: dict,
     n_jobs: int,
     log_indices: list[int],
+    priority_weight: float = 1.0,
+    field_score_columns: set[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, dict]]:
     """Fit a single shared-structure estimator for all outputs.
 
@@ -776,7 +828,18 @@ def _fit_multi_output(
     per-output payload is a :class:`MultiOutputPayload` holding the shared
     estimator plus the column index and per-output mean/std.  Validation
     metrics are computed per output on the original (unstandardized) scale.
+
+    ``priority_weight`` (> 1) up-weights every NON-field-score target (the
+    scalar/vector outputs) relative to the field PCA-score targets in the
+    shared squared-error objective.  Because the estimator minimizes total
+    SE over standardized columns, scaling a column by ``sqrt(w)`` multiplies
+    its loss contribution by ``w``; folding ``1/sqrt(w)`` back into the
+    payload's ``target_std`` makes prediction invert it transparently.  This
+    is how the carbon-dial bundle keeps emission/diet/cost fits sharp despite
+    co-training with the hundreds of field-score targets that would otherwise
+    dominate the loss (ch4 holdout R2 ~0.64 at w=1 -> ~0.99 at w=15).
     """
+    field_score_columns = field_score_columns or set()
     y_train = outputs_train[available_columns].values.astype(float)
     y_test = (
         outputs_test[available_columns].values.astype(float)
@@ -787,8 +850,21 @@ def _fit_multi_output(
     target_std = y_train.std(axis=0)
     # Constant columns would lead to divide-by-zero; fall back to unit scale.
     safe_std = np.where(target_std > 0, target_std, 1.0)
-    y_train_std = (y_train - target_mean) / safe_std
-    y_test_std = (y_test - target_mean) / safe_std if y_test is not None else None
+    # Per-target loss weight applied in standardized space: sqrt(w) on the
+    # priority (non-field-score) columns, 1 on the field-score columns.
+    sqrt_w = np.where(
+        [c not in field_score_columns for c in available_columns],
+        np.sqrt(priority_weight),
+        1.0,
+    )
+    y_train_std = (y_train - target_mean) / safe_std * sqrt_w
+    y_test_std = (
+        (y_test - target_mean) / safe_std * sqrt_w if y_test is not None else None
+    )
+    # The estimator predicts in the weighted-standardized space; dividing the
+    # per-output std by sqrt(w) makes MultiOutputPayload.predict invert both
+    # the standardization and the weighting in one multiply.
+    payload_std = safe_std / sqrt_w
 
     if method == "xgb":
         fit_result = fit_xgboost_multi(
@@ -827,6 +903,8 @@ def _fit_multi_output(
             max_iter=opts["max_iter"],
             learning_rate_init=opts["learning_rate_init"],
             n_iter_no_change=opts["n_iter_no_change"],
+            activation=opts["activation"],
+            ensemble_size=opts["ensemble_size"],
         )
         shared_model = fit_result["model"]
         extra_val = {"n_iter": fit_result["n_iter"]}
@@ -840,7 +918,7 @@ def _fit_multi_output(
             model=shared_model,
             output_index=j,
             target_mean=float(target_mean[j]),
-            target_std=float(safe_std[j]),
+            target_std=float(payload_std[j]),
         )
         y_train_col = y_train[:, j]
         y_pred_train = payload.predict(x_train)
@@ -864,7 +942,7 @@ def _fit_multi_output(
         if method == "rf":
             oob_pred_col = shared_model.oob_prediction_[:, j]
             val["oob_error"] = 1.0 - _r2(
-                y_train_col, oob_pred_col * safe_std[j] + target_mean[j]
+                y_train_col, oob_pred_col * payload_std[j] + target_mean[j]
             )
         models[col] = payload
         validation[col] = val

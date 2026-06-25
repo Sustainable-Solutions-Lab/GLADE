@@ -1795,6 +1795,14 @@ sensitivity_analysis:
         max_iter: 3000
         learning_rate_init: 0.001
         n_iter_no_change: 40
+        # "relu" won the activation sweep outright; soft-ReLU variants (softplus,
+        # gelu, silu) gave no accuracy gain on emissions and are not in sklearn.
+        activation: relu
+        # Neutral defaults so a plain mlp build works standalone. The carbon
+        # dial overrides ensemble_size, scalar_loss_weight and the net width via
+        # docs/config/carbon_dial_surrogate.yaml (its only mlp consumer).
+        ensemble_size: 1  # seed-averaged members; >1 de-noises/smooths outputs
+        scalar_loss_weight: 1  # up-weight scalar/vector vs field-score targets
   # Surrogate targets extracted from each scenario's analysis
   # directory.  Each entry declares:
   #   kind:     "scalar" (default) or "vector"

@@ -61,7 +61,12 @@ body { margin: 0; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
 }
-.dial__price { display: flex; align-items: baseline; gap: 10px; }
+.dial__price { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dial__price-label {
+  flex-basis: 100%;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600; opacity: 0.82; margin-bottom: -2px;
+}
 
 /* fixed/flexible diet toggle */
 .toggle {
@@ -120,6 +125,26 @@ input[type="range"]::-moz-range-thumb {
 }
 .dial__ticks span {
   position: absolute; transform: translateX(-50%); white-space: nowrap;
+}
+
+/* --- value-of-a-life-year sub-control (flexible diet only) --- */
+.dial__control-row--yll {
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+.dial__control-row--yll .dial__price-value { font-size: 2.1rem; }
+.dial__control-row--yll .dial__price-value::before { font-size: 1.1rem; }
+.dial__stat { text-align: right; line-height: 1.15; }
+.dial__stat-value {
+  display: block; font-size: 1.9rem; font-weight: 750;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+}
+.dial__stat small { font-size: 0.74rem; opacity: 0.85; }
+/* Health is unvalued under a fixed diet: grey the value-of-life dial and the
+   health-burden readouts so it reads as inactive (rather than vanishing). */
+.mode-no-yll .yll-only {
+  opacity: 0.32; pointer-events: none; filter: grayscale(0.4);
+  transition: opacity 0.2s;
 }
 /* --- stacked layout: two maps, then chart pair, then diet & feed strips --- */
 .dial__content { display: flex; flex-direction: column; gap: 16px; }
@@ -235,3 +260,62 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 760px) {
   .dial__grid { flex-direction: column; }
 }
+
+/* ---- advanced parameter panel (optional, inside the green control card) ---- */
+.dial__advanced {
+  margin-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  padding-top: 10px;
+  color: #fff;
+}
+.dial__advanced > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  list-style: none;
+  opacity: 0.92;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.dial__advanced > summary::-webkit-details-marker { display: none; }
+.dial__advanced > summary::before {
+  content: "\25B8";
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 0.8em;
+}
+.dial__advanced[open] > summary::before { transform: rotate(90deg); }
+.dial__advanced > summary small { font-weight: 400; opacity: 0.7; }
+.adv-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px 24px;
+}
+.adv-row { display: flex; flex-direction: column; }
+.adv-row__head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.78rem;
+}
+.adv-row__label { opacity: 0.9; }
+.adv-row__val { font-variant-numeric: tabular-nums; font-weight: 650; }
+.adv-row__val.is-off { opacity: 0.5; font-weight: 400; }
+.adv-row__slider { height: 5px; margin: 4px 0 2px; }
+.adv-row__slider::-webkit-slider-thumb { width: 16px; height: 16px; border-width: 2px; }
+.adv-row__slider::-moz-range-thumb { width: 16px; height: 16px; border-width: 2px; }
+.adv-reset {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 4px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.adv-reset:hover { background: rgba(255, 255, 255, 0.15); opacity: 1; }
+.adv-row.is-disabled { opacity: 0.4; }
+.adv-row.is-disabled .adv-row__slider { cursor: not-allowed; }
