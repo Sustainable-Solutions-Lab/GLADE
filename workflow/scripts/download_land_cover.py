@@ -2,13 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Download land cover data using the ECMWF datastores client.
+"""Download land cover data from the Copernicus CDS via the datastores client.
 
-This is a library module used by the maintainer tool
-``tools/mirror_land_cover.py`` (which imports :func:`main`). It is no longer
-wired into a Snakemake rule: ordinary builds fetch the mirrored data from
-Zenodo. Credentials are passed in by the caller, sourced from environment
-variables (ECMWF_DATASTORES_URL / ECMWF_DATASTORES_KEY) or config/secrets.yaml.
+Library module for the maintainer tool ``tools/mirror_land_cover.py`` (which
+imports :func:`main`) to fetch the source data before mirroring it to Zenodo.
+Credentials are passed in by the caller, sourced from environment variables
+(ECMWF_DATASTORES_URL / ECMWF_DATASTORES_KEY) or config/secrets.yaml.
 """
 
 from pathlib import Path

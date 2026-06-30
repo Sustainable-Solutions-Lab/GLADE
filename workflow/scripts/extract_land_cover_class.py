@@ -7,13 +7,11 @@
 The downloaded land cover dataset contains multiple variables (lccs_class,
 processed_flag, current_pixel_state, observation_count, change_count), but only
 the lccs_class variable (land cover classification) is needed for the model.
-This script extracts just that variable to reduce file size from ~2.2GB to ~440MB.
-It operates on the ZIP archive distributed by CDS, which bundles the NetCDF file.
+This extracts just that variable to reduce file size from ~2.2GB to ~440MB. It
+operates on the ZIP archive distributed by CDS, which bundles the NetCDF file.
 
-This is a library module used by the maintainer tool
-``tools/mirror_land_cover.py`` (which imports :func:`main`). It is no longer
-wired into a Snakemake rule: ordinary builds fetch the already-extracted file
-from Zenodo.
+Library module for the maintainer tool ``tools/mirror_land_cover.py`` (which
+imports :func:`main`) to prepare the file before mirroring it to Zenodo.
 """
 
 from pathlib import Path

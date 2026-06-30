@@ -1565,11 +1565,9 @@ data:
       fat: "Total lipid (fat)"
       cal: "Energy"
   land_cover:
-    # Copernicus ESA CCI land cover. The map for `baseline_year` is mirrored on
-    # Zenodo (CC-BY-4.0) so normal builds need no Copernicus CDS API key. The
-    # `zenodo_record` is the numeric Zenodo record id hosting the mirrored
-    # `lccs_class` file; refresh it with tools/mirror_land_cover.py (see
-    # docs/data_sources.rst).
+    # Copernicus ESA CCI land cover, mirrored on Zenodo (CC-BY-4.0). `zenodo_record`
+    # is the record id holding the `lccs_class` file for `baseline_year`; refresh
+    # it with tools/mirror_land_cover.py (see docs/data_sources.rst).
     version: "v2_1_1"
     zenodo_record: "21085632"  # https://doi.org/10.5281/zenodo.21085632
   faostat:

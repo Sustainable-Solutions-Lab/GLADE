@@ -971,9 +971,9 @@ rule download_luicube_grassland:
 
 rule download_land_cover:
     # Copernicus ESA CCI land cover (lccs_class only) for the baseline year,
-    # fetched from our Zenodo mirror (CC-BY-4.0) so builds need no Copernicus
-    # CDS API key. Refresh the mirror with tools/mirror_land_cover.py and update
-    # config['data']['land_cover']['zenodo_record'] to the new record id.
+    # fetched from our Zenodo mirror (CC-BY-4.0). Refresh the mirror with
+    # tools/mirror_land_cover.py and point
+    # config['data']['land_cover']['zenodo_record'] at the new record id.
     output:
         "data/downloads/land_cover_lccs_class.nc",
     params:
