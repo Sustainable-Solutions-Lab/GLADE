@@ -208,11 +208,10 @@ When the model assembles crop→food conversion links it rescales dry-matter cro
 
 **Retrieval**:
 
-* The repository includes pre-fetched nutritional data from USDA
-* To update with fresh data, enable ``data.usda.retrieve_nutrition: true`` in the config
-* Run: ``snakemake -- data/curated/nutrition.csv`` (requires network access and API key)
+* The build uses the pre-fetched ``data/curated/nutrition.csv``
+* To fetch fresh data, set ``data.usda.retrieve_nutrition: true`` and run ``snakemake -- data/curated/nutrition.csv`` (requires network access and a USDA API key)
+* Provide the key via the ``USDA_API_KEY`` environment variable or ``credentials.usda.api_key`` in ``config/secrets.yaml``; get a free key at https://fdc.nal.usda.gov/api-key-signup
 * Food-to-USDA mappings are maintained in ``data/curated/usda_food_mapping.csv``
-* A shared API key is included in the repository; users can optionally obtain their own free API key at https://fdc.nal.usda.gov/api-key-signup
 
 Per-Capita vs. Total Consumption
 ---------------------------------

@@ -118,7 +118,17 @@ def main():
     mapping_path = snakemake.input.mapping
     food_groups_path = snakemake.input.food_groups
     output_path = snakemake.output[0]
-    api_key = snakemake.config["credentials"]["usda"]["api_key"]
+    api_key = snakemake.config["credentials"].get("usda", {}).get("api_key")
+    if not api_key:
+        raise ValueError(
+            "A USDA FoodData Central API key is required to refresh nutrition "
+            "data. Set the USDA_API_KEY environment variable or add "
+            "credentials.usda.api_key to config/secrets.yaml (see "
+            "config/secrets.yaml.example); get a key at "
+            "https://fdc.nal.usda.gov/api-guide.html. This rule runs only when "
+            "data.usda.retrieve_nutrition is true, which the default build "
+            "leaves off in favor of the bundled data/curated/nutrition.csv."
+        )
     nutrient_name_map = snakemake.config["data"]["usda"]["nutrients"]
 
     # Read food groups file to get list of foods requiring nutrition data

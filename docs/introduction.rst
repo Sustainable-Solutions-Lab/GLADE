@@ -119,17 +119,11 @@ manually:
   publication (will be released under CC-BY-NC). See :doc:`current_diets`
   and the :ref:`gdd-ia-dietary-intake` entry in :doc:`data_sources`.
 
-Only one API credential matters for automatic downloads:
-
-* **USDA FoodData Central** — a free key from
-  https://fdc.nal.usda.gov/api-key-signup. The repository ships pre-fetched
-  nutritional data, so this is only needed if you want to refresh it; for a
-  default build ``DEMO_KEY`` suffices.
-
-No Copernicus/ECMWF account is required: the satellite land-cover data is
-fetched from a Zenodo mirror (see :ref:`copernicus-land-cover`). A Copernicus
-CDS token is only needed by maintainers refreshing that mirror with
-``tools/mirror_land_cover.py`` (see :ref:`redistributing-datasets`).
+The one build-time credential is an optional, free `USDA FoodData Central
+<https://fdc.nal.usda.gov/api-key-signup>`_ key, used to refresh the nutritional
+data (``data.usda.retrieve_nutrition: true``) after adding a food to the model.
+Maintainers refreshing the Zenodo land-cover mirror additionally need a
+Copernicus CDS token (see :ref:`redistributing-datasets`).
 
 Installation
 ------------
@@ -166,25 +160,11 @@ Installation
 
       Replace ``"2.17"`` with the version reported by ``ldd --version``.
 
-3. **Set up API credentials**:
-
-   .. code-block:: bash
-
-      cp config/secrets.yaml.example config/secrets.yaml
-
-   Edit ``config/secrets.yaml`` and fill in your USDA key (or leave the
-   ``DEMO_KEY`` default for a standard build). Alternatively, set the
-   equivalent environment variable:
-
-   .. code-block:: bash
-
-      export USDA_API_KEY="your-usda-api-key"
-
-4. **Download the manually-licensed datasets**: follow the
+3. **Download the manually-licensed datasets**: follow the
    :ref:`manual-download-checklist` in :doc:`data_sources` to place the three
    IHME/GDD files under ``data/manually_downloaded/``.
 
-5. **Verify the setup** with a dry run:
+4. **Verify the setup** with a dry run:
 
    .. code-block:: bash
 

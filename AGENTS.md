@@ -304,8 +304,8 @@ pixi run -e dev pytest -v         # verbose output
 
 ### Notes
 
-- The **dryrun test** (`test_workflow_dryrun`) validates full DAG construction with `forceall=True` without executing any rule. It makes no API calls, but the startup credential gate (presence-only, so dummy values work) and the manually-downloaded source files must still be satisfied for the DAG to resolve. See `.github/workflows/test.yml` for how CI stubs both.
-- The **execution test** (`test_build_solve_analyze`) runs the actual pipeline and requires USDA/ECMWF credentials for data downloads on first run.
+- The **dryrun test** (`test_workflow_dryrun`) validates full DAG construction with `forceall=True` without executing any rule. It makes no API calls; the manually-downloaded source files must be present for the DAG to resolve. See `.github/workflows/test.yml` for how CI stages them.
+- The **execution test** (`test_build_solve_analyze`) runs the actual pipeline and downloads public input data on first run (network access required).
 - Tests never delete `results/test/` or `.snakemake/`; Snakemake detects up-to-date outputs and skips them automatically. Subsequent runs are near-instant when code hasn't changed.
 - New unit tests go in `tests/test_*.py` alongside integration tests.
 
@@ -370,43 +370,12 @@ The project uses automatic configuration validation via JSON Schema to ensure al
 
 ## Secrets Management
 
-API credentials for external data sources (USDA, ECMWF) are managed separately from the main configuration to avoid committing secrets to version control.
+API credentials are kept out of the main configuration and out of version control, and each is tied to one specific task.
 
-### Setup Options
+Credentials can be supplied either in `config/secrets.yaml` (copy `config/secrets.yaml.example`; the file is gitignored) or via environment variables, which take precedence. They are loaded in `workflow/validation/secrets.py` and merged into `config["credentials"]`.
 
-**Option 1: Secrets File (Recommended for local development)**
-
-1. Copy the template:
-   ```bash
-   cp config/secrets.yaml.example config/secrets.yaml
-   ```
-
-2. Edit `config/secrets.yaml` and fill in your API credentials:
-   - **USDA API key**: Get from https://fdc.nal.usda.gov/api-guide.html
-   - **ECMWF credentials**: Get from https://cds.climate.copernicus.eu/api-how-to
-     - Register at https://cds.climate.copernicus.eu/user/register
-     - Accept dataset licenses at https://cds.climate.copernicus.eu/datasets/satellite-land-cover
-     - Get your UID and API key from your profile page
-
-3. The file is excluded from git - never commit real credentials!
-
-**Option 2: Environment Variables (Recommended for CI/CD)**
-
-Set these environment variables before running the workflow:
-
-```bash
-export USDA_API_KEY="your-usda-api-key"
-export ECMWF_DATASTORES_URL="https://cds.climate.copernicus.eu/api"
-export ECMWF_DATASTORES_KEY="your-ecmwf-key"
-```
-
-### Precedence
-
-Environment variables take precedence over the secrets file. This allows you to override file-based credentials in CI/CD or testing environments.
-
-### Validation
-
-The workflow validates that all required credentials are present at startup (before any rules execute). If credentials are missing, you'll see a clear error message with instructions on how to configure them.
+- **USDA FoodData Central key** (`USDA_API_KEY`, or `credentials.usda.api_key`): the one build-time credential, read by the `retrieve_usda_nutrition` rule when `data.usda.retrieve_nutrition: true`. That rule raises a clear error if the key is absent. Get a free key at https://fdc.nal.usda.gov/api-guide.html.
+- **Copernicus CDS credentials** (`ECMWF_DATASTORES_URL` / `ECMWF_DATASTORES_KEY`) and **Zenodo token** (`ZENODO_TOKEN`): used by `tools/mirror_land_cover.py` to refresh the land-cover data mirrored on Zenodo, which regular builds fetch from that mirror.
 
 ## When Implementing Changes
 

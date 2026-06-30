@@ -41,18 +41,13 @@ pixi install
 
 ### Setup (required before first run)
 
-1. **API credentials**: Copy and configure the secrets file:
-   ```bash
-   cp config/secrets.yaml.example config/secrets.yaml
-   # Edit config/secrets.yaml with your ECMWF Climate Data Store credentials
-   # Get credentials at: https://cds.climate.copernicus.eu/user/register
-   ```
-
-2. **Manual downloads**: Three datasets require free registration and manual download:
+**Manual downloads**: Three datasets require free registration and manual download:
    - IHME GBD mortality rates and relative risks (https://vizhub.healthdata.org/)
    - Global Dietary Database (https://globaldietarydatabase.org/)
 
    See the [Data Sources documentation](https://sustainable-solutions-lab.github.io/GLADE/data_sources.html#manual-download-checklist) for detailed instructions. Place files in `data/manually_downloaded/`.
+
+A free USDA FoodData Central key is needed only to refresh nutritional data (`data.usda.retrieve_nutrition: true`); see [`config/secrets.yaml.example`](config/secrets.yaml.example).
 
 ### Run the model
 
