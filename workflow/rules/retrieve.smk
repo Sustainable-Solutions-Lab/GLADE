@@ -970,40 +970,30 @@ rule download_luicube_grassland:
 
 
 rule download_land_cover:
+    # Copernicus ESA CCI land cover (lccs_class only) for the baseline year,
+    # fetched from our Zenodo mirror (CC-BY-4.0). Refresh the mirror with
+    # tools/mirror_land_cover.py and point
+    # config['data']['land_cover']['zenodo_record'] at the new record id.
     output:
-        temp("data/downloads/land_cover.zip"),
+        "data/downloads/land_cover_lccs_class.nc",
     params:
-        dataset="satellite-land-cover",
-        request={
-            "variable": "all",
-            "year": [str(config["baseline_year"])],
-            "version": [config["data"]["land_cover"]["version"]],
-        },
+        url=(
+            f"https://zenodo.org/records/{config['data']['land_cover']['zenodo_record']}"
+            f"/files/land_cover_lccs_class_{config['baseline_year']}"
+            f"_{config['data']['land_cover']['version']}.nc?download=1"
+        ),
     resources:
-        runtime="60m",
+        runtime="30m",
         mem_mb=500,
     log:
         "<logs>/shared/download_land_cover.log",
     benchmark:
         "<benchmarks>/shared/download_land_cover.tsv"
-    script:
-        "../scripts/download_land_cover.py"
-
-
-rule extract_land_cover_class:
-    input:
-        "data/downloads/land_cover.zip",
-    output:
-        "data/downloads/land_cover_lccs_class.nc",
-    resources:
-        runtime="15m",
-        mem_mb=13000,
-    log:
-        "<logs>/shared/extract_land_cover_class.log",
-    benchmark:
-        "<benchmarks>/shared/extract_land_cover_class.tsv"
-    script:
-        "../scripts/extract_land_cover_class.py"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
+        """
 
 
 rule download_biomass_cci:

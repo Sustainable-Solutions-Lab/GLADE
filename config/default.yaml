@@ -1565,9 +1565,11 @@ data:
       fat: "Total lipid (fat)"
       cal: "Energy"
   land_cover:
-    # ECMWF credentials: configure in config/secrets.yaml or via environment variables
-    # See config/secrets.yaml.example for setup instructions
+    # Copernicus ESA CCI land cover, mirrored on Zenodo (CC-BY-4.0). `zenodo_record`
+    # is the record id holding the `lccs_class` file for `baseline_year`; refresh
+    # it with tools/mirror_land_cover.py (see docs/data_sources.rst).
     version: "v2_1_1"
+    zenodo_record: "21085632"  # https://doi.org/10.5281/zenodo.21085632
   faostat:
     qcl_production_element_code: 5510  # "Production" in tonnes (QCL dataset, covers crops and livestock)
     fbs_food_supply_element_code: 645  # "Food supply quantity (kg/capita/yr)" in FBS dataset

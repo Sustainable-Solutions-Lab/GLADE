@@ -24,9 +24,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 3. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
 4. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
 
-**Required API key setup:**
-
-5. Register for a Copernicus Climate Data Store account and configure your API key to enable automatic retrieval of land cover data (:ref:`copernicus-land-cover`).
+No Copernicus/ECMWF API key is required: the land cover data is fetched from a Zenodo mirror (:ref:`copernicus-land-cover`). The only API credential needed for an automated build is the USDA FoodData Central key (see :doc:`introduction`).
 
 
 .. _weight-bases:
@@ -560,28 +558,23 @@ Copernicus Satellite Land Cover
 
 **Description**: Global land cover classification gridded maps from 1992 to present derived from satellite observations. The dataset describes the land surface into 22 classes including various vegetation types, water bodies, built-up areas, and bare land.
 
-**Version**: v2.1.1 (2016 onwards); NetCDF format via the Copernicus Climate Data Store API
+**Version**: v2.1.1 (2016 onwards); NetCDF format
 
 **Coverage**:
   * Spatial: Global (Plate Carree projection), 300 m resolution
   * Temporal: Annual (with approximately one-year publication delay)
 
-**Access**: https://cds.climate.copernicus.eu/datasets/satellite-land-cover (`API documentation <https://cds.climate.copernicus.eu/how-to-api>`__)
+**Access**: Original source: https://cds.climate.copernicus.eu/datasets/satellite-land-cover. For builds, GLADE downloads a mirror of the single year/version it needs from Zenodo (see *Retrieval* below), so no Copernicus account or API key is required.
 
-**License**: Multiple licenses apply including ESA CCI licence, CC-BY licence, and VITO licence. Users must also cite the Climate Data Store entry and provide attribution to the Copernicus program. (`Terms of use <https://cds.climate.copernicus.eu/terms-of-use>`__)
+**License**: CC-BY-4.0. The 2016-onwards C3S maps (which is what GLADE uses, since ``baseline_year`` is 2020) are released under the Creative Commons Attribution 4.0 International licence, as stated in the authoritative C3S/Copernicus metadata. This permits redistribution provided the Copernicus attribution and source DOI are retained; both are embedded in the Zenodo deposition. (The CDS download page also bundles the ESA CCI licence -- which governs the pre-2016 v2.0.7 maps that GLADE does not use -- and the VITO licence, which restricts only near-real-time PROBA-V products, not historical annual maps.)
+
+**Required attribution**: "Generated using Copernicus Climate Change Service information 2020. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains."
 
 **Citation**: Copernicus Climate Change Service, Climate Data Store, (2019): Land cover classification gridded maps from 1992 to present derived from satellite observation. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). https://doi.org/10.24381/cds.006f2c9a
 
-**Retrieval**: Automatic via the ``download_land_cover`` and ``extract_land_cover_class`` Snakemake rules. The full dataset (~2.2GB) contains multiple variables but only the land cover classification (``lccs_class``) is needed. The extraction rule outputs ``data/downloads/land_cover_lccs_class.nc`` (~440MB) and deletes the full download.
+**Retrieval**: Automatic via the ``download_land_cover`` Snakemake rule, which uses ``curl`` to fetch the pre-extracted land cover classification (``lccs_class`` only, ~320 MB NetCDF) from our Zenodo mirror -- no API key needed. The rule writes ``data/downloads/land_cover_lccs_class.nc``. The mirror itself is produced from the upstream CDS dataset by the maintainer tool ``tools/mirror_land_cover.py`` (see :ref:`redistributing-datasets`).
 
-**Manual setup required**:
-
-1. Register for a free CDS account at https://cds.climate.copernicus.eu/user/register
-2. Accept the required dataset licenses at https://cds.climate.copernicus.eu/datasets/satellite-land-cover?tab=download#manage-licences
-3. Obtain an API key from your account settings
-4. Configure the API key in ``~/.ecmwfdatastoresrc`` or via environment variables (see API documentation for setup instructions)
-
-**Configuration**: The land cover year is derived from the top-level ``baseline_year`` parameter. The version can be configured via ``config['data']['land_cover']['version']`` (default: v2_1_1).
+**Configuration**: The land cover year is derived from the top-level ``baseline_year`` parameter, and the version from ``config['data']['land_cover']['version']`` (default: v2_1_1). The mirror to download from is pinned by ``config['data']['land_cover']['zenodo_record']`` (the numeric Zenodo record id); the download URL and file name are derived from these three values.
 
 **Usage**: Spatial analysis of agricultural land availability and land use constraints.
 
@@ -1065,7 +1058,7 @@ Most datasets used in this project require attribution. Some disallow redistribu
 **Open licenses (attribution required, redistribution allowed)**:
 
 * **CC0 1.0 / Public domain** (USDA FoodData Central, IFA FUBC, BLS CPI-U): No restrictions; attribution requested
-* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS, ISIMIP2a / LPJmL grassland yield): Requires attribution
+* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS, ISIMIP2a / LPJmL grassland yield, Copernicus Land Cover 2016+): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
 * **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
 * **Eurostat copyright** (Eurostat apro_cpsh1): Free reuse with attribution
@@ -1077,4 +1070,50 @@ Most datasets used in this project require attribution. Some disallow redistribu
 * **Pending publication — CC-BY-NC on release** (GDD-IA): Available upon personal request from Marco Springmann; will be re-licensed under CC-BY-NC when published
 * **Non-commercial with attribution** (GADM, FADN): Free for academic/non-commercial use; GADM prohibits redistribution, FADN requires EU attribution
 * **FAO terms** (GLEAM 3.0 Supplement, FAO Nutrient Conversion): Non-commercial reuse with FAO acknowledgement; commercial use requires prior permission
-* **Custom terms** (ESA Biomass CCI, Copernicus Land Cover, Water Footprint Network): Various provider-specific terms; see individual entries above
+* **Custom terms** (ESA Biomass CCI, Water Footprint Network): Various provider-specific terms; see individual entries above
+
+.. _redistributing-datasets:
+
+Redistributing datasets via Zenodo
+----------------------------------
+
+Some upstream datasets are free to use but sit behind an API key or registration
+wall (historically the Copernicus land cover data). Where the licence permits
+redistribution, GLADE mirrors the exact slice it needs to `Zenodo
+<https://zenodo.org/>`__ and downloads it during builds with a plain HTTP
+request. This removes the per-user credential, pins an immutable, citable
+version (each Zenodo version has its own DOI and record id), and gives a single
+reusable pattern for any future dataset in the same situation.
+
+The components are:
+
+* ``tools/zenodo_publish.py`` -- a dataset-agnostic helper that creates (or
+  versions) a Zenodo deposition, uploads files, sets metadata, and publishes via
+  the Zenodo REST API. Reuse it for any redistributable dataset.
+* ``tools/mirror_land_cover.py`` -- the land-cover-specific maintainer tool. It
+  downloads ``satellite-land-cover`` from the Copernicus CDS, extracts
+  ``lccs_class``, and publishes it to Zenodo under CC-BY-4.0 with the required
+  Copernicus attribution baked into the deposition metadata.
+* The ``download_land_cover`` build rule, which ``curl``\ s the mirrored file
+  from the record pinned by ``config['data']['land_cover']['zenodo_record']``.
+
+**Before mirroring a new dataset**, confirm its licence actually permits
+redistribution (CC-BY / CC0 / public domain are safe; "use only" or
+non-commercial-no-redistribution terms are not) and record the required
+attribution in the deposition metadata.
+
+**Refreshing the land cover mirror** (maintainer, requires a Copernicus CDS
+token and a Zenodo token -- see ``config/secrets.yaml.example``)::
+
+    # Optional dry-run against the Zenodo sandbox (leaves an unpublished draft):
+    pixi run -e dev python tools/mirror_land_cover.py --sandbox --no-publish
+
+    # First publication (creates a new Zenodo record):
+    pixi run -e dev python tools/mirror_land_cover.py
+
+    # New data version (publishes a new version of an existing record):
+    pixi run -e dev python tools/mirror_land_cover.py --parent-record <record-id>
+
+The tool prints the published record id; set it as
+``config['data']['land_cover']['zenodo_record']`` in ``config/default.yaml`` and
+commit that change so builds pick up the new mirror.

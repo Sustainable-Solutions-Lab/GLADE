@@ -11,15 +11,18 @@ import yaml
 
 
 def load_secrets_with_env_fallback(project_root: Path) -> dict:
-    """Load API credentials from secrets file or environment variables.
+    """Load build-time API credentials from secrets file or environment variables.
 
     Environment variables take precedence over the secrets file. This allows
     overriding file-based credentials in CI/CD or testing environments.
 
+    Only USDA credentials are required to build and solve the model. Copernicus
+    CDS credentials are not part of the build: the land-cover data is fetched
+    from a Zenodo mirror, and the CDS key is only needed by
+    tools/mirror_land_cover.py when refreshing that mirror.
+
     Environment variables:
         USDA_API_KEY: USDA FoodData Central API key
-        ECMWF_DATASTORES_URL: ECMWF datastores API URL
-        ECMWF_DATASTORES_KEY: ECMWF datastores API key
 
     Parameters
     ----------
@@ -31,8 +34,7 @@ def load_secrets_with_env_fallback(project_root: Path) -> dict:
     dict
         Dictionary with credentials structure:
         {
-            "usda": {"api_key": str},
-            "ecmwf": {"url": str, "key": str}
+            "usda": {"api_key": str}
         }
 
     Raises
@@ -41,17 +43,11 @@ def load_secrets_with_env_fallback(project_root: Path) -> dict:
         If any required credentials are missing from both environment variables
         and the secrets file.
     """
-    credentials = {"usda": {}, "ecmwf": {}}
+    credentials = {"usda": {}}
 
     # Check environment variables first (highest priority)
     if usda_key := os.getenv("USDA_API_KEY"):
         credentials["usda"]["api_key"] = usda_key
-
-    if ecmwf_url := os.getenv("ECMWF_DATASTORES_URL"):
-        credentials["ecmwf"]["url"] = ecmwf_url
-
-    if ecmwf_key := os.getenv("ECMWF_DATASTORES_KEY"):
-        credentials["ecmwf"]["key"] = ecmwf_key
 
     # Try secrets file as fallback
     secrets_file = project_root / "config" / "secrets.yaml"
@@ -61,7 +57,7 @@ def load_secrets_with_env_fallback(project_root: Path) -> dict:
 
         # Merge file secrets (env vars take precedence)
         if file_secrets and "credentials" in file_secrets:
-            for service in ["usda", "ecmwf"]:
+            for service in ["usda"]:
                 if service in file_secrets["credentials"]:
                     for key, value in file_secrets["credentials"][service].items():
                         credentials[service].setdefault(key, value)
@@ -71,14 +67,6 @@ def load_secrets_with_env_fallback(project_root: Path) -> dict:
     if not credentials["usda"].get("api_key"):
         missing.append(
             "USDA API key (set USDA_API_KEY env var or add to config/secrets.yaml)"
-        )
-    if not credentials["ecmwf"].get("url"):
-        missing.append(
-            "ECMWF URL (set ECMWF_DATASTORES_URL env var or add to config/secrets.yaml)"
-        )
-    if not credentials["ecmwf"].get("key"):
-        missing.append(
-            "ECMWF key (set ECMWF_DATASTORES_KEY env var or add to config/secrets.yaml)"
         )
 
     if missing:
@@ -94,15 +82,12 @@ Option 1 - Secrets file (recommended for local development):
 
 Option 2 - Environment variables (recommended for CI/CD):
   export USDA_API_KEY="your-usda-key"
-  export ECMWF_DATASTORES_URL="https://cds.climate.copernicus.eu/api"
-  export ECMWF_DATASTORES_KEY="your-ecmwf-key"
 
 Missing credentials:
 {chr(10).join('  - ' + m for m in missing)}
 
 Get API keys:
   - USDA: https://fdc.nal.usda.gov/api-guide.html
-  - ECMWF: https://cds.climate.copernicus.eu/api-how-to
 """
         raise ValueError(error_msg)
 

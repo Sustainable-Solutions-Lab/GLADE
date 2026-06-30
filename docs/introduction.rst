@@ -119,14 +119,17 @@ manually:
   publication (will be released under CC-BY-NC). See :doc:`current_diets`
   and the :ref:`gdd-ia-dietary-intake` entry in :doc:`data_sources`.
 
-Two API credentials are needed for automatic downloads:
+Only one API credential matters for automatic downloads:
 
-* **Copernicus Climate Data Store** — required for satellite land-cover data.
-  Register at https://cds.climate.copernicus.eu/user/register, accept the
-  land-cover dataset licence, and copy the API key from your profile.
-* **USDA FoodData Central** — optional; the repository ships pre-fetched
-  nutritional data. A free key from https://fdc.nal.usda.gov/api-key-signup
-  is only needed if you want to refresh that data.
+* **USDA FoodData Central** — a free key from
+  https://fdc.nal.usda.gov/api-key-signup. The repository ships pre-fetched
+  nutritional data, so this is only needed if you want to refresh it; for a
+  default build ``DEMO_KEY`` suffices.
+
+No Copernicus/ECMWF account is required: the satellite land-cover data is
+fetched from a Zenodo mirror (see :ref:`copernicus-land-cover`). A Copernicus
+CDS token is only needed by maintainers refreshing that mirror with
+``tools/mirror_land_cover.py`` (see :ref:`redistributing-datasets`).
 
 Installation
 ------------
@@ -169,14 +172,12 @@ Installation
 
       cp config/secrets.yaml.example config/secrets.yaml
 
-   Edit ``config/secrets.yaml`` and fill in your ECMWF Climate Data Store
-   credentials (and optionally the USDA key). Alternatively, set the
-   equivalent environment variables:
+   Edit ``config/secrets.yaml`` and fill in your USDA key (or leave the
+   ``DEMO_KEY`` default for a standard build). Alternatively, set the
+   equivalent environment variable:
 
    .. code-block:: bash
 
-      export ECMWF_DATASTORES_URL="https://cds.climate.copernicus.eu/api"
-      export ECMWF_DATASTORES_KEY="your-uid:your-api-key"
       export USDA_API_KEY="your-usda-api-key"
 
 4. **Download the manually-licensed datasets**: follow the

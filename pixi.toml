@@ -73,7 +73,6 @@ linopy = { git = "https://github.com/koen-vg/linopy.git", tag = "v0.8.0+glade2" 
 exactextract = ">=0.2.2, <0.3"       # Fast zonal statistics from rasters
 
 # Data retrieval
-ecmwf-datastores-client = ">=0.4.1, <0.5" # ECMWF climate data access
 gsutil = ">=5.35, <6"                # Google Cloud Storage CLI
 
 # Validation
@@ -108,6 +107,8 @@ myst-nb = ">=1.1, <2"                # Render Jupyter notebooks in Sphinx
 [feature.dev.pypi-dependencies]
 snakefmt = ">=0.11.4, <0.12"         # Snakemake code formatter
 pytest = ">=8.0.0, <9"              # Test framework
+# Maintainer-only: Copernicus CDS access for tools/mirror_land_cover.py
+ecmwf-datastores-client = ">=0.4.1, <0.5"
 
 [activation.env]
 # Enable new PyPSA components API globally
