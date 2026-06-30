@@ -1361,12 +1361,16 @@ properties:
                 type: string
       land_cover:
         type: object
-        required: [version]
+        required: [version, zenodo_record]
         additionalProperties: false
         properties:
           version:
             type: string
             description: "Version of land cover dataset"
+          zenodo_record:
+            type: string
+            minLength: 1
+            description: "Zenodo record id hosting the mirrored lccs_class file (refresh with tools/mirror_land_cover.py)"
       faostat:
         type: object
         required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_other_uses_element_code, fbs_production_element_code]
@@ -2162,9 +2166,9 @@ properties:
 
   credentials:
     type: object
-    required: [usda, ecmwf]
+    required: [usda]
     additionalProperties: false
-    description: "API credentials for external data sources (configure via config/secrets.yaml or environment variables)"
+    description: "API credentials required by the build (configure via config/secrets.yaml or environment variables). Copernicus CDS credentials are NOT needed for builds; they are only used by tools/mirror_land_cover.py to refresh the mirrored land-cover data."
     properties:
       usda:
         type: object
@@ -2175,20 +2179,6 @@ properties:
             type: string
             minLength: 1
             description: "USDA FoodData Central API key (or set USDA_API_KEY env var)"
-      ecmwf:
-        type: object
-        required: [url, key]
-        additionalProperties: false
-        properties:
-          url:
-            type: string
-            minLength: 1
-            format: uri
-            description: "ECMWF datastores API URL (or set ECMWF_DATASTORES_URL env var)"
-          key:
-            type: string
-            minLength: 1
-            description: "ECMWF datastores API key (or set ECMWF_DATASTORES_KEY env var)"
 
   sensitivity:
     type: object

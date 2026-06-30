@@ -67,6 +67,4 @@ jobs:
       - name: Snakemake dryrun test
         env:
           USDA_API_KEY: dummy
-          ECMWF_DATASTORES_URL: https://cds.climate.copernicus.eu/api
-          ECMWF_DATASTORES_KEY: dummy
         run: pixi run --environment dev pytest -m integration -k dryrun -v

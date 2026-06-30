@@ -4,12 +4,11 @@
 
 """Download land cover data using the ECMWF datastores client.
 
-Credentials are sourced from config/secrets.yaml or environment variables
-(ECMWF_DATASTORES_URL and ECMWF_DATASTORES_KEY). No longer relies on
-the ~/.ecmwfdatastoresrc configuration file.
-
-Snakemake passes the ``snakemake`` object into this module; no standalone CLI
-usage is supported.
+This is a library module used by the maintainer tool
+``tools/mirror_land_cover.py`` (which imports :func:`main`). It is no longer
+wired into a Snakemake rule: ordinary builds fetch the mirrored data from
+Zenodo. Credentials are passed in by the caller, sourced from environment
+variables (ECMWF_DATASTORES_URL / ECMWF_DATASTORES_KEY) or config/secrets.yaml.
 """
 
 from pathlib import Path
@@ -37,13 +36,3 @@ def main(dataset: str, request: dict, output: Path, url: str, key: str) -> None:
 
     client = Client(url=url, key=key)
     client.retrieve(dataset, request, target=str(output))
-
-
-if __name__ == "__main__":
-    main(
-        dataset=snakemake.params.dataset,
-        request=snakemake.params.request,
-        output=Path(snakemake.output[0]),
-        url=snakemake.config["credentials"]["ecmwf"]["url"],
-        key=snakemake.config["credentials"]["ecmwf"]["key"],
-    )

@@ -10,8 +10,10 @@ the lccs_class variable (land cover classification) is needed for the model.
 This script extracts just that variable to reduce file size from ~2.2GB to ~440MB.
 It operates on the ZIP archive distributed by CDS, which bundles the NetCDF file.
 
-Snakemake passes the ``snakemake`` object into this module; no standalone CLI
-usage is supported.
+This is a library module used by the maintainer tool
+``tools/mirror_land_cover.py`` (which imports :func:`main`). It is no longer
+wired into a Snakemake rule: ordinary builds fetch the already-extracted file
+from Zenodo.
 """
 
 from pathlib import Path
@@ -74,10 +76,3 @@ def main(input_path: Path, output_path: Path) -> None:
     finally:
         if cleanup_dir is not None:
             cleanup_dir.cleanup()
-
-
-if __name__ == "__main__":
-    main(
-        input_path=Path(snakemake.input[0]),
-        output_path=Path(snakemake.output[0]),
-    )

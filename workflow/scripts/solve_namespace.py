@@ -162,7 +162,6 @@ def validate_scenario_config_schemas(
         if not merged.get("credentials"):
             merged["credentials"] = {
                 "usda": {"api_key": "unused"},
-                "ecmwf": {"url": "unused", "key": "unused"},
             }
         try:
             validate_config_schema(merged, Path(project_root))
