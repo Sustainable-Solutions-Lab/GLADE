@@ -13,9 +13,12 @@ by every subsequent solve. Running ``tools/calibrate`` regenerates them
 all in the right dependency order; individual steps can also be run
 directly.
 
-The calibration artefacts live under ``data/curated/calibration/`` and
-are version-controlled so that ordinary builds don't need to re-solve
-anything.
+Calibration artefacts are organised in *sets*: one directory
+``data/curated/calibration/<source>/`` per base configuration they were
+calibrated against, selected by the ``calibration.source`` config key.
+The shipped ``default`` set is version-controlled so that ordinary
+builds don't need to re-solve anything. See
+:ref:`calibration-provenance` for how sets are tied to configs.
 
 .. _calibration-enabled-generate-pattern:
 
@@ -114,7 +117,9 @@ Everything is wrapped by ``tools/calibrate``:
    tools/calibrate food_demand
    tools/calibrate cost
    tools/calibrate stability
-   tools/calibrate --check      # per-step staleness, no execution
+   tools/calibrate --check      # per-step staleness + provenance, no execution
+   tools/calibrate --base config/<name>.yaml [all|<step>|--check]
+                                # calibrate a dedicated set for another config
 
 The wrapper invokes ``tools/smk`` with the matching config and the
 appropriate output targets. Any extra flags are passed through, e.g.
@@ -124,6 +129,41 @@ The stability calibration runs locally in-process and is inherently
 sequential (each Broyden step depends on the previous solve), so HPC
 offloading isn't worthwhile at this size. Each iteration is one paired
 solve (baseline + main), and 3–5 iterations are typically enough.
+
+.. _calibration-provenance:
+
+Artefact sets and provenance
+----------------------------
+
+Calibration artefacts are only valid for configurations sharing the
+structural assumptions they were fit under. Each set therefore carries
+a ``provenance.yaml`` stamp of the structural configuration it was
+calibrated against (all config leaves except solve-time keys and a
+small exempt list; see
+``workflow/validation/calibration_provenance.py``), written by
+``tools/calibrate`` after each successful run. At workflow start the
+active config is compared against the stamp of the set named by
+``calibration.source``; a structural mismatch is an error listing the
+differing keys.
+
+A config with different structural assumptions has three options:
+
+* **Calibrate its own set**: declare ``calibration.source: <name>`` in
+  the config and run ``tools/calibrate --base config/<file>.yaml``.
+  Artefacts land in ``data/curated/calibration/<name>/``. A fresh set
+  is first seeded from the ``default`` set (each calibration solve
+  consumes the other steps' artefacts) and then regenerated in
+  dependency order.
+* **Point at a compatible existing set** via ``calibration.source``.
+* **Accept the mismatch** with
+  ``calibration.accept_provenance_mismatch: true``, downgrading the
+  error to a warning. Only appropriate when calibration fidelity does
+  not matter (e.g. the coarse test and tutorial configs).
+
+Solve-time keys (GHG price, health valuation, the deviation-penalty
+block, scenario overrides, ...) never invalidate a set; the check fires
+only on structural changes. Code changes are not captured by the stamp:
+``tools/calibrate --check`` (Snakemake staleness) covers those.
 
 Consuming the calibrated values
 -------------------------------
@@ -139,7 +179,7 @@ workflow when their configuration blocks are enabled (the default):
   the monogastric/ruminant protein and ruminant-roughage feed buses (see
   :ref:`exogenous-protein-feed`).
 * ``food_demand_calibration.enabled: true`` loads
-  ``data/curated/calibration/food_demand.csv`` at solve time and applies
+  ``data/curated/calibration/<source>/food_demand.csv`` at solve time and applies
   each per-food multiplier uniformly to the baseline-diet ``target_mt``
   in ``_match_baseline_to_consume_links`` (see
   :ref:`food-demand-calibration`).
@@ -148,7 +188,7 @@ workflow when their configuration blocks are enabled (the default):
 * ``deviation_penalty.calibration.enabled: true`` resolves the sentinel
   ``"calibrated"`` on any of
   ``deviation_penalty.{land.crops,land.grassland,feed,diet}.l1_cost`` from
-  ``data/curated/calibration/deviation_penalty.yaml`` at solve time
+  ``data/curated/calibration/<source>/deviation_penalty.yaml`` at solve time
   (see :ref:`production-stability-bounds` for the config reference).
   Scenarios that want an explicit numeric value simply override the
   sentinel with a number; scenarios that want to scan around the
@@ -167,13 +207,13 @@ validation solve:
   ``feed:ruminant_forage:*``). Surplus countries get a per-country
   multiplier on grassland yield and fodder-conversion efficiency;
   deficit countries get an exogenous-forage supply written to
-  ``data/curated/calibration/exogenous_forage.csv``. See
+  ``data/curated/calibration/<source>/exogenous_forage.csv``. See
   :ref:`grassland-forage-calibration` in the livestock chapter for the
   algorithm.
 * **Protein corrections** (deficit side only, on
   ``feed:monogastric_protein:*`` and ``feed:ruminant_protein:*``). The
   positive slack on each protein feed bus is written to
-  ``data/curated/calibration/exogenous_feed.csv``. See
+  ``data/curated/calibration/<source>/exogenous_feed.csv``. See
   :ref:`exogenous-protein-feed` for what real-world sources it stands
   in for.
 
@@ -382,7 +422,7 @@ log-log slope for a relationship of the form
 Convergence target: :math:`\lvert \log(\text{dev}/t) \rvert_\infty
 < 0.02`, i.e. all calibrated deviations within +/-2 % of the target.
 The calibrated coefficients are written to
-``data/curated/calibration/deviation_penalty.yaml`` under
+``data/curated/calibration/<source>/deviation_penalty.yaml`` under
 ``l1_costs.<component>`` and resolved at solve time wherever the
 sentinel ``"calibrated"`` appears in
 ``deviation_penalty.{land.crops,land.grassland,feed,diet}.l1_cost`` (see

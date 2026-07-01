@@ -24,6 +24,11 @@
 
 name: "tutorial_02"
 
+# Tutorials knowingly reuse the default calibration artefacts at a coarser
+# regional resolution.
+calibration:
+  accept_provenance_mismatch: true
+
 # See config/tutorial/01_ghg_prices.yaml for the rationale on target_count.
 aggregation:
   regions:

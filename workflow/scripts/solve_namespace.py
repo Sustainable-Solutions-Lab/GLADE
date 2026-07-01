@@ -205,6 +205,31 @@ ANALYSIS_OUTPUT_NAMES = (
 )
 
 
+def resolve_calibration_source_paths(config: dict) -> dict:
+    """Substitute ``{calibration_source}`` in all string config values.
+
+    Calibration artefact paths in config/default.yaml carry the
+    ``{calibration_source}`` placeholder so that a single key,
+    ``calibration.source``, selects which artefact set under
+    ``data/curated/calibration/<source>/`` a config reads (and, for
+    generation runs, writes). Mutates ``config`` in place and returns it.
+    """
+    source = config["calibration"]["source"]
+
+    def _substitute(node):
+        if isinstance(node, dict):
+            return {k: _substitute(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [_substitute(v) for v in node]
+        if isinstance(node, str):
+            return node.replace("{calibration_source}", source)
+        return node
+
+    for key in list(config.keys()):
+        config[key] = _substitute(config[key])
+    return config
+
+
 def load_merged_config(*configfiles) -> dict:
     """Load and merge YAML config files (later files override earlier ones)."""
     merged: dict = {}
@@ -212,7 +237,7 @@ def load_merged_config(*configfiles) -> dict:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
         _recursive_update(merged, data)
-    return merged
+    return resolve_calibration_source_paths(merged)
 
 
 def get_effective_config(

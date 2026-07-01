@@ -7,6 +7,12 @@
 
 name: "test"
 
+# The test config knowingly reuses the default calibration artefacts at a
+# much coarser structural resolution; calibration fidelity is irrelevant
+# for the integration tests.
+calibration:
+  accept_provenance_mismatch: true
+
 scenarios:
   # Toy scenarios for pytest integration tests.
   # Subset of production scenarios to exercise key code paths.

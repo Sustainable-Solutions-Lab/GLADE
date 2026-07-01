@@ -675,9 +675,9 @@ FAOSTAT area cap.
      grassland_forage_calibration:
        enabled: true
        generate: false
-       grassland_yield_correction: "data/curated/calibration/grassland_yield.csv"
-       fodder_conversion_correction: "data/curated/calibration/fodder_conversion.csv"
-       exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
+       grassland_yield_correction: "data/curated/calibration/{calibration_source}/grassland_yield.csv"
+       fodder_conversion_correction: "data/curated/calibration/{calibration_source}/fodder_conversion.csv"
+       exogenous_forage: "data/curated/calibration/{calibration_source}/exogenous_forage.csv"
        scenario: "default"
 
 The figure below shows the grassland calibration results.
@@ -715,10 +715,12 @@ forage calibration:
 2. **Phase 2 — Calibrated model**: All other scenarios (including
    ``default``) apply all three calibration files.
 
-Pre-computed calibration files are stored under ``data/curated/calibration/``
-so they can be reused across configurations without re-running the validation
-solve.  Set ``generate: true`` in the relevant configuration block to
-re-generate them (requires a full validation solve).
+Pre-computed calibration files are stored under
+``data/curated/calibration/<source>/`` (see :ref:`calibration-provenance`
+for how a config selects a compatible set) so structurally equivalent
+configurations reuse them without re-running the validation solve.  Set
+``generate: true`` in the relevant configuration block to re-generate
+them (requires a full validation solve).
 
 .. _exogenous-protein-feed:
 
@@ -803,7 +805,7 @@ supply that mirrors the existing
    ``feed:ruminant_roughage:{country}`` buses reveal the
    per-country gap.
 2. ``compute_exogenous_feed_calibration`` writes those positive slacks
-   to ``data/curated/calibration/exogenous_feed.csv``.
+   to ``data/curated/calibration/<source>/exogenous_feed.csv``.
 3. At solve time, ``_apply_exogenous_feed_calibration`` reads the CSV
    and adds free per-country generators on the matching protein and
    roughage feed buses. In validation / ``enforce_baseline_feed: true`` mode the
@@ -840,7 +842,7 @@ generators are named ``supply:exogenous_{category}:{country}``.
    exogenous_feed_calibration:
      enabled: true
      generate: false
-     exogenous_feed: "data/curated/calibration/exogenous_feed.csv"
+     exogenous_feed: "data/curated/calibration/{calibration_source}/exogenous_feed.csv"
      scenario: "default"
 
 When upstream feed or crop data changes, re-run

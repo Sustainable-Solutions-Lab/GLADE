@@ -1,6 +1,6 @@
 ---
 name: model-calibration
-description: Run, refresh, or diagnose the model's calibration pipeline (feed -> food_waste -> food_demand -> cost -> stability) that produces the git-tracked artefacts under `data/curated/calibration/`. Covers the dependency order, the `tools/calibrate` wrapper, realistic runtime expectations, when each kind of upstream change forces a re-run, and how to diagnose the most common failure mode: a hidden supply/demand mismatch that inflates the production-stability L1 cost. Use whenever calibration is relevant -- the user touches inputs/build logic that feed the calibration solves, calibration artefacts look off, or a refresh of the artefacts is needed after a model/data change.
+description: Run, refresh, or diagnose the model's calibration pipeline (feed -> food_waste -> food_demand -> cost -> stability) that produces the per-config artefact sets under `data/curated/calibration/<source>/` (the default set is git-tracked). Covers the dependency order, the `tools/calibrate` wrapper, realistic runtime expectations, when each kind of upstream change forces a re-run, and how to diagnose the most common failure mode: a hidden supply/demand mismatch that inflates the production-stability L1 cost. Use whenever calibration is relevant -- the user touches inputs/build logic that feed the calibration solves, calibration artefacts look off, or a refresh of the artefacts is needed after a model/data change.
 ---
 
 <!--
@@ -11,11 +11,18 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # Model Calibration
 
-The default workflow consumes five git-tracked calibration artefacts under
-`data/curated/calibration/`. Each is produced by a dedicated validation-mode
-solve and absorbs a specific class of residual mismatch so that ordinary
-solves don't have to. Without these files in place, production-stability,
+The default workflow consumes five calibration artefact groups organized
+in per-config *sets* under `data/curated/calibration/<source>/`, selected
+by the `calibration.source` config key (the `default` set is
+git-tracked). Each is produced by a dedicated validation-mode solve and
+absorbs a specific class of residual mismatch so that ordinary solves
+don't have to. Without these files in place, production-stability,
 costs, and food/feed accounting drift from observed 2020 reality.
+
+Every set carries a `provenance.yaml` stamp of the structural config it
+was fit against; workflow runs error at DAG time when their config
+differs structurally from the consumed set's stamp (see "Artefact sets
+and provenance" below).
 
 Authoritative reference: `docs/calibration.rst`. This skill is the operational
 companion: when to run, how to run, what to expect, what to watch out for.
@@ -58,11 +65,19 @@ tools/calibrate food_waste
 tools/calibrate food_demand
 tools/calibrate cost
 tools/calibrate stability
-tools/calibrate --check      # per-step staleness probe (dry-run, no execution)
+tools/calibrate --check      # per-step staleness + provenance probe (no execution)
+tools/calibrate --base config/<name>.yaml [all|<step>|--check]
+                             # calibrate a dedicated set for another config
 ```
 
 The wrapper defaults to `pixi -e gurobi` -- all calibration configs use
 Gurobi. HiGHS is too slow here. Override with `CALIBRATE_PIXI_ENV=<env>`.
+
+With `--base`, the base config must declare its own `calibration.source`
+(refusing to overwrite the shared `default` set); a fresh set is seeded
+from `default` and regenerated in order, and the `all` chain uses
+`name: calibration-<source>` so processing trees don't thrash. After any
+successful run the set is (re)stamped with `provenance.yaml`.
 
 Pass extra flags through positionally:
 
@@ -153,13 +168,21 @@ sequential (each Broyden iteration depends on the previous solve).
 
 ## Output landing zones
 
-- `data/curated/calibration/*` -- the five artefacts, **git-tracked**. Commit them together as a refresh; mixed-vintage artefacts are the most common cause of confusing downstream solves.
-- `processing/calibration/*` -- shared upstream prep, NOT committed.
+- `data/curated/calibration/<source>/*` -- one artefact set per base config, plus its `provenance.yaml` stamp; the `default` set is **git-tracked**. Commit a set together as a refresh; mixed-vintage artefacts are the most common cause of confusing downstream solves.
+- `processing/calibration/*` (or `processing/calibration-<source>/*` for non-default bases) -- shared upstream prep, NOT committed.
 - `results/calibration/*` -- per-iteration solve logs, NOT committed.
 - `results/calibration/calibration/deviation_penalty_trace.csv` -- per-iter Broyden trace (per-component lambda, achieved deviations, residual norm). Inspect when stability behaves oddly.
 
+## Artefact sets and provenance
+
+- A config selects its set with `calibration.source` (default: `default`); all artefact paths resolve through the `{calibration_source}` placeholder at config-load time.
+- Structurally divergent configs must either calibrate their own set (`calibration.source: <name>` + `tools/calibrate --base config/<name>.yaml`), point at a compatible set, or set `calibration.accept_provenance_mismatch: true` (test/tutorial-grade escape hatch: warning instead of error).
+- The provenance check covers config drift only; code/data staleness remains `tools/calibrate --check`'s job. Both run from `tools/calibrate --check`.
+- The stamp compares all non-solve-time leaves minus exempt machinery keys (see `PROVENANCE_EXEMPT_PREFIXES` in `workflow/validation/calibration_provenance.py`). Solve-time knobs (GHG price, value_per_yll, deviation_penalty, scenario overrides) never trip it.
+- `tests/test_calibration_provenance.py::TestDefaultStampConsistency` fails when `config/default.yaml` changes structurally without a recalibration/restamp -- that is the intended forcing function.
+
 The currently calibrated L1 centre lives in
-`data/curated/calibration/deviation_penalty.yaml` under
+`data/curated/calibration/default/deviation_penalty.yaml` under
 `l1_costs.<component>`. Solves that set
 `deviation_penalty.{land,feed,diet}.l1_cost: "calibrated"` resolve the
 sentinel from this file at solve time. Per-component
@@ -289,7 +312,7 @@ tools/smk --configfile config/validation.yaml -- \
     results/validation/solved/model_scen-default.nc
 
 # Current calibrated L1 centre
-cat data/curated/calibration/deviation_penalty.yaml
+cat data/curated/calibration/default/deviation_penalty.yaml
 
 # Per-iter Broyden trace (after a stability run)
 cat results/calibration/calibration/deviation_penalty_trace.csv

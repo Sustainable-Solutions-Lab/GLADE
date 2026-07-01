@@ -51,6 +51,23 @@ paths:
   logs_root: "logs"
   benchmarks_root: "benchmarks"
 
+# --- section: calibration ---
+# Which calibration artefact set to use. The five calibration artefact
+# groups (feed, food_waste, food_demand, cost, stability) live under
+# ``data/curated/calibration/<source>/``; every artefact path below that
+# contains the ``{calibration_source}`` placeholder resolves against this
+# key at config-load time. A config whose structural assumptions differ
+# from the set it consumes must either regenerate its own set
+# (``tools/calibrate --base <config>`` with its own ``source`` name) or
+# point ``source`` at a compatible existing set. Compatibility is checked
+# at workflow start against the set's ``provenance.yaml``.
+calibration:
+  source: "default"
+  # Downgrade a provenance mismatch from an error to a warning. Only for
+  # configs that knowingly reuse a set calibrated under different
+  # structural assumptions (e.g. coarse test/tutorial resolutions).
+  accept_provenance_mismatch: false
+
 # --- section: netcdf ---
 # NetCDF export settings for PyPSA network files (build and solve outputs)
 netcdf:
@@ -165,7 +182,7 @@ deviation_penalty:
     tolerance: 0.02
     max_iter: 8
     trust_region_log: 0.693  # log(2): caps |dx|_inf in log-coords per iteration
-    calibrated_yaml: "data/curated/calibration/deviation_penalty.yaml"
+    calibrated_yaml: "data/curated/calibration/{calibration_source}/deviation_penalty.yaml"
     trace_csv: "<results>/{name}/calibration/deviation_penalty_trace.csv"
     seeds:
       cropland: 1.0   # crop deviation reaches the 5% target near L1~1.1
@@ -656,9 +673,9 @@ grazing:
   grassland_forage_calibration:
     enabled: true
     generate: false
-    grassland_yield_correction: "data/curated/calibration/grassland_yield.csv"
-    fodder_conversion_correction: "data/curated/calibration/fodder_conversion.csv"
-    exogenous_forage: "data/curated/calibration/exogenous_forage.csv"
+    grassland_yield_correction: "data/curated/calibration/{calibration_source}/grassland_yield.csv"
+    fodder_conversion_correction: "data/curated/calibration/{calibration_source}/fodder_conversion.csv"
+    exogenous_forage: "data/curated/calibration/{calibration_source}/exogenous_forage.csv"
     scenario: "default"
 
 # Protein-feed calibration: per-country exogenous monogastric/ruminant
@@ -673,7 +690,7 @@ grazing:
 exogenous_feed_calibration:
   enabled: true
   generate: false
-  exogenous_feed: "data/curated/calibration/exogenous_feed.csv"
+  exogenous_feed: "data/curated/calibration/{calibration_source}/exogenous_feed.csv"
   scenario: "default"
 
 # Food waste calibration: a per-food-group multiplier on (1 - waste_fraction)
@@ -685,7 +702,7 @@ exogenous_feed_calibration:
 food_loss_waste_calibration:
   enabled: true
   generate: false
-  calibration_file: "data/curated/calibration/food_waste.yaml"
+  calibration_file: "data/curated/calibration/{calibration_source}/food_waste.yaml"
   food_groups:
   # Groups with documented FBS-vs-GDD gap that the SDG-based defaults
   # under- or over-state. The SDG global all-foods 10% waste rate fits
@@ -716,7 +733,7 @@ food_loss_waste_calibration:
 food_demand_calibration:
   enabled: true
   generate: false
-  calibration_file: "data/curated/calibration/food_demand.csv"
+  calibration_file: "data/curated/calibration/{calibration_source}/food_demand.csv"
   # Bounds on the per-food multiplier. Tight on purpose: anything that
   # would fall outside flags a structural data issue worth investigating
   # rather than being silently absorbed.
@@ -1687,9 +1704,9 @@ cost_calibration:
   enabled: true       # Apply calibration corrections to production costs
   generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
   scenario: "calibration"  # Scenario name used for calibration solve
-  crop_correction_csv: "data/curated/calibration/crop_cost.csv"
-  grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
-  animal_correction_csv: "data/curated/calibration/animal_cost.csv"
+  crop_correction_csv: "data/curated/calibration/{calibration_source}/crop_cost.csv"
+  grassland_correction_csv: "data/curated/calibration/{calibration_source}/grassland_cost.csv"
+  animal_correction_csv: "data/curated/calibration/{calibration_source}/animal_cost.csv"
 
 # --- section: solving ---
 solving:
