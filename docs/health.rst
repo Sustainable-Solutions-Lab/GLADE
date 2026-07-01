@@ -29,9 +29,9 @@ nonlinear relationships into a linear optimisation framework.
    model's attributable-burden numbers share the GBD intake basis. That
    anchoring changes the baseline diet and is an independent switch -- see
    :ref:`current-diets-gbd-anchoring`. Because the baseline diet feeds the
-   calibration, switching health (or anchoring) on or off means the
-   committed calibration no longer matches your run; rerun
-   ``tools/calibrate`` accordingly (see :doc:`calibration`).
+   calibration, a run must consume the artefact set matching its resolved
+   anchoring: ``calibration.source: default`` (anchoring off) or
+   ``gbd-anchored`` (anchoring on); see :doc:`calibration`.
 
 Conceptual Framework
 --------------------

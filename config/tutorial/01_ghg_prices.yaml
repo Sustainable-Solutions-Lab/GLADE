@@ -55,9 +55,10 @@ scenarios:
 validation:
   use_actual_yields: true
 
-# This tutorial does not use health costs.
+# Health module on for the GBD-anchored baseline diet and health outputs,
+# but with zero weight in the objective (post-hoc YLL evaluation only).
 health:
-  enabled: true  # default flipped to false; this tutorial relies on health (and the GBD-anchored diet)
+  enabled: true
   value_per_yll: 0
 
 # Compare all three scenarios in auto-generated plots.

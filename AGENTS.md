@@ -175,6 +175,7 @@ See `workflow/scripts/build_model/__init__.py` for the complete reference.
 - Keep code concise: Prefer simple control flow; fail early on invalid external inputs.
 - Do your best to avoid over-engineering. If you see possibilities for simplifying, suggest improvements (but let the user approve of such drive-by refactors first).
 - Consistent style: Follow existing patterns in nearby files; don’t introduce new paradigms ad hoc.
+- Comments (code and config alike) describe the *current* state as helpfully as possible, and only where something is not self-explanatory. Never write comments that justify a change or contrast with previous behaviour ("previously X", "default flipped to Y", "used to be unconditional") — that history belongs in the commit message.
 - Reproducibility: Use the Snakemake targets below to validate changes; don’t hand‑run ad hoc pipelines unless necessary.
 - No unused imports: The linter removes them automatically; only add imports when adding code that uses them.
 - ASCII-only in code, comments, and docstrings: ruff's `RUF001`/`RUF002`/`RUF003` rules flag ambiguous Unicode look-alikes (`×`, `–`, `—`, `’`, `…`, `Σ`, `≈`, non-breaking spaces, etc.) and block pushes via the pre-push hook. Use plain ASCII substitutes: `*` for multiplication, `-` for dashes, `'` for apostrophes, `~=` for approx-equal, spell out Greek letters. Math notation in docstrings is the most common offender — write `sum over i of a_i * b_i`, not `Σ_i a_i × b_i`.

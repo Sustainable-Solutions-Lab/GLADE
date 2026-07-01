@@ -122,11 +122,9 @@ sensitivity_analysis:
 validation:
   enforce_baseline_diet: true
 
-# Keep post-hoc YLL evaluation disabled: diet is fixed, so health outputs
-# would be essentially constant across scenarios and just add solve time.
 diet:
-  # Preserve the historical GBD-anchored baseline diet (anchoring used to be
-  # unconditional; it now follows health.enabled unless set explicitly).
+  # Anchor to GBD so the fixed baseline diet matches the health-enabled
+  # gsa.yaml diet (with health off, the sentinel would resolve to false).
   anchor_groups_to_gbd: true
 
 # Anchored baseline diet -> consume the artefact set calibrated against it
@@ -134,6 +132,8 @@ diet:
 calibration:
   source: "gbd-anchored"
 
+# No post-hoc YLL evaluation: diet is fixed, so health outputs would be
+# essentially constant across scenarios and just add solve time.
 health:
   enabled: false
 
