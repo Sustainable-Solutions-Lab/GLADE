@@ -53,7 +53,9 @@ Data Sources
     consistent per-country food and energy intake estimates.
   * **Status**: Pending publication; available upon personal request
     from Marco Springmann. Will be re-licensed under CC-BY-NC on
-    release.
+    release. The public release will then become GLADE's default
+    input; until then, a temporary mode that lets GLADE run without
+    GDD-IA is under development.
   * **Coverage**: ~185 countries, per-country mean dietary intake at
     the reference year, reported in parallel grams/day and kcal/day for
     every food category.

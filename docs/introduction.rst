@@ -116,8 +116,10 @@ manually:
   registration).
 * **GDD-IA (Global Dietary Database — Integrated Assessment)** —
   available upon personal request from Marco Springmann, pending
-  publication (will be released under CC-BY-NC). See :doc:`current_diets`
-  and the :ref:`gdd-ia-dietary-intake` entry in :doc:`data_sources`.
+  publication (will be released under CC-BY-NC); a temporary
+  GDD-IA-free mode is under development to bridge the gap until the
+  public release. See :doc:`current_diets` and the
+  :ref:`gdd-ia-dietary-intake` entry in :doc:`data_sources`.
 
 The one build-time credential is an optional, free `USDA FoodData Central
 <https://fdc.nal.usda.gov/api-key-signup>`_ key, used to refresh the nutritional

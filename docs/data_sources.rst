@@ -19,7 +19,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 
 **Always required:**
 
-1. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
+1. Obtain the **GDD-IA** intake CSVs by personal request to Marco Springmann and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`). A public GDD-IA release is upcoming and will then be the default input; until then, a temporary mode that lets GLADE run without GDD-IA is under development.
 
 **Required only for the health module / GBD diet anchoring:**
 
