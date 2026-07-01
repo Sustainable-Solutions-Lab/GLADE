@@ -20,6 +20,7 @@ from workflow.scripts.solve_namespace import (
     _is_solve_time_key,
     _leaf_keys,
     deviation_penalty_uses_calibrated,
+    resolve_gbd_anchoring,
     validate_scenario_config_schemas,
     validate_scenario_overrides,
 )
@@ -84,16 +85,8 @@ def health_required():
 
 
 def gbd_anchoring_enabled():
-    """Resolve diet.anchor_groups_to_gbd to a bool.
-
-    The sentinel "match_health" follows the base config's health.enabled.
-    Anchoring is applied in the scenario-independent baseline-diet prep, so the
-    sentinel resolves against the base config (not per-scenario).
-    """
-    value = config["diet"]["anchor_groups_to_gbd"]
-    if value == "match_health":
-        return bool(config["health"]["enabled"])
-    return bool(value)
+    """Resolve diet.anchor_groups_to_gbd for this run (see resolve_gbd_anchoring)."""
+    return resolve_gbd_anchoring(config)
 
 
 def gbd_data_required():

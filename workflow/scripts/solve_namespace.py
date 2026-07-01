@@ -72,6 +72,21 @@ def _is_solve_time_key(key):
     return any(key == p or key.startswith(p + ".") for p in SOLVE_TIME_CONFIG_PREFIXES)
 
 
+def resolve_gbd_anchoring(config: dict) -> bool:
+    """Resolve diet.anchor_groups_to_gbd to a bool.
+
+    The sentinel "match_health" follows health.enabled. Anchoring is applied
+    in the scenario-independent baseline-diet prep, so it always resolves
+    against the base config (never per-scenario). Single source of truth
+    shared by the Snakemake rules (workflow/rules/common.smk), the calibration
+    provenance snapshot, and tools/calibrate.
+    """
+    value = config["diet"]["anchor_groups_to_gbd"]
+    if value == "match_health":
+        return bool(config["health"]["enabled"])
+    return bool(value)
+
+
 def validate_scenario_overrides(scenario_defs: dict) -> None:
     """Raise if any scenario in scenario_defs overrides a structural config key.
 

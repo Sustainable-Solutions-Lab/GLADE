@@ -75,11 +75,6 @@ exogenous_feed_calibration:
   generate: true       # Generate calibration from solved model
   scenario: feed_uncal
 
-# Anchoring pinned on to reproduce the committed (anchored) calibration
-# artefacts; anchor-off regeneration is deferred to a dedicated PR (see cost.yaml).
-diet:
-  anchor_groups_to_gbd: true
-
 health:
   value_per_yll: 0
 
