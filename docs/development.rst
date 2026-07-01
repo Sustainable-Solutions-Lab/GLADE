@@ -206,8 +206,8 @@ How It Works
 
 Tests call a shared helper ``run_snakemake_target()`` in ``tests/conftest.py`` that invokes the Snakemake Python API directly (no subprocess). The helper layers ``tests/config/test.yaml`` on top of ``config/default.yaml`` and targets specific output files.
 
-* **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing any rule. Makes no API calls, but the startup credential gate (presence-only, so dummy values suffice) and the manually-downloaded source files must still be satisfied for the DAG to resolve. Catches missing inputs, broken rules, and invalid wildcard patterns.
-* **Execution test** (``test_build_solve_analyze``): Runs the actual pipeline through analysis for the default scenario. Requires a USDA credential for data downloads on first run.
+* **Dryrun test** (``test_workflow_dryrun``): Validates full DAG construction with ``forceall=True`` without executing any rule. Makes no API calls; the manually-downloaded source files must be present for the DAG to resolve. Catches missing inputs, broken rules, and invalid wildcard patterns.
+* **Execution test** (``test_build_solve_analyze``): Runs the actual pipeline through analysis for the default scenario. On first run it downloads public input data (network access required).
 * **Plot test** (``test_plots``): Generates representative plots from solved model outputs.
 
 Tests never delete ``results/test/`` or ``.snakemake/``; Snakemake detects up-to-date outputs and skips them automatically, so subsequent runs are near-instant when code hasn't changed.

@@ -24,7 +24,7 @@ Several licensed datasets cannot be fetched automatically. While their use is fr
 3. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
 4. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
 
-No Copernicus/ECMWF API key is required: the land cover data is fetched from a Zenodo mirror (:ref:`copernicus-land-cover`). The only API credential needed for an automated build is the USDA FoodData Central key (see :doc:`introduction`).
+The one build-time credential is a free USDA FoodData Central key, used only to refresh the nutritional data (see :doc:`introduction`). Everything else is fetched from public downloads, the Zenodo land-cover mirror (:ref:`copernicus-land-cover`), or bundled data.
 
 
 .. _weight-bases:
@@ -564,7 +564,7 @@ Copernicus Satellite Land Cover
   * Spatial: Global (Plate Carree projection), 300 m resolution
   * Temporal: Annual (with approximately one-year publication delay)
 
-**Access**: Original source: https://cds.climate.copernicus.eu/datasets/satellite-land-cover. For builds, GLADE downloads a mirror of the single year/version it needs from Zenodo (see *Retrieval* below), so no Copernicus account or API key is required.
+**Access**: Original source: https://cds.climate.copernicus.eu/datasets/satellite-land-cover. For builds, GLADE downloads a mirror of the single year/version it needs from Zenodo (see *Retrieval* below).
 
 **License**: CC-BY-4.0. The 2016-onwards C3S maps (which is what GLADE uses, since ``baseline_year`` is 2020) are released under the Creative Commons Attribution 4.0 International licence, as stated in the authoritative C3S/Copernicus metadata. This permits redistribution provided the Copernicus attribution and source DOI are retained; both are embedded in the Zenodo deposition. (The CDS download page also bundles the ESA CCI licence -- which governs the pre-2016 v2.0.7 maps that GLADE does not use -- and the VITO licence, which restricts only near-real-time PROBA-V products, not historical annual maps.)
 
@@ -572,7 +572,7 @@ Copernicus Satellite Land Cover
 
 **Citation**: Copernicus Climate Change Service, Climate Data Store, (2019): Land cover classification gridded maps from 1992 to present derived from satellite observation. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). https://doi.org/10.24381/cds.006f2c9a
 
-**Retrieval**: Automatic via the ``download_land_cover`` Snakemake rule, which uses ``curl`` to fetch the pre-extracted land cover classification (``lccs_class`` only, ~320 MB NetCDF) from our Zenodo mirror -- no API key needed. The rule writes ``data/downloads/land_cover_lccs_class.nc``. The mirror itself is produced from the upstream CDS dataset by the maintainer tool ``tools/mirror_land_cover.py`` (see :ref:`redistributing-datasets`).
+**Retrieval**: Automatic via the ``download_land_cover`` Snakemake rule, which uses ``curl`` to fetch the pre-extracted land cover classification (``lccs_class`` only, ~320 MB NetCDF) from our Zenodo mirror. The rule writes ``data/downloads/land_cover_lccs_class.nc``. The mirror itself is produced from the upstream CDS dataset by the maintainer tool ``tools/mirror_land_cover.py`` (see :ref:`redistributing-datasets`).
 
 **Configuration**: The land cover year is derived from the top-level ``baseline_year`` parameter, and the version from ``config['data']['land_cover']['version']`` (default: v2_1_1). The mirror to download from is pinned by ``config['data']['land_cover']['zenodo_record']`` (the numeric Zenodo record id); the download URL and file name are derived from these three values.
 
@@ -749,7 +749,7 @@ IMF World Economic Outlook -- GDP per Capita
 **Access**: https://www.imf.org/external/datamapper/NGDPDPC@WEO (`API documentation <https://www.imf.org/external/datamapper/api/help>`__) |
 **License**: Free to use with attribution (`Terms of use <https://www.imf.org/en/about/copyright-and-terms#data>`__)
 
-GDP per capita estimates (current prices, USD) from the World Economic Outlook database (indicator ``NGDPDPC``). Retrieved automatically via the IMF DataMapper API (no API key required). Output: ``processing/{name}/gdp_per_capita.csv``. Used by ``prepare_health_costs`` for multi-objective country clustering based on geography, GDP similarity, and population balance.
+GDP per capita estimates (current prices, USD) from the World Economic Outlook database (indicator ``NGDPDPC``). Retrieved automatically via the IMF DataMapper API. Output: ``processing/{name}/gdp_per_capita.csv``. Used by ``prepare_health_costs`` for multi-objective country clustering based on geography, GDP similarity, and population balance.
 
 Health and Epidemiology Data
 -----------------------------
@@ -1027,9 +1027,9 @@ USDA FoodData Central
 
 **Citation**: U.S. Department of Agriculture, Agricultural Research Service. FoodData Central. https://fdc.nal.usda.gov/
 
-**Retrieval**: Optional via ``retrieve_usda_nutrition`` rule (using the API with included API key). Set ``data.usda.retrieve_nutrition: true`` in config to fetch fresh data. By default, the repository includes pre-fetched data in ``data/curated/nutrition.csv``.
+**Retrieval**: The build uses the pre-fetched ``data/curated/nutrition.csv``. Set ``data.usda.retrieve_nutrition: true`` to instead fetch fresh data via the ``retrieve_usda_nutrition`` rule, which requires a USDA API key.
 
-**API Key**: The repository includes a shared API key for convenience. Users can optionally obtain their own API key (free, instant signup) at https://fdc.nal.usda.gov/api-key-signup and update the ``data.usda.api_key`` value in the config.
+**API Key**: Free, instant signup at https://fdc.nal.usda.gov/api-key-signup. Provide the key via the ``USDA_API_KEY`` environment variable or ``credentials.usda.api_key`` in ``config/secrets.yaml``; it is read only when ``retrieve_nutrition`` is enabled.
 
 **Usage**: Nutritional composition of model foods (protein, carbohydrates, fat, energy). The mapping from model foods to USDA FoodData Central IDs is maintained in ``data/curated/usda_food_mapping.csv``.
 

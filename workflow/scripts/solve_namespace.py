@@ -156,13 +156,6 @@ def validate_scenario_config_schemas(
         seen_structures.add(structure)
         merged = copy.deepcopy(dict(base_config))
         _recursive_update(merged, overrides)
-        # Credentials are runtime secrets, irrelevant to override structure;
-        # stub them on the validation copy so callers without secrets (e.g.
-        # manifest export) can still validate.
-        if not merged.get("credentials"):
-            merged["credentials"] = {
-                "usda": {"api_key": "unused"},
-            }
         try:
             validate_config_schema(merged, Path(project_root))
         except Exception as exc:

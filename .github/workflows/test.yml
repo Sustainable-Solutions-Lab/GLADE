@@ -61,10 +61,7 @@ jobs:
                 "$d/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX"
 
       # Validates the full Snakemake DAG without executing any rule (see
-      # tests/test_integration.py::test_workflow_dryrun). The credential gate
-      # at workflow startup is presence-only, so dummy values suffice; no rule
-      # that would actually call these APIs is ever run.
+      # tests/test_integration.py::test_workflow_dryrun). No credentials are
+      # needed: the DAG resolves from the staged source files alone.
       - name: Snakemake dryrun test
-        env:
-          USDA_API_KEY: dummy
         run: pixi run --environment dev pytest -m integration -k dryrun -v

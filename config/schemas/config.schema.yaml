@@ -59,7 +59,6 @@ required:
   - solving
   - remote_solve
   - plotting
-  - credentials
 additionalProperties: false
 
 properties:
@@ -2166,13 +2165,11 @@ properties:
 
   credentials:
     type: object
-    required: [usda]
     additionalProperties: false
-    description: "API credentials required by the build (configure via config/secrets.yaml or environment variables). Copernicus CDS credentials are NOT needed for builds; they are only used by tools/mirror_land_cover.py to refresh the mirrored land-cover data."
+    description: "Optional build-time API credentials, injected at runtime from config/secrets.yaml or environment variables. The one build-time credential is the USDA key, read by the retrieve_usda_nutrition rule (data.usda.retrieve_nutrition: true); the Copernicus CDS credentials are maintainer-only (tools/mirror_land_cover.py)."
     properties:
       usda:
         type: object
-        required: [api_key]
         additionalProperties: false
         properties:
           api_key:

@@ -1554,9 +1554,11 @@ data:
     water_requirement_var: "RES05-WDC" # Water deficit/net irrigation requirement during crop cycle, current cropland
     suitability_var: "RES05-SX1" # Share of grid cell assessed as VS or S (very suitable or suitable)
   usda:
-    # API credentials: configure in config/secrets.yaml or via USDA_API_KEY environment variable
-    # See config/secrets.yaml.example for setup instructions
-    retrieve_nutrition: true  # Set to true to fetch nutrition data from USDA instead of using the provided data
+    # When false, the build uses the bundled data/curated/nutrition.csv. When
+    # true, nutrition data is fetched from USDA FoodData Central (relevant after
+    # adding a food) and a USDA API key is required, via USDA_API_KEY or
+    # config/secrets.yaml (see config/secrets.yaml.example).
+    retrieve_nutrition: false
     # Nutrient mapping: internal name -> USDA FoodData Central name
     # USDA names must match nutrient names in FoodData Central exactly
     nutrients:
