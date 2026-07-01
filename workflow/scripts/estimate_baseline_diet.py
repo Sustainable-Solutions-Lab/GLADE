@@ -366,10 +366,16 @@ def apply_kcal_normalisation(
     otherwise overshoot the GDD-IA target by 20-35% per country and
     inflate Sub-Saharan Africa's per-capita intake by ~170 kcal/day.
 
-    Anchored groups: those in ``gbd_anchored_groups`` plus ``grain``
-    (which is set by the cereal residual fix and shouldn't be rescaled).
+    Anchored groups: those in ``gbd_anchored_groups``, plus ``grain`` when
+    the cereal residual fix ran (i.e. when whole_grains is anchored): the
+    fix sets refined grain from the cereal energy budget, so rescaling it
+    would undo that. With anchoring off, grain is an ordinary GDD/FAOSTAT
+    estimate and is rescaled like every other group -- pinning it would
+    force the (largest) grain kcal share onto the rest of the diet.
     """
-    anchored = set(gbd_anchored_groups) | {GRAIN_GROUP}
+    anchored = set(gbd_anchored_groups)
+    if WHOLE_GRAINS_GROUP in gbd_anchored_groups:
+        anchored |= {GRAIN_GROUP}
     targets = kcal_target_df.set_index("country")["kcal_target_modelled"]
 
     df = baseline_diet.copy()
@@ -1165,7 +1171,7 @@ def _resolve_shared_fbs_item(
                 weights = {f: w / total for f, w in weights.items()}
             return weights
         equal = 1.0 / len(bucket_foods)
-        return {f: equal for f in bucket_foods}
+        return dict.fromkeys(bucket_foods, equal)
 
     shares: dict[str, float] = {}
     if total_production > 0:
