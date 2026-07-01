@@ -300,7 +300,18 @@ Path Options
 .. literalinclude:: ../config/default.yaml
    :language: yaml
    :start-after: # --- section: paths ---
+   :end-before: # --- section: calibration ---
+
+Calibration Artefact Set
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. literalinclude:: ../config/default.yaml
+   :language: yaml
+   :start-after: # --- section: calibration ---
    :end-before: # --- section: netcdf ---
+
+See :ref:`calibration-provenance` for the semantics of ``source`` and
+``accept_provenance_mismatch``.
 
 NetCDF Options
 ~~~~~~~~~~~~~~
@@ -441,7 +452,7 @@ across components.
 
 The default calibration (cropland + grassland + feed) is regenerated
 with ``tools/calibrate stability`` and lands at
-``data/curated/calibration/deviation_penalty.yaml`` (see
+``data/curated/calibration/<source>/deviation_penalty.yaml`` (see
 :doc:`calibration`).
 
 .. _growth-caps:

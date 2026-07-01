@@ -68,7 +68,7 @@ trap restore_cursor EXIT
 # reminder. Intentionally non-blocking and non-authoritative; run
 # ``tools/calibrate --check`` for the real answer.
 if [[ -z "${SMK_SKIP_CALIBRATION_HINT:-}" && -d data/curated/calibration ]]; then
-  cal_oldest=$(find data/curated/calibration -maxdepth 1 -type f -printf '%T@\n' 2>/dev/null | sort -n | head -n1 || true)
+  cal_oldest=$(find data/curated/calibration -type f -printf '%T@\n' 2>/dev/null | sort -n | head -n1 || true)
   if [[ -n "${cal_oldest}" ]]; then
     upstream_newest=$(find data/curated -type f -not -path 'data/curated/calibration/*' -printf '%T@\n' 2>/dev/null | sort -n | tail -n1 || true)
     if [[ -n "${upstream_newest}" ]] && awk -v u="$upstream_newest" -v c="$cal_oldest" 'BEGIN { exit (u > c) ? 0 : 1 }'; then

@@ -14,6 +14,7 @@ required:
   - currency_base_year
   - downloads
   - paths
+  - calibration
   - netcdf
   - validation
   - consumer_values
@@ -121,6 +122,20 @@ properties:
         type: string
         minLength: 1
         description: "Root directory for Snakemake benchmark TSV files"
+
+  calibration:
+    type: object
+    required: [source, accept_provenance_mismatch]
+    additionalProperties: false
+    description: "Selection of the calibration artefact set under data/curated/calibration/<source>/"
+    properties:
+      source:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+        description: "Name of the calibration artefact set to read (and write, for generation runs)"
+      accept_provenance_mismatch:
+        type: boolean
+        description: "Downgrade a calibration provenance mismatch from an error to a warning"
 
   netcdf:
     type: object

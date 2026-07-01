@@ -782,9 +782,9 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
      enabled: false       # Apply calibration corrections
      generate: false      # Generate calibration from solved model
      scenario: "calibration"
-     crop_correction_csv: "data/curated/calibration/crop_cost.csv"
-     grassland_correction_csv: "data/curated/calibration/grassland_cost.csv"
-     animal_correction_csv: "data/curated/calibration/animal_cost.csv"
+     crop_correction_csv: "data/curated/calibration/{calibration_source}/crop_cost.csv"
+     grassland_correction_csv: "data/curated/calibration/{calibration_source}/grassland_cost.csv"
+     animal_correction_csv: "data/curated/calibration/{calibration_source}/animal_cost.csv"
 
 **Animal cost fallbacks** (see :ref:`animal_cost_fallbacks`):
 

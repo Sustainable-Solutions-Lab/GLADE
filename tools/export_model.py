@@ -37,6 +37,7 @@ from workflow.scripts.solve_model.core import (
     build_residue_feed_fraction_by_country,
 )
 from workflow.scripts.solve_model.health import add_health_objective
+from workflow.scripts.solve_namespace import resolve_calibration_source_paths
 
 # Enable new PyPSA components API
 pypsa.options.api.new_components_api = True
@@ -70,7 +71,7 @@ def load_config(config_path: str) -> dict:
         user_config = yaml.safe_load(f)
 
     _recursive_update(config, user_config)
-    return config
+    return resolve_calibration_source_paths(config)
 
 
 def build_and_export_model(

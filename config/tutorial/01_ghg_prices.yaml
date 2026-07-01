@@ -13,6 +13,11 @@
 
 name: "tutorial_01"
 
+# Tutorials knowingly reuse the default calibration artefacts at a coarser
+# regional resolution.
+calibration:
+  accept_provenance_mismatch: true
+
 # Reduced spatial resolution so the tutorial completes in a few minutes on a
 # laptop after the one-off data download. 200 is the smallest value the
 # default country list admits without enabling cross-border clustering.

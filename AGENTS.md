@@ -325,14 +325,15 @@ pixi run -e dev pytest -v         # verbose output
 
 ## Calibration
 
-Five calibrations feed the default workflow. Their outputs live under
-`data/curated/calibration/` and are git-tracked; builds depend on them.
-When upstream data or build logic changes materially, regenerate in
-this order:
+Five calibrations feed the default workflow. Their outputs are organized
+in per-config artefact *sets* under `data/curated/calibration/<source>/`
+(selected by the `calibration.source` config key; the `default` set is
+git-tracked) and builds depend on them. When upstream data or build
+logic changes materially, regenerate in this order:
 
 1. **feed** — `config/calibration/feed.yaml` → `grassland_yield.csv`,
    `fodder_conversion.csv`, `exogenous_forage.csv`,
-   `exogenous_protein.csv`.
+   `exogenous_feed.csv`.
 2. **food_waste** — `config/calibration/food_waste.yaml` →
    `food_waste.yaml` (per-food-group consumer-side waste multipliers).
 3. **food_demand** — `config/calibration/food_demand.yaml` →
@@ -354,7 +355,15 @@ Single entrypoint: `tools/calibrate` (`all` by default; `feed`,
 `food_waste`, `food_demand`, `cost`, `stability`, or `--check` for
 staleness). `tools/smk` prints a one-line reminder when
 `data/curated/` inputs are newer than the oldest calibration artefact.
-See `docs/calibration.rst` for the full story.
+
+Each artefact set carries a `provenance.yaml` stamp of the structural
+config it was fit against (written by `tools/calibrate`); every workflow
+run checks its config against the stamp of the set it consumes and
+errors on structural mismatch. Configs with different structural
+assumptions must declare their own `calibration.source` and run
+`tools/calibrate --base config/<name>.yaml`, or set
+`calibration.accept_provenance_mismatch: true` (test/tutorial configs
+only). See `docs/calibration.rst` for the full story.
 
 ## Configuration Validation
 

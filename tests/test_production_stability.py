@@ -385,7 +385,7 @@ class TestResolveCalibratedL1Costs:
         with open("config/default.yaml") as f:
             return yaml.safe_load(f)["deviation_penalty"]
 
-    ARTEFACT = "data/curated/calibration/deviation_penalty.yaml"
+    ARTEFACT = "data/curated/calibration/default/deviation_penalty.yaml"
 
     def test_resolves_shipped_artefact(self, dp_cfg):
         """Default config sentinels must resolve against the shipped artefact.

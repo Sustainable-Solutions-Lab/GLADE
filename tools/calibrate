@@ -5,21 +5,32 @@
 
 # Orchestrator for the calibrations that feed the default workflow.
 #
+# Artefacts land in data/curated/calibration/<source>/ where <source> is
+# the calibration.source of the base config (default: "default").
+#
 # Dependency order (upstream data changed → rerun in this order):
-#   1. feed        → data/curated/calibration/{grassland_yield,fodder_conversion,exogenous_forage,exogenous_feed}.csv
-#   2. food_waste  → data/curated/calibration/food_waste.yaml
-#   3. food_demand → data/curated/calibration/food_demand.csv
-#   4. cost        → data/curated/calibration/{crop_cost,grassland_cost,animal_cost}.csv
-#   5. stability   → data/curated/calibration/deviation_penalty.yaml
+#   1. feed        → {grassland_yield,fodder_conversion,exogenous_forage,exogenous_feed}.csv
+#   2. food_waste  → food_waste.yaml
+#   3. food_demand → food_demand.csv
+#   4. cost        → {crop_cost,grassland_cost,animal_cost}.csv
+#   5. stability   → deviation_penalty.yaml
+#
+# After a successful run the artefact set is stamped with a provenance
+# record (provenance.yaml) of the structural config it was fit against;
+# workflow runs check their config against the stamp of the set they
+# consume.
 #
 # Usage:
-#   tools/calibrate                # run all in order
+#   tools/calibrate                # run all in order (default artefact set)
 #   tools/calibrate feed           # one step (forage + protein feed slack)
 #   tools/calibrate food_waste
 #   tools/calibrate food_demand
 #   tools/calibrate cost
 #   tools/calibrate stability
 #   tools/calibrate --check        # report which calibrations are stale (no execution)
+#   tools/calibrate --base config/<name>.yaml [all|<step>|--check]
+#                                  # calibrate against a different base config;
+#                                  # the base must declare its own calibration.source
 #
 # All steps invoke ``tools/smk`` under the hood; any extra flags after the
 # subcommand are passed through.
@@ -34,25 +45,84 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
+PROVENANCE_SCRIPT=workflow/scripts/write_calibration_provenance.py
+
+# Extract a global --base <config> option (anywhere in argv).
+BASE_CONFIG=""
+_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base)
+      BASE_CONFIG="$2"
+      shift 2
+      ;;
+    --base=*)
+      BASE_CONFIG="${1#--base=}"
+      shift
+      ;;
+    *)
+      _args+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${_args[@]}"
+
+BASE_ARGS=()
+if [[ -n "$BASE_CONFIG" ]]; then
+  [[ -f "$BASE_CONFIG" ]] || { echo "[calibrate] Base config not found: $BASE_CONFIG" >&2; exit 2; }
+  BASE_ARGS=(--base "$BASE_CONFIG")
+fi
+
+SOURCE=$(pixi run python "$PROVENANCE_SCRIPT" "${BASE_ARGS[@]}" --print-source | tail -n1)
+if [[ -n "$BASE_CONFIG" && "$SOURCE" == "default" ]]; then
+  echo "[calibrate] $BASE_CONFIG does not declare its own calibration.source;" >&2
+  echo "            it would overwrite the shared 'default' artefact set." >&2
+  echo "            Set calibration.source: <name> in $BASE_CONFIG first." >&2
+  exit 2
+fi
+CAL_DIR="data/curated/calibration/${SOURCE}"
+echo "[calibrate] artefact set: ${SOURCE} (${CAL_DIR})"
+
+# Non-default sources get their own processing/results tree so repeated
+# calibrations against different bases don't thrash each other's builds.
+NAME_OVERRIDE=()
+if [[ "$SOURCE" != "default" ]]; then
+  NAME_OVERRIDE=(--config "name=calibration-${SOURCE}")
+fi
+
+ARTEFACT_FILES=(
+  grassland_yield.csv
+  fodder_conversion.csv
+  exogenous_forage.csv
+  exogenous_feed.csv
+  food_waste.yaml
+  food_demand.csv
+  crop_cost.csv
+  grassland_cost.csv
+  animal_cost.csv
+  deviation_penalty.yaml
+)
+
 FEED_TARGETS=(
-  data/curated/calibration/grassland_yield.csv
-  data/curated/calibration/fodder_conversion.csv
-  data/curated/calibration/exogenous_forage.csv
-  data/curated/calibration/exogenous_feed.csv
+  "$CAL_DIR"/grassland_yield.csv
+  "$CAL_DIR"/fodder_conversion.csv
+  "$CAL_DIR"/exogenous_forage.csv
+  "$CAL_DIR"/exogenous_feed.csv
 )
 FOOD_WASTE_TARGETS=(
-  data/curated/calibration/food_waste.yaml
+  "$CAL_DIR"/food_waste.yaml
 )
 FOOD_DEMAND_TARGETS=(
-  data/curated/calibration/food_demand.csv
+  "$CAL_DIR"/food_demand.csv
 )
 COST_TARGETS=(
-  data/curated/calibration/crop_cost.csv
-  data/curated/calibration/grassland_cost.csv
-  data/curated/calibration/animal_cost.csv
+  "$CAL_DIR"/crop_cost.csv
+  "$CAL_DIR"/grassland_cost.csv
+  "$CAL_DIR"/animal_cost.csv
 )
 STABILITY_TARGETS=(
-  data/curated/calibration/deviation_penalty.yaml
+  "$CAL_DIR"/deviation_penalty.yaml
 )
 
 # All three calibration configs use gurobi; default the pixi env accordingly.
@@ -97,8 +167,11 @@ run_step() {
   shift 2
   split_args "$@"
   inject_env
-  echo "[calibrate] $label -- tools/smk --configfile $configfile ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
-  tools/smk --configfile "$configfile" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
+  local cfgfiles=()
+  [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
+  cfgfiles+=("$configfile")
+  echo "[calibrate] $label -- tools/smk --configfile ${cfgfiles[*]} ${NAME_OVERRIDE[*]} ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
+  tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
 }
 
 check_step() {
@@ -106,8 +179,11 @@ check_step() {
   shift 2
   split_args "$@"
   inject_env
+  local cfgfiles=()
+  [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
+  cfgfiles+=("$configfile")
   local out
-  if ! out=$(tools/smk --configfile "$configfile" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
+  if ! out=$(tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
     printf '  [error]      %-10s (dry-run failed; see output below)\n' "$label"
     printf '%s\n' "$out" | sed 's/^/    /'
     return 2
@@ -120,12 +196,56 @@ check_step() {
   fi
 }
 
+# Stamp the artefact set with the structural config it was fit against.
+stamp_provenance() {
+  pixi run python "$PROVENANCE_SCRIPT" "${BASE_ARGS[@]}"
+}
+
+# A fresh (non-default) artefact set must be seeded before the chain can
+# run: each step's solve consumes the other steps' artefacts, so missing
+# files are copied from the default set as a starting vintage and then
+# regenerated in order by the full chain.
+seed_source_set() {
+  local missing=()
+  local f
+  for f in "${ARTEFACT_FILES[@]}"; do
+    [[ -f "$CAL_DIR/$f" ]] || missing+=("$f")
+  done
+  [[ ${#missing[@]} -eq 0 ]] && return 0
+  if [[ "$cmd" != all ]]; then
+    echo "[calibrate] Artefact set '${SOURCE}' is incomplete (missing: ${missing[*]})." >&2
+    echo "            Run the full chain first: tools/calibrate --base $BASE_CONFIG all" >&2
+    exit 2
+  fi
+  mkdir -p "$CAL_DIR"
+  for f in "${missing[@]}"; do
+    cp "data/curated/calibration/default/$f" "$CAL_DIR/$f"
+  done
+  echo "[calibrate] Seeded ${#missing[@]} artefact(s) in $CAL_DIR from the default set;"
+  echo "            the full chain will regenerate them in order."
+}
+
 cmd="${1:-all}"
 shift || true
 
+if [[ "$SOURCE" != "default" ]]; then
+  case "$cmd" in
+    all|feed|food_waste|food_demand|cost|stability) seed_source_set ;;
+    --check|check)
+      for f in "${ARTEFACT_FILES[@]}"; do
+        if [[ ! -f "$CAL_DIR/$f" ]]; then
+          echo "[calibrate] Artefact set '${SOURCE}' is incomplete (missing e.g. $f)." >&2
+          echo "            Generate it first: tools/calibrate --base $BASE_CONFIG all" >&2
+          exit 2
+        fi
+      done
+      ;;
+  esac
+fi
+
 case "$cmd" in
   -h|--help|help)
-    sed -n '7,22p' "$0"
+    sed -n '7,40p' "$0"
     exit 0
     ;;
   --check|check)
@@ -136,6 +256,7 @@ case "$cmd" in
     check_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@" || rc=$?
     check_step cost        config/calibration/cost.yaml        "${COST_TARGETS[@]}"        -- "$@" || rc=$?
     check_step stability   config/calibration/stability.yaml   "${STABILITY_TARGETS[@]}"   -- "$@" || rc=$?
+    pixi run python "$PROVENANCE_SCRIPT" "${BASE_ARGS[@]}" --check | sed 's/^/  /' || rc=$?
     exit "$rc"
     ;;
   all)
@@ -144,25 +265,31 @@ case "$cmd" in
     run_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@"
     run_step cost        config/calibration/cost.yaml        "${COST_TARGETS[@]}"        -- "$@"
     run_step stability   config/calibration/stability.yaml   "${STABILITY_TARGETS[@]}"   -- "$@"
+    stamp_provenance
     ;;
   feed)
     run_step feed config/calibration/feed.yaml "${FEED_TARGETS[@]}" -- "$@"
+    stamp_provenance
     ;;
   food_waste)
     run_step food_waste config/calibration/food_waste.yaml "${FOOD_WASTE_TARGETS[@]}" -- "$@"
+    stamp_provenance
     ;;
   food_demand)
     run_step food_demand config/calibration/food_demand.yaml "${FOOD_DEMAND_TARGETS[@]}" -- "$@"
+    stamp_provenance
     ;;
   cost)
     run_step cost config/calibration/cost.yaml "${COST_TARGETS[@]}" -- "$@"
+    stamp_provenance
     ;;
   stability)
     run_step stability config/calibration/stability.yaml "${STABILITY_TARGETS[@]}" -- "$@"
+    stamp_provenance
     ;;
   *)
     echo "[calibrate] Unknown subcommand: $cmd" >&2
-    echo "Usage: tools/calibrate [all|feed|food_waste|food_demand|cost|stability|--check]" >&2
+    echo "Usage: tools/calibrate [--base <config>] [all|feed|food_waste|food_demand|cost|stability|--check]" >&2
     exit 2
     ;;
 esac

@@ -9,6 +9,8 @@ from snakemake.utils import min_version
 
 from validation import load_secrets_with_env_fallback, validate
 
+from workflow.scripts.solve_namespace import resolve_calibration_source_paths
+
 min_version("9.0")
 
 os.makedirs("data/downloads", exist_ok=True)
@@ -21,6 +23,9 @@ configfile: "config/default.yaml"
 secrets = load_secrets_with_env_fallback(Path.cwd())
 config.setdefault("credentials", {}).update(secrets)
 
+# Resolve {calibration_source} placeholders in artefact paths against
+# config["calibration"]["source"] before any rule or validator reads them.
+resolve_calibration_source_paths(config)
 
 validate(config, project_root=Path.cwd())
 
