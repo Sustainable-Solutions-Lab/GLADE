@@ -76,5 +76,5 @@ emissions:
 
 solving:
   io_api: "direct"
-  solver: "gurobi"
+  solver: gurobi
   threads: 2

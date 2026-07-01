@@ -73,7 +73,7 @@ deviation_penalty:
     generate: true   # trigger the calibrate_deviation_penalty rule
 
 solving:
-  solver: "gurobi"
+  solver: gurobi
   io_api: "direct"
   # Solves run sequentially in the iteration, so give each solve more
   # threads instead of running multiple solves in parallel.

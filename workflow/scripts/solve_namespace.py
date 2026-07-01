@@ -72,6 +72,47 @@ def _is_solve_time_key(key):
     return any(key == p or key.startswith(p + ".") for p in SOLVE_TIME_CONFIG_PREFIXES)
 
 
+# Health data-prep outputs consumed at solve/analysis/calibration time, keyed
+# by input name; values are file names under <processing>/{name}/health/.
+# Single source of truth shared by the Snakemake rules (model.smk,
+# analysis.smk, deviation_penalty.smk) and the cluster manifest exporter
+# (build_scenario_entry below). These inputs are only wired up when the health
+# module is enabled, so that no IHME GBD data is required otherwise.
+HEALTH_INPUT_FILES = {
+    "health_risk_breakpoints": "risk_breakpoints.csv",
+    "health_cluster_cause": "cluster_cause_baseline.csv",
+    "health_cause_log": "cause_log_breakpoints.csv",
+    "health_cluster_summary": "cluster_summary.csv",
+    "health_clusters": "country_clusters.csv",
+    "health_tmrel": "tmrel.csv",
+    "health_cluster_risk_baseline": "cluster_risk_baseline.csv",
+}
+
+
+def health_input_paths(name: str) -> dict[str, str]:
+    """The health data-prep input map for a given config name (unresolved
+    <processing> pathvar, as used in Snakemake rule inputs)."""
+    return {
+        key: f"<processing>/{name}/health/{filename}"
+        for key, filename in HEALTH_INPUT_FILES.items()
+    }
+
+
+def resolve_gbd_anchoring(config: dict) -> bool:
+    """Resolve diet.anchor_groups_to_gbd to a bool.
+
+    The sentinel "match_health" follows health.enabled. Anchoring is applied
+    in the scenario-independent baseline-diet prep, so it always resolves
+    against the base config (never per-scenario). Single source of truth
+    shared by the Snakemake rules (workflow/rules/common.smk), the calibration
+    provenance snapshot, and tools/calibrate.
+    """
+    value = config["diet"]["anchor_groups_to_gbd"]
+    if value == "match_health":
+        return bool(config["health"]["enabled"])
+    return bool(value)
+
+
 def validate_scenario_overrides(scenario_defs: dict) -> None:
     """Raise if any scenario in scenario_defs overrides a structural config key.
 
@@ -319,22 +360,16 @@ def build_scenario_entry(
     inputs: dict = {
         "network": rp("<results>/{name}/build/model.nc"),
         "m49": "data/curated/M49-codes.csv",
-        "health_risk_breakpoints": rp(
-            "<processing>/{name}/health/risk_breakpoints.csv"
-        ),
-        "health_cluster_cause": rp(
-            "<processing>/{name}/health/cluster_cause_baseline.csv"
-        ),
-        "health_cause_log": rp("<processing>/{name}/health/cause_log_breakpoints.csv"),
-        "health_cluster_summary": rp("<processing>/{name}/health/cluster_summary.csv"),
-        "health_clusters": rp("<processing>/{name}/health/country_clusters.csv"),
-        "health_tmrel": rp("<processing>/{name}/health/tmrel.csv"),
-        "health_cluster_risk_baseline": rp(
-            "<processing>/{name}/health/cluster_risk_baseline.csv"
-        ),
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": rp("<processing>/{name}/baseline_diet.csv"),
     }
+
+    # Health processing inputs only when this scenario enables health (mirrors
+    # solve_model_inputs in workflow/rules/model.smk).
+    if eff["health"]["enabled"]:
+        inputs.update(
+            {key: rp(path) for key, path in health_input_paths("{name}").items()}
+        )
 
     if eff["food_incentives"]["enabled"]:
         sources = eff["food_incentives"]["sources"]

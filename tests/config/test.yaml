@@ -25,6 +25,12 @@ scenarios:
     emissions:
       ghg_pricing_enabled: true
 
+diet:
+  # Anchor the baseline diet to GBD (despite health being off) so the
+  # integration tests exercise the anchoring path; CI stages the IHME GBD
+  # inputs this needs.
+  anchor_groups_to_gbd: true
+
 health:
   enabled: false
 

@@ -317,7 +317,14 @@ rule estimate_baseline_diet:
     """
     input:
         dietary_intake="<processing>/{name}/dietary_intake.csv",
-        gbd_exposure="<processing>/{name}/gbd_food_group_intake.csv",
+        # Only required when the baseline diet anchors risk-factor groups to
+        # GBD intake exposure; otherwise the GDD/FAOSTAT estimate is used and
+        # the IHME GBD data is not needed. See diet.anchor_groups_to_gbd.
+        gbd_exposure=(
+            "<processing>/{name}/gbd_food_group_intake.csv"
+            if gbd_anchoring_enabled()
+            else []
+        ),
         kcal_target="<processing>/{name}/gdd_ia_kcal_target.csv",
         nutrition="data/curated/nutrition.csv",
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
@@ -344,7 +351,10 @@ rule estimate_baseline_diet:
         food_groups_included=config["food_groups"]["included"],
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],
-        gbd_anchored_groups=config["health"]["risk_factors"],
+        # Empty when anchoring is off -> baseline diet uses GDD/FAOSTAT only.
+        gbd_anchored_groups=(
+            config["health"]["risk_factors"] if gbd_anchoring_enabled() else []
+        ),
         source_basis=config["diet"]["source_basis"],
         weight_conversion=config["weight_conversion"],
         # Used to drop foods whose entire production graph is unreachable

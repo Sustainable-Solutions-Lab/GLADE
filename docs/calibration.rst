@@ -16,9 +16,29 @@ directly.
 Calibration artefacts are organised in *sets*: one directory
 ``data/curated/calibration/<source>/`` per base configuration they were
 calibrated against, selected by the ``calibration.source`` config key.
-The shipped ``default`` set is version-controlled so that ordinary
-builds don't need to re-solve anything. See
+The shipped ``default`` and ``gbd-anchored`` sets are version-controlled
+so that ordinary builds don't need to re-solve anything. See
 :ref:`calibration-provenance` for how sets are tied to configs.
+
+.. admonition:: Calibration is tied to the baseline diet (and thus to health/anchoring)
+   :class: warning
+
+   Several artefacts (notably ``food_demand.csv``, ``food_waste.yaml``
+   and ``deviation_penalty.yaml``) are fit against a *specific* baseline
+   diet. The baseline diet depends on whether the GBD risk-factor groups
+   are anchored to GBD intake, which is controlled by
+   ``diet.anchor_groups_to_gbd`` (default: follow ``health.enabled``); see
+   :ref:`current-diets-gbd-anchoring`.
+
+   Two artefact sets are therefore committed: ``default``, fit against
+   the anchoring-off baseline diet of the default config, and
+   ``gbd-anchored``, fit against the GBD-anchored diet and consumed by
+   the health-enabled configs (``validation``, ``gsa``, the doc-figure
+   configs) via ``calibration.source: gbd-anchored``. ``tools/calibrate``
+   resolves anchoring from its base config and pins it across all five
+   steps, so each set is regenerated against the right diet
+   automatically. The provenance stamps record the *resolved* anchoring,
+   so consuming a set fit against the other diet fails at startup.
 
 .. _calibration-enabled-generate-pattern:
 

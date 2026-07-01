@@ -84,6 +84,18 @@ fi
 CAL_DIR="data/curated/calibration/${SOURCE}"
 echo "[calibrate] artefact set: ${SOURCE} (${CAL_DIR})"
 
+# The artefacts are fit against the base config's baseline diet, which depends
+# on the resolved diet.anchor_groups_to_gbd (the "match_health" sentinel
+# follows health.enabled). The calibration step configs override health.enabled
+# for solver performance, which would otherwise re-resolve the sentinel per
+# step and mix baseline diets within one chain. Resolve anchoring from the
+# base config once and pin it explicitly in every step via a config overlay.
+ANCHORING=$(pixi run python "$PROVENANCE_SCRIPT" "${BASE_ARGS[@]}" --print-anchoring | tail -n1)
+ANCHOR_OVERLAY=$(mktemp -t calibrate-anchoring-XXXXXX.yaml)
+trap 'rm -f "$ANCHOR_OVERLAY"' EXIT
+printf 'diet:\n  anchor_groups_to_gbd: %s\n' "$ANCHORING" > "$ANCHOR_OVERLAY"
+echo "[calibrate] baseline-diet GBD anchoring: ${ANCHORING}"
+
 # Non-default sources get their own processing/results tree so repeated
 # calibrations against different bases don't thrash each other's builds.
 NAME_OVERRIDE=()
@@ -169,7 +181,7 @@ run_step() {
   inject_env
   local cfgfiles=()
   [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
-  cfgfiles+=("$configfile")
+  cfgfiles+=("$configfile" "$ANCHOR_OVERLAY")
   echo "[calibrate] $label -- tools/smk --configfile ${cfgfiles[*]} ${NAME_OVERRIDE[*]} ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
   tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
 }
@@ -181,7 +193,7 @@ check_step() {
   inject_env
   local cfgfiles=()
   [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
-  cfgfiles+=("$configfile")
+  cfgfiles+=("$configfile" "$ANCHOR_OVERLAY")
   local out
   if ! out=$(tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
     printf '  [error]      %-10s (dry-run failed; see output below)\n' "$label"

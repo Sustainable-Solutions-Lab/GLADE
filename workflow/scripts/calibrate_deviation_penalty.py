@@ -335,7 +335,20 @@ def broyden_iterate(
         x = x_new
         r = r_new
 
-    return x, trace
+    # Out of iterations: return the best iterate seen rather than the last.
+    # With a discontinuous deviation response (LP basis switches near the
+    # target), the final Broyden step can land worse than an earlier iterate.
+    best = min(trace, key=lambda row: row["resid_inf"])
+    if best["iter"] != trace[-1]["iter"]:
+        logger.info(
+            "Not converged; returning best iterate %d (|r|_inf=%.4f) "
+            "instead of last (%.4f)",
+            best["iter"],
+            best["resid_inf"],
+            trace[-1]["resid_inf"],
+        )
+    x_best = np.array([np.log(best[f"lambda_{c}"]) for c in components])
+    return x_best, trace
 
 
 def main() -> None:
@@ -407,7 +420,9 @@ def main() -> None:
         components=components,
     )
     l1_costs = {c: float(np.exp(x_final[i])) for i, c in enumerate(components)}
-    final_resid = trace[-1]["resid_inf"]
+    # The residual of the returned iterate: the converged row on success,
+    # otherwise the best iterate that broyden_iterate falls back to.
+    final_resid = min(row["resid_inf"] for row in trace)
 
     converged = final_resid < tol
     if not converged:
@@ -449,6 +464,12 @@ def main() -> None:
         sort_keys=False,
     )
     out_path.write_text(header + body)
+    # Side copy for warm-starting the next calibration: Snakemake deletes the
+    # calibrated_yaml output before rerunning this rule, so the warm-start
+    # seed must live outside the rule's outputs.
+    prev_path = Path(smk.params.previous_yaml)
+    prev_path.parent.mkdir(parents=True, exist_ok=True)
+    prev_path.write_text(header + body)
     logger.info(
         "Wrote calibrated L1 costs to %s (%s, iters=%d, converged=%s)",
         out_path,

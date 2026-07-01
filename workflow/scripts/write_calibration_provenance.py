@@ -25,7 +25,10 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from workflow.scripts.solve_namespace import load_merged_config  # noqa: E402
+from workflow.scripts.solve_namespace import (  # noqa: E402
+    load_merged_config,
+    resolve_gbd_anchoring,
+)
 from workflow.validation.calibration_provenance import (  # noqa: E402
     diff_snapshots,
     load_provenance,
@@ -63,6 +66,15 @@ def main() -> int:
         action="store_true",
         help="Print the resolved calibration.source and exit (used by tools/calibrate)",
     )
+    parser.add_argument(
+        "--print-anchoring",
+        action="store_true",
+        help=(
+            "Print the base config's resolved diet.anchor_groups_to_gbd "
+            "('true'/'false') and exit (used by tools/calibrate to pin every "
+            "calibration step to the base config's baseline diet)"
+        ),
+    )
     args = parser.parse_args()
 
     configfiles = [PROJECT_ROOT / "config" / "default.yaml"]
@@ -73,6 +85,10 @@ def main() -> int:
 
     if args.print_source:
         print(source)
+        return 0
+
+    if args.print_anchoring:
+        print("true" if resolve_gbd_anchoring(config) else "false")
         return 0
 
     snapshot = structural_snapshot(config)

@@ -791,25 +791,30 @@ class TestApplyKcalNormalisation:
             ), f"country {c} kcal={kcal:.2f} != target 600"
 
     def test_anchored_groups_are_not_rescaled(self):
-        """Foods in GBD-anchored groups (and the refined-grain residual)
-        must keep their consumption unchanged; only unanchored foods get
-        scaled to close the residual.
+        """Foods in GBD-anchored groups (and, when whole_grains is anchored,
+        the refined-grain residual) must keep their consumption unchanged;
+        only unanchored foods get scaled to close the residual.
         """
         baseline_diet = pd.DataFrame(
             {
-                "country": ["A", "A", "A"],
-                "food": ["red-meat-item", "cassava", "rice-white"],
-                "food_group": ["red_meat", "starchy_vegetable", "grain"],
-                "consumption_g_per_day": [50.0, 500.0, 100.0],
+                "country": ["A", "A", "A", "A"],
+                "food": ["red-meat-item", "cassava", "rice-white", "oat"],
+                "food_group": [
+                    "red_meat",
+                    "starchy_vegetable",
+                    "grain",
+                    "whole_grains",
+                ],
+                "consumption_g_per_day": [50.0, 500.0, 100.0, 0.0],
             }
         )
-        kpg = {"red-meat-item": 2.5, "cassava": 1.59, "rice-white": 3.65}
+        kpg = {"red-meat-item": 2.5, "cassava": 1.59, "rice-white": 3.65, "oat": 3.0}
         target_df = pd.DataFrame({"country": ["A"], "kcal_target_modelled": [1000.0]})
 
         result = apply_kcal_normalisation(
             baseline_diet,
             target_df,
-            gbd_anchored_groups={"red_meat"},
+            gbd_anchored_groups={"red_meat", "whole_grains"},
             kcal_per_g_food=kpg,
         )
 
@@ -831,6 +836,40 @@ class TestApplyKcalNormalisation:
         # target_unanchored = 510. pre-scaling cassava kcal = 500*1.59 = 795.
         # factor = 510/795 = 0.6415. post: 500 * 0.6415 = 320.75.
         assert cassava_g == pytest.approx(320.75, rel=1e-3)
+
+    def test_grain_rescaled_when_whole_grains_not_anchored(self):
+        """Without the whole-grain anchor the cereal residual fix does not
+        run, so refined grain is an ordinary estimate and must be rescaled
+        along with every other unanchored food (uniformly, here, since no
+        group is anchored at all).
+        """
+        baseline_diet = pd.DataFrame(
+            {
+                "country": ["A", "A"],
+                "food": ["cassava", "rice-white"],
+                "food_group": ["starchy_vegetable", "grain"],
+                "consumption_g_per_day": [500.0, 100.0],
+            }
+        )
+        kpg = {"cassava": 1.59, "rice-white": 3.65}
+        # Pre-scaling kcal = 500*1.59 + 100*3.65 = 1160; target 580 -> factor 0.5.
+        target_df = pd.DataFrame({"country": ["A"], "kcal_target_modelled": [580.0]})
+
+        result = apply_kcal_normalisation(
+            baseline_diet,
+            target_df,
+            gbd_anchored_groups=set(),
+            kcal_per_g_food=kpg,
+        )
+
+        grain_g = float(
+            result.loc[result["food"] == "rice-white", "consumption_g_per_day"].iloc[0]
+        )
+        cassava_g = float(
+            result.loc[result["food"] == "cassava", "consumption_g_per_day"].iloc[0]
+        )
+        assert grain_g == pytest.approx(50.0)
+        assert cassava_g == pytest.approx(250.0)
 
     def test_missing_food_raises(self):
         """Foods without a kcal/g entry should raise; the previous code

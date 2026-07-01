@@ -20,6 +20,9 @@ from workflow.scripts.solve_namespace import (
     _is_solve_time_key,
     _leaf_keys,
     deviation_penalty_uses_calibrated,
+    health_input_paths,
+    resolve_gbd_anchoring,
+    resolve_pathvars,
     validate_scenario_config_schemas,
     validate_scenario_overrides,
 )
@@ -70,6 +73,77 @@ def get_effective_config(scenario_name):
     return eff_config
 
 
+def health_required():
+    """True if the health module is enabled in the base config or any scenario.
+
+    The build step is scenario-independent, so health data-prep rules, health
+    stores, and downstream health analysis/plots are needed whenever *any*
+    configured scenario (or the base config) enables health. health.enabled is
+    a solve-time-overridable key.
+    """
+    if config["health"]["enabled"]:
+        return True
+    return any(get_effective_config(s)["health"]["enabled"] for s in list_scenarios())
+
+
+def gbd_anchoring_enabled():
+    """Resolve diet.anchor_groups_to_gbd for this run (see resolve_gbd_anchoring)."""
+    return resolve_gbd_anchoring(config)
+
+
+def gbd_data_required():
+    """True if the manually-downloaded IHME GBD data is needed by this run.
+
+    The GBD intake/mortality prep (and thus the IHME source files) is required
+    whenever the baseline diet is anchored to GBD or the health module is
+    enabled in any scenario.
+    """
+    return gbd_anchoring_enabled() or health_required()
+
+
+def assert_gbd_data_available():
+    """Fail early with actionable guidance if GBD data is needed but absent.
+
+    Snakemake would otherwise report a terse "missing input" deep in the DAG.
+    Only enforced when gbd_data_required(); a health-off, anchoring-off run
+    needs none of these files.
+    """
+    if not gbd_data_required():
+        return
+    year = config["baseline_year"]
+    required = {
+        f"data/manually_downloaded/IHME-GBD_2023-death-rates-{year}.csv": (
+            "IHME GBD mortality / national-location list"
+        ),
+        "data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_1": (
+            "IHME GBD dietary risk-exposure archive (part 1)"
+        ),
+        "data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_2": (
+            "IHME GBD dietary risk-exposure archive (part 2)"
+        ),
+    }
+    missing = [(p, desc) for p, desc in required.items() if not Path(p).exists()]
+    if not missing:
+        return
+    reasons = []
+    if health_required():
+        reasons.append("health.enabled is true (base config or a scenario)")
+    if gbd_anchoring_enabled():
+        reasons.append("diet.anchor_groups_to_gbd resolves to true")
+    listing = "\n".join(f"  - {p}  ({desc})" for p, desc in missing)
+    raise FileNotFoundError(
+        "This run needs the manually-downloaded IHME GBD data because "
+        + " and ".join(reasons)
+        + ", but the following are missing:\n"
+        + listing
+        + "\n\nEither place the files (see data/manually_downloaded/README.md "
+        "for the GBD Results Tool queries), or run without GBD data by setting "
+        "health.enabled: false and diet.anchor_groups_to_gbd: false in your "
+        "config. Note that disabling anchoring changes the baseline diet "
+        "(see docs/current_diets.rst)."
+    )
+
+
 # SOLVE_TIME_CONFIG_PREFIXES, _leaf_keys, _is_solve_time_key, and
 # validate_scenario_overrides are imported from workflow.scripts.solve_namespace
 # above so cluster manifest export, in-process calibration drivers, and this
@@ -78,6 +152,7 @@ def get_effective_config(scenario_name):
 
 validate_scenario_overrides(load_scenario_defs())
 validate_scenario_config_schemas(config, load_scenario_defs(), Path.cwd())
+assert_gbd_data_available()
 
 
 def scenario_override_hash(scenario_name):

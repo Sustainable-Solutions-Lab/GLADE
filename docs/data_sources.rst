@@ -17,12 +17,25 @@ Manual Download Checklist
 
 Several licensed datasets cannot be fetched automatically. While their use is free for non-commercial research purposes, these have to be downloaded manually or require API key registration.
 
-**Required manual downloads:**
+**Always required:**
 
-1. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
-2. Download the IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`).
+1. Obtain the **GDD-IA** intake CSVs by personal request to Marco Springmann and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`). A public GDD-IA release is upcoming and will then be the default input; until then, a temporary mode that lets GLADE run without GDD-IA is under development.
+
+**Required only for the health module / GBD diet anchoring:**
+
+The following IHME GBD datasets are needed **only** when the health
+module is enabled (``health.enabled: true``) or when the baseline diet
+anchors to GBD (``diet.anchor_groups_to_gbd``; see
+:ref:`current-diets-gbd-anchoring`). With both off -- the default -- they
+are not required and the workflow runs without them. If they are missing
+while needed, the workflow stops at startup with an explicit message.
+
+2. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
 3. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
-4. Obtain the **GDD-IA** intake CSVs by personal request to the Global Dietary Database team and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`).
+
+**Optional (only to regenerate curated health inputs):**
+
+4. The IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`) is only used by a standalone curation script to regenerate the git-tracked RR age-attenuation table; it is not consumed by the normal workflow.
 
 The one build-time credential is a free USDA FoodData Central key, used only to refresh the nutritional data (see :doc:`introduction`). Everything else is fetched from public downloads, the Zenodo land-cover mirror (:ref:`copernicus-land-cover`), or bundled data.
 

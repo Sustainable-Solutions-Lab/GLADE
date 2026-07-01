@@ -15,6 +15,28 @@ introduce breaking changes to configuration and outputs.
 
 ## [Unreleased]
 
+### Changed
+
+- The health module is now **disabled by default** (`health.enabled: false`).
+  With health off, the workflow no longer requires the manually-downloaded
+  IHME GBD data and runs end to end without it; a clear startup error is
+  raised if health (or GBD anchoring) is enabled but the data is absent.
+
+### Added
+
+- New `diet.anchor_groups_to_gbd` option that decouples GBD anchoring of the
+  baseline diet's risk-factor food groups from the health module. Defaults to
+  the sentinel `match_health` (follow `health.enabled`); set `true`/`false` to
+  control it independently. Previously anchoring was unconditional. See
+  `docs/current_diets.rst` for a quantitative description of the difference and
+  the refined-grain caveat. The baseline diet feeds calibration, so two
+  artefact sets are now committed: `default` (recalibrated against the
+  anchoring-off default diet) and `gbd-anchored` (the previous GBD-anchored
+  artefacts, consumed by the health-enabled configs via
+  `calibration.source: gbd-anchored`). Provenance stamps record the *resolved*
+  anchoring, and `tools/calibrate` pins the base config's resolved anchoring
+  across all five calibration steps.
+
 ## [0.1.0] - 2026-06-15
 
 First public release of GLADE (Global Land, Agriculture, Diet and Emissions),

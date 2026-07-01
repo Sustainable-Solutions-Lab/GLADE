@@ -24,7 +24,7 @@ from pathlib import Path
 from snakemake.logging import logger
 import yaml
 
-from workflow.scripts.solve_namespace import _is_solve_time_key
+from workflow.scripts.solve_namespace import _is_solve_time_key, resolve_gbd_anchoring
 
 CALIBRATION_DIR = Path("data/curated/calibration")
 PROVENANCE_FILENAME = "provenance.yaml"
@@ -95,6 +95,13 @@ def structural_snapshot(config: dict) -> dict:
                 snapshot[full] = v
 
     walk(config, "")
+    # diet.anchor_groups_to_gbd may hold the sentinel "match_health", which
+    # resolves through health.enabled -- a solve-time (and therefore exempt)
+    # key. Snapshot the resolved boolean so two configs with different
+    # resolved anchoring (and thus different baseline diets) never stamp
+    # identically.
+    if "diet.anchor_groups_to_gbd" in snapshot:
+        snapshot["diet.anchor_groups_to_gbd"] = resolve_gbd_anchoring(config)
     return snapshot
 
 

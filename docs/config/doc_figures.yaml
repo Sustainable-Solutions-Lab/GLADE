@@ -84,7 +84,17 @@ water:
   supply_scenario: "current_use"
 
 health:
-  enabled: false
+  # Documentation figures include health-cluster maps and the diet-attributable
+  # burden choropleth, which need the health data-prep outputs (clusters etc.).
+  # value_per_yll: 0 keeps health out of the objective (post-hoc evaluation
+  # only). Needs the manually-downloaded IHME GBD data.
+  enabled: true
+  value_per_yll: 0
+
+# With health on, the baseline diet is GBD-anchored, so consume the artefact
+# set calibrated against that diet (the `default` set is anchoring-off).
+calibration:
+  source: "gbd-anchored"
 
 solving:
   solver: "gurobi"
