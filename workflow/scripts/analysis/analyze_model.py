@@ -242,8 +242,7 @@ def main() -> None:
     network_path = Path(snakemake.input.network)
     if network_path.stat().st_size == 0:
         logger.warning(
-            "Network file is empty (solve failed or timed out). "
-            "Writing empty outputs."
+            "Network file is empty (solve failed or timed out). Writing empty outputs."
         )
         write_empty_outputs(snakemake.output)
         return
@@ -291,19 +290,19 @@ def main() -> None:
         health_risk_factors=list(snakemake.params.health_risk_factors),
         logger=logger,
         health_enabled=health_enabled,
-        risk_breakpoints_path=snakemake.input.risk_breakpoints
-        if health_enabled
-        else None,
+        risk_breakpoints_path=(
+            snakemake.input.health_risk_breakpoints if health_enabled else None
+        ),
         health_cluster_cause_path=(
             snakemake.input.health_cluster_cause if health_enabled else None
         ),
         health_cause_log_path=(
             snakemake.input.health_cause_log if health_enabled else None
         ),
-        health_clusters_path=snakemake.input.health_clusters
-        if health_enabled
-        else None,
-        tmrel_path=snakemake.input.tmrel if health_enabled else None,
+        health_clusters_path=(
+            snakemake.input.health_clusters if health_enabled else None
+        ),
+        tmrel_path=snakemake.input.health_tmrel if health_enabled else None,
     )
 
 

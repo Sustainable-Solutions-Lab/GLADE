@@ -173,37 +173,19 @@ else:
         passing intermediate DataFrames in memory rather than writing/re-reading them.
         """
         input:
+            # Health processing inputs only when this scenario enables health;
+            # otherwise analyze_model writes empty health outputs.
+            unpack(
+                lambda w: (
+                    health_input_paths(w.name)
+                    if get_effective_config(w.scenario)["health"]["enabled"]
+                    else {}
+                )
+            ),
             network="<results>/{name}/solved/model_scen-{scenario}.nc",
             food_groups="data/curated/food_groups.csv",
             m49_codes="data/curated/M49-codes.csv",
             population="<processing>/{name}/population.csv",
-            # Health processing inputs only when this scenario enables health;
-            # otherwise analyze_model writes empty health outputs.
-            risk_breakpoints=lambda w: (
-                f"<processing>/{w.name}/health/risk_breakpoints.csv"
-                if get_effective_config(w.scenario)["health"]["enabled"]
-                else []
-            ),
-            health_cluster_cause=lambda w: (
-                f"<processing>/{w.name}/health/cluster_cause_baseline.csv"
-                if get_effective_config(w.scenario)["health"]["enabled"]
-                else []
-            ),
-            health_cause_log=lambda w: (
-                f"<processing>/{w.name}/health/cause_log_breakpoints.csv"
-                if get_effective_config(w.scenario)["health"]["enabled"]
-                else []
-            ),
-            health_clusters=lambda w: (
-                f"<processing>/{w.name}/health/country_clusters.csv"
-                if get_effective_config(w.scenario)["health"]["enabled"]
-                else []
-            ),
-            tmrel=lambda w: (
-                f"<processing>/{w.name}/health/tmrel.csv"
-                if get_effective_config(w.scenario)["health"]["enabled"]
-                else []
-            ),
             analysis_scripts=_ANALYSIS_SCRIPTS,
         params:
             ghg_price=lambda w: get_effective_config(w.scenario)["emissions"][

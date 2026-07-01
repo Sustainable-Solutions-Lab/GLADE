@@ -20,6 +20,7 @@ from workflow.scripts.solve_namespace import (
     _is_solve_time_key,
     _leaf_keys,
     deviation_penalty_uses_calibrated,
+    health_input_paths,
     resolve_gbd_anchoring,
     resolve_pathvars,
     validate_scenario_config_schemas,
