@@ -29,12 +29,13 @@ introduce breaking changes to configuration and outputs.
   the sentinel `match_health` (follow `health.enabled`); set `true`/`false` to
   control it independently. Previously anchoring was unconditional. See
   `docs/current_diets.rst` for a quantitative description of the difference and
-  the refined-grain caveat. Note that the baseline diet feeds calibration, so
-  changing this (or `health.enabled`) requires re-running `tools/calibrate`.
-  The committed calibration artefacts remain the GBD-anchored ones (the
-  calibration configs pin anchoring on to reproduce them); regenerating them
-  for the anchoring-off default is deferred to a dedicated calibration change
-  because the dual-based cost/stability steps require Gurobi.
+  the refined-grain caveat. The baseline diet feeds calibration, so two
+  artefact sets are now committed: `default` (recalibrated against the
+  anchoring-off default diet) and `gbd-anchored` (the previous GBD-anchored
+  artefacts, consumed by the health-enabled configs via
+  `calibration.source: gbd-anchored`). Provenance stamps record the *resolved*
+  anchoring, and `tools/calibrate` pins the base config's resolved anchoring
+  across all five calibration steps.
 
 ## [0.1.0] - 2026-06-15
 

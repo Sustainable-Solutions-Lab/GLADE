@@ -219,14 +219,13 @@ expected change in land use or emissions.
    :class: warning
 
    The calibration artefacts under ``data/curated/calibration/`` are fit
-   against a *specific* baseline diet. The currently committed artefacts
-   were fit with anchoring **on** (the historical behaviour), so a
-   default anchoring-off run uses a slightly mismatched calibration --
-   a documented limitation pending a Gurobi-based anchor-off refresh (see
-   :doc:`calibration`). Either way, changing ``diet.anchor_groups_to_gbd``
-   (or ``health.enabled``, which drives it) changes the baseline diet, so
-   rerun ``tools/calibrate`` with the matching setting before trusting
-   results.
+   against a *specific* baseline diet. Two sets are committed: ``default``
+   (anchoring off) and ``gbd-anchored`` (anchoring on, used by the
+   health-enabled configs via ``calibration.source``). Changing
+   ``diet.anchor_groups_to_gbd`` (or ``health.enabled``, which drives it)
+   changes the baseline diet, so point ``calibration.source`` at the
+   matching set -- the provenance check errors otherwise (see
+   :doc:`calibration`).
 
 GDD-IA to Food Group Mapping
 -----------------------------

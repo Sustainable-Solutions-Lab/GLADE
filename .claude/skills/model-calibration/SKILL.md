@@ -1,6 +1,6 @@
 ---
 name: model-calibration
-description: Run, refresh, or diagnose the model's calibration pipeline (feed -> food_waste -> food_demand -> cost -> stability) that produces the per-config artefact sets under `data/curated/calibration/<source>/` (the default set is git-tracked). Covers the dependency order, the `tools/calibrate` wrapper, realistic runtime expectations, when each kind of upstream change forces a re-run, and how to diagnose the most common failure mode: a hidden supply/demand mismatch that inflates the production-stability L1 cost. Use whenever calibration is relevant -- the user touches inputs/build logic that feed the calibration solves, calibration artefacts look off, or a refresh of the artefacts is needed after a model/data change.
+description: Run, refresh, or diagnose the model's calibration pipeline (feed -> food_waste -> food_demand -> cost -> stability) that produces the per-config artefact sets under `data/curated/calibration/<source>/` (the `default` and `gbd-anchored` sets are git-tracked). Covers the dependency order, the `tools/calibrate` wrapper, realistic runtime expectations, when each kind of upstream change forces a re-run, and how to diagnose the most common failure mode: a hidden supply/demand mismatch that inflates the production-stability L1 cost. Use whenever calibration is relevant -- the user touches inputs/build logic that feed the calibration solves, calibration artefacts look off, or a refresh of the artefacts is needed after a model/data change.
 ---
 
 <!--
@@ -13,8 +13,14 @@ SPDX-License-Identifier: CC-BY-4.0
 
 The default workflow consumes five calibration artefact groups organized
 in per-config *sets* under `data/curated/calibration/<source>/`, selected
-by the `calibration.source` config key (the `default` set is
-git-tracked). Each is produced by a dedicated validation-mode solve and
+by the `calibration.source` config key. Two sets are git-tracked:
+`default` (fit against the anchoring-off baseline diet of the health-off
+default config) and `gbd-anchored` (fit against the GBD-anchored diet;
+consumed by the health-enabled configs gsa, gsa_fixed_diet, validation
+and the doc configs). `tools/calibrate` resolves the base config's
+diet.anchor_groups_to_gbd sentinel once and pins it across all five
+steps, and provenance stamps record the *resolved* anchoring. Each
+artefact group is produced by a dedicated validation-mode solve and
 absorbs a specific class of residual mismatch so that ordinary solves
 don't have to. Without these files in place, production-stability,
 costs, and food/feed accounting drift from observed 2020 reality.
@@ -168,7 +174,7 @@ sequential (each Broyden iteration depends on the previous solve).
 
 ## Output landing zones
 
-- `data/curated/calibration/<source>/*` -- one artefact set per base config, plus its `provenance.yaml` stamp; the `default` set is **git-tracked**. Commit a set together as a refresh; mixed-vintage artefacts are the most common cause of confusing downstream solves.
+- `data/curated/calibration/<source>/*` -- one artefact set per base config, plus its `provenance.yaml` stamp; the `default` and `gbd-anchored` sets are **git-tracked**. Commit a set together as a refresh; mixed-vintage artefacts are the most common cause of confusing downstream solves.
 - `processing/calibration/*` (or `processing/calibration-<source>/*` for non-default bases) -- shared upstream prep, NOT committed.
 - `results/calibration/*` -- per-iteration solve logs, NOT committed.
 - `results/calibration/calibration/deviation_penalty_trace.csv` -- per-iter Broyden trace (per-component lambda, achieved deviations, residual norm). Inspect when stability behaves oddly.

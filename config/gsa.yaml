@@ -36,6 +36,12 @@ name: "gsa"
 health:
   enabled: true
 
+# With health on, the baseline diet is GBD-anchored, so consume the artefact
+# set calibrated against that diet (the `default` set is anchoring-off).
+# Regenerate with `tools/calibrate --base config/gsa.yaml`.
+calibration:
+  source: "gbd-anchored"
+
 scenarios:
   # Baseline scenario for calibrating piecewise food utility blocks. Consumer
   # values (dual variables) are taken from this enforced-baseline solve.

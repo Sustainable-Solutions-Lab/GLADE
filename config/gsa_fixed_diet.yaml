@@ -129,6 +129,11 @@ diet:
   # unconditional; it now follows health.enabled unless set explicitly).
   anchor_groups_to_gbd: true
 
+# Anchored baseline diet -> consume the artefact set calibrated against it
+# (the `default` set is anchoring-off).
+calibration:
+  source: "gbd-anchored"
+
 health:
   enabled: false
 

@@ -853,9 +853,10 @@ diet:
   # residual fix whenever whole_grains is anchored -- see docs/current_diets.rst.
   # CALIBRATION COUPLING: this flag changes the baseline diet, which the
   # calibration artefacts under data/curated/calibration/ are fit against.
-  # Changing it (directly or via health.enabled) means the committed
-  # calibration no longer matches; rerun `tools/calibrate` with the same
-  # anchoring setting before trusting results (see docs/calibration.rst).
+  # Changing it (directly or via health.enabled) means the `default` artefact
+  # set no longer matches; point calibration.source at the `gbd-anchored` set
+  # (fit with anchoring on) or recalibrate. The provenance check errors on a
+  # mismatch (see docs/calibration.rst).
   anchor_groups_to_gbd: match_health
   # Foods whose per-country intake is computed directly from FAOSTAT Food
   # Balance Sheet supply rather than disaggregated from GDD/GBD group

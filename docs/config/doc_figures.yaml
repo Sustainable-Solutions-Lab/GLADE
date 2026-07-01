@@ -92,5 +92,10 @@ health:
   enabled: true
   value_per_yll: 0
 
+# With health on, the baseline diet is GBD-anchored, so consume the artefact
+# set calibrated against that diet (the `default` set is anchoring-off).
+calibration:
+  source: "gbd-anchored"
+
 solving:
   solver: "gurobi"

@@ -16,8 +16,8 @@ directly.
 Calibration artefacts are organised in *sets*: one directory
 ``data/curated/calibration/<source>/`` per base configuration they were
 calibrated against, selected by the ``calibration.source`` config key.
-The shipped ``default`` set is version-controlled so that ordinary
-builds don't need to re-solve anything. See
+The shipped ``default`` and ``gbd-anchored`` sets are version-controlled
+so that ordinary builds don't need to re-solve anything. See
 :ref:`calibration-provenance` for how sets are tied to configs.
 
 .. admonition:: Calibration is tied to the baseline diet (and thus to health/anchoring)
@@ -30,20 +30,15 @@ builds don't need to re-solve anything. See
    ``diet.anchor_groups_to_gbd`` (default: follow ``health.enabled``); see
    :ref:`current-diets-gbd-anchoring`.
 
-   The **currently committed artefacts were fit against the GBD-anchored
-   baseline diet** (the historical behaviour). The calibration configs
-   under ``config/calibration/`` therefore pin ``anchor_groups_to_gbd:
-   true`` so that re-running ``tools/calibrate`` reproduces them. Because
-   the default model now runs *without* anchoring, the committed
-   calibration does not strictly match the default baseline diet -- a
-   modest, documented mismatch. Regenerating the calibration against the
-   anchoring-off default is deferred to a dedicated calibration change:
-   the dual-based ``cost`` and ``stability`` steps require Gurobi (the
-   open-source HiGHS solver does not return the constraint duals those
-   steps consume), and making the artefacts mode-aware so both diets can
-   be served from one checkout is the cleaner long-term fix. Any run that
-   changes ``diet.anchor_groups_to_gbd`` (or ``health.enabled``) away from
-   the committed setting should rerun ``tools/calibrate`` with Gurobi.
+   Two artefact sets are therefore committed: ``default``, fit against
+   the anchoring-off baseline diet of the default config, and
+   ``gbd-anchored``, fit against the GBD-anchored diet and consumed by
+   the health-enabled configs (``validation``, ``gsa``, the doc-figure
+   configs) via ``calibration.source: gbd-anchored``. ``tools/calibrate``
+   resolves anchoring from its base config and pins it across all five
+   steps, so each set is regenerated against the right diet
+   automatically. The provenance stamps record the *resolved* anchoring,
+   so consuming a set fit against the other diet fails at startup.
 
 .. _calibration-enabled-generate-pattern:
 

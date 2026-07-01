@@ -327,9 +327,11 @@ pixi run -e dev pytest -v         # verbose output
 
 Five calibrations feed the default workflow. Their outputs are organized
 in per-config artefact *sets* under `data/curated/calibration/<source>/`
-(selected by the `calibration.source` config key; the `default` set is
-git-tracked) and builds depend on them. When upstream data or build
-logic changes materially, regenerate in this order:
+(selected by the `calibration.source` config key; the `default` set --
+fit against the anchoring-off baseline diet -- and the `gbd-anchored`
+set -- consumed by the health-enabled configs -- are git-tracked) and
+builds depend on them. When upstream data or build logic changes
+materially, regenerate in this order:
 
 1. **feed** — `config/calibration/feed.yaml` → `grassland_yield.csv`,
    `fodder_conversion.csv`, `exogenous_forage.csv`,

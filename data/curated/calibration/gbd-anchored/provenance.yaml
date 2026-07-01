@@ -3,10 +3,10 @@
 # workflow/scripts/write_calibration_provenance.py via
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
-base_config: config/default.yaml
-generated_at: '2026-07-01T22:29:28+00:00'
+base_config: config/gsa.yaml
+generated_at: '2026-07-01T21:08:01+00:00'
 git_commit: d3f07986e72ad291e10e5a11844c18752cddf7cc
-source: default
+source: gbd-anchored
 structural_config:
   aggregation.irrigated_area_source: current
   aggregation.regions.allow_cross_border: false
@@ -652,7 +652,7 @@ structural_config:
   data.usda.nutrients.fat: Total lipid (fat)
   data.usda.nutrients.protein: Protein
   data.usda.retrieve_nutrition: false
-  diet.anchor_groups_to_gbd: false
+  diet.anchor_groups_to_gbd: true
   diet.baseline_age: All ages
   diet.fbs_override_foods:
   - yam
