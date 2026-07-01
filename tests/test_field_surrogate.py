@@ -58,6 +58,9 @@ _METHOD_OPTIONS = {
         "max_iter": 3000,
         "learning_rate_init": 1e-3,
         "n_iter_no_change": 40,
+        "activation": "relu",
+        "ensemble_size": 1,
+        "scalar_loss_weight": 1,
     },
     "xgb": {
         "n_estimators": 300,

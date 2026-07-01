@@ -704,12 +704,15 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     # nonag = 1 - crop - grass = [[0.4, 0.2], [0.8, 0.6]]
     # forest ≤ nonag
     forest_frac = np.array([[0.3, 0.1], [0.5, 0.3]], dtype=np.float32)
+    # grazing_intensity: per-hectare depletion factor in [0, 1]
+    grazing_intensity = np.full((height, width), 0.5, dtype=np.float32)
     lc_ds = xr.Dataset(
         {
             "cropland_fraction": (("y", "x"), cropland_frac),
             "grassland_fraction": (("y", "x"), grassland_frac),
             "pasture_fraction": (("y", "x"), pasture_frac),
             "forest_fraction": (("y", "x"), forest_frac),
+            "grazing_intensity": (("y", "x"), grazing_intensity),
         },
         coords={"y": lat, "x": lon},
     )
