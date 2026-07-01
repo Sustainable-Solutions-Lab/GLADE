@@ -21,6 +21,7 @@ from workflow.scripts.solve_namespace import (
     _leaf_keys,
     deviation_penalty_uses_calibrated,
     resolve_gbd_anchoring,
+    resolve_pathvars,
     validate_scenario_config_schemas,
     validate_scenario_overrides,
 )

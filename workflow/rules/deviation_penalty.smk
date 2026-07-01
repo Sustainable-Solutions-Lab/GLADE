@@ -68,10 +68,18 @@ if _dp_cal_cfg["generate"]:
             tolerance=_dp_cal_cfg["tolerance"],
             max_iter=_dp_cal_cfg["max_iter"],
             trust_region_log=_dp_cal_cfg["trust_region_log"],
-            # Warm-start path is passed as a param (not an input) so Snakemake
-            # doesn't create a self-loop on calibrated_yaml. The script loads
-            # it iff the file exists on disk at run time.
-            previous_yaml=_dp_cal_cfg["calibrated_yaml"],
+            # Warm-start seed: a side copy of the previous calibrated yaml,
+            # written by the script next to the trace. It must not be the
+            # calibrated_yaml output itself (Snakemake deletes outputs before
+            # the job runs, so that warm start would never engage) nor a
+            # declared input/output (self-loop / same deletion). Pathvars are
+            # resolved explicitly since params are not path-expanded. The
+            # script loads it iff the file exists on disk at run time.
+            previous_yaml=str(
+                Path(resolve_pathvars(_trace_csv, PATH_ROOTS)).with_name(
+                    "deviation_penalty_warm.yaml"
+                )
+            ),
             name=name,
         resources:
             # Per-iteration solves use mem_mb / runtime configured in the
