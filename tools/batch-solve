@@ -243,7 +243,11 @@ for IDX in $(seq $START $END); do
                 wait "$pid" 2>/dev/null || FAILED=$((FAILED + 1))
             fi
         done
-        PIDS=("${{NEW_PIDS[@]}}")
+        if [ ${{#NEW_PIDS[@]}} -gt 0 ]; then
+            PIDS=("${{NEW_PIDS[@]}}")
+        else
+            PIDS=()
+        fi
     done
 
     {env_prefix} python tools/cluster-solve "$MANIFEST" --index "$IDX" --skip-existing &
