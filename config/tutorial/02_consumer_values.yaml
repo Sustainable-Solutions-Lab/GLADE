@@ -86,6 +86,7 @@ validation:
   use_actual_yields: true
 
 health:
+  enabled: true  # default flipped to false; this tutorial relies on health (and the GBD-anchored diet)
   value_per_yll: 0
 
 plotting:

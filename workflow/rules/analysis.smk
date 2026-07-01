@@ -176,12 +176,34 @@ else:
             network="<results>/{name}/solved/model_scen-{scenario}.nc",
             food_groups="data/curated/food_groups.csv",
             m49_codes="data/curated/M49-codes.csv",
-            risk_breakpoints="<processing>/{name}/health/risk_breakpoints.csv",
-            health_cluster_cause="<processing>/{name}/health/cluster_cause_baseline.csv",
-            health_cause_log="<processing>/{name}/health/cause_log_breakpoints.csv",
-            health_clusters="<processing>/{name}/health/country_clusters.csv",
             population="<processing>/{name}/population.csv",
-            tmrel="<processing>/{name}/health/tmrel.csv",
+            # Health processing inputs only when this scenario enables health;
+            # otherwise analyze_model writes empty health outputs.
+            risk_breakpoints=lambda w: (
+                f"<processing>/{w.name}/health/risk_breakpoints.csv"
+                if get_effective_config(w.scenario)["health"]["enabled"]
+                else []
+            ),
+            health_cluster_cause=lambda w: (
+                f"<processing>/{w.name}/health/cluster_cause_baseline.csv"
+                if get_effective_config(w.scenario)["health"]["enabled"]
+                else []
+            ),
+            health_cause_log=lambda w: (
+                f"<processing>/{w.name}/health/cause_log_breakpoints.csv"
+                if get_effective_config(w.scenario)["health"]["enabled"]
+                else []
+            ),
+            health_clusters=lambda w: (
+                f"<processing>/{w.name}/health/country_clusters.csv"
+                if get_effective_config(w.scenario)["health"]["enabled"]
+                else []
+            ),
+            tmrel=lambda w: (
+                f"<processing>/{w.name}/health/tmrel.csv"
+                if get_effective_config(w.scenario)["health"]["enabled"]
+                else []
+            ),
             analysis_scripts=_ANALYSIS_SCRIPTS,
         params:
             ghg_price=lambda w: get_effective_config(w.scenario)["emissions"][
@@ -189,6 +211,9 @@ else:
             ],
             ch4_gwp=config["emissions"]["ch4_to_co2_factor"],
             n2o_gwp=config["emissions"]["n2o_to_co2_factor"],
+            health_enabled=lambda w: get_effective_config(w.scenario)["health"][
+                "enabled"
+            ],
             value_per_yll=lambda w: get_effective_config(w.scenario)["health"][
                 "value_per_yll"
             ],

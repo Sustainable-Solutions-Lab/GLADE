@@ -1189,25 +1189,31 @@ if __name__ == "__main__":
         hub_centers=hub_centers,
     )
 
-    health.add_health_stores(
-        n,
-        snakemake.input.health_cluster_summary,
-        snakemake.input.health_cluster_cause,
-        snakemake.config["health"],
-    )
+    # Health-cluster stores are only added when health is enabled (in the base
+    # config or any scenario). When disabled, the health processing inputs are
+    # absent and no health data is needed on disk.
+    if snakemake.params.health_enabled:
+        health.add_health_stores(
+            n,
+            snakemake.input.health_cluster_summary,
+            snakemake.input.health_cluster_cause,
+            snakemake.config["health"],
+        )
 
-    # Compute and store health cluster populations from country populations
-    cluster_map_df = read_csv(snakemake.input.health_clusters)
-    cluster_lookup = (
-        cluster_map_df.set_index("country_iso3")["health_cluster"].astype(int).to_dict()
-    )
-    pop_df = population.reset_index()
-    pop_df.columns = ["iso3", "population"]
-    pop_df["cluster"] = pop_df["iso3"].str.upper().map(cluster_lookup)
-    pop_df = pop_df.dropna(subset=["cluster"])
-    pop_df["cluster"] = pop_df["cluster"].astype(int)
-    cluster_pop = pop_df.groupby("cluster")["population"].sum().to_dict()
-    n.meta["population"]["health_cluster"] = cluster_pop
+        # Compute and store health cluster populations from country populations
+        cluster_map_df = read_csv(snakemake.input.health_clusters)
+        cluster_lookup = (
+            cluster_map_df.set_index("country_iso3")["health_cluster"]
+            .astype(int)
+            .to_dict()
+        )
+        pop_df = population.reset_index()
+        pop_df.columns = ["iso3", "population"]
+        pop_df["cluster"] = pop_df["iso3"].str.upper().map(cluster_lookup)
+        pop_df = pop_df.dropna(subset=["cluster"])
+        pop_df["cluster"] = pop_df["cluster"].astype(int)
+        cluster_pop = pop_df.groupby("cluster")["population"].sum().to_dict()
+        n.meta["population"]["health_cluster"] = cluster_pop
 
     # Store build-time regional_limit in metadata so solve_model can rescale
     n.meta["land_regional_limit"] = float(land_cfg["regional_limit"])

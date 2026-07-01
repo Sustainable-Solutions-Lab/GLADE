@@ -988,6 +988,7 @@ properties:
     type: object
     required:
       - baseline_age
+      - anchor_groups_to_gbd
       - source_basis
       - gdd_ia
     additionalProperties: false
@@ -995,6 +996,12 @@ properties:
       baseline_age:
         type: string
         description: "Age group for baseline diet (e.g., 'All ages')"
+      anchor_groups_to_gbd:
+        oneOf:
+          - type: boolean
+          - type: string
+            enum: ["match_health"]
+        description: "Anchor risk-factor food-group baseline-diet totals to GBD intake exposure. true/false, or 'match_health' to follow health.enabled."
       fbs_override_foods:
         type: array
         uniqueItems: true

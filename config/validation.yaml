@@ -32,6 +32,7 @@ food_demand_calibration:
   enabled: false
 
 health:
+  enabled: true  # default flipped to false; this config relies on health (and the GBD-anchored diet)
   value_per_yll: 0
 
 emissions:

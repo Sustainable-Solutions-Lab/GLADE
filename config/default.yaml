@@ -839,6 +839,24 @@ weight_conversion:
 # --- section: diet ---
 diet:
   baseline_age: "All ages"
+  # Whether to anchor the per-country baseline-diet totals of the health
+  # risk-factor food groups (health.risk_factors, e.g. fruits, vegetables,
+  # red_meat, ...) to GBD dietary-exposure intake instead of the GDD/FAOSTAT
+  # estimate. Anchoring aligns the baseline diet with the same intake basis
+  # the GBD relative-risk curves are calibrated against, so it is required
+  # for attributable-burden numbers to be comparable to GBD; it is otherwise
+  # a modest, mostly distributional change to the baseline diet (see
+  # docs/current_diets.rst). The sentinel "match_health" follows health.enabled, so a
+  # health run anchors and a no-health run does not (and then needs no IHME
+  # GBD data on disk). Set explicitly to true/false to decouple the two.
+  # NOTE: refined "grain" is additionally adjusted by the whole-grain cereal
+  # residual fix whenever whole_grains is anchored -- see docs/current_diets.rst.
+  # CALIBRATION COUPLING: this flag changes the baseline diet, which the
+  # calibration artefacts under data/curated/calibration/ are fit against.
+  # Changing it (directly or via health.enabled) means the committed
+  # calibration no longer matches; rerun `tools/calibrate` with the same
+  # anchoring setting before trusting results (see docs/calibration.rst).
+  anchor_groups_to_gbd: match_health
   # Foods whose per-country intake is computed directly from FAOSTAT Food
   # Balance Sheet supply rather than disaggregated from GDD/GBD group
   # totals. For each listed food the override sets
@@ -1217,7 +1235,14 @@ commodities:
 
 # --- section: health ---
 health:
-  enabled: true  # Whether to include health costs in the objective function
+  # Whether to include the dietary health-burden module. When false, the
+  # manually-downloaded IHME GBD data is not needed (see docs/health.rst).
+  # IMPORTANT: this also drives diet.anchor_groups_to_gbd (sentinel
+  # "match_health"), so flipping it changes the baseline diet. The git-tracked
+  # calibration artefacts under data/curated/calibration/ are computed against a
+  # specific baseline diet, so after changing this (or anchoring) you must rerun
+  # `tools/calibrate` with matching options (see docs/calibration.rst).
+  enabled: false
   region_clusters: 30
   breakpoint_rel_tol: 0.05  # Max Stage 1 PWL deviation as a fraction of each RR curve's amplitude (5%)
   log_rr_points: 15

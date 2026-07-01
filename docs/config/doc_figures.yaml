@@ -84,7 +84,13 @@ water:
   supply_scenario: "current_use"
 
 health:
-  enabled: false
+  # Documentation figures include health-cluster maps and the diet-attributable
+  # burden choropleth, which need the health data-prep outputs (clusters etc.).
+  # value_per_yll: 0 keeps health out of the objective (post-hoc evaluation), so
+  # the optimisation and the GBD-anchored baseline diet match the prior figures;
+  # enabling health just makes the prep outputs available. Needs IHME GBD data.
+  enabled: true
+  value_per_yll: 0
 
 solving:
   solver: "gurobi"

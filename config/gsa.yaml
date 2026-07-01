@@ -30,6 +30,12 @@
 # live in a companion config, gsa_l1.yaml, on the paper branch.
 
 name: "gsa"
+
+# default flipped health.enabled to false; the GSA sweeps value_per_yll, so it
+# needs the health module (and the GBD-anchored baseline diet) enabled at base.
+health:
+  enabled: true
+
 scenarios:
   # Baseline scenario for calibrating piecewise food utility blocks. Consumer
   # values (dual variables) are taken from this enforced-baseline solve.

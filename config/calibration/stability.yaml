@@ -32,6 +32,11 @@ baseline_year: 2020
 # consumer values reflect raw revealed preferences).
 emissions:
   ghg_price: 0
+# Anchoring pinned on to reproduce the committed (anchored) calibration
+# artefacts; anchor-off regeneration is deferred to a dedicated PR (see cost.yaml).
+diet:
+  anchor_groups_to_gbd: true
+
 health:
   value_per_yll: 0
 
@@ -73,7 +78,7 @@ deviation_penalty:
     generate: true   # trigger the calibrate_deviation_penalty rule
 
 solving:
-  solver: "gurobi"
+  solver: gurobi
   io_api: "direct"
   # Solves run sequentially in the iteration, so give each solve more
   # threads instead of running multiple solves in parallel.

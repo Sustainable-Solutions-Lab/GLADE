@@ -319,22 +319,36 @@ def build_scenario_entry(
     inputs: dict = {
         "network": rp("<results>/{name}/build/model.nc"),
         "m49": "data/curated/M49-codes.csv",
-        "health_risk_breakpoints": rp(
-            "<processing>/{name}/health/risk_breakpoints.csv"
-        ),
-        "health_cluster_cause": rp(
-            "<processing>/{name}/health/cluster_cause_baseline.csv"
-        ),
-        "health_cause_log": rp("<processing>/{name}/health/cause_log_breakpoints.csv"),
-        "health_cluster_summary": rp("<processing>/{name}/health/cluster_summary.csv"),
-        "health_clusters": rp("<processing>/{name}/health/country_clusters.csv"),
-        "health_tmrel": rp("<processing>/{name}/health/tmrel.csv"),
-        "health_cluster_risk_baseline": rp(
-            "<processing>/{name}/health/cluster_risk_baseline.csv"
-        ),
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": rp("<processing>/{name}/baseline_diet.csv"),
     }
+
+    # Health processing inputs only when this scenario enables health (mirrors
+    # solve_model_inputs in workflow/rules/model.smk).
+    if eff["health"]["enabled"]:
+        inputs.update(
+            {
+                "health_risk_breakpoints": rp(
+                    "<processing>/{name}/health/risk_breakpoints.csv"
+                ),
+                "health_cluster_cause": rp(
+                    "<processing>/{name}/health/cluster_cause_baseline.csv"
+                ),
+                "health_cause_log": rp(
+                    "<processing>/{name}/health/cause_log_breakpoints.csv"
+                ),
+                "health_cluster_summary": rp(
+                    "<processing>/{name}/health/cluster_summary.csv"
+                ),
+                "health_clusters": rp(
+                    "<processing>/{name}/health/country_clusters.csv"
+                ),
+                "health_tmrel": rp("<processing>/{name}/health/tmrel.csv"),
+                "health_cluster_risk_baseline": rp(
+                    "<processing>/{name}/health/cluster_risk_baseline.csv"
+                ),
+            }
+        )
 
     if eff["food_incentives"]["enabled"]:
         sources = eff["food_incentives"]["sources"]

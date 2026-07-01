@@ -57,6 +57,7 @@ validation:
 
 # This tutorial does not use health costs.
 health:
+  enabled: true  # default flipped to false; this tutorial relies on health (and the GBD-anchored diet)
   value_per_yll: 0
 
 # Compare all three scenarios in auto-generated plots.

@@ -222,20 +222,27 @@ def load_group_totals(
     gdd_totals = intake.set_index(["country", "food_group"])["value"]
 
     # Load GBD dietary risk exposure (aggregate duplicates if any) and
-    # convert to the model's basis where it differs.
-    gbd = pd.read_csv(gbd_exposure_path)
-    gbd = convert_intake(
-        gbd,
-        source="gbd",
-        value_column="consumption_g_per_day",
-        group_column="food_group",
-        country_column="country",
-        source_basis=source_basis,
-        source_basis_country_overrides=source_basis_country_overrides,
-        target_basis_by_key=group_basis,
-        factors=weight_conversion,
-    )
-    gbd_totals = gbd.groupby(["country", "food_group"])["consumption_g_per_day"].mean()
+    # convert to the model's basis where it differs. Skipped entirely when no
+    # groups are anchored (anchoring off): the GBD intake file is then not an
+    # input and the GDD/FAOSTAT estimate is used for every group.
+    if gbd_anchored_groups:
+        gbd = pd.read_csv(gbd_exposure_path)
+        gbd = convert_intake(
+            gbd,
+            source="gbd",
+            value_column="consumption_g_per_day",
+            group_column="food_group",
+            country_column="country",
+            source_basis=source_basis,
+            source_basis_country_overrides=source_basis_country_overrides,
+            target_basis_by_key=group_basis,
+            factors=weight_conversion,
+        )
+        gbd_totals = gbd.groupby(["country", "food_group"])[
+            "consumption_g_per_day"
+        ].mean()
+    else:
+        gbd_totals = pd.Series(dtype=float)
 
     # Build combined group totals: GBD-anchored groups prefer GBD when
     # available, else fall back to GDD/FAOSTAT; non-anchored groups
@@ -261,7 +268,11 @@ def load_group_totals(
                 }
             )
 
-    log_gdd_gbd_agreement(gdd_totals, gbd_totals, gbd_anchored_groups)
+    # Cross-validation logging only applies when groups are anchored to GBD;
+    # with anchoring off gbd_totals is empty (no MultiIndex) and there is
+    # nothing to compare.
+    if gbd_anchored_groups:
+        log_gdd_gbd_agreement(gdd_totals, gbd_totals, gbd_anchored_groups)
     return pd.DataFrame(results)
 
 
@@ -1547,13 +1558,18 @@ def main():
     # gdd_ia_kcal_target.csv.
     kcal_target_df = pd.read_csv(kcal_target_path)
     nutrition_df = pd.read_csv(nutrition_path)
-    kcal_per_g_group = build_kcal_per_g_group(food_groups_df, nutrition_df)
     kcal_per_g_food = build_kcal_per_g_food(nutrition_df)
-    group_totals = apply_cereal_residual_fix(
-        group_totals,
-        kcal_target_df,
-        kcal_per_g_group,
-    )
+    # The cereal residual fix only compensates for energy lost to GBD's narrow
+    # whole_grain anchor, so it applies only when whole_grains is anchored.
+    # With anchoring off the GDD/FAOSTAT whole_grains total already carries the
+    # broad cereal energy and no reallocation to refined grain is needed.
+    if WHOLE_GRAINS_GROUP in gbd_anchored_groups:
+        kcal_per_g_group = build_kcal_per_g_group(food_groups_df, nutrition_df)
+        group_totals = apply_cereal_residual_fix(
+            group_totals,
+            kcal_target_df,
+            kcal_per_g_group,
+        )
 
     # Step 1c is performed after per-food disaggregation (Step 3) so the
     # kcal accounting uses food-level energy densities rather than a

@@ -20,6 +20,31 @@ The shipped ``default`` set is version-controlled so that ordinary
 builds don't need to re-solve anything. See
 :ref:`calibration-provenance` for how sets are tied to configs.
 
+.. admonition:: Calibration is tied to the baseline diet (and thus to health/anchoring)
+   :class: warning
+
+   Several artefacts (notably ``food_demand.csv``, ``food_waste.yaml``
+   and ``deviation_penalty.yaml``) are fit against a *specific* baseline
+   diet. The baseline diet depends on whether the GBD risk-factor groups
+   are anchored to GBD intake, which is controlled by
+   ``diet.anchor_groups_to_gbd`` (default: follow ``health.enabled``); see
+   :ref:`current-diets-gbd-anchoring`.
+
+   The **currently committed artefacts were fit against the GBD-anchored
+   baseline diet** (the historical behaviour). The calibration configs
+   under ``config/calibration/`` therefore pin ``anchor_groups_to_gbd:
+   true`` so that re-running ``tools/calibrate`` reproduces them. Because
+   the default model now runs *without* anchoring, the committed
+   calibration does not strictly match the default baseline diet -- a
+   modest, documented mismatch. Regenerating the calibration against the
+   anchoring-off default is deferred to a dedicated calibration change:
+   the dual-based ``cost`` and ``stability`` steps require Gurobi (the
+   open-source HiGHS solver does not return the constraint duals those
+   steps consume), and making the artefacts mode-aware so both diets can
+   be served from one checkout is the cleaner long-term fix. Any run that
+   changes ``diet.anchor_groups_to_gbd`` (or ``health.enabled``) away from
+   the committed setting should rerun ``tools/calibrate`` with Gurobi.
+
 .. _calibration-enabled-generate-pattern:
 
 .. note::

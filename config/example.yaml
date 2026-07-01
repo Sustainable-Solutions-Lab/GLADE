@@ -27,6 +27,17 @@ name: "example"
 # emissions:
 #   ghg_price: 200  # USD per tonne CO2-eq
 
+# Enable the dietary health-burden module. This requires the manually-
+# downloaded IHME GBD data (see docs/health.rst); when left disabled (the
+# default) none of that data is needed. Enabling health also anchors the
+# baseline diet to GBD intake exposure (diet.anchor_groups_to_gbd defaults to
+# "match_health"); set that key explicitly to decouple the two.
+# health:
+#   enabled: true
+#   value_per_yll: 50000  # USD per year of life lost (0 = evaluate post-hoc only)
+# diet:
+#   anchor_groups_to_gbd: true  # or false to keep the GDD/FAOSTAT-only diet
+
 # Restrict to specific countries (ISO 3166-1 alpha-3 codes)
 # countries:
 #   - NOR

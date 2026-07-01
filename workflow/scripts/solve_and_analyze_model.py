@@ -39,23 +39,33 @@ def main() -> None:
         and getattr(snakemake.output, attr).endswith(".parquet")
     }
 
+    health_enabled = bool(snakemake.params.health_enabled)
     run_analysis(
         n,
         output_paths=output_paths,
         food_groups_path=snakemake.input.food_groups,
         m49_codes_path=snakemake.input.m49,
-        risk_breakpoints_path=snakemake.input.health_risk_breakpoints,
-        health_cluster_cause_path=snakemake.input.health_cluster_cause,
-        health_cause_log_path=snakemake.input.health_cause_log,
-        health_clusters_path=snakemake.input.health_clusters,
         population_path=snakemake.input.population,
-        tmrel_path=snakemake.input.health_tmrel,
         ghg_price=float(snakemake.params.ghg_price),
         ch4_gwp=float(snakemake.params.ch4_gwp),
         n2o_gwp=float(snakemake.params.n2o_gwp),
         value_per_yll=float(snakemake.params.health_value_per_yll),
         health_risk_factors=list(snakemake.params.health_risk_factors),
         logger=logger,
+        health_enabled=health_enabled,
+        risk_breakpoints_path=(
+            snakemake.input.health_risk_breakpoints if health_enabled else None
+        ),
+        health_cluster_cause_path=(
+            snakemake.input.health_cluster_cause if health_enabled else None
+        ),
+        health_cause_log_path=(
+            snakemake.input.health_cause_log if health_enabled else None
+        ),
+        health_clusters_path=(
+            snakemake.input.health_clusters if health_enabled else None
+        ),
+        tmrel_path=snakemake.input.health_tmrel if health_enabled else None,
     )
 
     logger.info("Solve-and-analyze complete.")

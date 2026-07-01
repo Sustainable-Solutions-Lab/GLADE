@@ -124,6 +124,11 @@ validation:
 
 # Keep post-hoc YLL evaluation disabled: diet is fixed, so health outputs
 # would be essentially constant across scenarios and just add solve time.
+diet:
+  # Preserve the historical GBD-anchored baseline diet (anchoring used to be
+  # unconditional; it now follows health.enabled unless set explicitly).
+  anchor_groups_to_gbd: true
+
 health:
   enabled: false
 

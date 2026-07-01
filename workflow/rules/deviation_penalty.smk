@@ -22,13 +22,41 @@ if _dp_cal_cfg["generate"]:
             baseline_diet=f"<processing>/{name}/baseline_diet.csv",
             m49="data/curated/M49-codes.csv",
             food_groups="data/curated/food_groups.csv",
-            health_risk_breakpoints=f"<processing>/{name}/health/risk_breakpoints.csv",
-            health_cluster_cause=f"<processing>/{name}/health/cluster_cause_baseline.csv",
-            health_cause_log=f"<processing>/{name}/health/cause_log_breakpoints.csv",
-            health_cluster_summary=f"<processing>/{name}/health/cluster_summary.csv",
-            health_clusters=f"<processing>/{name}/health/country_clusters.csv",
-            health_tmrel=f"<processing>/{name}/health/tmrel.csv",
-            health_cluster_risk_baseline=f"<processing>/{name}/health/cluster_risk_baseline.csv",
+            # Health inputs only when health is enabled (the solve prices health
+            # only then); omitted otherwise so no IHME GBD data is required.
+            health_risk_breakpoints=(
+                f"<processing>/{name}/health/risk_breakpoints.csv"
+                if health_required()
+                else []
+            ),
+            health_cluster_cause=(
+                f"<processing>/{name}/health/cluster_cause_baseline.csv"
+                if health_required()
+                else []
+            ),
+            health_cause_log=(
+                f"<processing>/{name}/health/cause_log_breakpoints.csv"
+                if health_required()
+                else []
+            ),
+            health_cluster_summary=(
+                f"<processing>/{name}/health/cluster_summary.csv"
+                if health_required()
+                else []
+            ),
+            health_clusters=(
+                f"<processing>/{name}/health/country_clusters.csv"
+                if health_required()
+                else []
+            ),
+            health_tmrel=(
+                f"<processing>/{name}/health/tmrel.csv" if health_required() else []
+            ),
+            health_cluster_risk_baseline=(
+                f"<processing>/{name}/health/cluster_risk_baseline.csv"
+                if health_required()
+                else []
+            ),
             nutrition="data/curated/nutrition.csv",
         output:
             calibrated_yaml=_dp_cal_cfg["calibrated_yaml"],

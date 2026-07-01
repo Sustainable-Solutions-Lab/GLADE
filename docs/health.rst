@@ -12,6 +12,27 @@ dietary choices. It begins with the epidemiological concepts that underpin the
 methodology, then explains the implementation strategy for embedding these
 nonlinear relationships into a linear optimisation framework.
 
+.. admonition:: The health module is off by default
+   :class: note
+
+   ``health.enabled`` defaults to ``false``. The health module relies on
+   manually-downloaded IHME GBD data (mortality rates and dietary
+   risk-exposure; see :doc:`data_sources`), which cannot be fetched
+   automatically. When health is disabled, none of that data is required
+   and the workflow builds, solves, and analyses without it -- the
+   YLL stores, health objective term, and health analysis/plots are
+   simply omitted, and a clear error is raised if the data is missing
+   while health is on.
+
+   Enabling health also turns on **GBD anchoring of the baseline diet**
+   by default (``diet.anchor_groups_to_gbd: match_health``), so that the
+   model's attributable-burden numbers share the GBD intake basis. That
+   anchoring changes the baseline diet and is an independent switch -- see
+   :ref:`current-diets-gbd-anchoring`. Because the baseline diet feeds the
+   calibration, switching health (or anchoring) on or off means the
+   committed calibration no longer matches your run; rerun
+   ``tools/calibrate`` accordingly (see :doc:`calibration`).
+
 Conceptual Framework
 --------------------
 

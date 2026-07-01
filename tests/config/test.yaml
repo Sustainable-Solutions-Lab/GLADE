@@ -25,6 +25,12 @@ scenarios:
     emissions:
       ghg_pricing_enabled: true
 
+diet:
+  # Preserve the historical GBD-anchored baseline diet (anchoring used to be
+  # unconditional; it now follows health.enabled unless set explicitly). The
+  # health-off / anchoring-off path is exercised by the default config.
+  anchor_groups_to_gbd: true
+
 health:
   enabled: false
 

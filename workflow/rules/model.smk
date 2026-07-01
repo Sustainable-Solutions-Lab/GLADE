@@ -149,7 +149,12 @@ rule build_model:
         population="<processing>/{name}/population.csv",
         baseline_diet="<processing>/{name}/dietary_intake.csv",
         baseline_diet_validation="<processing>/{name}/baseline_diet_validation.csv",
-        baseline_diet_risk_comparison="<processing>/{name}/baseline_diet_risk_comparison.csv",
+        # GBD baseline-diet consistency check; only built when health is on.
+        baseline_diet_risk_comparison=(
+            "<processing>/{name}/baseline_diet_risk_comparison.csv"
+            if health_required()
+            else []
+        ),
         food_loss_waste="<processing>/{name}/food_loss_waste.csv",
         costs="<processing>/{name}/faostat_crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
@@ -161,9 +166,23 @@ rule build_model:
         faostat_pasture_area="<processing>/{name}/faostat_pasture_area.csv",
         current_grassland_area="<processing>/{name}/luc/current_grassland_area_by_class.csv",
         grazing_only_land="<processing>/{name}/land_grazing_only_by_class.csv",
-        health_cluster_summary="<processing>/{name}/health/cluster_summary.csv",
-        health_cluster_cause="<processing>/{name}/health/cluster_cause_baseline.csv",
-        health_clusters="<processing>/{name}/health/country_clusters.csv",
+        # Health-cluster stores are only added when health is enabled (in the
+        # base config or any scenario, since the build is scenario-independent).
+        health_cluster_summary=(
+            "<processing>/{name}/health/cluster_summary.csv"
+            if health_required()
+            else []
+        ),
+        health_cluster_cause=(
+            "<processing>/{name}/health/cluster_cause_baseline.csv"
+            if health_required()
+            else []
+        ),
+        health_clusters=(
+            "<processing>/{name}/health/country_clusters.csv"
+            if health_required()
+            else []
+        ),
         build_scripts=expand(
             "workflow/scripts/build_model/{script}",
             script=[
@@ -204,6 +223,9 @@ rule build_model:
         validation=config["validation"],
         deviation_penalty=config["deviation_penalty"],
         netcdf=config["netcdf"],
+        # Add health-cluster stores when health is enabled in the base config or
+        # any scenario (the build is shared across scenarios).
+        health_enabled=health_required(),
     output:
         network="<results>/{name}/build/model.nc",
     group:
@@ -227,19 +249,29 @@ def solve_model_inputs(w):
     inputs = {
         "network": f"<results>/{w.name}/build/model.nc",
         "m49": "data/curated/M49-codes.csv",
-        "health_risk_breakpoints": f"<processing>/{w.name}/health/risk_breakpoints.csv",
-        "health_cluster_cause": f"<processing>/{w.name}/health/cluster_cause_baseline.csv",
-        "health_cause_log": f"<processing>/{w.name}/health/cause_log_breakpoints.csv",
-        "health_cluster_summary": f"<processing>/{w.name}/health/cluster_summary.csv",
-        "health_clusters": f"<processing>/{w.name}/health/country_clusters.csv",
-        "health_tmrel": f"<processing>/{w.name}/health/tmrel.csv",
-        "health_cluster_risk_baseline": f"<processing>/{w.name}/health/cluster_risk_baseline.csv",
         "food_groups": "data/curated/food_groups.csv",
         "baseline_diet": f"<processing>/{w.name}/baseline_diet.csv",
     }
 
-    # Add food incentives input if enabled for this scenario
     eff_cfg = get_effective_config(w.scenario)
+
+    # Health processing inputs are only consumed when this scenario enables
+    # health (add_health_objective / post-hoc evaluation). Omitted otherwise so
+    # the solve needs none of the GBD-derived health artefacts.
+    if eff_cfg["health"]["enabled"]:
+        inputs.update(
+            {
+                "health_risk_breakpoints": f"<processing>/{w.name}/health/risk_breakpoints.csv",
+                "health_cluster_cause": f"<processing>/{w.name}/health/cluster_cause_baseline.csv",
+                "health_cause_log": f"<processing>/{w.name}/health/cause_log_breakpoints.csv",
+                "health_cluster_summary": f"<processing>/{w.name}/health/cluster_summary.csv",
+                "health_clusters": f"<processing>/{w.name}/health/country_clusters.csv",
+                "health_tmrel": f"<processing>/{w.name}/health/tmrel.csv",
+                "health_cluster_risk_baseline": f"<processing>/{w.name}/health/cluster_risk_baseline.csv",
+            }
+        )
+
+    # Add food incentives input if enabled for this scenario
     if eff_cfg["food_incentives"]["enabled"]:
         sources = eff_cfg["food_incentives"]["sources"]
         if not sources:

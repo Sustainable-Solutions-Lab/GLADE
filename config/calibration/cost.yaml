@@ -128,6 +128,14 @@ validation:
 water:
   supply_scenario: "current_use"
 
+# The committed calibration artefacts under data/curated/calibration/ were
+# generated against the GBD-anchored baseline diet, so anchoring is pinned on
+# here to reproduce them. Regenerating against the new default (anchoring off)
+# is deferred to a dedicated calibration PR -- the dual-based cost/stability
+# steps require Gurobi. See docs/calibration.rst.
+diet:
+  anchor_groups_to_gbd: true
+
 health:
   enabled: false
 

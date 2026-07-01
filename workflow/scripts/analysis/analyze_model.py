@@ -82,18 +82,19 @@ def run_analysis(
     output_paths: dict[str, str],
     food_groups_path: str,
     m49_codes_path: str,
-    risk_breakpoints_path: str,
-    health_cluster_cause_path: str,
-    health_cause_log_path: str,
-    health_clusters_path: str,
     population_path: str,
-    tmrel_path: str,
     ghg_price: float,
     ch4_gwp: float,
     n2o_gwp: float,
     value_per_yll: float,
     health_risk_factors: list[str],
     logger: logging.Logger,
+    health_enabled: bool,
+    risk_breakpoints_path: str | None = None,
+    health_cluster_cause_path: str | None = None,
+    health_cause_log_path: str | None = None,
+    health_clusters_path: str | None = None,
+    tmrel_path: str | None = None,
 ) -> None:
     """Run all analysis extractions on a solved network.
 
@@ -164,25 +165,34 @@ def run_analysis(
     ghg_attribution_totals = compute_ghg_totals(ghg_attribution)
 
     # --- Health impacts ---
-    logger.info("Extracting health impacts...")
-    risk_factors = list(health_risk_factors)
-    health_data = load_health_data(
-        {
-            "risk_breakpoints": risk_breakpoints_path,
-            "health_cluster_cause": health_cluster_cause_path,
-            "health_cause_log": health_cause_log_path,
-            "health_clusters": health_clusters_path,
-            "population": population_path,
-            "tmrel": tmrel_path,
-        }
-    )
-    health_marginals = compute_health_marginals(n, health_data, risk_factors)
-    health_marginals = add_health_monetary_value(health_marginals, value_per_yll)
-    health_marginals = health_marginals.sort_values(
-        ["country", "food_group"]
-    ).reset_index(drop=True)
-    health_totals = extract_yll_totals(n)
-    health_attribution = compute_health_attribution(n, health_data, risk_factors)
+    # Only computed when health is enabled for this scenario; otherwise the
+    # network carries no YLL stores and the GBD-derived health processing
+    # inputs are absent, so the health outputs are written empty.
+    if health_enabled:
+        logger.info("Extracting health impacts...")
+        risk_factors = list(health_risk_factors)
+        health_data = load_health_data(
+            {
+                "risk_breakpoints": risk_breakpoints_path,
+                "health_cluster_cause": health_cluster_cause_path,
+                "health_cause_log": health_cause_log_path,
+                "health_clusters": health_clusters_path,
+                "population": population_path,
+                "tmrel": tmrel_path,
+            }
+        )
+        health_marginals = compute_health_marginals(n, health_data, risk_factors)
+        health_marginals = add_health_monetary_value(health_marginals, value_per_yll)
+        health_marginals = health_marginals.sort_values(
+            ["country", "food_group"]
+        ).reset_index(drop=True)
+        health_totals = extract_yll_totals(n)
+        health_attribution = compute_health_attribution(n, health_data, risk_factors)
+    else:
+        logger.info("Health disabled for this scenario; writing empty health outputs.")
+        health_marginals = pd.DataFrame()
+        health_totals = pd.DataFrame()
+        health_attribution = pd.DataFrame()
 
     # Write all outputs
     output_dir = Path(output_paths["crop_production"]).parent
@@ -267,23 +277,33 @@ def main() -> None:
         and getattr(snakemake.output, attr).endswith(".parquet")
     }
 
+    health_enabled = bool(snakemake.params.health_enabled)
     run_analysis(
         n,
         output_paths=output_paths,
         food_groups_path=snakemake.input.food_groups,
         m49_codes_path=snakemake.input.m49_codes,
-        risk_breakpoints_path=snakemake.input.risk_breakpoints,
-        health_cluster_cause_path=snakemake.input.health_cluster_cause,
-        health_cause_log_path=snakemake.input.health_cause_log,
-        health_clusters_path=snakemake.input.health_clusters,
         population_path=snakemake.input.population,
-        tmrel_path=snakemake.input.tmrel,
         ghg_price=float(snakemake.params.ghg_price),
         ch4_gwp=float(snakemake.params.ch4_gwp),
         n2o_gwp=float(snakemake.params.n2o_gwp),
         value_per_yll=float(snakemake.params.value_per_yll),
         health_risk_factors=list(snakemake.params.health_risk_factors),
         logger=logger,
+        health_enabled=health_enabled,
+        risk_breakpoints_path=snakemake.input.risk_breakpoints
+        if health_enabled
+        else None,
+        health_cluster_cause_path=(
+            snakemake.input.health_cluster_cause if health_enabled else None
+        ),
+        health_cause_log_path=(
+            snakemake.input.health_cause_log if health_enabled else None
+        ),
+        health_clusters_path=snakemake.input.health_clusters
+        if health_enabled
+        else None,
+        tmrel_path=snakemake.input.tmrel if health_enabled else None,
     )
 
 

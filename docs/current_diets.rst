@@ -65,10 +65,14 @@ Data Sources
     [Brauer2024]_
   * **Coverage**: country-level mean intake (g/day) for the GBD dietary
     risk factors, adults 25+.
-  * **Role**: anchors the **risk-factor** food groups (fruits,
-    vegetables, whole_grains, legumes, nuts_seeds, red_meat) so the
-    baseline lines up with the same exposure basis the GBD relative-risk
-    functions were calibrated against.
+  * **Role**: *optionally* anchors the **risk-factor** food groups
+    (fruits, vegetables, whole_grains, legumes, nuts_seeds, red_meat) so
+    the baseline lines up with the same exposure basis the GBD
+    relative-risk functions were calibrated against. Controlled by
+    ``diet.anchor_groups_to_gbd`` (see
+    :ref:`current-diets-gbd-anchoring`). When anchoring is off, these
+    groups use the GDD-IA/FAOSTAT estimate like every other group and
+    this dataset is not needed on disk.
 
 **NHANES — What We Eat in America / FPED**
   * **Provider**: USDA ARS / CDC NHANES
@@ -116,6 +120,113 @@ unchanged.
 Units in the merged ``dietary_intake.csv`` distinguish ``g/day (fresh
 wt)`` from ``g/day (milk equiv)`` for dairy and ``g/day (refined sugar
 eq)`` for sugar.
+
+.. _current-diets-gbd-anchoring:
+
+GBD Anchoring of Risk-Factor Groups (optional)
+----------------------------------------------
+
+For the six GBD dietary **risk-factor** groups (``fruits``,
+``vegetables``, ``whole_grains``, ``legumes``, ``nuts_seeds``,
+``red_meat``) the per-country food-group total can optionally be taken
+from GBD dietary-exposure intake instead of the GDD-IA/FAOSTAT estimate.
+The point of anchoring is **basis consistency with the health module**:
+the GBD relative-risk dose-response curves are calibrated against GBD's
+own intake exposure, so a GBD-anchored baseline makes the model's
+attributable-burden numbers directly comparable to GBD's.
+
+Controlled by ``diet.anchor_groups_to_gbd``:
+
+* ``match_health`` (default) -- follow ``health.enabled``. A health run
+  anchors; a no-health run does not.
+* ``true`` / ``false`` -- force anchoring on or off, decoupled from the
+  health module.
+
+When anchoring is on, the run needs the manually-downloaded IHME GBD
+data (see :doc:`data_sources`); when off, it needs none of it.
+
+When to turn it on
+~~~~~~~~~~~~~~~~~~~
+
+Turn anchoring **on** when you care about compatibility with GBD health
+metrics -- i.e. whenever the health module is enabled, or when comparing
+the model's diet-attributable disease burden against GBD estimates.
+Otherwise the GDD-IA/FAOSTAT baseline (anchoring off) is a perfectly
+reasonable diet and avoids the manual GBD download entirely; this is the
+default for a no-health run.
+
+How much does it change the baseline diet?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The switch is **not** cosmetic at the diet level. Across ~174 countries,
+anchoring moves the per-country total of every risk-factor group, and in
+about half of the affected country-group cells by more than 50 %
+relative. The direction is systematic (values below are the mean
+per-country shift, *anchored minus non-anchored*, g/day):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 20 60
+
+   * - Group
+     - Mean shift (g/day)
+     - Direction
+   * - vegetables
+     - -56
+     - anchoring **lowers** vegetable intake (e.g. ~172 -> ~116 g/day mean)
+   * - red_meat
+     - -35
+     - lowers in ~98 % of countries
+   * - legumes
+     - -15
+     - lowers in ~94 % of countries
+   * - nuts_seeds
+     - -6
+     - lowers in ~95 % of countries
+   * - whole_grains
+     - -4.5 (mixed)
+     - large *relative* swings; GBD is often much higher where GDD-IA
+       reports near-zero whole grain
+   * - fruits
+     - +2.4 (mixed)
+     - roughly unchanged on average, country-specific either way
+
+In words: the GBD-anchored ("health-on") baseline has systematically
+**less** vegetables, red meat, legumes and nuts than the GDD-IA/FAOSTAT
+("health-off") baseline, and a markedly different whole-grain profile.
+
+Whether this matters for *physical* outcomes depends on the question.
+From a global agricultural and land-use perspective the effect is
+expected to be modest -- the shifts are partly redistributive within the
+diet and are further absorbed by the production-stability calibration
+(see :doc:`calibration`) -- though not strictly negligible. The reason
+to anchor is primarily **health-metric compatibility**, not a large
+expected change in land use or emissions.
+
+.. admonition:: Caveat: the option is not *exactly* "only the six risk groups"
+
+   Anchoring ``whole_grains`` to GBD's narrow whole-grain definition can
+   discard cereal energy that GDD-IA reports more broadly. To preserve
+   each country's cereal energy budget, a **cereal residual fix**
+   reassigns that deficit to refined ``grain`` (see
+   ``apply_cereal_residual_fix`` in ``estimate_baseline_diet.py``), and
+   the kcal normalisation then treats refined ``grain`` as anchored too.
+   So enabling anchoring also adjusts refined ``grain`` even though it is
+   not itself a GBD risk factor. The fix only runs when ``whole_grains``
+   is anchored, so it is inert when anchoring is off.
+
+.. admonition:: Calibration coupling
+   :class: warning
+
+   The calibration artefacts under ``data/curated/calibration/`` are fit
+   against a *specific* baseline diet. The currently committed artefacts
+   were fit with anchoring **on** (the historical behaviour), so a
+   default anchoring-off run uses a slightly mismatched calibration --
+   a documented limitation pending a Gurobi-based anchor-off refresh (see
+   :doc:`calibration`). Either way, changing ``diet.anchor_groups_to_gbd``
+   (or ``health.enabled``, which drives it) changes the baseline diet, so
+   rerun ``tools/calibrate`` with the matching setting before trusting
+   results.
 
 GDD-IA to Food Group Mapping
 -----------------------------

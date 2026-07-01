@@ -66,7 +66,16 @@ include: "rules/common.smk"
 include: "rules/retrieve.smk"
 include: "rules/geography.smk"
 include: "rules/diet.smk"
-include: "rules/health.smk"
+
+
+# Health data-prep rules are only needed when the health module is enabled in
+# the base config or any scenario. When off, none of the manually-downloaded
+# IHME GBD data is required (see docs/health.rst and diet.anchor_groups_to_gbd).
+if health_required():
+
+    include: "rules/health.smk"
+
+
 include: "rules/animals.smk"
 include: "rules/crops.smk"
 include: "rules/water.smk"
@@ -116,13 +125,10 @@ ALL_RULE_TARGETS = [
     "<results>/{name}/plots/food_consumption_comparison.csv",
     "<results>/{name}/plots/system_cost_comparison.pdf",
     "<results>/{name}/plots/system_cost_comparison.csv",
-    "<results>/{name}/plots/relative_risk_curves.pdf",
     # results plots
-    "<results>/{name}/plots/scen-default/consumption_balance.pdf",
     "<results>/{name}/plots/scen-default/objective_breakdown.pdf",
     "<results>/{name}/plots/scen-default/objective_breakdown.csv",
     "<results>/{name}/plots/scen-default/emissions_breakdown.pdf",
-    "<results>/{name}/plots/scen-default/yll_global_by_cause.pdf",
     # "<results>/{name}/plots/scen-default/health_risk_map.pdf",
     # "<results>/{name}/plots/scen-default/health_risk_by_region.csv",
     # "<results>/{name}/plots/scen-default/health_baseline_map.pdf",
@@ -145,12 +151,24 @@ ALL_RULE_TARGETS = [
     "<results>/{name}/plots/scen-default/water_use_by_region.csv",
     # "<results>/{name}/plots/scen-default/water_value_map.pdf",   # Current not working
     "<results>/{name}/plots/scen-default/food_consumption.pdf",
-    "<results>/{name}/plots/scen-default/food_consumption_map.pdf",
-    "<results>/{name}/plots/scen-default/food_consumption_baseline_map.pdf",
     # marginal damages analysis
     "<results>/{name}/plots/scen-default/marginal_ghg_global.pdf",
-    "<results>/{name}/plots/scen-default/marginal_yll_global.pdf",
 ]
+
+# Plots that depend on the health module: the YLL/risk plots, the marginal-YLL
+# damages plot, and the consumption maps/balance that aggregate countries into
+# health clusters (produced by prepare_health_costs). These are only requested
+# by `rule all` when health is enabled; the model still builds, solves, and
+# produces every other output with health off and no IHME GBD data on disk.
+if health_required():
+    ALL_RULE_TARGETS += [
+        "<results>/{name}/plots/relative_risk_curves.pdf",
+        "<results>/{name}/plots/scen-default/consumption_balance.pdf",
+        "<results>/{name}/plots/scen-default/yll_global_by_cause.pdf",
+        "<results>/{name}/plots/scen-default/food_consumption_map.pdf",
+        "<results>/{name}/plots/scen-default/food_consumption_baseline_map.pdf",
+        "<results>/{name}/plots/scen-default/marginal_yll_global.pdf",
+    ]
 
 # Solve all configured scenarios without triggering plotting targets.
 SOLVE_ALL_SCENARIOS_TARGETS = [
