@@ -31,6 +31,11 @@
 
 name: "gsa"
 
+# The published results use the GDD-IA survey-based baseline diet (the
+# calibration artefact set consumed here was fit against it).
+diet:
+  source: gdd_ia
+
 health:
   enabled: true
 

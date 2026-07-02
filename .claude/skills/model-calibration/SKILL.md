@@ -13,11 +13,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 The default workflow consumes five calibration artefact groups organized
 in per-config *sets* under `data/curated/calibration/<source>/`, selected
-by the `calibration.source` config key. Two sets are git-tracked:
-`default` (fit against the anchoring-off baseline diet of the health-off
-default config) and `gbd-anchored` (fit against the GBD-anchored diet;
-consumed by the health-enabled configs gsa, gsa_fixed_diet, validation
-and the doc configs). `tools/calibrate` resolves the base config's
+by the `calibration.source` config key. Three sets are git-tracked:
+`default` (fit against the FBS-derived baseline diet of the health-off
+default config), `gdd-ia` (fit against the anchoring-off GDD-IA diet;
+consumed by central, ghg_sensitivity_* and region_resolution configs)
+and `gbd-anchored` (fit against the GBD-anchored GDD-IA diet; consumed
+by the health-enabled configs gsa, gsa_fixed_diet, validation and the
+doc configs). `tools/calibrate` resolves the base config's
 diet.anchor_groups_to_gbd sentinel once and pins it across all five
 steps, and provenance stamps record the *resolved* anchoring. Each
 artefact group is produced by a dedicated validation-mode solve and

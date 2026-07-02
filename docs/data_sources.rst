@@ -17,9 +17,9 @@ Manual Download Checklist
 
 Several licensed datasets cannot be fetched automatically. While their use is free for non-commercial research purposes, these have to be downloaded manually or require API key registration.
 
-**Always required:**
+**Required only for the GDD-IA baseline diet (diet.source: gdd_ia):**
 
-1. Obtain the **GDD-IA** intake CSVs by personal request to Marco Springmann and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`). A public GDD-IA release is upcoming and will then be the default input; until then, a temporary mode that lets GLADE run without GDD-IA is under development.
+1. Obtain the **GDD-IA** intake CSVs by personal request to Marco Springmann and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`). With the default ``diet.source: fbs``, the baseline diet is derived from auto-retrieved FAOSTAT Food Balance Sheets instead (see :ref:`current-diets-fbs-source`) and no manual dietary data is needed. A public GDD-IA release is upcoming and will then become the default input.
 
 **Required only for the health module / GBD diet anchoring:**
 
@@ -891,7 +891,9 @@ configured ``baseline_year``.
 
 **Access**: Pending publication. Currently available on personal request
 from Marco Springmann; an automatic retrieval rule will be added once
-the public release is live.
+the public release is live. Only needed when ``diet.source: gdd_ia`` is
+set; the default configuration derives the baseline diet from FAOSTAT
+FBS instead (see :ref:`current-diets-fbs-source`).
 
 **License**: Pending publication; will be released under Creative
 Commons Attribution-NonCommercial (CC-BY-NC).

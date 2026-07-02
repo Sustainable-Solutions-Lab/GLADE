@@ -987,12 +987,18 @@ properties:
   diet:
     type: object
     required:
+      - source
       - baseline_age
       - anchor_groups_to_gbd
       - source_basis
+      - fbs
       - gdd_ia
     additionalProperties: false
     properties:
+      source:
+        type: string
+        enum: ["fbs", "gdd_ia"]
+        description: "Source of the per-(country, food-group) baseline dietary intake totals: 'fbs' (FAOSTAT Food Balance Sheets, auto-retrieved) or 'gdd_ia' (Global Dietary Database intake aggregation, manual download)"
       baseline_age:
         type: string
         description: "Age group for baseline diet (e.g., 'All ages')"
@@ -1033,6 +1039,19 @@ properties:
           additionalProperties:
             type: string
             enum: ["dry", "fresh", "cooked", "carcass", "brewed"]
+      fbs:
+        type: object
+        required: [whole_grain_shares]
+        additionalProperties: false
+        properties:
+          whole_grain_shares:
+            type: object
+            description: "Per-whole-grain-food fraction of the shared FBS item's supply (wheat 2511, rice 2807) allocated to the whole-grain food; the remainder goes to the refined counterpart in the same FBS item"
+            additionalProperties:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+        description: "FBS diet-source configuration (used when diet.source is 'fbs')."
       gdd_ia:
         type: object
         required: [cooked_to_raw]
@@ -1394,7 +1413,7 @@ properties:
             description: "Zenodo record id hosting the mirrored lccs_class file (refresh with tools/mirror_land_cover.py)"
       faostat:
         type: object
-        required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_other_uses_element_code, fbs_production_element_code]
+        required: [qcl_production_element_code, fbs_food_supply_element_code, fbs_food_kcal_element_code, fbs_other_uses_element_code, fbs_production_element_code]
         additionalProperties: false
         properties:
           qcl_production_element_code:
@@ -1403,6 +1422,9 @@ properties:
           fbs_food_supply_element_code:
             type: integer
             description: "FAOSTAT element code for 'Food supply quantity (kg/capita/yr)' in FBS dataset"
+          fbs_food_kcal_element_code:
+            type: integer
+            description: "FAOSTAT element code for 'Food supply (kcal/capita/day)' in FBS dataset"
           fbs_other_uses_element_code:
             type: integer
             description: "FAOSTAT element code for 'Other uses (non-food)' in 1000 tonnes (FBS dataset)"

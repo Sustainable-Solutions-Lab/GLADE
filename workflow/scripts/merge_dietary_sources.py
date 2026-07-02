@@ -3,29 +3,30 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Merge GDD-IA dietary intake with NHANES (USA override).
+"""Merge the configured group-intake source with NHANES (USA override).
 
 Inputs:
-- ``gdd_ia``: GDD-IA-derived per-(country, group) intake in model basis
-  (g/day), already kcal-derived and proxy-filled.
+- ``group_intake``: per-(country, group) intake in model basis (g/day)
+  from the configured ``diet.source`` -- either GDD-IA (kcal-derived and
+  proxy-filled) or the FBS-derived estimate (kcal-derived and
+  waste-corrected).
 - ``nhanes``: NHANES (FPED-derived) USA intake, per food group.
   NHANES values are intake-based and already in model basis; they
-  override the GDD-IA values for the country/items NHANES covers.
+  override the source values for the country/items NHANES covers.
 - ``faostat_supply``: FAOSTAT FBS-derived per-(country, group) supply
-  (g/day). Used only to fill the ``animal_fat`` group where GDD-IA's
-  ``fat_ani`` is not reported (a known coverage gap on ~37 countries),
-  scaled by ``ANIMAL_FAT_SUPPLY_TO_INTAKE`` to approximate post-FLW
-  intake. Other groups in the supply file are ignored here; they enter
-  the pipeline through ``prepare_food_loss_waste``.
+  (g/day). Used only to fill the ``animal_fat`` group on countries the
+  source does not cover (a known GDD-IA coverage gap on ~37 countries;
+  a no-op for the FBS source, which covers animal_fat natively), scaled
+  by ``ANIMAL_FAT_SUPPLY_TO_INTAKE`` to approximate post-FLW intake.
+  Other groups in the supply file are ignored here; they enter the
+  pipeline through ``prepare_food_loss_waste``.
 
-This script's job is just the source merge. The country-level
-kcal-normalisation step (against GDD-IA's `all-fg` minus out-of-scope
-categories) happens in ``estimate_baseline_diet``, after GBD anchoring
-and the cereal residual fix.
+This script's job is just the source merge. GBD anchoring, the cereal
+residual fix, and (for GDD-IA) the country-level kcal normalisation
+happen in ``estimate_baseline_diet``.
 
-No basis conversion is performed here. GDD-IA mass is derived via
-``kcal_ia / kcal_per_g_model_basis``, so the output is already in
-model basis by construction. NHANES values are intake-based and in
+No basis conversion is performed here: both sources emit model-basis
+values by construction, and NHANES values are intake-based and in
 model basis already (the FPED extraction handles that upstream).
 
 Output:
@@ -98,18 +99,20 @@ def _faostat_animal_fat_fallback(
 
 
 def main() -> None:
-    gdd_ia_path = snakemake.input["gdd_ia"]
+    group_intake_path = snakemake.input["group_intake"]
     nhanes_path = snakemake.input["nhanes"]
     faostat_path = snakemake.input["faostat_supply"]
+    diet_source = str(snakemake.params["diet_source"])
     output_path = snakemake.output["diet"]
 
-    logger.info("Reading GDD-IA dietary intake from %s", gdd_ia_path)
-    gdd_ia = pd.read_csv(gdd_ia_path)
+    logger.info("Reading %s dietary intake from %s", diet_source, group_intake_path)
+    group_intake = pd.read_csv(group_intake_path)
     logger.info(
-        "GDD-IA: %d rows, %d countries, items %s",
-        len(gdd_ia),
-        gdd_ia["country"].nunique(),
-        sorted(gdd_ia["item"].unique()),
+        "%s: %d rows, %d countries, items %s",
+        diet_source,
+        len(group_intake),
+        group_intake["country"].nunique(),
+        sorted(group_intake["item"].unique()),
     )
 
     logger.info("Reading NHANES dietary intake from %s", nhanes_path)
@@ -121,13 +124,13 @@ def main() -> None:
     logger.info("Reading FAOSTAT food group supply from %s", faostat_path)
     faostat_supply = pd.read_csv(faostat_path)
 
-    # NHANES overrides GDD-IA for the (country, item) pairs it covers.
-    gdd_ia = _drop_overlap(gdd_ia, nhanes, "NHANES")
+    # NHANES overrides the source for the (country, item) pairs it covers.
+    group_intake = _drop_overlap(group_intake, nhanes, "NHANES")
 
-    combined = pd.concat([gdd_ia, nhanes], ignore_index=True)
+    combined = pd.concat([group_intake, nhanes], ignore_index=True)
 
     # Supplement animal_fat from FAOSTAT FBS supply for countries that
-    # neither GDD-IA nor NHANES covers.
+    # neither the group-intake source nor NHANES covers.
     animal_fat_supplement = _faostat_animal_fat_fallback(faostat_supply, combined)
     if not animal_fat_supplement.empty:
         logger.info(

@@ -11,7 +11,8 @@ dietary risk exposure data and FAOSTAT item-level food supply to produce
 per-food consumption estimates (g/person/day).
 
 Algorithm:
-    1. Load food group totals from dietary_intake.csv (GDD + FAOSTAT supplements)
+    1. Load food group totals from dietary_intake.csv (the configured
+       diet.source -- GDD-IA or FBS-derived -- plus the NHANES USA override)
     2. For groups in ``health.risk_factors`` (GBD-anchored), the per-country
        group total is taken from GBD when GBD reports a value, else the
        GDD/FAOSTAT value. No averaging; GBD strictly takes precedence on
@@ -294,18 +295,21 @@ def apply_cereal_residual_fix(
     (India typical). To preserve the country's cereal energy budget,
     we reassign the deficit to refined ``grain``.
 
-    The deficit is computed against IA's *actual* cereal kcal pool
-    (whole_grains kcal + prc_grains kcal) carried via
-    ``gdd_ia_kcal_target.csv``, not via the broader nutrition.csv per-
-    group density — because IA's whole_grain mass is in a different
-    basis (~2.5-3 kcal/g) than the model's dry-flour basis (3.3 kcal/g).
+    The deficit is computed against the source's *actual* cereal kcal
+    pool (whole_grains kcal + refined-grain kcal) carried via
+    *kcal_target_df* -- GDD-IA's own kcal accounting, or the budget
+    synthesized from the FBS group totals (see
+    ``synthesize_cereal_kcal_budget``) -- not via the broader
+    nutrition.csv per-group density, because e.g. IA's whole_grain mass
+    is in a different basis (~2.5-3 kcal/g) than the model's dry-flour
+    basis (3.3 kcal/g).
 
-        deficit_kcal = (kcal_whole_grains_ia + kcal_grain_ia)
+        deficit_kcal = (kcal_whole_grains + kcal_grain)
                        - g_whole_anchored x k_whole_model
         new_g_grain = max(0, deficit_kcal) / k_grain_model
     """
-    k_whole = float(kcal_per_g_group.get(WHOLE_GRAINS_GROUP, 3.3))
-    k_grain = float(kcal_per_g_group.get(GRAIN_GROUP, 3.6))
+    k_whole = float(kcal_per_g_group[WHOLE_GRAINS_GROUP])
+    k_grain = float(kcal_per_g_group[GRAIN_GROUP])
 
     targets = kcal_target_df.set_index("country")
     totals = group_totals.set_index(["country", "food_group"])[
@@ -320,10 +324,10 @@ def apply_cereal_residual_fix(
             n_skipped += 1
             continue
         whole_anchored = float(totals.get((country, WHOLE_GRAINS_GROUP), 0.0) or 0.0)
-        ia_cereal_kcal = float(targets.at[country, "kcal_whole_grains_ia"]) + float(
-            targets.at[country, "kcal_grain_ia"]
+        source_cereal_kcal = float(targets.at[country, "kcal_whole_grains"]) + float(
+            targets.at[country, "kcal_grain"]
         )
-        deficit_kcal = ia_cereal_kcal - whole_anchored * k_whole
+        deficit_kcal = source_cereal_kcal - whole_anchored * k_whole
         if deficit_kcal <= 0:
             n_skipped += 1
             continue
@@ -333,7 +337,7 @@ def apply_cereal_residual_fix(
         total_deficit_kcal += deficit_kcal
 
     logger.info(
-        "Cereal residual fix: set refined-grain to absorb IA cereal kcal "
+        "Cereal residual fix: set refined-grain to absorb source cereal kcal "
         "minus anchored whole-grain kcal in %d countries (skipped %d). "
         "Mean refined-grain kcal per fixed country: %.0f kcal/d.",
         n_fixed,
@@ -345,6 +349,43 @@ def apply_cereal_residual_fix(
         .sort_values(["country", "food_group"])
         .reset_index(drop=True)
     )
+
+
+def synthesize_cereal_kcal_budget(
+    dietary_intake_path: str,
+    baseline_age: str,
+    kcal_per_g_group: dict[str, float],
+) -> pd.DataFrame:
+    """Cereal energy budget per country from the source group totals.
+
+    Used by the cereal residual fix when the diet source carries no
+    survey kcal accounting (``diet.source: fbs``): the source's cereal
+    energy is reconstructed from the pre-anchoring ``grain`` /
+    ``whole_grains`` group totals at model-basis group densities. For
+    the FBS source the masses were themselves derived from FBS energy
+    at these densities, so this reproduces the FBS cereal energy
+    exactly.
+
+    Returns a DataFrame with columns ``country``, ``kcal_whole_grains``,
+    ``kcal_grain`` (the subset of the kcal-target schema the cereal
+    residual fix consumes).
+    """
+    intake = pd.read_csv(dietary_intake_path)
+    intake = intake[intake["age"] == baseline_age]
+    cereal = (
+        intake[intake["item"].isin([WHOLE_GRAINS_GROUP, GRAIN_GROUP])]
+        .pivot_table(index="country", columns="item", values="value", fill_value=0.0)
+        .reindex(columns=[WHOLE_GRAINS_GROUP, GRAIN_GROUP], fill_value=0.0)
+    )
+    k_whole = float(kcal_per_g_group[WHOLE_GRAINS_GROUP])
+    k_grain = float(kcal_per_g_group[GRAIN_GROUP])
+    return pd.DataFrame(
+        {
+            "country": cereal.index,
+            "kcal_whole_grains": cereal[WHOLE_GRAINS_GROUP].to_numpy() * k_whole,
+            "kcal_grain": cereal[GRAIN_GROUP].to_numpy() * k_grain,
+        }
+    ).reset_index(drop=True)
 
 
 def apply_kcal_normalisation(
@@ -1465,6 +1506,7 @@ def main():
 
     reference_year = int(snakemake.params.reference_year)
     baseline_age = str(snakemake.params.baseline_age)
+    diet_source = str(snakemake.params.diet_source)
     food_groups_included = list(snakemake.params.food_groups_included)
     byproducts = list(snakemake.params.byproducts)
     fbs_override_foods = list(snakemake.params.fbs_override_foods)
@@ -1559,21 +1601,29 @@ def main():
     )
 
     # Step 1b: Cereal residual fix — when GBD's narrow whole_grain anchor
-    # discards cereal kcal from the GDD-IA source, reassign that deficit
-    # to refined grain. Uses IA's actual cereal kcal pool carried in
-    # gdd_ia_kcal_target.csv.
-    kcal_target_df = pd.read_csv(kcal_target_path)
+    # discards cereal kcal from the source, reassign that deficit to
+    # refined grain. GDD-IA ships its own survey kcal accounting
+    # (gdd_ia_kcal_target.csv); the FBS source has none, so the cereal
+    # budget is reconstructed from the source group totals instead.
     nutrition_df = pd.read_csv(nutrition_path)
     kcal_per_g_food = build_kcal_per_g_food(nutrition_df)
+    kcal_target_df = pd.read_csv(kcal_target_path) if diet_source == "gdd_ia" else None
     # The cereal residual fix only compensates for energy lost to GBD's narrow
     # whole_grain anchor, so it applies only when whole_grains is anchored.
-    # With anchoring off the GDD/FAOSTAT whole_grains total already carries the
+    # With anchoring off the source whole_grains total already carries the
     # broad cereal energy and no reallocation to refined grain is needed.
     if WHOLE_GRAINS_GROUP in gbd_anchored_groups:
         kcal_per_g_group = build_kcal_per_g_group(food_groups_df, nutrition_df)
+        cereal_budget = (
+            kcal_target_df
+            if kcal_target_df is not None
+            else synthesize_cereal_kcal_budget(
+                dietary_intake_path, baseline_age, kcal_per_g_group
+            )
+        )
         group_totals = apply_cereal_residual_fix(
             group_totals,
-            kcal_target_df,
+            cereal_budget,
             kcal_per_g_group,
         )
 
@@ -1711,12 +1761,16 @@ def main():
     # unanchored foods so total kcal/day hits ``kcal_target_modelled``;
     # GBD-anchored foods and the refined-grain residual are preserved.
     # See ``apply_kcal_normalisation`` for the basis-mismatch motivation.
-    result = apply_kcal_normalisation(
-        result,
-        kcal_target_df,
-        gbd_anchored_groups=gbd_anchored_groups,
-        kcal_per_g_food=kcal_per_g_food,
-    )
+    # GDD-IA only: the FBS source derives its masses from FBS energy at
+    # the same densities used here, so its diet is FAO-energy-consistent
+    # by construction and rescaling would only distort the masses.
+    if diet_source == "gdd_ia":
+        result = apply_kcal_normalisation(
+            result,
+            kcal_target_df,
+            gbd_anchored_groups=gbd_anchored_groups,
+            kcal_per_g_food=kcal_per_g_food,
+        )
 
     # Step 4: Override specific foods with FBS-supply-anchored intake
     if fbs_override_foods:

@@ -8,6 +8,11 @@
 # and feed) to compare model behaviour against observed 2020 outcomes.
 
 name: "validation"
+
+# The published results use the GDD-IA survey-based baseline diet (the
+# calibration artefact set consumed here was fit against it).
+diet:
+  source: gdd_ia
 scenarios:
   default: {}
 

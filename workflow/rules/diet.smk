@@ -55,11 +55,11 @@ rule prepare_gdd_ia_dietary_intake:
 rule prepare_faostat_food_group_supply:
     """Prepare FAOSTAT supply data for downstream waste accounting.
 
-    Previously also supplemented GDD dietary intake; now retained only
-    as an input to ``prepare_food_loss_waste`` (dairy/oil/sugar/eggs/
-    poultry supply totals used for FLW fractions). The diet pipeline
-    is fully GDD-IA-driven and no longer uses this file. Uses the same
-    layered FBS/FBSH/proxy fallback as ``prepare_faostat_fbs_items``.
+    Consumed by ``prepare_food_loss_waste`` (dairy/oil/sugar supply
+    totals used for FLW fractions) and by ``merge_dietary_sources`` as
+    the animal_fat fallback for countries the group-intake source does
+    not cover. Uses the same layered FBS/FBSH/proxy fallback as
+    ``prepare_faostat_fbs_items``.
     """
     input:
         fbs_csv="data/downloads/faostat/FBS.parquet",
@@ -88,8 +88,9 @@ rule prepare_faostat_food_group_supply:
 rule prepare_faostat_fbs_items:
     """Prepare raw item-level supply data from FAOSTAT Food Balance Sheets.
 
-    Reads supply data (kg/capita/year) for all items in the food item mapping,
-    used for calculating within-group food consumption ratios. Uses a layered
+    Reads mass supply (kg/capita/year; within-group consumption ratios and
+    FBS overrides) and energy supply (kcal/capita/day; the FBS baseline-diet
+    source) for all items in the food item mapping. Uses a layered
     fallback: new FBS at the reference year -> latest available year in new
     FBS -> latest available year in historic FBSH (covers Japan, Chad, Mali,
     Benin, Togo, Burundi, etc., which are not in new FBS) -> country proxy.
@@ -103,8 +104,10 @@ rule prepare_faostat_fbs_items:
         countries=config["countries"],
         reference_year=config["baseline_year"],
         fbs_element_code=config["data"]["faostat"]["fbs_food_supply_element_code"],
+        fbs_kcal_element_code=config["data"]["faostat"]["fbs_food_kcal_element_code"],
     output:
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
+        fbs_items_kcal="<processing>/{name}/faostat_fbs_items_kcal.csv",
         fbs_provenance="<processing>/{name}/faostat_fbs_items_provenance.csv",
     group:
         "prep"
@@ -160,20 +163,66 @@ rule prepare_nhanes_dietary_intake:
         "../scripts/prepare_nhanes_dietary_intake.py"
 
 
-rule merge_dietary_sources:
-    """Merge GDD-IA dietary intake with NHANES USA override.
+rule prepare_fbs_dietary_intake:
+    """Derive per-(country, group) dietary intake from FAOSTAT FBS energy supply.
 
-    GDD-IA mass is already in model basis (kcal-derived). NHANES is
+    The FBS baseline-diet source (``diet.source: fbs``): group intake mass
+    is derived from the FBS "Food supply (kcal/capita/day)" element at
+    model-basis nutrition.csv densities and corrected for consumer waste.
+    Wheat and rice are split between grain and whole_grains via
+    ``diet.fbs.whole_grain_shares``; see workflow/scripts/diet/fbs_intake.py
+    for the full attribution rules. Output schema matches
+    ``gdd_ia_dietary_intake.csv``.
+    """
+    input:
+        fbs_items_kcal="<processing>/{name}/faostat_fbs_items_kcal.csv",
+        food_item_map="data/curated/faostat_food_item_map.csv",
+        food_groups="data/curated/food_groups.csv",
+        nutrition="data/curated/nutrition.csv",
+        food_loss_waste="<processing>/{name}/food_loss_waste.csv",
+    params:
+        countries=config["countries"],
+        food_groups=config["food_groups"]["included"],
+        byproducts=config["byproducts"],
+        whole_grain_shares=config["diet"]["fbs"]["whole_grain_shares"],
+        baseline_age=config["diet"]["baseline_age"],
+        reference_year=config["baseline_year"],
+    output:
+        diet="<processing>/{name}/fbs_dietary_intake.csv",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=500,
+    log:
+        "<logs>/{name}/prepare_fbs_dietary_intake.log",
+    benchmark:
+        "<benchmarks>/{name}/prepare_fbs_dietary_intake.tsv"
+    script:
+        "../scripts/prepare_fbs_dietary_intake.py"
+
+
+rule merge_dietary_sources:
+    """Merge the configured group-intake source with the NHANES USA override.
+
+    The group-intake source (``diet.source``) is either GDD-IA or the
+    FBS-derived estimate; both are already in model basis. NHANES is
     already in model basis. The FAOSTAT supply file is used only as
-    a fallback for the ``animal_fat`` group on countries that GDD-IA
-    does not cover. Output is the merged ``dietary_intake.csv``;
+    a fallback for the ``animal_fat`` group on countries that the
+    source does not cover. Output is the merged ``dietary_intake.csv``;
     GBD anchoring and kcal normalisation happen in
     ``estimate_baseline_diet``.
     """
     input:
-        gdd_ia="<processing>/{name}/gdd_ia_dietary_intake.csv",
+        group_intake=(
+            "<processing>/{name}/gdd_ia_dietary_intake.csv"
+            if config["diet"]["source"] == "gdd_ia"
+            else "<processing>/{name}/fbs_dietary_intake.csv"
+        ),
         nhanes="<processing>/{name}/nhanes_dietary_intake.csv",
         faostat_supply="<processing>/{name}/faostat_food_group_supply.csv",
+    params:
+        diet_source=config["diet"]["source"],
     output:
         diet="<processing>/{name}/dietary_intake.csv",
     group:
@@ -325,7 +374,14 @@ rule estimate_baseline_diet:
             if gbd_anchoring_enabled()
             else []
         ),
-        kcal_target="<processing>/{name}/gdd_ia_kcal_target.csv",
+        # Survey kcal accounting: only the GDD-IA source provides one; the
+        # FBS source is FAO-energy-consistent by construction and skips
+        # the kcal normalisation (see estimate_baseline_diet.py).
+        kcal_target=(
+            "<processing>/{name}/gdd_ia_kcal_target.csv"
+            if config["diet"]["source"] == "gdd_ia"
+            else []
+        ),
         nutrition="data/curated/nutrition.csv",
         fbs_items="<processing>/{name}/faostat_fbs_items.csv",
         crop_production="<processing>/{name}/faostat_crop_production.csv",
@@ -348,6 +404,7 @@ rule estimate_baseline_diet:
     params:
         reference_year=config["baseline_year"],
         baseline_age=config["diet"]["baseline_age"],
+        diet_source=config["diet"]["source"],
         food_groups_included=config["food_groups"]["included"],
         byproducts=config["byproducts"],
         fbs_override_foods=config["diet"]["fbs_override_foods"],

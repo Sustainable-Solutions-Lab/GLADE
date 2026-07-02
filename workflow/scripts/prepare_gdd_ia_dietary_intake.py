@@ -399,15 +399,15 @@ def main() -> None:
     prcd_whole = kcal[
         (kcal["type"] == "prcd") & (kcal["food_group"] == "whole_grains")
     ][["region", "value"]].rename(
-        columns={"region": "country", "value": "kcal_whole_grains_ia"}
+        columns={"region": "country", "value": "kcal_whole_grains"}
     )
     prcd_grain = kcal[(kcal["type"] == "prcd") & (kcal["food_group"] == "prc_grains")][
         ["region", "value"]
-    ].rename(columns={"region": "country", "value": "kcal_grain_ia"})
+    ].rename(columns={"region": "country", "value": "kcal_grain"})
     targets = targets.merge(prcd_whole, on="country", how="left")
     targets = targets.merge(prcd_grain, on="country", how="left")
-    targets["kcal_whole_grains_ia"] = targets["kcal_whole_grains_ia"].fillna(0.0)
-    targets["kcal_grain_ia"] = targets["kcal_grain_ia"].fillna(0.0)
+    targets["kcal_whole_grains"] = targets["kcal_whole_grains"].fillna(0.0)
+    targets["kcal_grain"] = targets["kcal_grain"].fillna(0.0)
 
     # Apply proxy filling to kcal targets too.
     have = set(targets["country"].unique())
@@ -450,8 +450,8 @@ def main() -> None:
                 "kcal_all_fg",
                 "kcal_oos",
                 "kcal_target_modelled",
-                "kcal_whole_grains_ia",
-                "kcal_grain_ia",
+                "kcal_whole_grains",
+                "kcal_grain",
             ]
         ]
         .sort_values("country")

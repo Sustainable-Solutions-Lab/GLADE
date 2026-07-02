@@ -102,6 +102,15 @@ def structural_snapshot(config: dict) -> dict:
     # identically.
     if "diet.anchor_groups_to_gbd" in snapshot:
         snapshot["diet.anchor_groups_to_gbd"] = resolve_gbd_anchoring(config)
+    # The diet-source blocks (diet.fbs, diet.gdd_ia) only shape the
+    # baseline diet when their source is active; drop the inactive one so
+    # its knobs cannot spuriously (in)validate a stamp.
+    inactive = "diet.gdd_ia" if config["diet"]["source"] == "fbs" else "diet.fbs"
+    snapshot = {
+        k: v
+        for k, v in snapshot.items()
+        if k != inactive and not k.startswith(inactive + ".")
+    }
     return snapshot
 
 
