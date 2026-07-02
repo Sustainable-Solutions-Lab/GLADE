@@ -52,34 +52,31 @@ The following permalink reproduces this query for year 2020: https://vizhub.heal
 
 ---
 
-### GDD-dietary-intake (directory)
+### GDD-IA-intake_grams_{year}.csv / GDD-IA-intake_kcals_{year}.csv
 
-**Source:** Global Dietary Database (Tufts University)
-**Download:** https://globaldietarydatabase.org/data-download
+**Source:** Global Dietary Database — Integrated Assessment (GDD-IA), Marco Springmann (University of Oxford / UCL)
+**Access:** Pending publication; available on personal request from Marco Springmann.
 
-Downloading requires free user registration and acceptance of terms of use.
+**Only needed when `diet.source: gdd_ia` is set.** The default configuration
+(`diet.source: fbs`) derives the baseline diet from auto-retrieved FAOSTAT
+Food Balance Sheets and needs no manually-obtained dietary data.
 
 **Dataset details:**
-- **Content:** Country-level mean daily dietary intake (g/day per capita) for major food groups and dietary risk factors
-- **Food groups:** Vegetables, fruits (temperate/tropical/starchy), whole grains, legumes, nuts & seeds, red meat (beef/lamb/pork), processed meat, seafood (fish types + shellfish), grains, dairy, eggs, oils, and others
-- **Coverage:** 185+ countries with data circa 2015-2020
-- **Format:** CSV (~1.6 GB) with columns for country, food item, mean intake, standard error, and uncertainty bounds
-- **Use case:** Baseline dietary patterns for health risk assessment
+- **Content:** Harmonised country-level mean dietary intake, reported in parallel grams/day and kcal/day per food category
+- **Coverage:** ~185 countries at the configured `baseline_year`
+- **Use case:** Survey-based per-country food-group totals for the baseline diet (used for the published results)
 
-**Processing:** The Snakemake workflow processes this file via `workflow/scripts/prepare_gdd_dietary_intake.py` to:
-1. Filter to baseline (BMK) scenario equivalent
-2. Map country names to ISO3 codes
-3. Map GDD food items to model dietary risk factors
-4. Aggregate multiple food items to risk factor categories
-5. Output to `processing/{name}/dietary_intake_baseline.csv`
+**Placement:** Save the two CSVs as `GDD-IA-intake_grams_{year}.csv` and
+`GDD-IA-intake_kcals_{year}.csv` where `{year}` matches `baseline_year`
+in the config (default: 2020).
 
-**License:** Free for non-commercial research, teaching, and private study with attribution. May not be redistributed or used commercially without Tufts permission.
+**Processing:** Processed via `workflow/scripts/prepare_gdd_ia_dietary_intake.py`
+(rule `prepare_gdd_ia_dietary_intake`); see `docs/current_diets.rst`.
+
+**License:** Pending publication; will be released under CC-BY-NC. Used here with permission.
 
 **Citation:**
-> Global Dietary Database. Dietary intake data by country. https://www.globaldietarydatabase.org/ [Accessed YYYY-MM-DD].
-
-**Attribution format (when publishing results):**
-> Data provided by Global Dietary Database. https://www.globaldietarydatabase.org/ [Date accessed].
+> Springmann M, *Global Dietary Database — Integrated Assessment dataset (GDD-IA)*. Pending publication.
 
 ---
 
@@ -166,16 +163,12 @@ When new GBD data is released:
 4. Save as `IHME-GBD_2023-death-rates-{year}.csv` (the year in the filename must match `baseline_year`)
 6. Rerun workflow: `tools/smk processing/{name}/gbd_mortality_rates.csv`
 
-### GDD Dietary Data
+### GDD-IA Dietary Data
 
-When updating GDD data:
+When a new GDD-IA release arrives:
 
-1. Visit https://globaldietarydatabase.org/data-download
-2. Log in with user account
-3. Download the complete dataset CSV
-4. Replace `GDD-dietary-intake.csv` in this directory
-5. Update access date in citations and documentation
-6. Rerun workflow: `tools/smk processing/{name}/dietary_intake_baseline.csv`
+1. Save the two CSVs as `GDD-IA-intake_grams_{year}.csv` and `GDD-IA-intake_kcals_{year}.csv` (the year must match `baseline_year`)
+2. Rerun workflow: `tools/smk processing/{name}/gdd_ia_dietary_intake.csv`
 
 ### IHME GBD Dietary Risk Exposure Estimates
 

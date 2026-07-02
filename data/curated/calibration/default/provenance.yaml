@@ -4,8 +4,8 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/default.yaml
-generated_at: '2026-07-01T22:29:28+00:00'
-git_commit: d3f07986e72ad291e10e5a11844c18752cddf7cc
+generated_at: '2026-07-02T17:52:12+00:00'
+git_commit: 4779577ccbbee7ef1d77fad71c517dd53faa8d01
 source: default
 structural_config:
   aggregation.irrigated_area_source: current
@@ -632,6 +632,7 @@ structural_config:
   - silage-maize
   - biomass-sorghum
   currency_base_year: 2024
+  data.faostat.fbs_food_kcal_element_code: 664
   data.faostat.fbs_food_supply_element_code: 645
   data.faostat.fbs_other_uses_element_code: 5154
   data.faostat.fbs_production_element_code: 5511
@@ -654,6 +655,8 @@ structural_config:
   data.usda.retrieve_nutrition: false
   diet.anchor_groups_to_gbd: false
   diet.baseline_age: All ages
+  diet.fbs.whole_grain_shares.flour-wholemeal: 0.11
+  diet.fbs.whole_grain_shares.rice-brown: 0.04
   diet.fbs_override_foods:
   - yam
   - cocoa-powder
@@ -664,10 +667,10 @@ structural_config:
   - meat-sheep
   - meat-chicken
   - eggs
-  diet.gdd_ia.cooked_to_raw.red_meat: 1.43
   diet.nhanes.cycle: '1720'
   diet.nhanes.reference_year: 2018
   diet.nhanes.url: https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf
+  diet.source: fbs
   diet.source_basis.faostat_fbs_supply.meat-cattle: carcass
   diet.source_basis.faostat_fbs_supply.meat-chicken: carcass
   diet.source_basis.faostat_fbs_supply.meat-pig: carcass

@@ -8,13 +8,15 @@ Current Diets
 Overview
 --------
 
-The model represents current consumption patterns by combining three
-intake datasets — **GDD-IA**, **GBD**, and **NHANES** (for the USA) —
-with item-level food supply data from FAOSTAT for within-group
-disaggregation. The pipeline produces a single per-country, per-food
-baseline diet whose mass basis is aligned with what the model's food bus
-delivers after applying food loss and waste. The baseline diet serves
-several roles:
+The model represents current consumption patterns by combining a
+configurable primary intake source (``diet.source``) — the FAOSTAT
+**FBS**-derived estimate (the default) or the survey-based **GDD-IA**
+dataset — with the optional **GBD** risk-factor anchor and the
+**NHANES** USA override, plus item-level food supply data from FAOSTAT
+for within-group disaggregation. The pipeline produces a single
+per-country, per-food baseline diet whose mass basis is aligned with
+what the model's food bus delivers after applying food loss and waste.
+The baseline diet serves several roles:
 
 * **Health impact assessment**: dietary risk exposure for the burden of
   disease attributable to current diets.
@@ -53,14 +55,16 @@ Data Sources
     consistent per-country food and energy intake estimates.
   * **Status**: Pending publication; available upon personal request
     from Marco Springmann. Will be re-licensed under CC-BY-NC on
-    release. The public release will then become GLADE's default
-    input; until then, a temporary mode that lets GLADE run without
-    GDD-IA is under development.
+    release, and will then become GLADE's default input. Until then the
+    default baseline diet is derived from FAOSTAT FBS (see below), and
+    GDD-IA is only needed when ``diet.source: gdd_ia`` is set.
   * **Coverage**: ~185 countries, per-country mean dietary intake at
     the reference year, reported in parallel grams/day and kcal/day for
     every food category.
-  * **Role**: Primary source of per-country food-group totals for all
-    food groups except the GBD-anchored risk groups (see below).
+  * **Role**: With ``diet.source: gdd_ia``, primary source of
+    per-country food-group totals for all food groups except the
+    GBD-anchored risk groups (see below). Used for the published
+    results.
 
 **Global Burden of Disease (GBD) 2019 dietary risk exposure**
   * **Provider**: Institute for Health Metrics and Evaluation (IHME)
@@ -84,16 +88,24 @@ Data Sources
 
 **FAOSTAT FBS + QCL**
   * **Provider**: FAO Statistics Division
-  * **Role**: Item-level supply (FBS) drives **within-group**
-    disaggregation of food-group totals into per-food consumption.
-    Production statistics (QCL) resolve shared FBS items (e.g. several
-    millet species under one FBS code) and weight module-pool
-    projections (see :ref:`current-diets-step2`). FBS supply also serves
-    as the **anchor source** for the foods in
-    ``diet.fbs_override_foods`` (meats, eggs, yam, coffee, cocoa).
+  * **Role**: With ``diet.source: fbs`` (the default), FBS energy supply
+    is also the source of the **food-group totals** themselves (see
+    :ref:`current-diets-fbs-source`). Independently of the source,
+    item-level supply (FBS) drives **within-group** disaggregation of
+    food-group totals into per-food consumption; production statistics
+    (QCL) resolve shared FBS items (e.g. several millet species under
+    one FBS code) and weight module-pool projections (see
+    :ref:`current-diets-step2`); and FBS supply serves as the **anchor
+    source** for the foods in ``diet.fbs_override_foods`` (meats, eggs,
+    yam, coffee, cocoa).
 
 Weight Conventions
 ~~~~~~~~~~~~~~~~~~
+
+The FBS source needs no mass-basis conversions: its group masses are
+derived from FBS energy at model-basis densities (see
+:ref:`current-diets-fbs-source`). The conventions below apply to the
+GDD-IA source.
 
 GDD-IA reports intake "as consumed" (cooked weight for cereals and
 meats, fresh weight for fruits and vegetables). The pipeline derives the
@@ -122,6 +134,69 @@ unchanged.
 Units in the merged ``dietary_intake.csv`` distinguish ``g/day (fresh
 wt)`` from ``g/day (milk equiv)`` for dairy and ``g/day (refined sugar
 eq)`` for sugar.
+
+.. _current-diets-fbs-source:
+
+FBS-Derived Baseline Diet (default)
+-----------------------------------
+
+With ``diet.source: fbs`` (the default), the per-(country, food-group)
+intake totals are derived from FAOSTAT Food Balance Sheets instead of
+GDD-IA, so GLADE runs without any manually-obtained dietary data. The
+rule ``prepare_fbs_dietary_intake`` computes, per country and group,
+
+.. math::
+
+   \text{intake}_{g}\ [\mathrm{g/day}] = \sum_{i \in \text{items}(g)}
+   \frac{\text{kcal}_i \cdot (1 - w_g)}{k_i}
+
+where :math:`\text{kcal}_i` is the FBS "Food supply (kcal/capita/day)"
+element for FBS item :math:`i`, :math:`w_g` the group's consumer waste
+fraction, and :math:`k_i` the model-basis energy density (kcal/g,
+nutrition.csv) of the item's mapped food(s). Deriving mass from energy
+rather than from the FBS mass element sidesteps per-item mass-basis
+bookkeeping: FAO's nutritive factors already net out flour extraction,
+refuse fractions, and carcass-to-retail conversion, so dividing by the
+model-basis density lands directly in model basis — the same convention
+the GDD-IA pipeline uses for dairy. The FBS "Food supply" element is
+net of supply-chain losses, so only consumer waste is deducted.
+
+Item-to-group attribution follows the food-to-FBS-item mapping used by
+the within-group shares (each item counted once per group), with a few
+special cases (see ``workflow/scripts/diet/fbs_intake.py`` for the full
+rules):
+
+* **Wheat and rice** (FBS 2511, 2807) are the only items whose foods
+  span two groups: FBS does not distinguish whole-grain from refined
+  milling, so ``diet.fbs.whole_grain_shares`` sets the fraction of each
+  item's energy consumed as the whole-grain food (``flour-wholemeal``,
+  ``rice-brown``); the remainder goes to the refined counterpart. The
+  defaults are chosen so the FBS-derived global whole-grain intake
+  matches the survey-based (GDD-IA) estimate.
+* **Dairy** folds butter and cream energy into the milk item at
+  cow-milk density (strict milk-equivalent mass, matching GDD-IA).
+* **Oil** uses the FBS "Vegetable Oils" aggregate (2914) so unmodelled
+  oils are included in the group total.
+* **Unmapped pool items** (pineapples, dates, "other" residuals) count
+  toward their projection pool's group at the mean density of the
+  pool's recipient foods.
+* **Stimulants** are not emitted: all three stimulants foods are
+  ``diet.fbs_override_foods`` and get their per-food intake directly
+  from FBS mass supply in ``estimate_baseline_diet``.
+
+Because the masses are derived from FBS energy at the same densities
+used by the kcal accounting, the FBS diet is FAO-energy-consistent by
+construction and the kcal-normalisation step (Step 1c below) is
+skipped. GBD anchoring, the NHANES USA override, the FBS per-food
+overrides, and the within-group disaggregation apply unchanged.
+
+The FBS-derived diet is supply-based: it inherits FBS's known biases
+relative to intake surveys beyond what the waste fractions correct.
+It is the pragmatic default while GDD-IA is unpublished; results
+intended to be comparable with the published GLADE results should set
+``diet.source: gdd_ia``. The baseline diet is structural, so the two
+sources need different calibration artefact sets (see
+:doc:`calibration`).
 
 .. _current-diets-gbd-anchoring:
 
@@ -310,19 +385,24 @@ Data Processing
 The diet pipeline runs in three preparation stages followed by the
 baseline-diet estimation:
 
-1. **Prepare GDD-IA** (``prepare_gdd_ia_dietary_intake``): reads the
-   parallel grams and kcal CSVs, maps GDD-IA's food categories to the
-   model's food groups, derives the per-food-group mass in model basis
-   (pooling all dairy subcategories by energy, applying the cooked-to-
-   raw meat inflation), and emits two files:
+1. **Prepare the group-intake source** (``diet.source``):
 
-   * ``gdd_ia_dietary_intake.csv`` — per-(country, food group) intake
-     (g/day) at age = ``All ages``.
-   * ``gdd_ia_kcal_target.csv`` — per-country kcal accounting: the
-     total dietary energy, the out-of-scope subtotal, the in-scope
-     target (total minus out-of-scope), and the refined / whole-grain
-     cereal energy split. Consumed by the cereal residual fix and the
-     kcal-normalisation step in ``estimate_baseline_diet``.
+   * ``fbs`` (default) — ``prepare_fbs_dietary_intake`` derives
+     per-(country, food group) intake from FBS energy supply (see
+     :ref:`current-diets-fbs-source`) into ``fbs_dietary_intake.csv``.
+   * ``gdd_ia`` — ``prepare_gdd_ia_dietary_intake`` reads the parallel
+     grams and kcal CSVs, maps GDD-IA's food categories to the model's
+     food groups, derives the per-food-group mass in model basis
+     (pooling all dairy subcategories by energy, applying the
+     cooked-to-raw meat inflation), and emits two files:
+
+     * ``gdd_ia_dietary_intake.csv`` — per-(country, food group) intake
+       (g/day) at age = ``All ages``.
+     * ``gdd_ia_kcal_target.csv`` — per-country kcal accounting: the
+       total dietary energy, the out-of-scope subtotal, the in-scope
+       target (total minus out-of-scope), and the refined / whole-grain
+       cereal energy split. Consumed by the cereal residual fix and the
+       kcal-normalisation step in ``estimate_baseline_diet``.
 
 2. **Prepare NHANES** (``prepare_nhanes_dietary_intake``): parses the
    USDA FPED demographic-table PDF for the configured cycle and emits
@@ -331,8 +411,9 @@ baseline-diet estimation:
    for the FPED specifics).
 
 3. **Merge sources** (``merge_dietary_sources``): NHANES overrides
-   GDD-IA for the (country, item) pairs it covers; the merged file
-   ``dietary_intake.csv`` is the input to ``estimate_baseline_diet``.
+   the group-intake source for the (country, item) pairs it covers; the
+   merged file ``dietary_intake.csv`` is the input to
+   ``estimate_baseline_diet``.
 
 The GBD risk-exposure data is processed independently by
 ``prepare_gbd_food_group_intake`` into
@@ -355,7 +436,7 @@ Output Format
   ``g/day (refined sugar eq)`` (sugar).
 * ``item``: food group name.
 * ``country``: ISO 3166-1 alpha-3 code.
-* ``age``: ``All ages`` for GDD-IA rows; NHANES uses the configured
+* ``age``: ``All ages`` for GDD-IA and FBS rows; NHANES uses the configured
   ``diet.baseline_age`` literal (the FPED single population-mean row).
 * ``year``: reference year.
 * ``value``: mean daily intake in grams per person, in model basis.
@@ -377,16 +458,17 @@ Step 1: Food group totals
 For groups in ``health.risk_factors`` (currently ``fruits``,
 ``vegetables``, ``whole_grains``, ``legumes``, ``nuts_seeds``,
 ``red_meat``) the per-country total is taken **from GBD when GBD reports
-a value** and falls back to the merged GDD-IA/NHANES value otherwise.
+a value** and falls back to the merged source/NHANES value otherwise.
 GBD strictly takes precedence on these groups — no averaging — so the
 baseline is on the same intake basis the GBD relative-risk functions are
-calibrated against. All other groups use GDD-IA (or NHANES for the USA).
+calibrated against. All other groups use the configured group-intake
+source (or NHANES for the USA).
 
 GBD exposure is converted to the model's basis at load time, per
 food-group, using ``diet.source_basis`` plus per-(source, country,
 food_group) overrides from ``data/curated/diet_source_basis_overrides.csv``
 and the conversion tables in ``diet.weight_conversion``. The script also
-logs cross-validation metrics: median and range of the GDD-IA/GBD ratio
+logs cross-validation metrics: median and range of the source/GBD ratio
 across countries for every risk group, and GBD's milk exposure as a
 cross-check on the dairy total.
 
@@ -408,11 +490,18 @@ cereal budget. To preserve the cereal energy budget, the deficit is
 
    \text{new}\ g_{\text{grain}} = \max(0, \text{deficit\_kcal}) / k_{\text{grain, model}}
 
-The IA cereal kcal pool comes from ``gdd_ia_kcal_target.csv`` (basis-
-aware), not from nutrition.csv per-group averages.
+For the GDD-IA source the cereal kcal pool comes from
+``gdd_ia_kcal_target.csv`` (basis-aware), not from nutrition.csv
+per-group averages; for the FBS source it is reconstructed from the
+pre-anchoring group totals at model-basis densities, which reproduces
+the FBS cereal energy exactly.
 
-Step 1c: Anchor-aware kcal normalisation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Step 1c: Anchor-aware kcal normalisation (GDD-IA source only)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This step runs only for ``diet.source: gdd_ia``; the FBS-derived diet
+is FAO-energy-consistent by construction (see
+:ref:`current-diets-fbs-source`).
 
 For each country, the **unanchored** groups are scaled by a single
 multiplicative factor so that total kcal across all groups lands on

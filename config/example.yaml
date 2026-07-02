@@ -32,13 +32,14 @@ name: "example"
 # default) none of that data is needed. Enabling health also anchors the
 # baseline diet to GBD intake exposure (diet.anchor_groups_to_gbd defaults to
 # "match_health"); set that key explicitly to decouple the two.
-# With anchoring on, also consume the calibration artefacts fit against the
-# anchored diet (the default set is fit against the anchoring-off diet).
+# The gbd-anchored calibration artefact set was fit against the anchored
+# GDD-IA diet, so it matches exactly only with diet.source: gdd_ia (which
+# needs the manually-obtained GDD-IA data, see docs/current_diets.rst).
 # health:
 #   enabled: true
 #   value_per_yll: 50000  # USD per year of life lost (0 = evaluate post-hoc only)
 # diet:
-#   anchor_groups_to_gbd: true  # or false to keep the GDD/FAOSTAT-only diet
+#   anchor_groups_to_gbd: true  # or false to keep the source-only diet
 # calibration:
 #   source: "gbd-anchored"
 

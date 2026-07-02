@@ -123,6 +123,9 @@ validation:
   enforce_baseline_diet: true
 
 diet:
+  # The published results use the GDD-IA survey-based baseline diet (the
+  # gbd-anchored calibration artefact set was fit against it).
+  source: gdd_ia
   # Anchor to GBD so the fixed baseline diet matches the health-enabled
   # gsa.yaml diet (with health off, the sentinel would resolve to false).
   anchor_groups_to_gbd: true

@@ -8,6 +8,11 @@
 
 name: "doc_figures"
 
+# The published results use the GDD-IA survey-based baseline diet (the
+# calibration artefact set consumed here was fit against it).
+diet:
+  source: gdd_ia
+
 scenarios:
   # Scenario definitions for documentation figures
   # -----------------------------------------------

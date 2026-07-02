@@ -24,6 +24,11 @@ from workflow.validation.calibration_provenance import (
 MINIMAL_CONFIG = {
     "name": "unit",
     "calibration": {"source": "unit", "accept_provenance_mismatch": False},
+    "diet": {
+        "source": "fbs",
+        "fbs": {"whole_grain_shares": {"flour-wholemeal": 0.11}},
+        "gdd_ia": {"cooked_to_raw": {"red_meat": 1.43}},
+    },
     "crops": ["wheat", "maize"],
     "planning_horizon": 2030,
     "baseline_year": 2020,

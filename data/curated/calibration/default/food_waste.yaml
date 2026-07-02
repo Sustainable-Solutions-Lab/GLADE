@@ -9,27 +9,27 @@
 # from a solved validation scenario. Do not hand-edit; rerun
 # `tools/calibrate food_waste` instead.
 fruits:
-  baseline_consumption_mt: 304.3055541798858
-  baseline_negative_slack_mt: 101.51363178525935
-  baseline_positive_slack_mt: 0.0
-  waste_retention_multiplier: 0.7498550209156989
-oil:
-  baseline_consumption_mt: 78.5514709682393
-  baseline_negative_slack_mt: 1.0906066512688994
-  baseline_positive_slack_mt: 0.0
-  waste_retention_multiplier: 0.986306150167512
-starchy_vegetable:
-  baseline_consumption_mt: 442.3559145834927
+  baseline_consumption_mt: 509.1456383276636
   baseline_negative_slack_mt: 0.0
-  baseline_positive_slack_mt: 2.6019802293478733
-  waste_retention_multiplier: 1.0059169003983315
+  baseline_positive_slack_mt: 65.78844199162813
+  waste_retention_multiplier: 1.1483869948098573
+oil:
+  baseline_consumption_mt: 94.16507102176183
+  baseline_negative_slack_mt: 0.5121270318049937
+  baseline_positive_slack_mt: 1.3026912717632513
+  waste_retention_multiplier: 1.008466596153548
+starchy_vegetable:
+  baseline_consumption_mt: 479.6430849393066
+  baseline_negative_slack_mt: 0.0
+  baseline_positive_slack_mt: 10.674629568871978
+  waste_retention_multiplier: 1.0227619351507131
 stimulants:
   baseline_consumption_mt: 23.68795094791676
   baseline_negative_slack_mt: 0.0
   baseline_positive_slack_mt: 2.164119136995396
   waste_retention_multiplier: 1.1005452540238354
 vegetables:
-  baseline_consumption_mt: 624.8539440262484
-  baseline_negative_slack_mt: 144.53753955755383
-  baseline_positive_slack_mt: 0.0
-  waste_retention_multiplier: 0.8121404478194867
+  baseline_consumption_mt: 971.5815352395748
+  baseline_negative_slack_mt: 0.0
+  baseline_positive_slack_mt: 202.19004818416033
+  waste_retention_multiplier: 1.2627921566405347
