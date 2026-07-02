@@ -57,6 +57,12 @@ introduce breaking changes to configuration and outputs.
   `diet.source: gdd_ia`, with its input CSVs required only in that mode. The
   `default` calibration artefact set is refit against the FBS diet; the
   previous GDD-fit set is preserved as `gdd-ia`.
+- Whole-grain definitions are aligned across diet sources: a new `maize-whole`
+  food carries GBD's whole-grain exposure in maize-staple regions,
+  `diet.fbs.whole_grain_shares` is refit against GBD per-country whole-grain
+  exposure, and GDD-IA cereal energy is re-split by each country's FBS cereal
+  composition (fixing starved whole-grain intake for Sahel coarse-grain
+  staples). All three calibration artefact sets are refreshed accordingly.
 - The health module is now **disabled by default** (`health.enabled: false`).
   With health off, the workflow no longer requires the manually-downloaded
   IHME GBD data and runs end to end without it; a clear startup error is
