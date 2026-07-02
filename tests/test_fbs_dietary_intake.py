@@ -10,9 +10,11 @@ import pytest
 from workflow.scripts.diet.fbs_intake import (
     DAIRY_ITEM_CODES,
     OIL_GROUP_ITEM_CODE,
+    build_cereal_energy_shares,
     build_fbs_group_intake,
     build_item_attribution,
 )
+from workflow.scripts.prepare_gdd_ia_dietary_intake import split_cereal_energy
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -28,6 +30,8 @@ def food_groups_df():
                 "flour-wholemeal",
                 "rice-white",
                 "rice-brown",
+                "maize",
+                "maize-whole",
                 "foxtail-millet",
                 "pearl-millet",
                 "dairy",
@@ -43,6 +47,8 @@ def food_groups_df():
                 "coffee-green",
             ],
             "group": [
+                "grain",
+                "whole_grains",
                 "grain",
                 "whole_grains",
                 "grain",
@@ -74,6 +80,8 @@ def food_item_map_df():
                 "flour-wholemeal",
                 "rice-white",
                 "rice-brown",
+                "maize",
+                "maize-whole",
                 "foxtail-millet",
                 "pearl-millet",
                 "dairy",
@@ -91,6 +99,8 @@ def food_item_map_df():
                 2511,
                 2807,
                 2807,
+                2514,
+                2514,
                 2517,
                 2517,
                 2848,
@@ -116,6 +126,8 @@ def nutrition_df(food_groups_df):
         "flour-wholemeal": 332.5,
         "rice-white": 365.0,
         "rice-brown": 366.6,
+        "maize": 365.0,
+        "maize-whole": 362.1,
         "foxtail-millet": 378.1,
         "pearl-millet": 378.1,
         "dairy": 60.7,
@@ -158,7 +170,11 @@ FOOD_GROUPS_INCLUDED = [
     "stimulants",
 ]
 
-WHOLE_GRAIN_SHARES = {"flour-wholemeal": 0.2, "rice-brown": 0.1}
+WHOLE_GRAIN_SHARES = {
+    "flour-wholemeal": 0.2,
+    "rice-brown": 0.1,
+    "maize-whole": 0.8,
+}
 
 
 def _kcal_supply(cells: dict[int, float], country: str = "AAA") -> pd.DataFrame:
@@ -247,6 +263,15 @@ class TestWholeGrainSplit:
         assert totals["whole_grains"] == pytest.approx(0.2 * 364.0 / 3.325)
         assert totals["grain"] == pytest.approx(0.8 * 364.0 / 3.64)
 
+    def test_maize_split_between_groups(
+        self, food_item_map_df, food_groups_df, nutrition_df
+    ):
+        # Maize 2514: 365 kcal/d; 80% to maize-whole (3.621 kcal/g),
+        # 20% to maize (3.65 kcal/g).
+        totals = _intake({2514: 365.0}, food_item_map_df, food_groups_df, nutrition_df)
+        assert totals["whole_grains"] == pytest.approx(0.8 * 365.0 / 3.621)
+        assert totals["grain"] == pytest.approx(0.2 * 365.0 / 3.65)
+
     def test_missing_share_raises(self, food_item_map_df, food_groups_df, nutrition_df):
         with pytest.raises(ValueError, match="whole_grain_shares"):
             _intake(
@@ -317,6 +342,56 @@ class TestPoolItems:
         totals = _intake({2616: 60.0}, food_item_map_df, food_groups_df, nutrition_df)
         assert totals["starchy_vegetable"] == pytest.approx(100.0)
         assert "fruits" not in totals.index
+
+
+class TestCerealEnergyShares:
+    def test_energy_split_by_shares(
+        self, food_item_map_df, food_groups_df, nutrition_df
+    ):
+        # Wheat 100 kcal (20% whole), maize 200 kcal (80% whole),
+        # millet 50 kcal (always whole).
+        result = build_cereal_energy_shares(
+            kcal_supply=_kcal_supply({2511: 100.0, 2514: 200.0, 2517: 50.0}),
+            food_item_map=food_item_map_df,
+            food_groups=food_groups_df,
+            nutrition=nutrition_df,
+            countries=["AAA"],
+            byproducts=[],
+            whole_grain_shares=WHOLE_GRAIN_SHARES,
+        )
+        row = result.set_index("country").loc["AAA"]
+        assert row["kcal_whole_grains"] == pytest.approx(
+            0.2 * 100.0 + 0.8 * 200.0 + 50.0
+        )
+        assert row["kcal_grain"] == pytest.approx(0.8 * 100.0 + 0.2 * 200.0)
+
+    def test_zero_supply_country_emits_zeros(
+        self, food_item_map_df, food_groups_df, nutrition_df
+    ):
+        result = build_cereal_energy_shares(
+            kcal_supply=_kcal_supply({2511: 100.0}),
+            food_item_map=food_item_map_df,
+            food_groups=food_groups_df,
+            nutrition=nutrition_df,
+            countries=["AAA", "BBB"],
+            byproducts=[],
+            whole_grain_shares=WHOLE_GRAIN_SHARES,
+        )
+        row = result.set_index("country").loc["BBB"]
+        assert row["kcal_whole_grains"] == 0.0
+        assert row["kcal_grain"] == 0.0
+
+
+class TestSplitCerealEnergy:
+    def test_energy_conserved_and_masses_at_density(self):
+        kcal_whole, kcal_grain, g_whole, g_grain = split_cereal_energy(
+            e_total=1000.0, f_whole=0.3, k_whole=3.5, k_grain=3.6
+        )
+        assert kcal_whole == pytest.approx(300.0)
+        assert kcal_grain == pytest.approx(700.0)
+        assert kcal_whole + kcal_grain == pytest.approx(1000.0)
+        assert g_whole == pytest.approx(300.0 / 3.5)
+        assert g_grain == pytest.approx(700.0 / 3.6)
 
 
 class TestValidation:

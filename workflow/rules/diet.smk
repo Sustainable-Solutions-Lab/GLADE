@@ -16,26 +16,31 @@ rule prepare_gdd_ia_dietary_intake:
     Reads the parallel grams and kcal CSVs, maps prim/prcd categories to
     GLADE food groups (butter+cream folded into dairy as
     milk-equivalent; fat_ani, fruits_starch, seafood, alcohol etc. left
-    out-of-scope), derives mass in model basis from energy
-    (``g_model = kcal_ia / kcal_per_g_model_basis``), and applies a
-    cooked-to-raw inflation for red_meat. Emits:
+    out-of-scope), re-splits GDD's total cereal energy by the country's
+    FBS whole/refined cereal composition, derives mass in model basis
+    from energy (``g_model = kcal_ia / kcal_per_g_model_basis``), and
+    applies a cooked-to-raw inflation for red_meat. Emits:
 
       - gdd_ia_dietary_intake.csv: per-(country, group) intake (g/d)
       - gdd_ia_kcal_target.csv: per-country all-fg / OOS / target
-        kcal/d for the anchor-aware normalisation in
-        ``estimate_baseline_diet``.
+        kcal/d plus the FBS-aligned cereal kcal split for the
+        anchor-aware normalisation in ``estimate_baseline_diet``.
     """
     input:
         grams=f"data/manually_downloaded/GDD-IA-intake_grams_{config['baseline_year']}.csv",
         kcal=f"data/manually_downloaded/GDD-IA-intake_kcals_{config['baseline_year']}.csv",
         food_groups="data/curated/food_groups.csv",
         nutrition="data/curated/nutrition.csv",
+        fbs_items_kcal="<processing>/{name}/faostat_fbs_items_kcal.csv",
+        food_item_map="data/curated/faostat_food_item_map.csv",
     params:
         countries=config["countries"],
         food_groups=config["food_groups"]["included"],
         reference_year=config["baseline_year"],
         cooked_to_raw=config["diet"]["gdd_ia"]["cooked_to_raw"],
         country_proxies=config["diet"]["gdd_ia"].get("country_proxies", {}),
+        byproducts=config["byproducts"],
+        whole_grain_shares=config["diet"]["fbs"]["whole_grain_shares"],
     output:
         diet="<processing>/{name}/gdd_ia_dietary_intake.csv",
         kcal_target="<processing>/{name}/gdd_ia_kcal_target.csv",

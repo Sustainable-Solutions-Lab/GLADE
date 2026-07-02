@@ -1046,7 +1046,7 @@ properties:
         properties:
           whole_grain_shares:
             type: object
-            description: "Per-whole-grain-food fraction of the shared FBS item's supply (wheat 2511, rice 2807) allocated to the whole-grain food; the remainder goes to the refined counterpart in the same FBS item"
+            description: "Per-whole-grain-food fraction of the shared FBS item's supply (wheat 2511, rice 2807, maize 2514) allocated to the whole-grain food; the remainder goes to the refined counterpart in the same FBS item"
             additionalProperties:
               type: number
               minimum: 0.0
