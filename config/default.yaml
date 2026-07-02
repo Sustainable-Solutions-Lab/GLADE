@@ -975,18 +975,23 @@ diet:
   # global defaults.
   # FBS diet-source configuration (used when source: fbs).
   fbs:
-    # FBS reports wheat (item 2511) and rice (item 2807) supply without a
-    # whole-grain vs refined split, while the model carries them as
-    # separate foods (flour-wholemeal/rice-brown vs flour-white/
-    # rice-white) in separate food groups. These fractions allocate each
-    # item's energy supply to the whole-grain food; the remainder goes to
-    # the refined counterpart. Defaults from a population-weighted
-    # least-squares fit of per-country FBS-derived whole-grain intake to
-    # the survey-based (GDD-IA) estimate; they reproduce GDD-IA's global
-    # population-weighted whole-grain intake (~42 g/day) within ~1 g/day.
+    # FBS reports wheat (item 2511), rice (item 2807) and maize (item
+    # 2514) supply without a whole-grain vs refined split, while the
+    # model carries them as separate foods (flour-wholemeal/rice-brown/
+    # maize-whole vs flour-white/rice-white/maize) in separate food
+    # groups. These fractions allocate each item's energy supply to the
+    # whole-grain food; the remainder goes to the refined counterpart.
+    # Defaults from a population-weighted bounded least-squares fit of
+    # per-country FBS-derived whole-grain intake to the GBD whole-grain
+    # exposure estimate (the definitional anchor of the health module),
+    # excluding countries whose always-whole coarse-grain intake alone
+    # already exceeds the GBD target (their residual is invariant to
+    # the shares). The fit reproduces GBD's global population-weighted
+    # whole-grain intake (~45 g/day) within a few g/day.
     whole_grain_shares:
-      flour-wholemeal: 0.11
-      rice-brown: 0.04
+      flour-wholemeal: 0.07
+      rice-brown: 0.01
+      maize-whole: 0.46
   # GDD-IA pipeline configuration (used when source: gdd_ia).
   gdd_ia:
     # GDD-IA reports meat in cooked weight (implied kcal/g for beef
@@ -1139,6 +1144,7 @@ commodities:
         - buckwheat
         - foxtail-millet
         - maize
+        - maize-whole
         - oat
         - pearl-millet
         - rye

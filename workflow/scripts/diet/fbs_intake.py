@@ -123,6 +123,13 @@ WHOLE_GRAINS_GROUP = "whole_grains"
 GRAIN_GROUP = "grain"
 
 
+def kcal_per_g_by_food(nutrition: pd.DataFrame) -> dict[str, float]:
+    """Model-basis energy density (kcal/g) per food from nutrition.csv rows."""
+    return (
+        nutrition[nutrition["nutrient"] == "cal"].set_index("food")["value"] / 100.0
+    ).to_dict()
+
+
 def _mean_density(foods: list[str], kcal_per_g_food: dict[str, float]) -> float:
     """Mean model-basis kcal/g over *foods*; fails on missing entries."""
     missing = [f for f in foods if f not in kcal_per_g_food]
@@ -270,6 +277,55 @@ def build_item_attribution(
     return attribution
 
 
+def build_cereal_energy_shares(
+    kcal_supply: pd.DataFrame,
+    food_item_map: pd.DataFrame,
+    food_groups: pd.DataFrame,
+    nutrition: pd.DataFrame,
+    countries: list[str],
+    byproducts: list[str],
+    whole_grain_shares: dict[str, float],
+) -> pd.DataFrame:
+    """Per-country FBS food-energy supply of the two cereal groups.
+
+    Runs the item attribution restricted to the ``grain`` and
+    ``whole_grains`` groups (so the wheat/rice/maize whole-grain split
+    applies) and sums each group's kcal supply per country. Used by the
+    GDD-IA pipeline to re-split GDD's total cereal energy by the
+    country's FBS cereal composition.
+
+    Returns a DataFrame with columns ``country``, ``kcal_whole_grains``,
+    ``kcal_grain`` (kcal/capita/day, supply basis, no waste deduction).
+    """
+    attribution = build_item_attribution(
+        food_item_map,
+        food_groups,
+        kcal_per_g_by_food(nutrition),
+        [GRAIN_GROUP, WHOLE_GRAINS_GROUP],
+        byproducts,
+        whole_grain_shares,
+    )
+    kcal_lookup = kcal_supply.set_index(["country", "item_code"])[
+        "kcal_per_capita_day"
+    ].to_dict()
+
+    rows = []
+    for country in countries:
+        totals = {WHOLE_GRAINS_GROUP: 0.0, GRAIN_GROUP: 0.0}
+        for code, group, share, _ in attribution:
+            kcal = float(kcal_lookup.get((country, code), 0.0))
+            if kcal > 0.0:
+                totals[group] += kcal * share
+        rows.append(
+            {
+                "country": country,
+                "kcal_whole_grains": totals[WHOLE_GRAINS_GROUP],
+                "kcal_grain": totals[GRAIN_GROUP],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def build_fbs_group_intake(
     kcal_supply: pd.DataFrame,
     food_item_map: pd.DataFrame,
@@ -290,9 +346,7 @@ def build_fbs_group_intake(
     Returns a DataFrame with columns ``country``, ``food_group``,
     ``value`` (g/day per capita, consumer-eaten intake in model basis).
     """
-    kcal_per_g_food = (
-        nutrition[nutrition["nutrient"] == "cal"].set_index("food")["value"] / 100.0
-    ).to_dict()
+    kcal_per_g_food = kcal_per_g_by_food(nutrition)
     attribution = build_item_attribution(
         food_item_map,
         food_groups,

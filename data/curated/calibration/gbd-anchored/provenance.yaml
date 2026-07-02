@@ -4,8 +4,8 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/gsa.yaml
-generated_at: '2026-07-02T17:16:36+00:00'
-git_commit: 4779577ccbbee7ef1d77fad71c517dd53faa8d01
+generated_at: '2026-07-02T22:28:37+00:00'
+git_commit: 08a68eccbce283e7a4b01940e002fd266f000cef
 source: gbd-anchored
 structural_config:
   aggregation.irrigated_area_source: current
@@ -363,6 +363,7 @@ structural_config:
   - buckwheat
   - foxtail-millet
   - maize
+  - maize-whole
   - oat
   - pearl-millet
   - rye

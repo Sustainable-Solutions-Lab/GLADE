@@ -70,6 +70,7 @@ sorghum_grain,sorghum,sorghum,1.0,No processing,
 foxtail_millet_grain,foxtail-millet,foxtail-millet,1.0,No processing,
 pearl_millet_grain,pearl-millet,pearl-millet,1.0,No processing,
 maize_grain,maize,maize,1.0,No processing,
+maize_whole,maize,maize-whole,1.0,No processing,
 soybean_whole,soybean,soy,1.0,No processing,
 soybean_oil,soybean,soybean-oil,0.18,Oil extraction from soybeans (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024
 soybean_oil,soybean,oilseed-meal,0.78,Oilcake byproduct from soybean oil extraction (FAO SUA 2024 sheet 03),FAO_SUA_NCT_2024

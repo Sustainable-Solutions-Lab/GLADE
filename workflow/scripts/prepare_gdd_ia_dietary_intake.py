@@ -6,10 +6,16 @@
 """Process Global Dietary Database — Integrated Assessment (GDD-IA) dataset.
 
 GDD-IA ships two parallel CSVs (one in grams/day, one in kcal/day) at
-country level. Most groups (cereals, vegetables, fruits, nuts/seeds,
-oil, sugar, legumes, poultry, eggs) ship in mass that's already close
-to model basis; we pass IA's reported grams through. Two groups need
-basis adjustment:
+country level. Most groups (vegetables, fruits, nuts/seeds, oil, sugar,
+legumes, poultry, eggs) ship in mass that's already close to model
+basis; we pass IA's reported grams through. Cereals keep GDD's total
+energy but not its whole/processed split: GDD counts decorticated
+coarse grains (millet, sorghum) as processed, colliding with the model
+taxonomy where they are whole_grains foods, so the total cereal kcal is
+re-split by the country's FBS cereal composition (via
+``diet.fbs_intake.build_cereal_energy_shares``) and masses are derived
+at model-basis group densities. Two further groups need basis
+adjustment:
 
 - ``red_meat``: IA implied kcal/g ≈ 2.4 (cooked); model uses raw retail
   (~2.15 kcal/g). Apply cooked-to-raw factor 1/0.7 ≈ 1.43.
@@ -34,9 +40,10 @@ group (model crop ``plantain`` added).
 The output mirrors the schema of the legacy ``gdd_dietary_intake.csv``
 (unit, item, country, age, year, value), plus a companion
 ``gdd_ia_kcal_target.csv`` that carries the per-country ``all-fg``
-total kcal, the out-of-scope subtotal, and the IA cereal kcal split
-(whole_grains, prc_grains) — all consumed by ``estimate_baseline_diet``
-for the anchor-aware kcal normalisation step.
+total kcal, the out-of-scope subtotal, and the FBS-aligned cereal kcal
+split (whole_grains, grain) — all consumed by
+``estimate_baseline_diet`` for the anchor-aware kcal normalisation
+step.
 
 Output rows are emitted at age = "All ages" only. GDD-IA stratifies
 age 0-9/10-19/20-39/40-64/65+ which doesn't match the existing
@@ -45,9 +52,11 @@ pipeline buckets; baseline_age is "All ages" by default.
 Input:
     - GDD-IA grams CSV (data/manually_downloaded/GDD-IA-intake_grams_{year}.csv)
     - GDD-IA kcal CSV  (data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv)
-    - baseline_diet CSV (for per-(country, group) kcal density in model basis)
-    - nutrition CSV     (for global per-group fallback density)
+    - nutrition CSV     (for global per-group density in model basis)
     - food_groups CSV   (food → group)
+    - FBS items kcal CSV (per-(country, item) energy supply, for the
+      cereal composition)
+    - faostat_food_item_map CSV (food → FBS item code)
 
 Output:
     - gdd_ia_dietary_intake.csv: unit,item,country,age,year,value
@@ -59,6 +68,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from workflow.scripts.diet.fbs_intake import build_cereal_energy_shares
 from workflow.scripts.logging_config import setup_script_logging
 
 logger = logging.getLogger("prepare_gdd_ia_dietary_intake")
@@ -96,11 +106,17 @@ PRIM_TO_GLADE_GROUP: dict[str, str] = {
     "fat_ani": "animal_fat",  # rendered animal fat (lard/tallow)
 }
 
-# `prcd` rows providing the whole/refined cereal split.
+# `prcd` rows providing GDD-IA's total cereal energy. Only the total is
+# kept: GDD's own whole/processed split counts decorticated coarse
+# grains (millet, sorghum) as processed, colliding with the model's food
+# taxonomy where they are whole_grains foods. The total is re-split by
+# the country's FBS cereal composition (see _align_cereals_to_fbs).
 PRCD_TO_GLADE_GROUP: dict[str, str] = {
     "whole_grains": "whole_grains",
     "prc_grains": "grain",
 }
+
+CEREAL_GROUPS = ("whole_grains", "grain")
 
 # Categories whose kcal is added to the `dairy` group at cow-milk
 # density. butter and cream are reported as separate prim categories
@@ -262,6 +278,88 @@ def _derive_mass(
     return out
 
 
+def split_cereal_energy(
+    e_total: float, f_whole: float, k_whole: float, k_grain: float
+) -> tuple[float, float, float, float]:
+    """Split a country's total cereal energy by the FBS whole-grain fraction.
+
+    Returns ``(kcal_whole, kcal_grain, g_whole, g_grain)`` where masses
+    are derived at the model-basis group densities (kcal/g). Energy is
+    conserved: ``kcal_whole + kcal_grain == e_total``.
+    """
+    kcal_whole = f_whole * e_total
+    kcal_grain = e_total - kcal_whole
+    return kcal_whole, kcal_grain, kcal_whole / k_whole, kcal_grain / k_grain
+
+
+def _align_cereals_to_fbs(
+    df: pd.DataFrame,
+    fbs_cereal: pd.DataFrame,
+    density: dict[str, float],
+    required_countries: set[str],
+) -> tuple[pd.DataFrame, dict[str, tuple[float, float]]]:
+    """Re-split each country's GDD cereal energy by its FBS composition.
+
+    GDD-IA's total cereal energy (whole_grains + grain kcal) is kept;
+    its whole/processed split is replaced by the country's FBS cereal
+    composition (``fbs_cereal`` from
+    :func:`workflow.scripts.diet.fbs_intake.build_cereal_energy_shares`).
+    Masses are re-derived from the aligned kcal at model-basis group
+    densities. Countries absent from ``fbs_cereal`` (GDD rows outside
+    the configured country set) keep GDD's own split.
+
+    Returns the updated intake DataFrame and a per-country mapping
+    ``country -> (kcal_whole_grains, kcal_grain)`` of the aligned split,
+    used to override the kcal-target columns.
+    """
+    fbs = fbs_cereal.set_index("country")
+    cereal_mask = df["group"].isin(CEREAL_GROUPS)
+    e_total = df.loc[cereal_mask].groupby("country")["kcal"].sum()
+
+    k_whole = density["whole_grains"]
+    k_grain = density["grain"]
+    aligned: dict[str, tuple[float, float]] = {}
+    new_rows = []
+    for country, e in e_total.items():
+        if country not in fbs.index:
+            continue
+        fbs_total = float(fbs.at[country, "kcal_whole_grains"]) + float(
+            fbs.at[country, "kcal_grain"]
+        )
+        if fbs_total <= 0.0:
+            if country in required_countries:
+                raise ValueError(
+                    f"FBS reports no cereal energy supply for {country}; "
+                    "cannot derive the whole-grain fraction for the GDD-IA "
+                    "cereal alignment."
+                )
+            continue
+        f_whole = float(fbs.at[country, "kcal_whole_grains"]) / fbs_total
+        kcal_whole, kcal_grain, g_whole, g_grain = split_cereal_energy(
+            float(e), f_whole, k_whole, k_grain
+        )
+        aligned[country] = (kcal_whole, kcal_grain)
+        new_rows.append(
+            {
+                "country": country,
+                "group": "whole_grains",
+                "kcal": kcal_whole,
+                "value": g_whole,
+            }
+        )
+        new_rows.append(
+            {"country": country, "group": "grain", "kcal": kcal_grain, "value": g_grain}
+        )
+
+    drop_mask = cereal_mask & df["country"].isin(aligned)
+    out = pd.concat([df.loc[~drop_mask], pd.DataFrame(new_rows)], ignore_index=True)
+    logger.info(
+        "Aligned cereal whole/refined split to FBS composition for %d countries",
+        len(aligned),
+    )
+    return out, aligned
+
+
 def _fold_butter_cream_into_dairy(
     df: pd.DataFrame, kcal_ia_full: pd.DataFrame
 ) -> pd.DataFrame:
@@ -331,6 +429,8 @@ def main() -> None:
     kcal_path = Path(snakemake.input["kcal"])
     food_groups_path = Path(snakemake.input["food_groups"])
     nutrition_path = Path(snakemake.input["nutrition"])
+    fbs_items_kcal_path = Path(snakemake.input["fbs_items_kcal"])
+    food_item_map_path = Path(snakemake.input["food_item_map"])
 
     out_diet_path = Path(snakemake.output["diet"])
     out_kcal_path = Path(snakemake.output["kcal_target"])
@@ -340,6 +440,11 @@ def main() -> None:
     reference_year = int(snakemake.params["reference_year"])
     cooked_to_raw = {
         str(k): float(v) for k, v in dict(snakemake.params["cooked_to_raw"]).items()
+    }
+    byproducts = list(snakemake.params["byproducts"])
+    whole_grain_shares = {
+        str(k): float(v)
+        for k, v in dict(snakemake.params["whole_grain_shares"]).items()
     }
     extra_proxies = dict(snakemake.params.get("country_proxies", {}) or {})
     proxies = {**COUNTRY_PROXIES, **extra_proxies}
@@ -363,7 +468,7 @@ def main() -> None:
     # --- Restrict groups to those configured in food_groups.included ---
     df = df[df["group"].isin(food_groups_included)].copy()
 
-    # --- Per-group density (sanity log only; not used for mass derivation) ---
+    # --- Per-group density (used for the aligned cereal mass derivation) ---
     food_groups_df = pd.read_csv(food_groups_path)
     nutrition_df = pd.read_csv(nutrition_path)
     density = _build_kcal_density(food_groups_df, nutrition_df)
@@ -371,6 +476,20 @@ def main() -> None:
 
     # --- Mass = IA's reported g/d, with cooked-to-raw inflation for meat ---
     df = _derive_mass(df, cooked_to_raw)
+
+    # --- Re-split cereal energy by the FBS whole/refined composition ---
+    fbs_cereal = build_cereal_energy_shares(
+        pd.read_csv(fbs_items_kcal_path),
+        pd.read_csv(food_item_map_path, comment="#"),
+        food_groups_df,
+        nutrition_df,
+        sorted(required_countries),
+        byproducts,
+        whole_grain_shares,
+    )
+    df, aligned_cereal = _align_cereals_to_fbs(
+        df, fbs_cereal, density, required_countries
+    )
 
     # --- Apply country proxies ---
     df = _apply_proxies(df, required_countries, proxies)
@@ -392,10 +511,11 @@ def main() -> None:
     targets["kcal_target_modelled"] = targets["kcal_all_fg"] - targets["kcal_oos"]
     targets = targets[~targets["country"].isin(REGION_AGGREGATES)]
 
-    # Carry IA whole_grain and refined-grain kcal per country so the
-    # cereal residual fix in estimate_baseline_diet has IA's own
-    # cereal-kcal accounting (it's basis-aware in a way that the
-    # nutrition.csv per-group average isn't).
+    # Carry per-country whole_grain and refined-grain kcal so the cereal
+    # residual fix in estimate_baseline_diet sees the same cereal-kcal
+    # accounting as the intake rows. IA's own split is the fallback for
+    # countries outside the FBS alignment; aligned countries are
+    # overridden below.
     prcd_whole = kcal[
         (kcal["type"] == "prcd") & (kcal["food_group"] == "whole_grains")
     ][["region", "value"]].rename(
@@ -408,6 +528,18 @@ def main() -> None:
     targets = targets.merge(prcd_grain, on="country", how="left")
     targets["kcal_whole_grains"] = targets["kcal_whole_grains"].fillna(0.0)
     targets["kcal_grain"] = targets["kcal_grain"].fillna(0.0)
+
+    # Override with the FBS-aligned cereal split (total energy unchanged).
+    targets["kcal_whole_grains"] = (
+        targets["country"]
+        .map({c: v[0] for c, v in aligned_cereal.items()})
+        .fillna(targets["kcal_whole_grains"])
+    )
+    targets["kcal_grain"] = (
+        targets["country"]
+        .map({c: v[1] for c, v in aligned_cereal.items()})
+        .fillna(targets["kcal_grain"])
+    )
 
     # Apply proxy filling to kcal targets too.
     have = set(targets["country"].unique())

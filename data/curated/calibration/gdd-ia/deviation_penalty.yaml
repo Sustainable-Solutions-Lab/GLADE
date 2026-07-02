@@ -14,9 +14,9 @@ components:
 - grassland
 - feed
 l1_costs:
-  cropland: 1.468666316419478
-  grassland: 0.16337061661222912
-  feed: 0.07852586344897906
-iterations: 3
+  cropland: 1.376689142706436
+  grassland: 0.15535580787676795
+  feed: 0.08322202186356281
+iterations: 5
 converged: true
-final_residual_log_inf: 0.01697416334606783
+final_residual_log_inf: 0.014949439844417031

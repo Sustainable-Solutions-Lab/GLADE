@@ -166,13 +166,14 @@ the within-group shares (each item counted once per group), with a few
 special cases (see ``workflow/scripts/diet/fbs_intake.py`` for the full
 rules):
 
-* **Wheat and rice** (FBS 2511, 2807) are the only items whose foods
-  span two groups: FBS does not distinguish whole-grain from refined
-  milling, so ``diet.fbs.whole_grain_shares`` sets the fraction of each
-  item's energy consumed as the whole-grain food (``flour-wholemeal``,
-  ``rice-brown``); the remainder goes to the refined counterpart. The
-  defaults are chosen so the FBS-derived global whole-grain intake
-  matches the survey-based (GDD-IA) estimate.
+* **Wheat, rice and maize** (FBS 2511, 2807, 2514) are the only items
+  whose foods span two groups: FBS does not distinguish whole-grain
+  from refined consumption, so ``diet.fbs.whole_grain_shares`` sets the
+  fraction of each item's energy consumed as the whole-grain food
+  (``flour-wholemeal``, ``rice-brown``, ``maize-whole``); the remainder
+  goes to the refined counterpart. The defaults come from a
+  population-weighted least-squares fit of the FBS-derived per-country
+  whole-grain intake to the GBD whole-grain exposure estimate.
 * **Dairy** folds butter and cream energy into the milk item at
   cow-milk density (strict milk-equivalent mass, matching GDD-IA).
 * **Oil** uses the FBS "Vegetable Oils" aggregate (2914) so unmodelled
@@ -316,9 +317,13 @@ covers every food group the model uses (``fruits``, ``vegetables``,
 Categories that are out of scope for the model (alcohol, seafood,
 spices, rendered animal fats, miscellaneous "other") are excluded from
 food-group totals but their energy is tracked separately for the
-kcal-normalisation step described below. Refined and whole-grain mass
-are tracked separately so cereals can be split between the model's
-``grain`` and ``whole_grains`` groups; plantain is routed to
+kcal-normalisation step described below. Cereals keep GDD-IA's total
+energy but not its whole/processed split (which counts decorticated
+millet and sorghum as processed, unlike the model's food taxonomy):
+the total cereal kcal is re-split between ``grain`` and
+``whole_grains`` by the country's FBS cereal composition, using the
+same item attribution and ``diet.fbs.whole_grain_shares`` as the FBS
+diet source. Plantain is routed to
 ``starchy_vegetable``; and all red-meat subcategories (including
 processed) are folded into ``red_meat`` so the consumption side stays
 consistent with FAOSTAT slaughter-volume animal production.

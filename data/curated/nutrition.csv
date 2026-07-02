@@ -103,6 +103,10 @@ maize,cal,kcal/100g,364.96
 maize,carb,g/100g,74.26
 maize,fat,g/100g,4.74
 maize,protein,g/100g,9.42
+maize-whole,cal,kcal/100g,362.1
+maize-whole,carb,g/100g,76.89
+maize-whole,fat,g/100g,3.59
+maize-whole,protein,g/100g,8.12
 mango,cal,kcal/100g,59.75
 mango,carb,g/100g,14.98
 mango,fat,g/100g,0.38

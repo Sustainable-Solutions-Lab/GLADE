@@ -50,6 +50,11 @@ validation:
   disable_spared_grassland: true
   slack_marginal_cost: 10
 
+# The enforced-baseline validation solve is incompatible with piecewise
+# food utility; disable it regardless of the base config's setting.
+food_utility_piecewise:
+  enabled: false
+
 # Skip downstream calibrations so this step is order-independent.
 cost_calibration:
   enabled: false

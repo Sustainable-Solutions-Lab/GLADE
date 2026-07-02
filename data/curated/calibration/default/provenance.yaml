@@ -4,8 +4,8 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/default.yaml
-generated_at: '2026-07-02T17:52:12+00:00'
-git_commit: 4779577ccbbee7ef1d77fad71c517dd53faa8d01
+generated_at: '2026-07-02T21:35:52+00:00'
+git_commit: 08a68eccbce283e7a4b01940e002fd266f000cef
 source: default
 structural_config:
   aggregation.irrigated_area_source: current
@@ -363,6 +363,7 @@ structural_config:
   - buckwheat
   - foxtail-millet
   - maize
+  - maize-whole
   - oat
   - pearl-millet
   - rye
@@ -655,8 +656,9 @@ structural_config:
   data.usda.retrieve_nutrition: false
   diet.anchor_groups_to_gbd: false
   diet.baseline_age: All ages
-  diet.fbs.whole_grain_shares.flour-wholemeal: 0.11
-  diet.fbs.whole_grain_shares.rice-brown: 0.04
+  diet.fbs.whole_grain_shares.flour-wholemeal: 0.07
+  diet.fbs.whole_grain_shares.maize-whole: 0.46
+  diet.fbs.whole_grain_shares.rice-brown: 0.01
   diet.fbs_override_foods:
   - yam
   - cocoa-powder
