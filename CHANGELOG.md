@@ -15,27 +15,67 @@ introduce breaking changes to configuration and outputs.
 
 ## [Unreleased]
 
-### Changed
-
-- The health module is now **disabled by default** (`health.enabled: false`).
-  With health off, the workflow no longer requires the manually-downloaded
-  IHME GBD data and runs end to end without it; a clear startup error is
-  raised if health (or GBD anchoring) is enabled but the data is absent.
-
 ### Added
 
+- Interactive **Carbon Price Dial**: a web widget embedded in the
+  documentation where GHG-price and value-per-life-year sliders drive live
+  land-use maps, net-emissions, system-cost and diet readouts by evaluating
+  the MLP surrogate directly in the browser. Includes constant- and
+  flexible-diet modes, a grams/kcal diet toggle, per-region hover breakdowns
+  of cropland and grazing land, and an advanced panel exposing the remaining
+  surrogate inputs.
+- New `mlp` surrogate method (now the default) with optional seed-ensemble
+  averaging and per-target loss weighting, plus PCA-compressed spatial-field
+  surrogate outputs that reconstruct per-region land-use maps. Surrogate
+  modelling is documented on a dedicated docs page
+  (`docs/surrogate_modelling.rst`).
+- Calibration artefacts are now organized in per-config **sets** under
+  `data/curated/calibration/<source>/`, selected via the new
+  `calibration.source` config key. Each set carries a `provenance.yaml` stamp
+  of the structural config it was calibrated against; workflow runs error on
+  structural mismatch (downgradable via
+  `calibration.accept_provenance_mismatch`). `tools/calibrate --base <config>`
+  calibrates a dedicated set for a structurally divergent config.
 - New `diet.anchor_groups_to_gbd` option that decouples GBD anchoring of the
   baseline diet's risk-factor food groups from the health module. Defaults to
   the sentinel `match_health` (follow `health.enabled`); set `true`/`false` to
   control it independently. Previously anchoring was unconditional. See
   `docs/current_diets.rst` for a quantitative description of the difference and
-  the refined-grain caveat. The baseline diet feeds calibration, so two
-  artefact sets are now committed: `default` (recalibrated against the
-  anchoring-off default diet) and `gbd-anchored` (the previous GBD-anchored
-  artefacts, consumed by the health-enabled configs via
-  `calibration.source: gbd-anchored`). Provenance stamps record the *resolved*
+  the refined-grain caveat. The baseline diet feeds calibration, so a
+  `gbd-anchored` artefact set (the previous GBD-anchored artefacts) is
+  committed alongside `default` and consumed by the health-enabled configs via
+  `calibration.source: gbd-anchored`. Provenance stamps record the *resolved*
   anchoring, and `tools/calibrate` pins the base config's resolved anchoring
   across all five calibration steps.
+
+### Changed
+
+- The baseline diet is now derived from **FAOSTAT Food Balance Sheets** by
+  default (`diet.source: fbs`), computed from per-country food supply energy
+  at model-basis densities and corrected for consumer waste. The GDD-IA
+  pipeline (not yet publicly available) remains available via
+  `diet.source: gdd_ia`, with its input CSVs required only in that mode. The
+  `default` calibration artefact set is refit against the FBS diet; the
+  previous GDD-fit set is preserved as `gdd-ia`.
+- The health module is now **disabled by default** (`health.enabled: false`).
+  With health off, the workflow no longer requires the manually-downloaded
+  IHME GBD data and runs end to end without it; a clear startup error is
+  raised if health (or GBD anchoring) is enabled but the data is absent.
+- A default build now requires **no credentials**: land-cover data is fetched
+  from a CC-BY-4.0 Zenodo mirror instead of the Copernicus Climate Data Store
+  (dropping the CDS API key), and the USDA FoodData Central key is only needed
+  when refreshing nutrition data (`data.usda.retrieve_nutrition: true`, off by
+  default; the bundled `data/curated/nutrition.csv` is used otherwise).
+- Upgraded the vendored solver stack: linopy to `v0.8.0+glade2` (CSR-based
+  matrix construction, frozen constraint storage) and PyPSA to
+  `v1.2.0+glade2` (vectorized dual assignment). Together these cut solver
+  matrix assembly by ~60x and dual recovery from ~470 s to ~2 s on
+  full-resolution solves.
+
+### Removed
+
+- The MARS surrogate method; supported surrogates are now `pce`, `rf`, `xgb`
+  and `mlp`.
 
 ## [0.1.0] - 2026-06-15
 

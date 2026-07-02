@@ -324,6 +324,14 @@ pixi run -e dev pytest -v         # verbose output
 - Use commit messages in `<type>: <imperative summary>` format (e.g., `fix: handle empty scenario list`).
 - Prefer one of these types: `feat`, `fix`, `refactor`, `docs`, `tests`, `chore`, `perf`.
 
+### Changelog
+
+`CHANGELOG.md` (rendered in the docs via `docs/changelog.rst`) follows the Keep a Changelog format; new entries go under `## [Unreleased]` in the appropriate `Added`/`Changed`/`Fixed`/`Removed` subsection.
+
+- Add an entry for anything a user of the model would notice: new features, changed config keys or defaults, changed model behaviour or outputs, bugfixes that affect results, removed functionality, major performance improvements, and dependency or setup changes.
+- Skip entries for internal refactors, test/CI-only changes, documentation-only changes, and trivial fixes with no user-visible effect.
+- Write for users, not developers: describe the observable change and any migration needed, not the implementation. Fold related commits or PRs into a single entry.
+
 ## Calibration
 
 Five calibrations feed the default workflow. Their outputs are organized
