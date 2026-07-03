@@ -108,21 +108,23 @@ def add_diet_stability_constraints(
 
     if penalty_mode == "l1":
         cost = float(diet_cfg["l1_cost"])
-        abs_dev = n.model.add_variables(
+        dev_pos = n.model.add_variables(
             lower=0,
             coords=[consume_links.index],
             dims=["name"],
-            name="diet_stability_abs_dev",
+            name="diet_stability_dev_pos",
+        )
+        dev_neg = n.model.add_variables(
+            lower=0,
+            coords=[consume_links.index],
+            dims=["name"],
+            name="diet_stability_dev_neg",
         )
         n.model.add_constraints(
-            abs_dev >= deviation,
-            name="GlobalConstraint-diet_stability_pos",
+            dev_pos - dev_neg == deviation,
+            name="GlobalConstraint-diet_stability_dev_split",
         )
-        n.model.add_constraints(
-            abs_dev >= -deviation,
-            name="GlobalConstraint-diet_stability_neg",
-        )
-        n.model.objective += cost * abs_dev.sum()
+        n.model.objective += cost * (dev_pos.sum() + dev_neg.sum())
         logger.info(
             "Added %d per-(food, country) diet L1 penalties "
             "(cost=%.4f bn USD/Mt, mode=%s)",

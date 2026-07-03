@@ -50,6 +50,15 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- Reformulated the **L1 deviation penalties** (production, animal-feed, diet
+  stability) from an absolute-value auxiliary variable with two inequality
+  rows per link to an equivalent equality split into non-negative
+  positive/negative deviation parts, and priced the zero-baseline
+  land-conversion penalty directly on link flows. Together with a faster
+  nodal-balance construction in the vendored PyPSA fork, this cuts
+  full-resolution solve times by roughly a third (about 40% fewer
+  constraint rows after presolve) with identical optima up to solver
+  tolerance.
 - Improved the optimisation model's **numerical conditioning** to remove
   Gurobi's "large matrix coefficient range" warning. The CH₄ and N₂O emission
   buses are now denominated in kilotonnes (previously tonnes) so their flow
