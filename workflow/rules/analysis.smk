@@ -77,6 +77,12 @@ if config["solving"]["inline_analysis"]:
             health_value_per_yll=lambda w: get_effective_config(w.scenario)["health"][
                 "value_per_yll"
             ],
+            health_segment_formulation=lambda w: get_effective_config(w.scenario)[
+                "health"
+            ]["segment_formulation"],
+            health_relax_and_fix_max_gap=lambda w: get_effective_config(w.scenario)[
+                "health"
+            ]["relax_and_fix_max_gap"],
             ghg_price=lambda w: get_effective_config(w.scenario)["emissions"][
                 "ghg_price"
             ],

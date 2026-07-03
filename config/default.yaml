@@ -1293,6 +1293,15 @@ health:
   # specific baseline diet, so after changing this (or anchoring) you must rerun
   # `tools/calibrate` with matching options (see docs/calibration.rst).
   enabled: false
+  # How non-convex dose-response curves are enforced in the optimisation:
+  # - "sos1": exact SOS1 segment indicators; the model becomes a MIP and
+  #   needs a strong MIP solver (Gurobi).
+  # - "relax_and_fix": two-pass LP scheme (solve the relaxation, pin each
+  #   non-convex curve to the segment of its relaxed intake, re-solve with a
+  #   warm start). No integer variables; works well with HiGHS. The gap
+  #   between the two passes is certified against relax_and_fix_max_gap.
+  segment_formulation: "sos1"
+  relax_and_fix_max_gap: 0.001  # max certified relative gap for relax_and_fix
   region_clusters: 30
   breakpoint_rel_tol: 0.05  # Max Stage 1 PWL deviation as a fraction of each RR curve's amplitude (5%)
   log_rr_points: 15

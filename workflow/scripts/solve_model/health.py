@@ -407,6 +407,7 @@ def _add_stage1_constraints(
     intake_data: dict,
     store_level_var: xr.DataArray,
     baseline_intakes: dict[tuple[int, str], float],
+    relax_fix_registry: list[dict] | None = None,
 ) -> tuple[dict[tuple[int, str], linopy.LinearExpression], dict[int, float]]:
     """Add Stage 1 constraints: store level → log(RR_{r,d}).
 
@@ -544,6 +545,7 @@ def _add_stage1_constraints(
             cluster_risk_pairs=cluster_risk_pairs,
             baseline_intakes=baseline_intakes,
             start_entries=start_entries,
+            relax_fix_registry=relax_fix_registry,
         )
 
         # -----------------------------------------------------------------------
@@ -601,6 +603,7 @@ def _add_stage1_delta(
     cluster_risk_pairs: list[tuple[int, str]],
     baseline_intakes: dict[tuple[int, str], float],
     start_entries: dict[int, float],
+    relax_fix_registry: list[dict] | None = None,
 ) -> linopy.LinearExpression:
     """Stage 1 delta formulation with segment indicators.
 
@@ -614,6 +617,12 @@ def _add_stage1_delta(
     Linking constraints tie δ and y:
         - δ_i ≥ Σ_{k>i} y_k  (δ_i = 1 if active segment is later)
         - δ_i ≤ Σ_{k≥i} y_k  (δ_i = 0 if active segment is earlier)
+
+    When ``relax_fix_registry`` is not None (relax-and-fix mode), no segment
+    indicators, SOS constraints or MIP starts are created; instead the δ
+    variable name, intake breakpoints and non-convex labels are appended to
+    the registry so that :func:`fix_nonconvex_segments` can bound the δ
+    variables after a relaxed solve.
 
     Returns log(RR) expression indexed by (cluster_risk, cause).
     """
@@ -675,7 +684,16 @@ def _add_stage1_delta(
     ]
 
     y_var = None
-    if mip_labels and n_segments > 1:
+    if relax_fix_registry is not None:
+        if mip_labels and n_segments > 1:
+            relax_fix_registry.append(
+                {
+                    "delta_name": delta_var.name,
+                    "intake_breakpoints": np.asarray(intake_values.values, dtype=float),
+                    "nonconvex_labels": list(mip_labels),
+                }
+            )
+    elif mip_labels and n_segments > 1:
         mip_index = pd.Index(mip_labels, name="cluster_risk")
 
         # y_j indicates segment j is "active" (contains the fractional δ).
@@ -794,8 +812,11 @@ def _add_stage1_delta(
     log_rr_contrib = delta_contrib + f_0
 
     # -----------------------------------------------------------------------
-    # MIP start values from baseline intake
+    # MIP start values from baseline intake (no MIP in relax-and-fix mode)
     # -----------------------------------------------------------------------
+    if relax_fix_registry is not None:
+        return log_rr_contrib
+
     breakpoints = intake_values.values
     mip_label_set = set(mip_labels)
     for label, (cluster, risk) in zip(cluster_risk_index, cluster_risk_pairs):
@@ -1212,7 +1233,8 @@ def add_health_objective(
     cluster_risk_baseline_path: str,
     rr_quantiles: dict[str, float] | None = None,
     tmrel_path: str | None = None,
-) -> None:
+    segment_formulation: str = "sos1",
+) -> list[dict] | None:
     """Add health cost constraints to the optimization model.
 
     This implements the health cost formulation from docs/health.rst:
@@ -1265,7 +1287,29 @@ def add_health_objective(
     tmrel_path
         Path to CSV with derived TMREL values (risk_factor, tmrel_g_per_day).
         Required when rr_quantiles is provided.
+    segment_formulation
+        How non-convex dose-response curves are handled. ``"sos1"`` adds
+        exact SOS1 segment indicators (the model becomes a MIP).
+        ``"relax_and_fix"`` adds no integer structure; the caller must
+        solve the relaxed model, call :func:`fix_nonconvex_segments` with
+        the returned registry, and re-solve (two-pass LP scheme for
+        solvers without efficient MIP support, e.g. HiGHS).
+
+    Returns
+    -------
+    list[dict] | None
+        In ``relax_and_fix`` mode, the registry to pass to
+        :func:`fix_nonconvex_segments` (one entry per Stage 1 delta group
+        with non-convex curves). ``None`` in ``sos1`` mode.
     """
+    if segment_formulation not in ("sos1", "relax_and_fix"):
+        raise ValueError(
+            "health.segment_formulation must be 'sos1' or 'relax_and_fix'; "
+            f"got {segment_formulation!r}"
+        )
+    relax_fix_registry: list[dict] | None = (
+        [] if segment_formulation == "relax_and_fix" else None
+    )
     m = n.model
 
     # --- Load Data ---
@@ -1376,6 +1420,7 @@ def add_health_objective(
         intake_data,
         store_level_var,
         baseline_intakes,
+        relax_fix_registry=relax_fix_registry,
     )
 
     # --- Set MIP Start ---
@@ -1417,6 +1462,71 @@ def add_health_objective(
     )
 
     logger.info("Added %d health store level constraints", constraints_added)
+
+    return relax_fix_registry
+
+
+def _fillup_bounds_for_intake(
+    breakpoints: np.ndarray, intake: float, n_segments: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Delta bounds pinning the fill-up pattern to the segment containing intake.
+
+    Returns (lower, upper) arrays of length n_segments: delta_j is fixed to 1
+    before the active segment, fixed to 0 after it, and free in [0, 1] on the
+    active segment itself.
+    """
+    seg = int(
+        np.clip(
+            np.searchsorted(breakpoints, intake, side="right") - 1, 0, n_segments - 1
+        )
+    )
+    lower = np.zeros(n_segments)
+    upper = np.ones(n_segments)
+    lower[:seg] = 1.0
+    upper[seg + 1 :] = 0.0
+    return lower, upper
+
+
+def fix_nonconvex_segments(m: linopy.Model, registry: list[dict]) -> int:
+    """Bound Stage 1 delta variables to the segments of a relaxed solution.
+
+    For each registry entry (see :func:`add_health_objective` with
+    ``segment_formulation="relax_and_fix"``), the relaxed delta solution is
+    converted to an intake value per non-convex (cluster, risk) pair, and the
+    delta bounds are pinned to the fill-up pattern of the segment containing
+    that intake. Re-solving then yields a solution that lies exactly on the
+    piecewise dose-response curve for those pairs; convex pairs are already
+    exact in the relaxation and stay free.
+
+    Must be called after a successful solve of the relaxed model (delta
+    solutions are read from ``m``). Returns the number of pairs fixed.
+    """
+    seg_dim = "intake_step_seg"
+    n_fixed = 0
+    for entry in registry:
+        var = m.variables[entry["delta_name"]]
+        breakpoints = entry["intake_breakpoints"]
+        sol = var.solution.transpose("cluster_risk", seg_dim)
+        labels = list(sol.coords["cluster_risk"].values)
+        n_segments = sol.sizes[seg_dim]
+
+        delta_x = np.diff(breakpoints)
+        intakes = breakpoints[0] + sol.values @ delta_x
+
+        lower = np.zeros((len(labels), n_segments))
+        upper = np.ones((len(labels), n_segments))
+        for label in entry["nonconvex_labels"]:
+            i = labels.index(label)
+            lower[i], upper[i] = _fillup_bounds_for_intake(
+                breakpoints, float(intakes[i]), n_segments
+            )
+            n_fixed += 1
+
+        coords = {"cluster_risk": labels, seg_dim: sol.coords[seg_dim].values}
+        dims = ("cluster_risk", seg_dim)
+        var.lower = xr.DataArray(lower, coords=coords, dims=dims)
+        var.upper = xr.DataArray(upper, coords=coords, dims=dims)
+    return n_fixed
 
 
 # =============================================================================
