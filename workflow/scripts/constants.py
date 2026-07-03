@@ -13,6 +13,13 @@ MM3_PER_M3 = 1e-6  # convert cubic metres to million cubic metres
 TONNE_TO_MEGATONNE = 1e-6  # convert tonnes to megatonnes
 MEGATONNE_TO_TONNE = 1e6  # convert megatonnes to tonnes
 KG_TO_MEGATONNE = 1e-9  # convert kilograms to megatonnes
+# Non-CO2 gas buses (emission:ch4, emission:n2o) are denominated in
+# kilotonnes so their flow coefficients sit within a few orders of the
+# CO2 bus (MtCO2), which keeps the optimisation matrix well conditioned.
+# The GWP aggregation links and all analysis converters use these factors
+# to translate the kt gas flows to/from MtCO2e.
+KILOTONNE_TO_MEGATONNE = 1e-3  # convert kilotonnes to megatonnes
+MEGATONNE_TO_KILOTONNE = 1e3  # convert megatonnes to kilotonnes
 GRAMS_PER_MEGATONNE = 1e12  # grams per megatonne of mass
 YLL_TO_MILLION_YLL = 1e-6  # convert years of life lost to million YLL
 PER_100K = 100_000  # epidemiological rate denominator (per 100,000 population)

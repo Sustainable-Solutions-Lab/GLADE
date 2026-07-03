@@ -129,7 +129,7 @@ def add_primary_resources(
         bus0="emission:ch4",
         bus1="emission:ghg",
         carrier="emission_aggregation",
-        efficiency=ch4_to_co2_factor * constants.TONNE_TO_MEGATONNE,
+        efficiency=ch4_to_co2_factor * constants.KILOTONNE_TO_MEGATONNE,
         p_nom_extendable=True,
     )
     n.links.add(
@@ -137,7 +137,7 @@ def add_primary_resources(
         bus0="emission:n2o",
         bus1="emission:ghg",
         carrier="emission_aggregation",
-        efficiency=n2o_to_co2_factor * constants.TONNE_TO_MEGATONNE,
+        efficiency=n2o_to_co2_factor * constants.KILOTONNE_TO_MEGATONNE,
         p_nom_extendable=True,
     )
 
@@ -195,9 +195,9 @@ def add_fertilizer_distribution_links(
     emission_mt_per_mt = total_n2o_n * constants.N2O_N_TO_N2O
 
     if emission_mt_per_mt > 0.0:
-        emission_t_per_mt = emission_mt_per_mt * constants.MEGATONNE_TO_TONNE
+        emission_kt_per_mt = emission_mt_per_mt * constants.MEGATONNE_TO_KILOTONNE
         params["bus2"] = "emission:n2o"
-        params["efficiency2"] = emission_t_per_mt
+        params["efficiency2"] = emission_kt_per_mt
 
     n.links.add(link_df.index, **params)
 

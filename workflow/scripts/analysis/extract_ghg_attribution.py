@@ -44,7 +44,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 
-from workflow.scripts.constants import TONNE_TO_MEGATONNE
+from workflow.scripts.constants import KILOTONNE_TO_MEGATONNE
 
 _BUS_COL_PATTERN = re.compile(r"^bus(\d+)$")
 
@@ -136,8 +136,8 @@ def build_ghg_links_dataframe(
     gwp = pd.Series(
         {
             "emission:co2": 1.0,
-            "emission:ch4": ch4_gwp * TONNE_TO_MEGATONNE,
-            "emission:n2o": n2o_gwp * TONNE_TO_MEGATONNE,
+            "emission:ch4": ch4_gwp * KILOTONNE_TO_MEGATONNE,
+            "emission:n2o": n2o_gwp * KILOTONNE_TO_MEGATONNE,
         }
     )
 

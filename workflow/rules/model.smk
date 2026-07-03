@@ -217,6 +217,7 @@ rule build_model:
         baseline_year=config["baseline_year"],
         validation=config["validation"],
         deviation_penalty=config["deviation_penalty"],
+        numerics=config["numerics"],
         netcdf=config["netcdf"],
         # Add health-cluster stores when health is enabled in the base config or
         # any scenario (the build is shared across scenarios).

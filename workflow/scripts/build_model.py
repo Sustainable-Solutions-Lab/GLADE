@@ -185,7 +185,7 @@ if __name__ == "__main__":
         residue_lookup = {}
         residue_fue_lookup = {}
 
-    # Build per-residue soil-N2O coefficient (t N2O / Mt DM) once here so
+    # Build per-residue soil-N2O coefficient (kt N2O / Mt DM) once here so
     # both crop_production (mandatory (1-FUE) N2O on bus6) and
     # residue_incorporation (LP-controlled N2O on the net residue bus)
     # use the same numbers. Requires the IPCC residue-decomposition
@@ -865,10 +865,10 @@ if __name__ == "__main__":
         * USD_TO_BNUSD
     )
 
-    filtering_cfg = land_cfg["filtering"]
-    min_crop_yield = float(filtering_cfg["min_crop_yield_t_per_ha"])
-    min_grassland_yield = float(filtering_cfg["min_grassland_yield_t_per_ha"])
-    min_area_ha = float(filtering_cfg["min_area_ha"])
+    numerics_cfg = snakemake.params.numerics
+    min_crop_yield = float(numerics_cfg["min_crop_yield_t_per_ha"])
+    min_grassland_yield = float(numerics_cfg["min_grassland_yield_t_per_ha"])
+    min_area_ha = float(numerics_cfg["min_land_area_ha"])
     land.add_land_components(
         n,
         land_class_df,
@@ -1217,6 +1217,11 @@ if __name__ == "__main__":
 
     # Store build-time regional_limit in metadata so solve_model can rescale
     n.meta["land_regional_limit"] = float(land_cfg["regional_limit"])
+
+    # Zero out physically-negligible coefficients (sub-hectare areas, trace
+    # water/carbon fluxes, rounding-level cost corrections) so the solver's
+    # coefficient/bounds/RHS ranges stay well conditioned.
+    utils.clip_negligible_coefficients(n, snakemake.params.numerics, logger)
 
     # ═══════════════════════════════════════════════════════════════
     # EXPORT

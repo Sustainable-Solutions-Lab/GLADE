@@ -16,6 +16,7 @@ required:
   - paths
   - calibration
   - netcdf
+  - numerics
   - validation
   - consumer_values
   - food_incentives
@@ -159,6 +160,48 @@ properties:
                 maximum: 9
           - type: "null"
         description: "Compression settings passed to xarray.Dataset.to_netcdf; null disables compression"
+
+  numerics:
+    type: object
+    description: "Build-time numerical-conditioning thresholds (structural pruning + coefficient clipping)"
+    required:
+      - min_land_area_ha
+      - min_crop_yield_t_per_ha
+      - min_grassland_yield_t_per_ha
+      - min_link_area_mha
+      - min_water_requirement_m3_per_ha
+      - min_co2_coefficient_tco2_per_ha
+      - min_cost_correction_bnusd
+    additionalProperties: false
+    properties:
+      min_land_area_ha:
+        type: number
+        minimum: 0
+        description: "Resource classes below this land area (ha) are dropped"
+      min_crop_yield_t_per_ha:
+        type: number
+        minimum: 0
+        description: "Crop production links below this yield (t/ha) are dropped"
+      min_grassland_yield_t_per_ha:
+        type: number
+        minimum: 0
+        description: "Grassland feed links below this yield (t/ha) are dropped"
+      min_link_area_mha:
+        type: number
+        minimum: 0
+        description: "Land areas (p_nom_max, baseline) below this many Mha are zeroed"
+      min_water_requirement_m3_per_ha:
+        type: number
+        minimum: 0
+        description: "Irrigation water coefficients below this many m3/ha are zeroed"
+      min_co2_coefficient_tco2_per_ha:
+        type: number
+        minimum: 0
+        description: "Land carbon-flux coefficients below this many tCO2/ha are zeroed"
+      min_cost_correction_bnusd:
+        type: number
+        minimum: 0
+        description: "Cost-calibration corrections below this many bnUSD per unit flow are zeroed"
 
   validation:
     type: object
@@ -306,7 +349,7 @@ properties:
 
   land:
     type: object
-    required: [regional_limit, reforestation_cap, land_use_cost_usd_per_ha, conversion_cost_forest_usd_per_ha, conversion_cost_nonforest_usd_per_ha, investment_horizon, discount_rate, filtering]
+    required: [regional_limit, reforestation_cap, land_use_cost_usd_per_ha, conversion_cost_forest_usd_per_ha, conversion_cost_nonforest_usd_per_ha, investment_horizon, discount_rate]
     additionalProperties: false
     properties:
       regional_limit:
@@ -361,23 +404,6 @@ properties:
         minimum: 0
         maximum: 1
         description: "Annual discount rate for annualizing land conversion investment costs"
-      filtering:
-        type: object
-        required: [min_crop_yield_t_per_ha, min_grassland_yield_t_per_ha, min_area_ha]
-        additionalProperties: false
-        properties:
-          min_crop_yield_t_per_ha:
-            type: number
-            minimum: 0
-            description: "Minimum yield threshold for crop production links (t/ha)"
-          min_grassland_yield_t_per_ha:
-            type: number
-            minimum: 0
-            description: "Minimum yield threshold for grassland feed links (t/ha)"
-          min_area_ha:
-            type: number
-            minimum: 0
-            description: "Minimum land area threshold (ha)"
 
   water:
     type: object

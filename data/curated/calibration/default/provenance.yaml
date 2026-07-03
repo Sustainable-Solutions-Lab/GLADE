@@ -4,8 +4,8 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/default.yaml
-generated_at: '2026-07-02T21:35:52+00:00'
-git_commit: 08a68eccbce283e7a4b01940e002fd266f000cef
+generated_at: '2026-07-03T17:40:28+00:00'
+git_commit: 22281c512133c39d1fd438f77f076a0b931c3d33
 source: default
 structural_config:
   aggregation.irrigated_area_source: current
@@ -801,9 +801,6 @@ structural_config:
   land.conversion_cost_forest_usd_per_ha: 8000
   land.conversion_cost_nonforest_usd_per_ha: 2000
   land.discount_rate: 0.05
-  land.filtering.min_area_ha: 100
-  land.filtering.min_crop_yield_t_per_ha: 0.01
-  land.filtering.min_grassland_yield_t_per_ha: 0.05
   land.investment_horizon: 30
   land.land_use_cost_usd_per_ha: 0.0
   luc.cropland_source: gaez
@@ -833,6 +830,13 @@ structural_config:
   - alfalfa
   - silage-maize
   - biomass-sorghum
+  numerics.min_co2_coefficient_tco2_per_ha: 0.001
+  numerics.min_cost_correction_bnusd: 1.0e-06
+  numerics.min_crop_yield_t_per_ha: 0.01
+  numerics.min_grassland_yield_t_per_ha: 0.05
+  numerics.min_land_area_ha: 100
+  numerics.min_link_area_mha: 1.0e-06
+  numerics.min_water_requirement_m3_per_ha: 0.1
   optimal_taxes.enabled: false
   residues.max_feed_fraction: 0.3
   residues.max_feed_fraction_by_region.Asia: 0.7
