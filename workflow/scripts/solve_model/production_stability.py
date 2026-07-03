@@ -618,10 +618,13 @@ def _add_production_l1_penalty(
 ) -> None:
     """Add L1 (absolute-value) penalty on area deviations.
 
-    Creates a linopy variable ``abs_dev >= 0`` per constrained link and adds:
-      abs_dev >= +(area - baseline)
-      abs_dev >= -(area - baseline)
-      objective += l1_cost * sum(abs_dev)
+    Splits the deviation into non-negative parts per constrained link:
+      dev_pos - dev_neg == (area - baseline),  dev_pos, dev_neg >= 0
+      objective += l1_cost * sum(dev_pos + dev_neg)
+    With positive ``l1_cost``, ``dev_pos + dev_neg == |area - baseline|``
+    at any optimum. The single equality row per link presolves to a much
+    smaller LP than an equivalent pair of ``abs_dev >= +/-deviation``
+    inequalities (~40% fewer presolved rows on the full model).
     """
     result = _production_and_baselines(
         link_p, links_df, carrier, min_baseline, include_all_links=True
@@ -636,22 +639,24 @@ def _add_production_l1_penalty(
         area, baselines, deviation_type, min_baseline
     )
 
-    abs_dev = m.add_variables(
+    dev_pos = m.add_variables(
         lower=0,
         coords=[link_names],
         dims=["name"],
-        name=f"{label}_stability_abs_dev",
+        name=f"{label}_stability_dev_pos",
+    )
+    dev_neg = m.add_variables(
+        lower=0,
+        coords=[link_names],
+        dims=["name"],
+        name=f"{label}_stability_dev_neg",
     )
 
     m.add_constraints(
-        abs_dev >= deviation,
-        name=f"GlobalConstraint-{label}_stability_pos",
+        dev_pos - dev_neg == deviation,
+        name=f"GlobalConstraint-{label}_stability_dev_split",
     )
-    m.add_constraints(
-        abs_dev >= -deviation,
-        name=f"GlobalConstraint-{label}_stability_neg",
-    )
-    m.objective += l1_cost * abs_dev.sum()
+    m.objective += l1_cost * (dev_pos.sum() + dev_neg.sum())
 
     logger.info(
         "Added %d per-link %s L1 stability penalties (cost=%.4f, mode=%s)",
@@ -837,22 +842,24 @@ def _add_animal_l1_penalty(
     if animal_scale != 1.0:
         deviation = deviation * animal_scale
 
-    abs_dev = m.add_variables(
+    dev_pos = m.add_variables(
         lower=0,
         coords=[link_names],
         dims=["name"],
-        name="animal_stability_abs_dev",
+        name="animal_stability_dev_pos",
+    )
+    dev_neg = m.add_variables(
+        lower=0,
+        coords=[link_names],
+        dims=["name"],
+        name="animal_stability_dev_neg",
     )
 
     m.add_constraints(
-        abs_dev >= deviation,
-        name="GlobalConstraint-animal_stability_pos",
+        dev_pos - dev_neg == deviation,
+        name="GlobalConstraint-animal_stability_dev_split",
     )
-    m.add_constraints(
-        abs_dev >= -deviation,
-        name="GlobalConstraint-animal_stability_neg",
-    )
-    m.objective += l1_cost * abs_dev.sum()
+    m.objective += l1_cost * (dev_pos.sum() + dev_neg.sum())
 
     logger.info(
         "Added %d per-link animal L1 stability penalties (cost=%.4f, mode=%s)",
@@ -922,7 +929,9 @@ def _add_land_conversion_l1_penalty(
     """Add L1 penalty on land conversion link flows (zero baseline).
 
     Since baseline is zero and all flows are non-negative, the absolute
-    deviation equals the flow itself: ``|p - 0| = p``.
+    deviation equals the flow itself: ``|p - 0| = p``. The penalty is
+    therefore priced directly on the flow variables; no auxiliary
+    variables or constraints are needed.
     """
     conv_links = links_df[links_df["carrier"].isin(LAND_CONVERSION_CARRIERS)]
     if conv_links.empty:
@@ -933,22 +942,7 @@ def _add_land_conversion_l1_penalty(
     link_names = conv_links.index
     flow = link_p.sel(name=link_names)
 
-    abs_dev = m.add_variables(
-        lower=0,
-        coords=[link_names],
-        dims=["name"],
-        name="land_conversion_stability_abs_dev",
-    )
-
-    m.add_constraints(
-        abs_dev >= flow,
-        name="GlobalConstraint-land_conversion_stability_pos",
-    )
-    m.add_constraints(
-        abs_dev >= -flow,
-        name="GlobalConstraint-land_conversion_stability_neg",
-    )
-    m.objective += l1_cost * abs_dev.sum()
+    m.objective += l1_cost * flow.sum()
 
     logger.info(
         "Added %d per-link land conversion L1 stability penalties (cost=%.4f)",

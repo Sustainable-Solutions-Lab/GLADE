@@ -76,6 +76,26 @@ netcdf:
     zlib: true
     complevel: 4
 
+# --- section: numerics ---
+# Build-time numerical conditioning. A few upstream datasets carry values
+# many orders of magnitude below anything that affects results (sub-hectare
+# disaggregated areas, trace yields/irrigation/carbon fluxes, rounding-level
+# cost corrections); leaving them in widens the solver's coefficient/bounds/RHS
+# ranges to ~20 orders and triggers numerical-scaling warnings. Every threshold
+# is deliberately conservative -- far below any value that changes the solution.
+# Set any to 0 to disable that clip.
+numerics:
+  # Structural pruning: drop links/rows whose defining input is implausibly
+  # small (these components would be inert or agronomically non-viable).
+  min_land_area_ha: 100                   # drop resource classes below this area
+  min_crop_yield_t_per_ha: 0.01           # drop crop links below this yield (~1% of entries)
+  min_grassland_yield_t_per_ha: 0.05      # drop grassland links below this yield (~6% of entries)
+  # Coefficient clipping: zero negligible coefficients on retained components.
+  min_link_area_mha: 0.000001            # ~1 ha; smaller land areas -> 0
+  min_water_requirement_m3_per_ha: 0.1   # <0.1 mm/ha irrigation -> no water draw
+  min_co2_coefficient_tco2_per_ha: 0.001 # near-zero land carbon flux -> 0
+  min_cost_correction_bnusd: 0.000001    # ~0.001 USD per unit flow -> 0
+
 # --- section: validation ---
 validation:
   use_actual_yields: true
@@ -227,10 +247,6 @@ land:
   conversion_cost_nonforest_usd_per_ha: 2000 # Overnight investment cost for converting non-forested land to agriculture (2024 USD/ha); sources in docs/land_use.rst
   investment_horizon: 30 # Years over which to annualize land conversion investment costs (harmonized with luc.horizon_years and the ~30-year Cook-Patton regrowth window)
   discount_rate: 0.05 # Annual discount rate for annualizing land conversion investment costs
-  filtering:
-    min_crop_yield_t_per_ha: 0.01      # Minimum yield for crop links (t/ha); filters ~1% of entries
-    min_grassland_yield_t_per_ha: 0.05 # Minimum yield for grassland links (t/ha); filters ~6% of entries
-    min_area_ha: 100                    # Minimum land area (ha); filters very small resource classes
 
 # --- section: water ---
 water:

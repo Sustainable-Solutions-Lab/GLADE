@@ -33,6 +33,7 @@ from workflow.scripts.solve_model.health import (
     evaluate_health_posthoc,
 )
 from workflow.scripts.solve_model.production_stability import (
+    LAND_CONVERSION_CARRIERS,
     add_animal_growth_cap_constraints,
     add_bounded_subsidy_constraints,
     add_crop_growth_cap_constraints,
@@ -1804,10 +1805,13 @@ def run_solve(
         #
         # The L1 coefficient mirrors what _add_animal_l1_penalty applies in
         # production_stability.py: when feed.l1_cost is set, the penalty
-        # uses that value directly (animal_scale=1.0) and abs_dev is in
-        # native Mt DM; when null, the penalty uses the cropland l1_cost on
-        # Mha-equivalent units. In both cases the per-component coefficient
-        # times sum(abs_dev.solution) reproduces the actual objective term.
+        # uses that value directly (animal_scale=1.0) and the deviation is
+        # in native Mt DM; when null, the penalty uses the cropland l1_cost
+        # on Mha-equivalent units. Each L1 term splits the deviation into
+        # dev_pos/dev_neg parts whose solution sum equals |deviation|, so
+        # the per-component coefficient times that sum reproduces the
+        # actual objective term. The land-conversion L1 is priced directly
+        # on the (non-negative, zero-baseline) link flows.
         if dp_cfg["enabled"]:
             penalty_mode = dp_cfg.get("penalty_mode")
             stability_cost = 0.0
@@ -1818,15 +1822,27 @@ def run_solve(
                 animal_l1 = (
                     float(feed_l1_override) if feed_l1_override is not None else crop_l1
                 )
-                for var_name, cost in [
-                    ("crop_stability_abs_dev", crop_l1),
-                    ("grassland_stability_abs_dev", grassland_l1),
-                    ("animal_stability_abs_dev", animal_l1),
-                    ("land_conversion_stability_abs_dev", crop_l1),
+                for var_stem, cost in [
+                    ("crop_stability_dev", crop_l1),
+                    ("grassland_stability_dev", grassland_l1),
+                    ("animal_stability_dev", animal_l1),
                 ]:
-                    if var_name in n.model.variables:
-                        sol = n.model.variables[var_name].solution
+                    if f"{var_stem}_pos" in n.model.variables:
+                        sol = (
+                            n.model.variables[f"{var_stem}_pos"].solution
+                            + n.model.variables[f"{var_stem}_neg"].solution
+                        )
                         stability_cost += cost * float(sol.sum())
+                land_cfg = dp_cfg["land"]
+                if land_cfg["enabled"] and land_cfg["land_conversion"]["enabled"]:
+                    conv_links = n.links.static.index[
+                        n.links.static["carrier"].isin(LAND_CONVERSION_CARRIERS)
+                    ]
+                    if not conv_links.empty:
+                        conv_flow = n.model.variables["Link-p"].solution.sel(
+                            name=conv_links.tolist()
+                        )
+                        stability_cost += crop_l1 * float(conv_flow.sum())
             quad_var_names = [
                 "crop_stability_dev",
                 "grassland_stability_dev",

@@ -584,11 +584,15 @@ def add_feed_to_animal_product_links(
     )
     link_df = df.set_index(names, drop=False).copy()
     link_df["bus3"] = "fertilizer:" + link_df["country"]
-    # Convert per-tonne emissions to per-Mt flows (CH4, N2O in t; feed in Mt)
+    # Convert per-tonne emissions to per-Mt flows (CH4, N2O buses in kt; feed in Mt)
     # Manure N needs no conversion: t N / t feed = Mt N / Mt feed (ratio is scale-invariant)
-    link_df["efficiency2"] = link_df["ch4_per_t_feed"] * constants.MEGATONNE_TO_TONNE
+    link_df["efficiency2"] = (
+        link_df["ch4_per_t_feed"] * constants.MEGATONNE_TO_KILOTONNE
+    )
     link_df["efficiency3"] = link_df["n_fert_per_t_feed"]
-    link_df["efficiency4"] = link_df["n2o_per_t_feed"] * constants.MEGATONNE_TO_TONNE
+    link_df["efficiency4"] = (
+        link_df["n2o_per_t_feed"] * constants.MEGATONNE_TO_KILOTONNE
+    )
 
     # Animal-production co-products (e.g. rendered-fat tallow/lard).
     # Each co-product is attached as an additional output bus on the

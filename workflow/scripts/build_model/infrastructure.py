@@ -198,8 +198,8 @@ def add_carriers_and_buses(
     for carrier, unit in [
         ("fertilizer", "Mt"),
         ("co2", "MtCO2"),
-        ("ch4", "tCH4"),
-        ("n2o", "tN2O"),
+        ("ch4", "ktCH4"),
+        ("n2o", "ktN2O"),
         ("ghg", "MtCO2e"),
     ]:
         n.carriers.add(carrier, unit=unit)

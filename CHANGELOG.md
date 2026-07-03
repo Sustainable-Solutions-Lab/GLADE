@@ -50,6 +50,24 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- Reformulated the **L1 deviation penalties** (production, animal-feed, diet
+  stability) from an absolute-value auxiliary variable with two inequality
+  rows per link to an equivalent equality split into non-negative
+  positive/negative deviation parts, and priced the zero-baseline
+  land-conversion penalty directly on link flows. Together with a faster
+  nodal-balance construction in the vendored PyPSA fork, this cuts
+  full-resolution solve times by roughly a third (about 40% fewer
+  constraint rows after presolve) with identical optima up to solver
+  tolerance.
+- Improved the optimisation model's **numerical conditioning** to remove
+  Gurobi's "large matrix coefficient range" warning. The CH₄ and N₂O emission
+  buses are now denominated in kilotonnes (previously tonnes) so their flow
+  coefficients sit within a few orders of the CO₂ bus, and a new `numerics`
+  config block clips physically-negligible coefficients at build time
+  (sub-hectare areas, trace irrigation/carbon fluxes, rounding-level cost
+  corrections). The former `land.filtering` thresholds now live under
+  `numerics`. Emission totals and the objective are unchanged (to within
+  solver tolerance); only reported CH₄/N₂O bus flows change units.
 - The baseline diet is now derived from **FAOSTAT Food Balance Sheets** by
   default (`diet.source: fbs`), computed from per-country food supply energy
   at model-basis densities and corrected for consumer waste. The GDD-IA

@@ -18,6 +18,8 @@ import logging
 import pandas as pd
 import pypsa
 
+from workflow.scripts.constants import KILOTONNE_TO_MEGATONNE
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,8 +146,10 @@ def extract_net_emissions(
 
         gwp_factor = gwp_factors[bus_carrier]
 
-        # CH4 and N2O flows are in tonnes; convert to Mt before applying GWP
-        value_mt = value * 1e-6 if bus_carrier in ("ch4", "n2o") else value
+        # CH4 and N2O flows are in kilotonnes; convert to Mt before applying GWP
+        value_mt = (
+            value * KILOTONNE_TO_MEGATONNE if bus_carrier in ("ch4", "n2o") else value
+        )
         emission_co2eq = value_mt * gwp_factor
 
         category = categorize_emission_carrier(carrier, bus_carrier)
@@ -161,10 +165,10 @@ def extract_net_emissions(
 
         p4 = n.links.dynamic["p4"].loc[:, produce_mask]
         weights = n.snapshot_weightings["objective"]
-        pasture_t_n2o = -(
+        pasture_kt_n2o = -(
             p4.multiply(pasture_share, axis=1).multiply(weights, axis=0).sum().sum()
         )
-        pasture_mtco2eq = pasture_t_n2o * n2o_gwp * 1e-6
+        pasture_mtco2eq = pasture_kt_n2o * n2o_gwp * KILOTONNE_TO_MEGATONNE
 
         total_mtco2eq = emissions["n2o"].get("Manure management & application", 0.0)
         raw_managed = total_mtco2eq - pasture_mtco2eq
@@ -193,10 +197,10 @@ def extract_net_emissions(
 
         p2 = n.links.dynamic["p2"].loc[:, produce_mask]
         weights = n.snapshot_weightings["objective"]
-        manure_t_ch4 = -(
+        manure_kt_ch4 = -(
             p2.multiply(manure_share, axis=1).multiply(weights, axis=0).sum().sum()
         )
-        manure_mtco2eq = manure_t_ch4 * ch4_gwp * 1e-6
+        manure_mtco2eq = manure_kt_ch4 * ch4_gwp * KILOTONNE_TO_MEGATONNE
 
         total_mtco2eq = emissions["ch4"].get(
             "Enteric fermentation & Manure management", 0.0

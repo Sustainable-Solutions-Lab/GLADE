@@ -177,9 +177,9 @@ The model uses consistent units throughout:
   * Nutritional energy (calories): kcal/person/day → PJ/year
 
 **Emissions**
-  * Methane (CH₄) and nitrous oxide (N₂O): tonnes of gas, converted downstream to Mt CO₂-eq
-  * Aggregate greenhouse gases: tCO₂-eq (tonnes CO₂-equivalent)
-  * Conversion factors: CH₄ (28 GWP100), N₂O (265 GWP100)
+  * Methane (CH₄) and nitrous oxide (N₂O): kilotonnes of gas (kept close in magnitude to the CO₂ bus for numerical conditioning), converted downstream to Mt CO₂-eq
+  * Carbon dioxide (CO₂) and aggregate greenhouse gases: Mt CO₂-eq
+  * Conversion factors: CH₄ (27 GWP100), N₂O (273 GWP100)
 
 **Water**
   * Water use: Mm³ (million cubic meters)

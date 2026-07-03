@@ -12,10 +12,119 @@ import logging
 
 import numpy as np
 import pandas as pd
+import pypsa
 
 from .. import constants
 
 logger = logging.getLogger(__name__)
+
+
+def _clip_below(
+    df: pd.DataFrame, col: str, floor: float, mask: pd.Series | None = None
+) -> int:
+    """Zero entries of ``df[col]`` whose magnitude is below ``floor``.
+
+    Restricted to rows selected by ``mask`` when given. NaN entries are left
+    untouched. Returns the number of entries zeroed.
+    """
+    values = df[col]
+    small = (values.abs() < floor) & (values != 0)
+    if mask is not None:
+        small &= mask
+    small = small.fillna(False)
+    df.loc[small, col] = 0.0
+    return int(small.sum())
+
+
+def _clip_port_coefficients(
+    links: pd.DataFrame, bus_carrier: pd.Series, target_carrier: str, floor: float
+) -> int:
+    """Zero multi-bus-link efficiencies feeding ``target_carrier`` buses.
+
+    Scans every output port (``bus1``/``efficiency`` .. ``busN``/``efficiencyN``)
+    and zeroes the efficiency where the port's bus has carrier
+    ``target_carrier`` and the coefficient magnitude is below ``floor``.
+    Returns the number of coefficients zeroed.
+    """
+    n_clipped = 0
+    port_cols = [c for c in links.columns if c.startswith("bus") and c != "bus0"]
+    for bus_col in port_cols:
+        suffix = bus_col[len("bus") :]
+        eff_col = "efficiency" if suffix == "1" else f"efficiency{suffix}"
+        if eff_col not in links.columns:
+            continue
+        port_carrier = links[bus_col].map(bus_carrier).fillna("")
+        eff = links[eff_col]
+        small = (port_carrier == target_carrier) & (eff.abs() < floor) & (eff != 0)
+        small = small.fillna(False)
+        links.loc[small, eff_col] = 0.0
+        n_clipped += int(small.sum())
+    return n_clipped
+
+
+def clip_negligible_coefficients(
+    n: pypsa.Network,
+    numerics_cfg: dict,
+    logger: logging.Logger = logger,
+) -> None:
+    """Zero physically-negligible coefficients to keep the LP well conditioned.
+
+    A few upstream datasets carry values orders of magnitude below anything
+    that affects results -- sub-hectare disaggregated crop areas, trace
+    irrigation requirements, near-zero carbon fluxes on arid spared land,
+    and rounding-level cost-calibration corrections. Left in place they widen
+    the solver's coefficient/bounds/RHS ranges to ~20 orders of magnitude and
+    trigger numerical-scaling warnings. Every threshold in ``config['numerics']``
+    sits far below any value that influences the solution, so clipping them to
+    zero only removes noise.
+
+    Operates in place, filtering by carrier and bus-carrier columns.
+    """
+    area_floor = float(numerics_cfg["min_link_area_mha"])
+    water_floor = float(numerics_cfg["min_water_requirement_m3_per_ha"])
+    co2_floor = float(numerics_cfg["min_co2_coefficient_tco2_per_ha"])
+    cost_floor = float(numerics_cfg["min_cost_correction_bnusd"])
+
+    links = n.links.static
+    gens = n.generators.static
+    bus_carrier = n.buses.static["carrier"].astype(str)
+    land_buses = set(bus_carrier.index[bus_carrier.str.startswith("land")])
+
+    # 1. Land areas below ~1 ha: the sub-Mha disaggregation noise that drives
+    #    the tiny end of the bounds/RHS range.
+    n_area = _clip_below(
+        links, "p_nom_max", area_floor, mask=links["bus0"].isin(land_buses)
+    )
+    if "baseline_area_mha" in links.columns:
+        n_area += _clip_below(links, "baseline_area_mha", area_floor)
+    n_area += _clip_below(
+        gens, "p_nom_max", area_floor, mask=gens["bus"].isin(land_buses)
+    )
+
+    # 2. Trace irrigation water requirements and 3. near-zero carbon fluxes,
+    #    both carried as link efficiencies onto the water / CO2 buses.
+    n_water = _clip_port_coefficients(links, bus_carrier, "water", water_floor)
+    n_co2 = _clip_port_coefficients(links, bus_carrier, "co2", co2_floor)
+
+    # 4. Rounding-level cost-calibration corrections (bnUSD per Mha or Mt flow).
+    n_cost = 0
+    for col in (
+        "bounded_subsidy_bnusd_per_mha",
+        "bounded_penalty_bnusd_per_mha",
+        "bounded_subsidy_bnusd_per_mt",
+        "bounded_penalty_bnusd_per_mt",
+    ):
+        if col in links.columns:
+            n_cost += _clip_below(links, col, cost_floor)
+
+    logger.info(
+        "Numerics clipping: zeroed %d land areas, %d water coefficients, "
+        "%d CO2 coefficients, %d cost corrections",
+        n_area,
+        n_water,
+        n_co2,
+        n_cost,
+    )
 
 
 def _per_capita_mass_to_mt_per_year(

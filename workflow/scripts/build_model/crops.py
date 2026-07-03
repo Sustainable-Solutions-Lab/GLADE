@@ -32,7 +32,7 @@ def compute_residue_n2o_efficiency_per_dm(
     indirect_ef5: float,
     frac_leach: float,
 ) -> dict[str, float]:
-    """Per-residue-feed_item soil-incorporation N2O efficiency (t N2O / Mt DM).
+    """Per-residue-feed_item soil-incorporation N2O efficiency (kt N2O / Mt DM).
 
     Combines direct (IPCC eq. 11.1) and indirect-leaching (eq. 11.10)
     pathways. Used for both the optional ``residue_incorporation`` link
@@ -77,9 +77,9 @@ def compute_residue_n2o_efficiency_per_dm(
 
     # Total N2O-N per kg residue-N: direct decomposition + leaching/runoff.
     total_n2o_n = incorporation_n2o_factor + frac_leach * indirect_ef5
-    # t N2O per Mt residue DM:
-    # = (kg N / kg DM) * (kg N2O-N / kg N) * (44/28 N2O/N2O-N) * (1e6 t/Mt)
-    coeff = total_n2o_n * (44.0 / 28.0) * constants.MEGATONNE_TO_TONNE
+    # kt N2O per Mt residue DM:
+    # = (kg N / kg DM) * (kg N2O-N / kg N) * (44/28 N2O/N2O-N) * (1e3 kt/Mt)
+    coeff = total_n2o_n * (44.0 / 28.0) * constants.MEGATONNE_TO_KILOTONNE
     return {
         item: float(n_content_lookup[item]) / 1000.0 * coeff
         for item in residue_feed_items
@@ -311,9 +311,9 @@ def add_regional_crop_production_links(
                 ch4_bus = np.full(len(df), "emission:ch4", dtype=object)
                 ch4_eff = np.full(
                     len(df),
-                    rice_methane_factor
-                    * scaling_factor
-                    * 1e3,  # kg CH4/ha -> t CH4/Mha
+                    # kg CH4/ha == kt CH4/Mha (both scale by 1e6), so the
+                    # emission factor carries straight onto the kt CH4 bus.
+                    rice_methane_factor * scaling_factor,
                     dtype=float,
                 )
             else:
