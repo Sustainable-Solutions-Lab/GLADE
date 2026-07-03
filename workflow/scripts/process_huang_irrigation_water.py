@@ -4,9 +4,10 @@
 
 """Process Huang et al. gridded irrigation water withdrawal data.
 
-Aggregates monthly gridded irrigation water use (km³/month at 0.5° resolution)
-to model regions, producing outputs compatible with the sustainable water
-availability data from the Water Footprint Network.
+Aggregates monthly gridded irrigation water withdrawal, stored as a depth
+(mm/month at 0.5 degree resolution), converting it to a volume via grid-cell
+area before aggregating to model regions. Produces outputs compatible with the
+sustainable water availability data from the Water Footprint Network.
 
 This script produces the same output format as build_region_water_availability.py
 so that the two data sources can be used interchangeably.
@@ -33,8 +34,12 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import xarray as xr  # noqa: E402
 
-# Conversion factors
-KM3_TO_M3 = 1e9  # 1 km³ = 1e9 m³
+# Physical constants for depth-to-volume conversion. The Huang `withd_irr`
+# variable is an irrigation-withdrawal *depth* (mm/month), not a volume, so it
+# must be multiplied by grid-cell area (which varies with latitude) to obtain a
+# volume before aggregating across cells.
+MM_TO_M = 1e-3
+EARTH_RADIUS_M = 6_371_000.0
 
 # Month lengths for growing season calculations
 MONTH_LENGTHS = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype=float)
@@ -400,6 +405,18 @@ def process_huang_irrigation(
     lat_idx = np.rint((lat_max - lat.astype(float)) / lat_res).astype(int)
     grid_shape = (lat_values.size, lon_values.size)
 
+    # Per-cell area (m2) for converting the withdrawal depth (mm/month) to a
+    # volume. Area depends only on latitude:
+    #   A = R^2 * dlon_rad * (sin(lat_north) - sin(lat_south)).
+    lat_north = np.deg2rad(lat_values + lat_res / 2.0)
+    lat_south = np.deg2rad(lat_values - lat_res / 2.0)
+    row_area_m2 = (
+        EARTH_RADIUS_M**2
+        * np.deg2rad(lon_res)
+        * (np.sin(lat_north) - np.sin(lat_south))
+    )
+    cell_area_m2 = np.abs(row_area_m2)[:, np.newaxis]  # (n_lat, 1), broadcasts over lon
+
     # Extract monthly data for reference year
     # The dataset spans 1971-2010, with monthly data = 480 time steps
     year_start_idx = (reference_year - 1971) * 12
@@ -410,14 +427,17 @@ def process_huang_irrigation(
         monthly_data = np.full(grid_shape, np.nan, dtype=float)
         monthly_data[lat_idx, lon_idx] = monthly_values.ravel()
 
-        # Aggregate to regions
+        # Convert withdrawal depth (mm/month) to volume (m3/month) per cell
+        # before aggregating; a coverage-weighted sum of a depth is meaningless.
+        monthly_volume_m3 = monthly_data * MM_TO_M * cell_area_m2
+
+        # Aggregate to regions (coverage-weighted sum of per-cell volumes)
         result = aggregate_gridded_to_regions(
-            monthly_data, lon_values, lat_values, regions_gdf
+            monthly_volume_m3, lon_values, lat_values, regions_gdf
         )
 
         for _, row in result.iterrows():
-            # Convert from km³ to m³
-            water_m3 = float(row["value"]) * KM3_TO_M3
+            water_m3 = float(row["value"])
             monthly_records.append(
                 {
                     "region": row["region"],
