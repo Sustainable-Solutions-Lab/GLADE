@@ -1739,11 +1739,13 @@ def run_solve(
             relaxed_obj = float(n.model.objective.value)
             n_fixed = fix_nonconvex_segments(n.model, health_relax_fix_registry)
             repair_options = dict(solver_options)
+            # Bound changes on the relaxed basis repair fastest with a
+            # warm-started simplex (crossover / barrier ignore the basis).
             if solver_name.lower() == "highs":
-                # Bound changes on the relaxed basis repair fastest with a
-                # warm-started simplex; crossover is barrier-specific.
                 repair_options["solver"] = "simplex"
                 repair_options.pop("run_crossover", None)
+            elif solver_name.lower() == "gurobi":
+                repair_options["Method"] = 1
             status, condition = n.model.solve(
                 solver_name=solver_name,
                 io_api=io_api,
