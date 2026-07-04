@@ -1738,6 +1738,14 @@ def run_solve(
         with _phase("health_relax_and_fix_repair"):
             relaxed_obj = float(n.model.objective.value)
             n_fixed = fix_nonconvex_segments(n.model, health_relax_fix_registry)
+            # The pass-1 solver model is no longer needed once its basis is
+            # on disk; free it so the repair model does not double peak
+            # memory.
+            if getattr(n.model, "solver_model", None) is not None:
+                with contextlib.suppress(AttributeError):
+                    n.model.solver_model.dispose()
+                n.model.solver_model = None
+                gc.collect()
             repair_options = dict(solver_options)
             # Bound changes on the relaxed basis repair fastest with a
             # warm-started simplex (crossover / barrier ignore the basis).

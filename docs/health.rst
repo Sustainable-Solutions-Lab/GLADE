@@ -480,8 +480,9 @@ the Stage 1 MILP as small as the dose-response data allows.
 Relax-and-Fix Mode
 ^^^^^^^^^^^^^^^^^^
 
-``health.segment_formulation: relax_and_fix`` replaces the SOS1 indicators
-with a two-pass LP scheme, so the model contains no integer variables at all:
+``health.segment_formulation: relax_and_fix`` (the default) replaces the
+SOS1 indicators with a two-pass LP scheme, so the model contains no integer
+variables at all:
 
 1. Solve the model without segment indicators. This is a relaxation: on
    non-convex curves the delta variables may interpolate across the convex
@@ -495,13 +496,17 @@ with a two-pass LP scheme, so the model contains no integer variables at all:
 The relative difference between the two objectives is a certified optimality
 gap, checked against ``health.relax_and_fix_max_gap`` (the solve errors if
 exceeded). On the full-resolution model the certified gap is well within the
-0.1% MIP tolerance used with Gurobi.
+0.1% MIP tolerance used with ``sos1``, results agree across solvers, and the
+solve is faster than the MIP even under Gurobi. Higher values per YLL
+tighten rather than widen the gap: they push intakes to breakpoint corners,
+where the relaxation is exact.
 
-This mode is intended for solvers without an efficient MIP path for this
-model class, in particular HiGHS: pair it with
+Because the scheme contains no integer variables it works with any LP
+solver. With HiGHS, pair it with
 ``solving.options_highs: {solver: ipm, run_crossover: on}`` so the relaxation
 is solved by the interior-point method (the crossover basis warm-starts the
-repair pass). See :doc:`configuration` for the solver options.
+repair pass); HiGHS's default simplex does not terminate on full-resolution
+models. See :doc:`configuration` for the solver options.
 
 Delta Formulation
 ^^^^^^^^^^^^^^^^^

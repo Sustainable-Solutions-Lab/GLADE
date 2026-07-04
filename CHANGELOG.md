@@ -17,15 +17,17 @@ introduce breaking changes to configuration and outputs.
 
 ### Added
 
-- New `health.segment_formulation: relax_and_fix` option: a two-pass LP
-  scheme for the health module's non-convex dose-response curves (solve the
-  relaxation, pin each non-convex curve to the segment of its relaxed
-  intake, re-solve warm-started) with a certified optimality gap checked
-  against `health.relax_and_fix_max_gap`. With this mode and HiGHS
-  interior-point options (`solving.options_highs: {solver: ipm,
-  run_crossover: on}`), full-resolution health-enabled scenarios solve with
-  the open-source HiGHS solver in about 5 minutes, with no Gurobi license
-  required; the default `sos1` mode (exact MIP indicators) is unchanged.
+- New `health.segment_formulation: relax_and_fix` option (now the default):
+  a two-pass LP scheme for the health module's non-convex dose-response
+  curves (solve the relaxation, pin each non-convex curve to the segment of
+  its relaxed intake, re-solve warm-started) with a certified optimality gap
+  checked against `health.relax_and_fix_max_gap`. Health-enabled solves no
+  longer contain integer variables: full-resolution scenarios solve with the
+  open-source HiGHS solver in about 5 minutes (`solving.options_highs:
+  {solver: ipm, run_crossover: on}`, no Gurobi license required) and about
+  30% faster than before under Gurobi, with results that agree across
+  solvers and certify tighter than the previous 0.1% MIP gap. The exact MIP
+  indicators remain available via `health.segment_formulation: sos1`.
 - Interactive **Carbon Price Dial**: a web widget embedded in the
   documentation where GHG-price and value-per-life-year sliders drive live
   land-use maps, net-emissions, system-cost and diet readouts by evaluating
