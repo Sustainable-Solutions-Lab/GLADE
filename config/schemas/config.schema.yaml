@@ -1188,6 +1188,8 @@ properties:
     type: object
     required:
       - enabled
+      - segment_formulation
+      - relax_and_fix_max_gap
       - region_clusters
       - breakpoint_rel_tol
       - log_rr_points
@@ -1204,6 +1206,14 @@ properties:
       enabled:
         type: boolean
         description: "Whether to include health costs in the objective function"
+      segment_formulation:
+        type: string
+        enum: ["sos1", "relax_and_fix"]
+        description: "How non-convex dose-response curves are enforced: exact SOS1 indicators (MIP) or a two-pass LP relax-and-fix scheme"
+      relax_and_fix_max_gap:
+        type: number
+        minimum: 0
+        description: "Maximum certified relative gap accepted by the relax_and_fix scheme"
       region_clusters:
         type: integer
         minimum: 1

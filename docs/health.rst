@@ -477,6 +477,42 @@ adds integer structure only where a curve actually needs it:
 The convex/non-convex split is decided per (cluster, risk) pair, which keeps
 the Stage 1 MILP as small as the dose-response data allows.
 
+Relax-and-Fix Mode
+^^^^^^^^^^^^^^^^^^
+
+``health.segment_formulation: relax_and_fix`` (the default) replaces the
+SOS1 indicators with a two-pass LP scheme, so the model contains no integer
+variables at all:
+
+1. Solve the model without segment indicators. This is a relaxation: on
+   non-convex curves the delta variables may interpolate across the convex
+   hull, so the objective is a valid bound on the exact-MIP optimum.
+2. For each non-convex (cluster, risk) pair, compute the relaxed intake and
+   pin the delta bounds to the fill-up pattern of the segment containing it
+   (only the active segment's delta stays free).
+3. Re-solve. The bound changes repair quickly from the pass-1 basis, and the
+   solution now lies exactly on the piecewise dose-response curve.
+
+The relative difference between the two objectives is a certified optimality
+gap, checked against ``health.relax_and_fix_max_gap``. If the check fails,
+the solve first re-fixes the segments from the repaired solution (intakes
+pressing against a pinned segment boundary select the neighbouring segment)
+and, if the gap still exceeds the tolerance, automatically falls back to the
+exact SOS1 MIP on the same model, seeded with the repaired solution as MIP
+start -- so a failed certificate costs extra solve time rather than an
+error. On the full-resolution model the certified gap is well within the
+0.1% MIP tolerance used with ``sos1``, results agree across solvers, and the
+solve is faster than the MIP even under Gurobi. Higher values per YLL
+tighten rather than widen the gap: they push intakes to breakpoint corners,
+where the relaxation is exact.
+
+Because the scheme contains no integer variables it works with any LP
+solver. With HiGHS, pair it with
+``solving.options_highs: {solver: ipm, run_crossover: on}`` so the relaxation
+is solved by the interior-point method (the crossover basis warm-starts the
+repair pass); HiGHS's default simplex does not terminate on full-resolution
+models. See :doc:`configuration` for the solver options.
+
 Delta Formulation
 ^^^^^^^^^^^^^^^^^
 

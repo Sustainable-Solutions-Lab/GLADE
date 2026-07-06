@@ -7,7 +7,9 @@ import ctypes
 import functools
 import gc
 import logging
+import os
 from pathlib import Path
+import tempfile
 import time
 
 from linopy.common import format_single_constraint
@@ -31,6 +33,7 @@ from workflow.scripts.solve_model.health import (
     HEALTH_AUX_MAP,
     add_health_objective,
     evaluate_health_posthoc,
+    run_relax_and_fix,
 )
 from workflow.scripts.solve_model.production_stability import (
     LAND_CONVERSION_CARRIERS,
@@ -1672,13 +1675,14 @@ def run_solve(
     # Add health impacts if enabled
     health_enabled = bool(smk.params.health_enabled)
     value_per_yll = float(smk.params.health_value_per_yll)
+    health_relax_fix_registry = None
     if health_enabled and value_per_yll > 0:
         # Extract per-risk-factor RR quantiles from sensitivity config
         sensitivity_cfg = smk.params.sensitivity
         rr_quantiles = sensitivity_cfg.get("health_relative_risk") or None
 
         with _phase("add_health_objective"):
-            add_health_objective(
+            health_relax_fix_registry = add_health_objective(
                 n,
                 smk.input.health_risk_breakpoints,
                 smk.input.health_cluster_cause,
@@ -1691,6 +1695,7 @@ def run_solve(
                 smk.input.health_cluster_risk_baseline,
                 rr_quantiles=rr_quantiles,
                 tmrel_path=smk.input.health_tmrel,
+                segment_formulation=smk.params.health_segment_formulation,
             )
 
     # Export fully-constructed model to MPS for Gurobi parameter tuning
@@ -1705,6 +1710,15 @@ def run_solve(
         logger.info("Model exported. Run tuning with:")
         logger.info("  pixi run -e gurobi python tools/tune_model.py %s", output_path)
 
+    # In health relax-and-fix mode the relaxed basis is written to disk so
+    # the repair pass can hot-start from it.
+    relax_fix_basis = None
+    if health_relax_fix_registry:
+        fd, relax_fix_basis = tempfile.mkstemp(
+            suffix=".bas", prefix="health_relax_fix_"
+        )
+        os.close(fd)
+
     with _phase("model.solve (to_solver + solver run)"):
         status, condition = n.model.solve(
             solver_name=solver_name,
@@ -1712,8 +1726,80 @@ def run_solve(
             env=gurobi_env,
             calculate_fixed_duals=smk.params.calculate_fixed_duals,
             reformulate_sos="auto",
+            basis_fn=relax_fix_basis,
             **solver_options,
         )
+
+    if health_relax_fix_registry and condition == "optimal":
+        # Health relax-and-fix repair: bound the Stage 1 delta variables to
+        # the segments of the relaxed solution and re-solve. The relaxed
+        # objective is a valid bound on the exact-MIP optimum, so the gap
+        # between the two passes certifies the repaired solution's quality;
+        # run_relax_and_fix re-fixes and ultimately falls back to the exact
+        # SOS1 MIP (seeded with the repaired solution) if the gap check
+        # fails.
+        with _phase("health_relax_and_fix_repair"):
+
+            def _dispose_solver_model():
+                # Free the previous pass's solver model so consecutive
+                # solves do not double peak memory.
+                if getattr(n.model, "solver_model", None) is not None:
+                    with contextlib.suppress(AttributeError):
+                        n.model.solver_model.dispose()
+                    n.model.solver_model = None
+                    gc.collect()
+
+            repair_options = dict(solver_options)
+            # Bound changes on the relaxed basis repair fastest with a
+            # warm-started simplex (crossover / barrier ignore the basis).
+            if solver_name.lower() == "highs":
+                repair_options["solver"] = "simplex"
+                repair_options.pop("run_crossover", None)
+            elif solver_name.lower() == "gurobi":
+                repair_options["Method"] = 1
+
+            def solve_repair():
+                _dispose_solver_model()
+                return n.model.solve(
+                    solver_name=solver_name,
+                    io_api=io_api,
+                    env=gurobi_env,
+                    calculate_fixed_duals=smk.params.calculate_fixed_duals,
+                    reformulate_sos="auto",
+                    warmstart_fn=relax_fix_basis,
+                    basis_fn=relax_fix_basis,
+                    **repair_options,
+                )
+
+            fallback_options = dict(solver_options)
+            # The fallback is a MIP: HiGHS' LP algorithm options would make
+            # it ignore integrality.
+            if solver_name.lower() == "highs":
+                fallback_options.pop("solver", None)
+                fallback_options.pop("run_crossover", None)
+
+            def solve_fallback():
+                _dispose_solver_model()
+                return n.model.solve(
+                    solver_name=solver_name,
+                    io_api=io_api,
+                    env=gurobi_env,
+                    calculate_fixed_duals=smk.params.calculate_fixed_duals,
+                    reformulate_sos="auto",
+                    **fallback_options,
+                )
+
+            status, condition = run_relax_and_fix(
+                n.model,
+                health_relax_fix_registry,
+                max_gap=float(smk.params.health_relax_and_fix_max_gap),
+                solve_repair=solve_repair,
+                solve_fallback=solve_fallback,
+            )
+
+    if relax_fix_basis is not None:
+        with contextlib.suppress(OSError):
+            os.unlink(relax_fix_basis)
     result = (status, condition)
 
     # Free solver-internal model (Gurobi/HiGHS); solution is already stored
