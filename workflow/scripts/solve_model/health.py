@@ -52,6 +52,11 @@ would under-count risk). ``_convex_cluster_risk_mask`` decides this per
 (cluster, risk) pair, so the integer structure is restricted to the curves
 that need it. Linopy's ``reformulate_sos='auto'`` converts the residual SOS1
 constraints to binary + Big-M for solvers without native SOS (e.g. HiGHS).
+In ``relax_and_fix`` mode no integer structure is built at all; instead
+:func:`run_relax_and_fix` pins the non-convex curves to the segments of the
+relaxed solution, re-solves, certifies the result against the relaxed bound,
+and falls back to the exact SOS1 MIP (seeded with the repaired solution)
+when the certificate fails.
 
 **Stage 2** uses an LP-tangent (chord-only) formulation: no auxiliary
 variables at all. Because ``exp()`` is convex and the YLL cost minimises
@@ -125,6 +130,10 @@ def _register_auxiliary_variable(m: linopy.Model, name: str) -> None:
 # differences ~0..+; non-convex ones are -0.02..-0.5 relative, so the exact
 # threshold is not sensitive.
 LP_CONVEXITY_TOL = 1e-3
+
+# Maximum number of repair rounds (segment re-fixing) attempted before the
+# relax-and-fix scheme falls back to the exact SOS1 MIP formulation.
+RELAX_AND_FIX_MAX_REFIX_ROUNDS = 3
 
 
 def _convex_cluster_risk_mask(
@@ -593,6 +602,69 @@ def _add_stage1_constraints(
     return log_rr_totals, start_entries
 
 
+def _add_segment_indicators_group(
+    m: linopy.Model,
+    delta_var: linopy.Variable,
+    mip_labels: list[str],
+    segment_coords: pd.Index,
+    name_suffix: str,
+) -> linopy.Variable:
+    """Add SOS1 segment indicators and delta-y linking for non-convex pairs.
+
+    y_j indicates segment j is "active" (contains the fractional delta).
+    Exactly one segment active: sum of y_j = 1. SOS1 ensures at most one y_j
+    is non-zero per cluster_risk; linopy's ``reformulate_sos='auto'``
+    converts these to binary+Big-M constraints for solvers without native
+    SOS (e.g. HiGHS).
+
+    Linking constraints tie delta and y (suffix-sum formulation):
+        delta_i >= sum_{k>i} y_k  (delta_i = 1 if the active segment is later)
+        delta_i <= sum_{k>=i} y_k (delta_i = 0 if the active segment is earlier)
+    """
+    segment_dim = segment_coords.name
+    n_segments = len(segment_coords)
+    mip_index = pd.Index(mip_labels, name="cluster_risk")
+
+    y_var = m.add_variables(
+        lower=0,
+        upper=1,
+        coords=[mip_index, segment_coords],
+        name=f"health_segment_ind_{name_suffix}",
+    )
+    m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
+    _register_auxiliary_variable(m, y_var.name)
+
+    m.add_constraints(
+        y_var.sum(segment_dim) == 1,
+        name=f"health_segment_sum_{name_suffix}",
+    )
+
+    suffix_matrix = np.triu(np.ones((n_segments, n_segments)))
+    suffix_coeffs = xr.DataArray(
+        suffix_matrix,
+        dims=[segment_dim, "sum_over"],
+        coords={segment_dim: segment_coords, "sum_over": segment_coords},
+    )
+    # to_linexpr() avoids sos_dim validation issues with Variable.rename().
+    y_linexpr_renamed = y_var.to_linexpr().rename({segment_dim: "sum_over"})
+    y_suffix = (y_linexpr_renamed * suffix_coeffs).sum("sum_over")
+
+    delta_mip = delta_var.sel(cluster_risk=mip_index)
+    m.add_constraints(
+        delta_mip <= y_suffix,
+        name=f"health_delta_upper_{name_suffix}",
+    )
+
+    # delta[i] >= y_suffix[i+1] for i=0..n-2
+    y_later = y_suffix.roll({segment_dim: -1}).isel({segment_dim: slice(0, -1)})
+    delta_for_lower = delta_mip.isel({segment_dim: slice(0, -1)})
+    m.add_constraints(
+        delta_for_lower >= y_later,
+        name=f"health_delta_lower_{name_suffix}",
+    )
+    return y_var
+
+
 def _add_stage1_delta(
     m: linopy.Model,
     store_expr: linopy.LinearExpression,
@@ -684,61 +756,20 @@ def _add_stage1_delta(
     ]
 
     y_var = None
+    name_suffix = f"{group_id}_{risk_label}"
     if relax_fix_registry is not None:
         if mip_labels and n_segments > 1:
             relax_fix_registry.append(
                 {
                     "delta_name": delta_var.name,
+                    "name_suffix": name_suffix,
                     "intake_breakpoints": np.asarray(intake_values.values, dtype=float),
                     "nonconvex_labels": list(mip_labels),
                 }
             )
     elif mip_labels and n_segments > 1:
-        mip_index = pd.Index(mip_labels, name="cluster_risk")
-
-        # y_j indicates segment j is "active" (contains the fractional δ).
-        # Exactly one segment active: Σ y_j = 1. SOS1 ensures at most one y_j
-        # is non-zero per cluster_risk; linopy's reformulate_sos='auto'
-        # converts to binary+Big-M for solvers without native SOS (e.g. HiGHS).
-        y_var = m.add_variables(
-            lower=0,
-            upper=1,
-            coords=[mip_index, segment_coords],
-            name=f"health_segment_ind_{group_id}_{risk_label}",
-        )
-        m.add_sos_constraints(y_var, sos_type=1, sos_dim=segment_dim)
-        _register_auxiliary_variable(m, y_var.name)
-
-        m.add_constraints(
-            y_var.sum(segment_dim) == 1,
-            name=f"health_segment_sum_{group_id}_{risk_label}",
-        )
-
-        # Linking constraints between δ and y (suffix-sum formulation):
-        #   δ_i ≥ Σ_{k>i} y_k  (δ_i = 1 if the active segment is later than i)
-        #   δ_i ≤ Σ_{k≥i} y_k  (δ_i = 0 if the active segment is before i)
-        suffix_matrix = np.triu(np.ones((n_segments, n_segments)))
-        suffix_coeffs = xr.DataArray(
-            suffix_matrix,
-            dims=[segment_dim, "sum_over"],
-            coords={segment_dim: segment_coords, "sum_over": segment_coords},
-        )
-        # to_linexpr() avoids sos_dim validation issues with Variable.rename().
-        y_linexpr_renamed = y_var.to_linexpr().rename({segment_dim: "sum_over"})
-        y_suffix = (y_linexpr_renamed * suffix_coeffs).sum("sum_over")
-
-        delta_mip = delta_var.sel(cluster_risk=mip_index)
-        m.add_constraints(
-            delta_mip <= y_suffix,
-            name=f"health_delta_upper_{group_id}_{risk_label}",
-        )
-
-        # δ[i] >= y_suffix[i+1] for i=0..n-2
-        y_later = y_suffix.roll({segment_dim: -1}).isel({segment_dim: slice(0, -1)})
-        delta_for_lower = delta_mip.isel({segment_dim: slice(0, -1)})
-        m.add_constraints(
-            delta_for_lower >= y_later,
-            name=f"health_delta_lower_{group_id}_{risk_label}",
+        y_var = _add_segment_indicators_group(
+            m, delta_var, mip_labels, segment_coords, name_suffix
         )
 
     # Intake balance: I_{c,r} = x_0 + Σ_j δ_j Δx_j
@@ -1291,15 +1322,17 @@ def add_health_objective(
         How non-convex dose-response curves are handled. ``"sos1"`` adds
         exact SOS1 segment indicators (the model becomes a MIP).
         ``"relax_and_fix"`` adds no integer structure; the caller must
-        solve the relaxed model, call :func:`fix_nonconvex_segments` with
-        the returned registry, and re-solve (two-pass LP scheme for
-        solvers without efficient MIP support, e.g. HiGHS).
+        solve the relaxed model and hand the returned registry to
+        :func:`run_relax_and_fix`, which repairs the solution and falls
+        back to the exact SOS1 MIP if the certified gap check fails
+        (two-pass LP scheme for solvers without efficient MIP support,
+        e.g. HiGHS).
 
     Returns
     -------
     list[dict] | None
         In ``relax_and_fix`` mode, the registry to pass to
-        :func:`fix_nonconvex_segments` (one entry per Stage 1 delta group
+        :func:`run_relax_and_fix` (one entry per Stage 1 delta group
         with non-convex curves). ``None`` in ``sos1`` mode.
     """
     if segment_formulation not in ("sos1", "relax_and_fix"):
@@ -1487,22 +1520,24 @@ def _fillup_bounds_for_intake(
     return lower, upper
 
 
-def fix_nonconvex_segments(m: linopy.Model, registry: list[dict]) -> int:
-    """Bound Stage 1 delta variables to the segments of a relaxed solution.
+def fix_nonconvex_segments(m: linopy.Model, registry: list[dict]) -> tuple[int, bool]:
+    """Bound Stage 1 delta variables to the segments of the current solution.
 
     For each registry entry (see :func:`add_health_objective` with
-    ``segment_formulation="relax_and_fix"``), the relaxed delta solution is
-    converted to an intake value per non-convex (cluster, risk) pair, and the
-    delta bounds are pinned to the fill-up pattern of the segment containing
-    that intake. Re-solving then yields a solution that lies exactly on the
-    piecewise dose-response curve for those pairs; convex pairs are already
-    exact in the relaxation and stay free.
+    ``segment_formulation="relax_and_fix"``), the delta solution stored on
+    ``m`` is converted to an intake value per non-convex (cluster, risk)
+    pair, and the delta bounds are pinned to the fill-up pattern of the
+    segment containing that intake. Re-solving then yields a solution that
+    lies exactly on the piecewise dose-response curve for those pairs;
+    convex pairs are already exact in the relaxation and stay free.
 
-    Must be called after a successful solve of the relaxed model (delta
-    solutions are read from ``m``). Returns the number of pairs fixed.
+    Must be called after a successful solve (delta solutions are read from
+    ``m``). Returns ``(n_fixed, changed)`` where ``changed`` indicates
+    whether any pair's pinned segment differs from the previous call.
     """
     seg_dim = "intake_step_seg"
     n_fixed = 0
+    changed = False
     for entry in registry:
         var = m.variables[entry["delta_name"]]
         breakpoints = entry["intake_breakpoints"]
@@ -1515,18 +1550,185 @@ def fix_nonconvex_segments(m: linopy.Model, registry: list[dict]) -> int:
 
         lower = np.zeros((len(labels), n_segments))
         upper = np.ones((len(labels), n_segments))
+        fixed_segments: dict[str, int] = {}
         for label in entry["nonconvex_labels"]:
             i = labels.index(label)
             lower[i], upper[i] = _fillup_bounds_for_intake(
                 breakpoints, float(intakes[i]), n_segments
             )
+            # The active segment index equals the number of deltas pinned to 1.
+            fixed_segments[label] = int(lower[i].sum())
             n_fixed += 1
+        if fixed_segments != entry.get("fixed_segments"):
+            changed = True
+        entry["fixed_segments"] = fixed_segments
 
         coords = {"cluster_risk": labels, seg_dim: sol.coords[seg_dim].values}
         dims = ("cluster_risk", seg_dim)
         var.lower = xr.DataArray(lower, coords=coords, dims=dims)
         var.upper = xr.DataArray(upper, coords=coords, dims=dims)
-    return n_fixed
+    return n_fixed, changed
+
+
+def reset_delta_bounds(m: linopy.Model, registry: list[dict]) -> None:
+    """Restore free [0, 1] bounds on all delta variables in the registry."""
+    seg_dim = "intake_step_seg"
+    for entry in registry:
+        var = m.variables[entry["delta_name"]]
+        labels = list(var.coords["cluster_risk"].values)
+        segs = var.coords[seg_dim].values
+        coords = {"cluster_risk": labels, seg_dim: segs}
+        dims = ("cluster_risk", seg_dim)
+        shape = (len(labels), len(segs))
+        var.lower = xr.DataArray(np.zeros(shape), coords=coords, dims=dims)
+        var.upper = xr.DataArray(np.ones(shape), coords=coords, dims=dims)
+        entry.pop("fixed_segments", None)
+
+
+def add_segment_indicators(m: linopy.Model, registry: list[dict]) -> None:
+    """Add the exact SOS1 segment indicators for all registry entries.
+
+    Used by the relax-and-fix fallback to restore the sos1 formulation on an
+    already-built model when the certified gap check fails.
+    """
+    for entry in registry:
+        var = m.variables[entry["delta_name"]]
+        segment_coords = pd.Index(
+            var.coords["intake_step_seg"].values, name="intake_step_seg"
+        )
+        _add_segment_indicators_group(
+            m,
+            var,
+            list(entry["nonconvex_labels"]),
+            segment_coords,
+            entry["name_suffix"],
+        )
+
+
+def set_mip_start_from_solution(m: linopy.Model, registry: list[dict]) -> None:
+    """Seed the MIP fallback with the current (repaired) solution.
+
+    Sets ``m._mip_start`` (consumed by the vendored linopy solvers) covering
+    the delta fill-up pattern and one-hot segment indicators of every
+    non-convex pair, derived from the intake implied by the delta solution
+    stored on ``m``. Must be called after :func:`add_segment_indicators`.
+    """
+    seg_dim = "intake_step_seg"
+    start_entries: dict[int, float] = {}
+    for entry in registry:
+        var = m.variables[entry["delta_name"]]
+        y_var = m.variables[f"health_segment_ind_{entry['name_suffix']}"]
+        breakpoints = entry["intake_breakpoints"]
+        sol = var.solution.transpose("cluster_risk", seg_dim)
+        labels = list(sol.coords["cluster_risk"].values)
+        n_segments = sol.sizes[seg_dim]
+        delta_x = np.diff(breakpoints)
+        intakes = breakpoints[0] + sol.values @ delta_x
+        for label in entry["nonconvex_labels"]:
+            i = labels.index(label)
+            intake = float(intakes[i])
+            seg = int(
+                np.clip(
+                    np.searchsorted(breakpoints, intake, side="right") - 1,
+                    0,
+                    n_segments - 1,
+                )
+            )
+            for j in range(n_segments):
+                dcol = int(var.labels.sel(cluster_risk=label, **{seg_dim: j}))
+                ycol = int(y_var.labels.sel(cluster_risk=label, **{seg_dim: j}))
+                start_entries[ycol] = 1.0 if j == seg else 0.0
+                if j < seg:
+                    start_entries[dcol] = 1.0
+                elif j == seg:
+                    bp_lo = float(breakpoints[j])
+                    bp_hi = float(breakpoints[j + 1])
+                    frac = (intake - bp_lo) / (bp_hi - bp_lo) if bp_hi > bp_lo else 0.5
+                    start_entries[dcol] = max(0.0, min(1.0, frac))
+                else:
+                    start_entries[dcol] = 0.0
+    if start_entries:
+        indices = np.array(sorted(start_entries), dtype=np.int32)
+        values = np.array([start_entries[i] for i in indices], dtype=np.float64)
+        m._mip_start = (len(indices), indices, values)
+
+
+def run_relax_and_fix(
+    m: linopy.Model,
+    registry: list[dict],
+    max_gap: float,
+    solve_repair,
+    solve_fallback,
+) -> tuple:
+    """Repair a relaxed health solution, falling back to the exact MIP.
+
+    Starting from a solved relaxed model, pin the non-convex Stage 1 curves
+    to the segments of the relaxed solution and re-solve via
+    ``solve_repair``. The relaxed objective is a valid bound on the exact
+    MIP optimum, so the relative gap between the two passes certifies the
+    repaired solution. If the certificate fails, re-fix from the repaired
+    solution (repaired intakes pressing against a pinned segment boundary
+    select the neighbouring segment) for up to
+    ``RELAX_AND_FIX_MAX_REFIX_ROUNDS`` rounds. If the gap still exceeds
+    ``max_gap``, restore the exact SOS1 formulation on the same model, seed
+    it with the repaired solution as MIP start, and re-solve via
+    ``solve_fallback``.
+
+    ``solve_repair`` and ``solve_fallback`` are callables returning
+    ``(status, condition)``: the former should re-solve warm-started with
+    LP-suitable options, the latter with MIP-capable options.
+
+    Returns ``(status, condition)`` of the accepted solve.
+    """
+    relaxed_obj = float(m.objective.value)
+    gap = np.inf
+    for round_idx in range(RELAX_AND_FIX_MAX_REFIX_ROUNDS):
+        n_fixed, changed = fix_nonconvex_segments(m, registry)
+        if round_idx > 0 and not changed:
+            break
+        status, condition = solve_repair()
+        if condition != "optimal":
+            raise RuntimeError(
+                "Health relax-and-fix repair solve did not reach optimality "
+                f"(condition: {condition})."
+            )
+        repaired_obj = float(m.objective.value)
+        gap = abs(repaired_obj - relaxed_obj) / max(abs(repaired_obj), 1e-9)
+        logger.info(
+            "Health relax-and-fix round %d: %d segment patterns fixed; "
+            "relaxed objective %.6f, repaired objective %.6f, certified gap "
+            "%.3e (max %.1e)",
+            round_idx + 1,
+            n_fixed,
+            relaxed_obj,
+            repaired_obj,
+            gap,
+            max_gap,
+        )
+        if gap <= max_gap:
+            return status, condition
+    logger.warning(
+        "Health relax-and-fix certified gap %.3e exceeds "
+        "health.relax_and_fix_max_gap (%.1e); falling back to the exact SOS1 "
+        "formulation seeded with the repaired solution.",
+        gap,
+        max_gap,
+    )
+    add_segment_indicators(m, registry)
+    set_mip_start_from_solution(m, registry)
+    reset_delta_bounds(m, registry)
+    status, condition = solve_fallback()
+    if condition != "optimal":
+        raise RuntimeError(
+            "Health relax-and-fix MIP fallback did not reach optimality "
+            f"(condition: {condition})."
+        )
+    logger.info(
+        "Health relax-and-fix MIP fallback solved; objective %.6f "
+        "(gap certified by the solver's MIP gap settings).",
+        float(m.objective.value),
+    )
+    return status, condition
 
 
 # =============================================================================

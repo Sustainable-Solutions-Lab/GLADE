@@ -494,8 +494,13 @@ variables at all:
    solution now lies exactly on the piecewise dose-response curve.
 
 The relative difference between the two objectives is a certified optimality
-gap, checked against ``health.relax_and_fix_max_gap`` (the solve errors if
-exceeded). On the full-resolution model the certified gap is well within the
+gap, checked against ``health.relax_and_fix_max_gap``. If the check fails,
+the solve first re-fixes the segments from the repaired solution (intakes
+pressing against a pinned segment boundary select the neighbouring segment)
+and, if the gap still exceeds the tolerance, automatically falls back to the
+exact SOS1 MIP on the same model, seeded with the repaired solution as MIP
+start -- so a failed certificate costs extra solve time rather than an
+error. On the full-resolution model the certified gap is well within the
 0.1% MIP tolerance used with ``sos1``, results agree across solvers, and the
 solve is faster than the MIP even under Gurobi. Higher values per YLL
 tighten rather than widen the gap: they push intakes to breakpoint corners,

@@ -33,7 +33,7 @@ from workflow.scripts.solve_model.health import (
     HEALTH_AUX_MAP,
     add_health_objective,
     evaluate_health_posthoc,
-    fix_nonconvex_segments,
+    run_relax_and_fix,
 )
 from workflow.scripts.solve_model.production_stability import (
     LAND_CONVERSION_CARRIERS,
@@ -1731,21 +1731,24 @@ def run_solve(
         )
 
     if health_relax_fix_registry and condition == "optimal":
-        # Health relax-and-fix repair pass: bound the Stage 1 delta variables
-        # to the segments of the relaxed solution and re-solve. The relaxed
+        # Health relax-and-fix repair: bound the Stage 1 delta variables to
+        # the segments of the relaxed solution and re-solve. The relaxed
         # objective is a valid bound on the exact-MIP optimum, so the gap
-        # between the two passes certifies the repaired solution's quality.
+        # between the two passes certifies the repaired solution's quality;
+        # run_relax_and_fix re-fixes and ultimately falls back to the exact
+        # SOS1 MIP (seeded with the repaired solution) if the gap check
+        # fails.
         with _phase("health_relax_and_fix_repair"):
-            relaxed_obj = float(n.model.objective.value)
-            n_fixed = fix_nonconvex_segments(n.model, health_relax_fix_registry)
-            # The pass-1 solver model is no longer needed once its basis is
-            # on disk; free it so the repair model does not double peak
-            # memory.
-            if getattr(n.model, "solver_model", None) is not None:
-                with contextlib.suppress(AttributeError):
-                    n.model.solver_model.dispose()
-                n.model.solver_model = None
-                gc.collect()
+
+            def _dispose_solver_model():
+                # Free the previous pass's solver model so consecutive
+                # solves do not double peak memory.
+                if getattr(n.model, "solver_model", None) is not None:
+                    with contextlib.suppress(AttributeError):
+                        n.model.solver_model.dispose()
+                    n.model.solver_model = None
+                    gc.collect()
+
             repair_options = dict(solver_options)
             # Bound changes on the relaxed basis repair fastest with a
             # warm-started simplex (crossover / barrier ignore the basis).
@@ -1754,41 +1757,45 @@ def run_solve(
                 repair_options.pop("run_crossover", None)
             elif solver_name.lower() == "gurobi":
                 repair_options["Method"] = 1
-            status, condition = n.model.solve(
-                solver_name=solver_name,
-                io_api=io_api,
-                env=gurobi_env,
-                calculate_fixed_duals=smk.params.calculate_fixed_duals,
-                reformulate_sos="auto",
-                warmstart_fn=relax_fix_basis,
-                **repair_options,
-            )
-            if condition != "optimal":
-                raise RuntimeError(
-                    "Health relax-and-fix repair solve did not reach "
-                    f"optimality (condition: {condition})."
+
+            def solve_repair():
+                _dispose_solver_model()
+                return n.model.solve(
+                    solver_name=solver_name,
+                    io_api=io_api,
+                    env=gurobi_env,
+                    calculate_fixed_duals=smk.params.calculate_fixed_duals,
+                    reformulate_sos="auto",
+                    warmstart_fn=relax_fix_basis,
+                    basis_fn=relax_fix_basis,
+                    **repair_options,
                 )
-            fixed_obj = float(n.model.objective.value)
-            gap = abs(fixed_obj - relaxed_obj) / max(abs(fixed_obj), 1e-9)
-            max_gap = float(smk.params.health_relax_and_fix_max_gap)
-            logger.info(
-                "Health relax-and-fix: %d segment patterns fixed; relaxed "
-                "objective %.6f, repaired objective %.6f, certified gap %.3e "
-                "(max %.1e)",
-                n_fixed,
-                relaxed_obj,
-                fixed_obj,
-                gap,
-                max_gap,
-            )
-            if gap > max_gap:
-                raise ValueError(
-                    f"Health relax-and-fix certified gap {gap:.3e} exceeds "
-                    f"health.relax_and_fix_max_gap ({max_gap:.1e}). Refine the "
-                    "health intake breakpoints, raise the tolerance, or use "
-                    "health.segment_formulation: sos1 with a MIP-capable "
-                    "solver setup."
+
+            fallback_options = dict(solver_options)
+            # The fallback is a MIP: HiGHS' LP algorithm options would make
+            # it ignore integrality.
+            if solver_name.lower() == "highs":
+                fallback_options.pop("solver", None)
+                fallback_options.pop("run_crossover", None)
+
+            def solve_fallback():
+                _dispose_solver_model()
+                return n.model.solve(
+                    solver_name=solver_name,
+                    io_api=io_api,
+                    env=gurobi_env,
+                    calculate_fixed_duals=smk.params.calculate_fixed_duals,
+                    reformulate_sos="auto",
+                    **fallback_options,
                 )
+
+            status, condition = run_relax_and_fix(
+                n.model,
+                health_relax_fix_registry,
+                max_gap=float(smk.params.health_relax_and_fix_max_gap),
+                solve_repair=solve_repair,
+                solve_fallback=solve_fallback,
+            )
 
     if relax_fix_basis is not None:
         with contextlib.suppress(OSError):

@@ -1298,8 +1298,9 @@ health:
   #   non-convex curve to the segment of its relaxed intake, re-solve with a
   #   warm start). No integer variables, so it works with any LP solver
   #   (including HiGHS) and is faster than sos1 even under Gurobi. The gap
-  #   between the two passes is certified against relax_and_fix_max_gap and
-  #   the solve errors if it is exceeded.
+  #   between the two passes is certified against relax_and_fix_max_gap; if
+  #   exceeded, the solve re-fixes from the repaired solution and ultimately
+  #   falls back to the exact sos1 MIP seeded with the repaired solution.
   # - "sos1": exact SOS1 segment indicators; the model becomes a MIP and
   #   needs a strong MIP solver (Gurobi).
   segment_formulation: "relax_and_fix"

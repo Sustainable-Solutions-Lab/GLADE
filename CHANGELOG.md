@@ -21,7 +21,10 @@ introduce breaking changes to configuration and outputs.
   a two-pass LP scheme for the health module's non-convex dose-response
   curves (solve the relaxation, pin each non-convex curve to the segment of
   its relaxed intake, re-solve warm-started) with a certified optimality gap
-  checked against `health.relax_and_fix_max_gap`. Health-enabled solves no
+  checked against `health.relax_and_fix_max_gap`. If the certificate fails,
+  the solve re-fixes the segments from the repaired solution and, as a last
+  resort, automatically falls back to the exact sos1 MIP seeded with the
+  repaired solution, instead of erroring. Health-enabled solves no
   longer contain integer variables: full-resolution scenarios solve with the
   open-source HiGHS solver in about 5 minutes (`solving.options_highs:
   {solver: ipm, run_crossover: on}`, no Gurobi license required) and about
