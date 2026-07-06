@@ -61,6 +61,8 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- Tightened the default solve memory allocation (`solving.mem_mb`) to match
+  the reduced memory usage of full-resolution solves.
 - Reformulated the **L1 deviation penalties** (production, animal-feed, diet
   stability) from an absolute-value auxiliary variable with two inequality
   rows per link to an equivalent equality split into non-negative

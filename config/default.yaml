@@ -1822,7 +1822,7 @@ solving:
   export_for_tuning: false  # Export model to MPS before solving (for Gurobi parameter tuning)
   time_limit: null  # Solver-internal time limit in minutes (null = no limit)
   runtime: 5  # Maximum solver runtime in minutes (used by SLURM)
-  mem_mb: 8000  # Maximum solve_model memory in MB (used by SLURM)
+  mem_mb: 6000  # Maximum solve_model memory in MB (used by SLURM)
   inline_analysis: false  # When true, analysis runs inside the solve process (no intermediate .nc)
 
 # --- section: remote_solve ---
