@@ -214,7 +214,7 @@ class TestCalculateManureNOutputs:
     ):
         """Zero efficiency: no product N retained, all feed N is excreted."""
         efficiency = 0.0
-        n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
+        n_fert, n2o, _pasture_share = _calculate_manure_n_outputs(
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
@@ -250,7 +250,7 @@ class TestCalculateManureNOutputs:
     ):
         """Verify the 44/28 N2O-N to N2O conversion is applied."""
         efficiency = 0.05
-        n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
+        _n_fert, n2o, _pasture_share = _calculate_manure_n_outputs(
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
@@ -304,7 +304,7 @@ class TestCalculateManureNOutputs:
     ):
         """Forage feed: pasture fraction from MMS data contributes to N2O."""
         efficiency = 0.03
-        n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
+        _n_fert, n2o, pasture_share = _calculate_manure_n_outputs(
             product="meat-cattle",
             feed_category="ruminant_forage",
             efficiency=efficiency,
@@ -504,7 +504,7 @@ class TestCalculateCh4PerFeedIntake:
         manure_ch4_lookup,
     ):
         """Enteric CH4 conversion: g CH4/kg DM -> t CH4/t DM (divide by 1000)."""
-        total, manure = _calculate_ch4_per_feed_intake(
+        total, _manure = _calculate_ch4_per_feed_intake(
             product="meat-cattle",
             feed_category="ruminant_roughage",
             country="USA",

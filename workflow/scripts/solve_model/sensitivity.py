@@ -427,7 +427,7 @@ def _scale_loss_on_links(
             n.links.static.loc[idx, eff_col].astype(float) * ratio
         )
         n.links.static.loc[idx, lm_col] = new_mult
-        scaled_pairs += int(len(idx))
+        scaled_pairs += len(idx)
 
     return scaled_pairs
 
@@ -501,7 +501,7 @@ def _apply_food_waste_factor(n: pypsa.Network, factor: float) -> None:
     logger.info(
         "Applied food waste factor %.3f to %d food_consumption links",
         factor,
-        int(len(idx)),
+        len(idx),
     )
 
 
@@ -588,7 +588,7 @@ def _apply_fcr_factor(n: pypsa.Network, factor: float) -> None:
         n.links.static.loc[target_idx, eff_col] = (
             n.links.static.loc[target_idx, eff_col].astype(float) * factor
         )
-        scaled_pairs += int(len(target_idx))
+        scaled_pairs += len(target_idx)
 
     logger.info(
         "Applied FCR factor %.3f to %d food outputs on %d animal_production links",

@@ -146,7 +146,7 @@ def _plot_feed_slack(
     colors = categorical_colors(cat_order)
     labels = [CATEGORY_LABELS.get(c, c) for c in cat_order]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _fig, ax = plt.subplots(figsize=(10, 6))
     positions = np.arange(len(cat_order))
     bar_width = 0.7
 

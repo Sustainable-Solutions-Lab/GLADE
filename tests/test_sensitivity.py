@@ -825,7 +825,7 @@ class TestExpandRrGroups:
 
     def test_overlap_raises(self, risk_breakpoints):
         """Overlap between group and individual key raises ValueError."""
-        with pytest.raises(ValueError, match="whole_grains.*protective"):
+        with pytest.raises(ValueError, match=r"whole_grains.*protective"):
             _expand_rr_groups(
                 {"protective": 0.5, "whole_grains": 0.7}, risk_breakpoints
             )
