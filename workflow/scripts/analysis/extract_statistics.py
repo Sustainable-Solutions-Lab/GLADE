@@ -448,105 +448,38 @@ def extract_animal_production(n: pypsa.Network) -> pd.DataFrame:
     return df.sort_values(["country", "product"]).reset_index(drop=True)
 
 
-def _get_nutrient_ports(n: pypsa.Network) -> list[str]:
-    """Get list of port indices that connect to nutrient buses.
+# Nutrient bus carriers and their output column names
+_NUTRIENT_MAP = {
+    "protein": "protein_mt",
+    "carb": "carb_mt",
+    "fat": "fat_mt",
+    "cal": "cal_pj",
+}
 
-    Parameters
-    ----------
-    n : pypsa.Network
-        Network to query
-
-    Returns
-    -------
-    list[str]
-        List of port index strings (e.g., ["1", "2", "3", "4"])
-    """
-    links = n.links.static
-    consume_links = links[links["carrier"] == "food_consumption"]
-    sample_link = consume_links.iloc[0]
-
-    nutrient_carriers = {"protein", "carb", "fat", "cal"}
-    ports = []
-
-    for col in sample_link.index:
-        match = re.match(r"^bus(\d+)$", col)
-        if match and int(match.group(1)) >= 1:
-            bus_name = sample_link[col]
-            if pd.notna(bus_name) and bus_name in n.buses.static.index:
-                carrier = n.buses.static.at[bus_name, "carrier"]
-                if carrier in nutrient_carriers:
-                    ports.append(match.group(1))
-    return ports
+_CONSUMPTION_VALUE_COLS = ["consumption_mt", *_NUTRIENT_MAP.values()]
 
 
-def _extract_nutrient_flows(
-    n: pypsa.Network, consume_carriers: list[str], groupby: list[str]
-) -> dict[str, pd.Series]:
-    """Extract nutrient flows from consume links using statistics API.
+def _extract_consumption_detailed(n: pypsa.Network) -> pd.DataFrame:
+    """Extract consumption and nutrient flows at (food, food_group, country) level.
 
-    Parameters
-    ----------
-    n : pypsa.Network
-        Network to query
-    consume_carriers : list[str]
-        List of consume link carriers
-    groupby : list[str]
-        Columns to group by
+    Uses one withdrawal call (mass from food buses) and one supply call (all
+    four nutrient flows at once, grouped by bus_carrier); each statistics call
+    scans every port of the full network, so minimizing the call count matters.
 
-    Returns
-    -------
-    dict[str, pd.Series]
-        Dict mapping nutrient names to grouped Series
-    """
-    nutrients = {}
-
-    # Detect nutrient ports dynamically
-    nutrient_ports = _get_nutrient_ports(n)
-
-    # Nutrient bus carriers and their output column names
-    nutrient_map = {
-        "protein": "protein_mt",
-        "carb": "carb_mt",
-        "fat": "fat_mt",
-        "cal": "cal_pj",
-    }
-
-    for nutrient, col_name in nutrient_map.items():
-        flow = n.statistics.supply(
-            components="Link",
-            carrier=consume_carriers,
-            at_port=nutrient_ports,
-            bus_carrier=nutrient,
-            groupby=groupby,
-            nice_names=False,
-        )
-        nutrients[col_name] = flow
-
-    return nutrients
-
-
-def _extract_consumption(
-    n: pypsa.Network, groupby: list[str], group_col: str
-) -> pd.DataFrame:
-    """Extract food consumption and macronutrients grouped by specified columns.
-
-    Shared implementation for food and food group consumption extraction.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-        Solved network
-    groupby : list[str]
-        Columns to group by (e.g., ["food", "country"] or ["food_group", "country"])
-    group_col : str
-        Primary grouping column name for output ("food" or "food_group")
+    Statistics are fetched unrounded and with zeros kept; rounding and
+    zero-dropping happen after aggregation to the output level (in
+    :func:`_finalize_consumption`) so results match a direct per-level
+    statistics query.
 
     Returns
     -------
     pd.DataFrame
-        Consumption data with mass, nutrient, and per-capita columns
+        Columns: food, food_group, country, consumption_mt, protein_mt,
+        carb_mt, fat_mt, cal_pj. Empty (no columns) if the network has no
+        consumption flows.
     """
     consume_carriers = ["food_consumption"]
+    groupby = ["food", "food_group", "country"]
 
     # Get food bus carriers (food_wheat, food_bread, etc.)
     food_bus_carriers = [
@@ -560,16 +493,63 @@ def _extract_consumption(
         bus_carrier=food_bus_carriers,
         groupby=groupby,
         nice_names=False,
+        round=False,
+        drop_zero=False,
     ).abs()
 
     if consumption.empty:
+        return pd.DataFrame()
+
+    df = consumption.to_frame("consumption_mt").reset_index()
+    df = df.dropna(subset=groupby)
+    df = df.groupby(groupby, as_index=False)["consumption_mt"].sum()
+
+    # Select the nutrient flows purely by ``bus_carrier`` (each consume link
+    # has exactly one bus per nutrient, so this is unambiguous). We
+    # deliberately do NOT pass ``at_port``: PyPSA resolves numeric port labels
+    # positionally against a lexicographically-sorted port list, so once a
+    # Link has >= 10 ports (``bus10`` exists, e.g. at finer
+    # water.temporal_resolution) the labels ['1','2','3','4'] map to suffixes
+    # '1','10','11','12' and silently select the wrong buses. Omitting at_port
+    # scans all ports and filters by carrier, which is correct at any port
+    # count and identical where both work.
+    nutrient_flows = n.statistics.supply(
+        components="Link",
+        carrier=consume_carriers,
+        bus_carrier=list(_NUTRIENT_MAP),
+        groupby=[*groupby, "bus_carrier"],
+        nice_names=False,
+        round=False,
+        drop_zero=False,
+    )
+    nutrients = (
+        nutrient_flows.to_frame("value")
+        .reset_index()
+        .pivot_table(
+            index=groupby, columns="bus_carrier", values="value", aggfunc="sum"
+        )
+        .rename(columns=_NUTRIENT_MAP)
+        .reindex(columns=list(_NUTRIENT_MAP.values()))
+        .reset_index()
+    )
+
+    df = df.merge(nutrients, on=groupby, how="left")
+    for col in _NUTRIENT_MAP.values():
+        df[col] = df[col].fillna(0.0)
+
+    return df
+
+
+def _finalize_consumption(
+    n: pypsa.Network, detailed: pd.DataFrame, group_col: str
+) -> pd.DataFrame:
+    """Aggregate detailed consumption to (group_col, country) and add per-capita columns."""
+    groupby = [group_col, "country"]
+
+    if detailed.empty:
         columns = [
             *groupby,
-            "consumption_mt",
-            "protein_mt",
-            "carb_mt",
-            "fat_mt",
-            "cal_pj",
+            *_CONSUMPTION_VALUE_COLS,
             "consumption_g_per_person_day",
             "protein_g_per_person_day",
             "carb_g_per_person_day",
@@ -578,24 +558,13 @@ def _extract_consumption(
         ]
         return pd.DataFrame(columns=columns)
 
-    df = consumption.to_frame("consumption_mt").reset_index()
-    df = df.dropna(subset=groupby)
+    df = detailed.groupby(groupby, as_index=False)[_CONSUMPTION_VALUE_COLS].sum()
 
-    # Extract nutrient flows
-    nutrients = _extract_nutrient_flows(n, consume_carriers, groupby)
-
-    # Merge nutrient columns
-    for col_name, flow in nutrients.items():
-        nutrient_df = flow.to_frame(col_name).reset_index()
-        df = df.merge(nutrient_df, on=groupby, how="left")
-
-    # Fill NaN nutrients with 0
-    for col in ["protein_mt", "carb_mt", "fat_mt", "cal_pj"]:
-        df[col] = df[col].fillna(0.0)
-
-    # Aggregate by groupby columns (in case of duplicates)
-    agg_cols = ["consumption_mt", "protein_mt", "carb_mt", "fat_mt", "cal_pj"]
-    df = df.groupby(groupby, as_index=False)[agg_cols].sum()
+    # Match the statistics module's default post-processing at this
+    # aggregation level: round to 5 decimals, then drop rows whose
+    # consumption rounds to zero.
+    df[_CONSUMPTION_VALUE_COLS] = df[_CONSUMPTION_VALUE_COLS].round(5)
+    df = df[df["consumption_mt"] != 0]
 
     # Add per-capita values
     population = get_country_population(n)
@@ -629,20 +598,27 @@ def _extract_consumption(
     return df.sort_values(["country", group_col]).reset_index(drop=True)
 
 
-def extract_food_consumption(n: pypsa.Network) -> pd.DataFrame:
-    """Extract food consumption and macronutrients by food and country.
+def extract_consumption_tables(
+    n: pypsa.Network,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Extract food- and food-group-level consumption in one network pass.
 
-    Uses PyPSA statistics with bus_carrier filtering to extract consumption
-    (withdrawal from food buses) and nutrient flows (supply to nutrient buses).
+    Consumption and nutrient flows are extracted once at (food, food_group,
+    country) resolution, then aggregated to both output levels. Consume links
+    carry validated ``food`` and ``food_group`` columns, so nothing is lost
+    relative to extracting each level separately.
 
     Returns
     -------
-    pd.DataFrame
-        Columns: food, country, consumption_mt, protein_mt, carb_mt, fat_mt, cal_pj,
-                 consumption_g_per_person_day, protein_g_per_person_day,
-                 carb_g_per_person_day, fat_g_per_person_day, cal_kcal_per_person_day
+    tuple[pd.DataFrame, pd.DataFrame]
+        (food-level, food-group-level) consumption tables, each with mass,
+        nutrient, and per-capita columns.
     """
-    return _extract_consumption(n, groupby=["food", "country"], group_col="food")
+    detailed = _extract_consumption_detailed(n)
+    return (
+        _finalize_consumption(n, detailed, group_col="food"),
+        _finalize_consumption(n, detailed, group_col="food_group"),
+    )
 
 
 def _aggregate_animal_production_flows(
@@ -1079,21 +1055,3 @@ def extract_luc_breakdown(
     )
 
     return pd.concat([by_land, by_continent], ignore_index=True)[out_cols]
-
-
-def extract_food_group_consumption(n: pypsa.Network) -> pd.DataFrame:
-    """Extract food consumption and macronutrients by food group and country.
-
-    Uses PyPSA statistics with bus_carrier filtering to group by the `food_group`
-    column that already exists on consume links.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: food_group, country, consumption_mt, protein_mt, carb_mt, fat_mt, cal_pj,
-                 consumption_g_per_person_day, protein_g_per_person_day,
-                 carb_g_per_person_day, fat_g_per_person_day, cal_kcal_per_person_day
-    """
-    return _extract_consumption(
-        n, groupby=["food_group", "country"], group_col="food_group"
-    )
