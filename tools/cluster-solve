@@ -73,23 +73,33 @@ def run_scenario(
             and getattr(smk.output, attr).endswith(".parquet")
         }
 
+        health_enabled = bool(smk.params.health_enabled)
         run_analysis(
             n,
             output_paths=output_paths,
             food_groups_path=smk.input.food_groups,
             m49_codes_path=smk.input.m49,
-            risk_breakpoints_path=smk.input.health_risk_breakpoints,
-            health_cluster_cause_path=smk.input.health_cluster_cause,
-            health_cause_log_path=smk.input.health_cause_log,
-            health_clusters_path=smk.input.health_clusters,
             population_path=smk.input.population,
-            tmrel_path=smk.input.health_tmrel,
             ghg_price=float(smk.params.ghg_price),
             ch4_gwp=float(smk.params.ch4_gwp),
             n2o_gwp=float(smk.params.n2o_gwp),
             value_per_yll=float(smk.params.health_value_per_yll),
             health_risk_factors=list(smk.params.health_risk_factors),
             logger=logger,
+            health_enabled=health_enabled,
+            risk_breakpoints_path=(
+                smk.input.health_risk_breakpoints if health_enabled else None
+            ),
+            health_cluster_cause_path=(
+                smk.input.health_cluster_cause if health_enabled else None
+            ),
+            health_cause_log_path=(
+                smk.input.health_cause_log if health_enabled else None
+            ),
+            health_clusters_path=(
+                smk.input.health_clusters if health_enabled else None
+            ),
+            tmrel_path=smk.input.health_tmrel if health_enabled else None,
         )
     else:
         # Write solved network to disk
