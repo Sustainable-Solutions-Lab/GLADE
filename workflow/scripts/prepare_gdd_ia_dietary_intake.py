@@ -3,7 +3,13 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Process Global Dietary Database — Integrated Assessment (GDD-IA) dataset.
+"""Process the Global Dietary Database for Impact Assessments (GDD-IA).
+
+GDD-IA (Springmann 2026, https://doi.org/10.1038/s43016-026-01388-z)
+reconciles regional food availability, food waste, socio-demographic
+survey intake and energy-requirement estimates into complete diets. It
+is a distinct dataset from the Tufts University Global Dietary Database
+(GDD), which the model does not use.
 
 GDD-IA ships two parallel CSVs (one in grams/day, one in kcal/day) at
 country level. Most groups (vegetables, fruits, nuts/seeds, oil, sugar,
@@ -37,9 +43,8 @@ Out-of-scope categories (kcal subtracted from country target):
 ``fruits_starch`` (plantain) maps to the ``starchy_vegetable`` food
 group (model crop ``plantain`` added).
 
-The output mirrors the schema of the legacy ``gdd_dietary_intake.csv``
-(unit, item, country, age, year, value), plus a companion
-``gdd_ia_kcal_target.csv`` that carries the per-country ``all-fg``
+The output is emitted as (unit, item, country, age, year, value), plus a
+companion ``gdd_ia_kcal_target.csv`` that carries the per-country ``all-fg``
 total kcal, the out-of-scope subtotal, and the FBS-aligned cereal kcal
 split (whole_grains, grain) — all consumed by
 ``estimate_baseline_diet`` for the anchor-aware kcal normalisation
@@ -50,8 +55,8 @@ age 0-9/10-19/20-39/40-64/65+ which doesn't match the existing
 pipeline buckets; baseline_age is "All ages" by default.
 
 Input:
-    - GDD-IA grams CSV (data/manually_downloaded/GDD-IA-intake_grams_{year}.csv)
-    - GDD-IA kcal CSV  (data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv)
+    - GDD-IA grams CSV (data/downloads/gdd_ia/intake_grams_{year}.csv)
+    - GDD-IA kcal CSV  (data/downloads/gdd_ia/intake_kcals_{year}.csv)
     - nutrition CSV     (for global per-group density in model basis)
     - food_groups CSV   (food → group)
     - FBS items kcal CSV (per-(country, item) energy supply, for the
@@ -140,10 +145,8 @@ OUT_OF_SCOPE_KCAL: list[str] = [
     "other",
 ]
 
-# Country proxies for the 12 GDD-IA-missing required countries.
-# AFG/ERI/SOM use already-validated regional analogues from the legacy
-# pipeline; the new entries (BRN/BTN/GNQ/PSE/SSD/TWN) are chosen by
-# dietary similarity and geographic proximity.
+# Country proxies for the 12 required countries GDD-IA does not cover,
+# chosen by dietary similarity and geographic proximity.
 COUNTRY_PROXIES: dict[str, str] = {
     "AFG": "IRN",  # diet similar (Persian/Pashtun)
     "ASM": "WSM",  # American Samoa → Samoa
@@ -159,8 +162,7 @@ COUNTRY_PROXIES: dict[str, str] = {
     "TWN": "CHN",  # Taiwan → China
 }
 
-# Unit strings (kept consistent with gdd_dietary_intake.csv conventions
-# so downstream consumers see the same labels).
+# Unit strings, matching the labels the other dietary-intake sources emit.
 UNIT_BY_GROUP = {
     "dairy": "g/day (milk equiv)",
     "sugar": "g/day (refined sugar eq)",

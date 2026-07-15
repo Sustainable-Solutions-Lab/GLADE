@@ -51,8 +51,8 @@ jobs:
       # no producing rule, so the DAG can't resolve unless the paths exist.
       # A dryrun never reads their contents, so empty stubs suffice. Paths
       # track the rules in workflow/rules/health.smk (baseline_year: 2020).
-      # The GDD-IA dietary data needs no stubs: the test config uses the
-      # default FBS-derived baseline diet (diet.source: fbs).
+      # The GDD-IA dietary data needs no stubs: it has a producing rule
+      # (download_gdd_ia_intake), so the DAG resolves without it on disk.
       - name: Stub manually-downloaded inputs
         run: |
           d=data/manually_downloaded

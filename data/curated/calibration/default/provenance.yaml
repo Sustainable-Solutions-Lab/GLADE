@@ -4,7 +4,7 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/default.yaml
-generated_at: '2026-07-03T17:40:28+00:00'
+generated_at: '2026-07-03T17:40:30+00:00'
 git_commit: 22281c512133c39d1fd438f77f076a0b931c3d33
 source: default
 structural_config:
@@ -656,9 +656,6 @@ structural_config:
   data.usda.retrieve_nutrition: false
   diet.anchor_groups_to_gbd: false
   diet.baseline_age: All ages
-  diet.fbs.whole_grain_shares.flour-wholemeal: 0.07
-  diet.fbs.whole_grain_shares.maize-whole: 0.46
-  diet.fbs.whole_grain_shares.rice-brown: 0.01
   diet.fbs_override_foods:
   - yam
   - cocoa-powder
@@ -669,10 +666,11 @@ structural_config:
   - meat-sheep
   - meat-chicken
   - eggs
+  diet.gdd_ia.cooked_to_raw.red_meat: 1.43
   diet.nhanes.cycle: '1720'
   diet.nhanes.reference_year: 2018
   diet.nhanes.url: https://www.ars.usda.gov/ARSUserFiles/80400530/pdf/fped/Table_1_FPED_MaleFemale_{cycle}.pdf
-  diet.source: fbs
+  diet.source: gdd_ia
   diet.source_basis.faostat_fbs_supply.meat-cattle: carcass
   diet.source_basis.faostat_fbs_supply.meat-chicken: carcass
   diet.source_basis.faostat_fbs_supply.meat-pig: carcass

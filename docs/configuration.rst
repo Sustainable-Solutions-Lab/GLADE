@@ -333,7 +333,7 @@ Validation Options
    :end-before: # --- section: land ---
 
 Set ``validation.enforce_baseline_diet`` to ``true`` to force the optimizer to match
-baseline consumption derived from the processed GDD file. When this flag is active,
+baseline consumption derived from the estimated baseline diet. When this flag is active,
 the ``diet.baseline_age`` and ``baseline_year`` settings determine which
 cohort/year is enforced. Use ``validation.food_group_slack_marginal_cost`` to set the
 penalty (USD\ :sub:`2024` per Mt) for the slack generators that backstop those fixed

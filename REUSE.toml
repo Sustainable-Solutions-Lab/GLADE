@@ -9,16 +9,6 @@ SPDX-PackageDownloadLocation = "https://github.com/Sustainable-Solutions-Lab/GLA
 
 [[annotations]]
 path = [
-    "data/manually_downloaded/GDD-dietary-intake/**",
-    "data/manually_downloaded/GDD-dietary-intake/**.csv",
-    "data/manually_downloaded/GDD-dietary-intake/**.xlsx"
-]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Tufts University"
-SPDX-License-Identifier = "LicenseRef-GDD-NonCommercial"
-
-[[annotations]]
-path = [
     "data/manually_downloaded/IHME-GBD_2023-death-rates-2020.csv",
     "data/manually_downloaded/IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX"
 ]

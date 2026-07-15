@@ -11,7 +11,7 @@ GBD dietary risk exposure, and per-food baseline diet estimation.
 
 
 rule prepare_gdd_ia_dietary_intake:
-    """Process Global Dietary Database — Integrated Assessment (GDD-IA) dataset.
+    """Process the Global Dietary Database for Impact Assessments (GDD-IA) dataset.
 
     Reads the parallel grams and kcal CSVs, maps prim/prcd categories to
     GLADE food groups (butter+cream folded into dairy as
@@ -27,8 +27,8 @@ rule prepare_gdd_ia_dietary_intake:
         anchor-aware normalisation in ``estimate_baseline_diet``.
     """
     input:
-        grams=f"data/manually_downloaded/GDD-IA-intake_grams_{config['baseline_year']}.csv",
-        kcal=f"data/manually_downloaded/GDD-IA-intake_kcals_{config['baseline_year']}.csv",
+        grams=f"data/downloads/gdd_ia/intake_grams_{GDD_IA_SOURCE_YEAR}.csv",
+        kcal=f"data/downloads/gdd_ia/intake_kcals_{GDD_IA_SOURCE_YEAR}.csv",
         food_groups="data/curated/food_groups.csv",
         nutrition="data/curated/nutrition.csv",
         fbs_items_kcal="<processing>/{name}/faostat_fbs_items_kcal.csv",

@@ -22,14 +22,14 @@ scenarios:
 #   projections (UN WPP) and GDP clustering (IMF WEO).
 #
 # baseline_year: Reference year for observed baseline data. Controls FAOSTAT
-#   production, GDD dietary intake, GBD health data, ESA CCI land cover,
+#   production, GDD-IA dietary intake, GBD health data, ESA CCI land cover,
 #   and LUIcube grassland data.
 #   Hard constraints (data must exist for exact year):
 #     - LUIcube grassland: 1992-2020 (binding upper limit)
 #     - ESA CCI land cover: 1992-2022
 #     - GBD mortality: manual download required for matching year
 #   Soft constraints (nearest available year used automatically):
-#     - GDD dietary intake: latest available is 2018
+#     - GDD-IA dietary intake: 1990-2020 in five-year steps
 #     - GBD dietary risk exposure: latest available is 2019
 #
 # currency_base_year: Base year for inflation-adjusted USD values.
@@ -855,18 +855,21 @@ weight_conversion:
 # --- section: diet ---
 diet:
   # Source of the per-(country, food-group) baseline dietary intake totals:
-  #   - "fbs": derived from FAOSTAT Food Balance Sheet energy supply
-  #     (auto-retrieved; no manual downloads). Group masses are derived
-  #     from FBS kcal supply at model-basis energy densities and
-  #     waste-corrected to consumer-eaten intake; see the fbs block below
-  #     and docs/current_diets.rst.
-  #   - "gdd_ia": Global Dietary Database intake aggregation (survey-based;
-  #     manual download of a not-yet-public dataset). Used for the
-  #     published results; see docs/data_sources.rst.
+  #   - "gdd_ia": Global Dietary Database for Impact Assessments
+  #     (Springmann 2026), which reconciles food availability, food waste,
+  #     dietary surveys and energy-requirement estimates into complete
+  #     diets. Auto-retrieved from Zenodo; see the gdd_ia block below and
+  #     docs/data_sources.rst.
+  #   - "fbs": derived from FAOSTAT Food Balance Sheet energy supply.
+  #     Group masses are derived from FBS kcal supply at model-basis
+  #     energy densities and waste-corrected to consumer-eaten intake;
+  #     see the fbs block below and docs/current_diets.rst. No calibration
+  #     artefact set is shipped for this source, so it needs a recalibration
+  #     (see docs/calibration.rst).
   # The baseline diet is structural: calibration artefact sets are fit
   # against it, so changing the source requires a matching
   # calibration.source (see docs/calibration.rst).
-  source: fbs
+  source: gdd_ia
   baseline_age: "All ages"
   # Whether to anchor the per-country baseline-diet totals of the health
   # risk-factor food groups (health.risk_factors, e.g. fruits, vegetables,
@@ -1008,7 +1011,9 @@ diet:
       flour-wholemeal: 0.07
       rice-brown: 0.01
       maize-whole: 0.46
-  # GDD-IA pipeline configuration (used when source: gdd_ia).
+  # GDD-IA pipeline configuration (used when source: gdd_ia). The intake
+  # CSVs are downloaded from the Zenodo record pinned in the
+  # download_gdd_ia_intake rule; the release closest to baseline_year is used.
   gdd_ia:
     # GDD-IA reports meat in cooked weight (implied kcal/g for beef
     # ≈ 2.4, between raw 2.15 and cooked 2.50). Apply cooked-to-raw
@@ -1311,7 +1316,7 @@ health:
   ssb_sugar_g_per_100g: 5.7  # ~=50 kcal per 226.8 g sugar-sweetened beverage (SSB) implies ~5.7 g sugar per 100 g
   value_per_yll: 50000  # USD_2024 per year of life lost
   intake_age_min: 11  # GDD adult band starts at 11; set to 11 to retain adult intake data. Note however that GDB chronic disease risk factors are for adults of >=25 years.
-  # Dietary risk factors to consider (must match GDD data items)
+  # Dietary risk factors to consider (must match GBD risk-factor items)
   risk_factors:
   - fruits
   - vegetables

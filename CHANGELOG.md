@@ -50,6 +50,12 @@ introduce breaking changes to configuration and outputs.
   structural mismatch (downgradable via
   `calibration.accept_provenance_mismatch`). `tools/calibrate --base <config>`
   calibrates a dedicated set for a structurally divergent config.
+- New alternative baseline-diet source `diet.source: fbs`, derived from
+  **FAOSTAT Food Balance Sheets**: per-country food supply energy at
+  model-basis densities, corrected for consumer waste. The default remains
+  the GDD-IA source. No calibration artefact set is shipped for the FBS diet,
+  so using it requires running `tools/calibrate` against your config first
+  (see `docs/calibration.rst`).
 - New `diet.anchor_groups_to_gbd` option that decouples GBD anchoring of the
   baseline diet's risk-factor food groups from the health module. Defaults to
   the sentinel `match_health` (follow `health.enabled`); set `true`/`false` to
@@ -64,6 +70,19 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- The **GDD-IA baseline-diet dataset is now retrieved automatically** from
+  Zenodo ([10.5281/zenodo.20818140](https://doi.org/10.5281/zenodo.20818140),
+  CC-BY-4.0) instead of being obtained on personal request and placed under
+  `data/manually_downloaded/`. It is now published as Springmann, M., *Global
+  dietary estimates for conducting health, environmental and economic impact
+  assessments*, Nature Food (2026),
+  [doi:10.1038/s43016-026-01388-z](https://doi.org/10.1038/s43016-026-01388-z),
+  and should be cited as such. The data is unchanged, so results are
+  unaffected; any GDD-IA CSVs under `data/manually_downloaded/` are now
+  ignored and can be deleted. The record ships 1990-2020 in five-year steps;
+  for intervening `baseline_year` values the workflow warns and uses the
+  closest release. Retrieving it needs no account, so a default build now
+  requires no manually-downloaded data at all.
 - Tightened the default solve memory allocation (`solving.mem_mb`) to match
   the reduced memory usage of full-resolution solves.
 - Reformulated the **L1 deviation penalties** (production, animal-feed, diet
@@ -84,19 +103,12 @@ introduce breaking changes to configuration and outputs.
   corrections). The former `land.filtering` thresholds now live under
   `numerics`. Emission totals and the objective are unchanged (to within
   solver tolerance); only reported CH₄/N₂O bus flows change units.
-- The baseline diet is now derived from **FAOSTAT Food Balance Sheets** by
-  default (`diet.source: fbs`), computed from per-country food supply energy
-  at model-basis densities and corrected for consumer waste. The GDD-IA
-  pipeline (not yet publicly available) remains available via
-  `diet.source: gdd_ia`, with its input CSVs required only in that mode. The
-  `default` calibration artefact set is refit against the FBS diet; the
-  previous GDD-fit set is preserved as `gdd-ia`.
 - Whole-grain definitions are aligned across diet sources: a new `maize-whole`
   food carries GBD's whole-grain exposure in maize-staple regions,
   `diet.fbs.whole_grain_shares` is refit against GBD per-country whole-grain
   exposure, and GDD-IA cereal energy is re-split by each country's FBS cereal
   composition (fixing starved whole-grain intake for Sahel coarse-grain
-  staples). All three calibration artefact sets are refreshed accordingly.
+  staples). Both calibration artefact sets are refreshed accordingly.
 - The health module is now **disabled by default** (`health.enabled: false`).
   With health off, the workflow no longer requires the manually-downloaded
   IHME GBD data and runs end to end without it; a clear startup error is

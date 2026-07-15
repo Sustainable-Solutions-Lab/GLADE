@@ -14,7 +14,9 @@ import json
 from pathlib import Path
 
 from scenario_generators import expand_scenario_defs
+from snakemake.logging import logger
 
+from workflow.scripts.diet.gdd_ia import closest_gdd_ia_release_year
 from workflow.scripts.solve_namespace import (
     SOLVE_TIME_CONFIG_PREFIXES,
     _is_solve_time_key,
@@ -28,6 +30,19 @@ from workflow.scripts.solve_namespace import (
 )
 
 _SCENARIO_CACHE = None
+
+GDD_IA_SOURCE_YEAR = closest_gdd_ia_release_year(config["baseline_year"])
+if (
+    config["diet"]["source"] == "gdd_ia"
+    and GDD_IA_SOURCE_YEAR != config["baseline_year"]
+):
+    logger.warning(
+        "GDD-IA has no release for baseline_year=%d; using closest release %d "
+        "while retaining %d as the model reference year",
+        config["baseline_year"],
+        GDD_IA_SOURCE_YEAR,
+        config["baseline_year"],
+    )
 
 
 def _recursive_update(target, source):
@@ -150,42 +165,9 @@ def assert_gbd_data_available():
 # Snakemake-time guard share a single source of truth.
 
 
-def assert_gdd_ia_data_available():
-    """Fail early with actionable guidance if GDD-IA data is needed but absent.
-
-    Only enforced when diet.source is "gdd_ia"; the default FBS-derived
-    baseline diet needs no manually-downloaded dietary data.
-    """
-    if config["diet"]["source"] != "gdd_ia":
-        return
-    year = config["baseline_year"]
-    missing = [
-        p
-        for p in (
-            f"data/manually_downloaded/GDD-IA-intake_grams_{year}.csv",
-            f"data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv",
-        )
-        if not Path(p).exists()
-    ]
-    if not missing:
-        return
-    listing = "\n".join(f"  - {p}" for p in missing)
-    raise FileNotFoundError(
-        "This run needs the manually-downloaded GDD-IA dietary intake data "
-        "because diet.source is 'gdd_ia', but the following are missing:\n"
-        + listing
-        + "\n\nEither place the files (see data/manually_downloaded/README.md)"
-        " or set diet.source: fbs to use the FAOSTAT-FBS-derived baseline "
-        "diet instead. Note that changing the diet source changes the "
-        "baseline diet, which calibration artefact sets are fit against "
-        "(see docs/calibration.rst)."
-    )
-
-
 validate_scenario_overrides(load_scenario_defs())
 validate_scenario_config_schemas(config, load_scenario_defs(), Path.cwd())
 assert_gbd_data_available()
-assert_gdd_ia_data_available()
 
 
 def scenario_override_hash(scenario_name):
