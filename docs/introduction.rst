@@ -162,9 +162,13 @@ Installation
 
       Replace ``"2.17"`` with the version reported by ``ldd --version``.
 
-3. **Download the manually-licensed datasets**: follow the
-   :ref:`manual-download-checklist` in :doc:`data_sources` to place the three
-   IHME/GDD files under ``data/manually_downloaded/``.
+3. **Download the manually-licensed datasets** (optional): manually
+   downloaded data is only needed for configs that enable the dietary health
+   module; with health disabled (the default), the workflow runs without it.
+   The tutorial configs do enable health, so to follow the :doc:`tutorial`
+   (including the dry run below), follow the :ref:`manual-download-checklist`
+   in :doc:`data_sources` to place the IHME GBD mortality and dietary
+   risk-exposure data under ``data/manually_downloaded/``.
 
 4. **Verify the setup** with a dry run:
 
