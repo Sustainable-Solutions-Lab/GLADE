@@ -14,7 +14,9 @@ import json
 from pathlib import Path
 
 from scenario_generators import expand_scenario_defs
+from snakemake.logging import logger
 
+from workflow.scripts.diet.gdd_ia import closest_gdd_ia_release_year
 from workflow.scripts.solve_namespace import (
     SOLVE_TIME_CONFIG_PREFIXES,
     _is_solve_time_key,
@@ -28,6 +30,19 @@ from workflow.scripts.solve_namespace import (
 )
 
 _SCENARIO_CACHE = None
+
+GDD_IA_SOURCE_YEAR = closest_gdd_ia_release_year(config["baseline_year"])
+if (
+    config["diet"]["source"] == "gdd_ia"
+    and GDD_IA_SOURCE_YEAR != config["baseline_year"]
+):
+    logger.warning(
+        "GDD-IA has no release for baseline_year=%d; using closest release %d "
+        "while retaining %d as the model reference year",
+        config["baseline_year"],
+        GDD_IA_SOURCE_YEAR,
+        config["baseline_year"],
+    )
 
 
 def _recursive_update(target, source):

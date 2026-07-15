@@ -27,10 +27,9 @@ scenarios:
 #   Hard constraints (data must exist for exact year):
 #     - LUIcube grassland: 1992-2020 (binding upper limit)
 #     - ESA CCI land cover: 1992-2022
-#     - GDD-IA dietary intake: 1990-2020 in five-year steps (used when
-#       diet.source is gdd_ia; the Zenodo record ships no other years)
 #     - GBD mortality: manual download required for matching year
 #   Soft constraints (nearest available year used automatically):
+#     - GDD-IA dietary intake: 1990-2020 in five-year steps
 #     - GBD dietary risk exposure: latest available is 2019
 #
 # currency_base_year: Base year for inflation-adjusted USD values.
@@ -1014,7 +1013,7 @@ diet:
       maize-whole: 0.46
   # GDD-IA pipeline configuration (used when source: gdd_ia). The intake
   # CSVs are downloaded from the Zenodo record pinned in the
-  # download_gdd_ia_intake rule; baseline_year selects the release.
+  # download_gdd_ia_intake rule; the release closest to baseline_year is used.
   gdd_ia:
     # GDD-IA reports meat in cooked weight (implied kcal/g for beef
     # ≈ 2.4, between raw 2.15 and cooked 2.50). Apply cooked-to-raw

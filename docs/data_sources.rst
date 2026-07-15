@@ -884,12 +884,13 @@ comparability. This is the model's default baseline-diet source
 **Version**: Zenodo record `20818140
 <https://doi.org/10.5281/zenodo.20818140>`_. The record covers 1990-2020
 in five-year steps; the workflow fetches the two CSVs (grams/day and
-kcal/day) for the configured ``baseline_year``, which must therefore be
-one of those five-year steps.
+kcal/day) for the release closest to the configured ``baseline_year``
+and warns when an exact release is unavailable.
 
 **Coverage**:
-  * Spatial: ~185 countries (a small number are filled via configured
-    proxies — see :doc:`current_diets`).
+  * Spatial: 171 source countries. Twelve of GLADE's 175 default
+    countries are filled via configured proxies -- see
+    :doc:`current_diets`.
   * Content: per-country mean dietary intake covering the major food
     groups the model represents (cereals — refined and whole-grain —
     vegetables, fruits, nuts and seeds, oils, sugar, legumes, poultry,

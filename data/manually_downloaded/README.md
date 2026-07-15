@@ -11,12 +11,14 @@ This directory contains datasets that must be manually downloaded because they:
 - Have terms-of-service that preclude automated bulk downloads
 - Require authentication or registration
 
-All of these are IHME GBD datasets, and all are needed **only** when the
-health module is enabled (`health.enabled: true`) or when the baseline diet
-anchors to GBD (`diet.anchor_groups_to_gbd`). With both off — the default —
-the workflow runs without any manually-downloaded data. The baseline diet
-itself needs none: the default GDD-IA source is fetched automatically from
-Zenodo (see `docs/data_sources.rst`).
+All of these are IHME GBD datasets. Normal workflow runs need the mortality
+file and two dietary risk-exposure directories **only** when the health module
+is enabled (`health.enabled: true`) or when the baseline diet anchors to GBD
+(`diet.anchor_groups_to_gbd`). The relative-risk workbook is optional and is
+used only to regenerate a committed curated table. With health and anchoring
+both off — the default — the workflow runs without any manually-downloaded
+data. The baseline diet itself needs none: the default GDD-IA source is fetched
+automatically from Zenodo (see `docs/data_sources.rst`).
 
 ## Current Files
 

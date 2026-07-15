@@ -467,7 +467,8 @@ rule download_gdd_ia_intake:
     Springmann 2026, https://doi.org/10.1038/s43016-026-01388-z) is
     published as a Zenodo dataset under CC-BY-4.0
     (https://doi.org/10.5281/zenodo.20818140). The record covers
-    1990-2020 in five-year steps; `baseline_year` selects the release.
+    1990-2020 in five-year steps; the release closest to `baseline_year`
+    is selected.
     The record id below pins the dataset version, so refreshing to a
     later version means bumping it here.
 
@@ -475,8 +476,8 @@ rule download_gdd_ia_intake:
     University, which is a separate dataset from a different group.
     """
     output:
-        grams=f"data/downloads/gdd_ia/intake_grams_{config['baseline_year']}.csv",
-        kcals=f"data/downloads/gdd_ia/intake_kcals_{config['baseline_year']}.csv",
+        grams=f"data/downloads/gdd_ia/intake_grams_{GDD_IA_SOURCE_YEAR}.csv",
+        kcals=f"data/downloads/gdd_ia/intake_kcals_{GDD_IA_SOURCE_YEAR}.csv",
     params:
         base_url="https://zenodo.org/api/records/20818140/files",
     resources:

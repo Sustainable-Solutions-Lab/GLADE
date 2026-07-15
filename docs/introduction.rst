@@ -106,16 +106,19 @@ Software to install manually
 Accounts and credentials
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Two IHME health datasets cannot be redistributed and must be placed
+Two IHME health inputs cannot be redistributed and must be placed
 manually. Both are needed only when the health module is enabled or the
 baseline diet anchors to GBD; with both off (the default), the workflow
 runs without them:
 
 * **IHME GBD 2023 mortality rates** — `IHME GBD Results Tool
   <https://vizhub.healthdata.org/gbd-results/>`_ (free registration).
-* **IHME GBD 2023 dietary risk exposure data** and **IHME GBD 2019
-  relative risk curves** — same source, separate exports (free
-  registration).
+* **IHME GBD 2023 dietary risk exposure data** -- two archives from the
+  same source (free registration).
+
+The **IHME GBD 2019 relative-risk workbook** is needed only by the
+standalone curation script that regenerates the committed age-attenuation
+table; normal workflow runs do not consume it.
 
 The baseline-diet data needs no manual step: the default GDD-IA source
 is fetched automatically from Zenodo (see :doc:`current_diets` and the

@@ -59,10 +59,11 @@ Data Sources
   * **Status**: Published and openly licensed (CC-BY-4.0); retrieved
     automatically from Zenodo, so it needs no manual download. This is
     GLADE's default intake source.
-  * **Coverage**: ~185 countries, per-country mean dietary intake at
-    the reference year, reported in parallel grams/day and kcal/day for
-    every food category. The Zenodo record covers 1990-2020 in
-    five-year steps, so ``baseline_year`` must be one of those.
+  * **Coverage**: 171 source countries, with 12 of GLADE's 175 default
+    countries filled from configured proxies. Intake is reported in
+    parallel grams/day and kcal/day for every food category. The Zenodo
+    record covers 1990-2020 in five-year steps; the workflow warns and
+    uses the closest release when ``baseline_year`` falls between them.
   * **Role**: With ``diet.source: gdd_ia`` (the default), primary
     source of per-country food-group totals for all food groups except
     the GBD-anchored risk groups (see below).
@@ -331,9 +332,9 @@ consistent with FAOSTAT slaughter-volume animal production.
 Country Coverage
 ----------------
 
-GDD-IA covers ~185 countries. For a handful of territories without
-separate IA estimates the pipeline copies values from a configured
-proxy. The built-in proxies live in
+GDD-IA covers 171 countries. Twelve of GLADE's 175 default countries do
+not have separate IA estimates, so the pipeline copies values from a
+configured proxy. The built-in proxies live in
 ``workflow/scripts/prepare_gdd_ia_dietary_intake.py`` and can be
 extended via ``diet.gdd_ia.country_proxies`` in the config:
 
@@ -794,9 +795,9 @@ Workflow Integration
 
 **Input data**:
 
-* ``data/downloads/gdd_ia/intake_grams_{baseline_year}.csv`` and
-  ``data/downloads/gdd_ia/intake_kcals_{baseline_year}.csv``
-  (auto-fetched from Zenodo)
+* ``data/downloads/gdd_ia/intake_grams_{release_year}.csv`` and
+  ``data/downloads/gdd_ia/intake_kcals_{release_year}.csv``
+  (auto-fetched from Zenodo for the release closest to ``baseline_year``)
 * ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_{1,2}/*.CSV``
 * ``data/downloads/usda_fped/Table_1_FPED_MaleFemale_{cycle}.pdf``
 * FAOSTAT FBS and QCL (auto-fetched via the FAOSTAT bulk API)
@@ -833,7 +834,9 @@ Workflow Integration
 
 * ``config.countries`` — list of countries.
 * ``config.food_groups.included`` — food groups to process.
-* ``config.baseline_year`` — reference year for GDD-IA and GBD.
+* ``config.baseline_year`` — reference year for GDD-IA and GBD. GDD-IA
+  uses the closest available five-year release while retaining this as
+  the model reference year.
 * ``config.diet.baseline_age`` — age label written to NHANES rows
   (default ``"All ages"``).
 * ``config.diet.fbs_override_foods`` — foods anchored to FBS supply.

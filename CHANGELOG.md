@@ -79,10 +79,10 @@ introduce breaking changes to configuration and outputs.
   [doi:10.1038/s43016-026-01388-z](https://doi.org/10.1038/s43016-026-01388-z),
   and should be cited as such. The data is unchanged, so results are
   unaffected; any GDD-IA CSVs under `data/manually_downloaded/` are now
-  ignored and can be deleted. `baseline_year` must be one of the years the
-  record ships (1990-2020 in five-year steps) when using this source.
-  Retrieving it needs no account, so a default build now requires no
-  manually-downloaded data at all.
+  ignored and can be deleted. The record ships 1990-2020 in five-year steps;
+  for intervening `baseline_year` values the workflow warns and uses the
+  closest release. Retrieving it needs no account, so a default build now
+  requires no manually-downloaded data at all.
 - Tightened the default solve memory allocation (`solving.mem_mb`) to match
   the reduced memory usage of full-resolution solves.
 - Reformulated the **L1 deviation penalties** (production, animal-feed, diet

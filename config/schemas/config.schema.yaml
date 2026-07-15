@@ -84,7 +84,7 @@ properties:
     type: integer
     minimum: 2010
     maximum: 2020
-    description: "Reference year for observed baseline data. Controls FAOSTAT production, GDD-IA dietary intake, GBD health data, ESA CCI land cover, and LUIcube grassland data."
+    description: "Reference year for observed baseline data. Controls FAOSTAT production, GDD-IA dietary intake (nearest five-year release), GBD health data, ESA CCI land cover, and LUIcube grassland data."
 
   currency_base_year:
     type: integer
