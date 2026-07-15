@@ -9,9 +9,9 @@ Overview
 --------
 
 The model represents current consumption patterns by combining a
-configurable primary intake source (``diet.source``) — the FAOSTAT
-**FBS**-derived estimate (the default) or the survey-based **GDD-IA**
-dataset — with the optional **GBD** risk-factor anchor and the
+configurable primary intake source (``diet.source``) — the **GDD-IA**
+dataset (the default) or the FAOSTAT **FBS**-derived estimate — with
+the optional **GBD** risk-factor anchor and the
 **NHANES** USA override, plus item-level food supply data from FAOSTAT
 for within-group disaggregation. The pipeline produces a single
 per-country, per-food baseline diet whose mass basis is aligned with
@@ -47,24 +47,25 @@ The baseline diet serves several roles:
 Data Sources
 ------------
 
-**Global Dietary Database — Integrated Assessment (GDD-IA)**
-  * **Provider**: Marco Springmann (University of Oxford / UCL). GDD-IA
-    combines the Global Dietary Database (GDD) survey-based intake
-    estimates with FAOSTAT Food Balance Sheets and applies a
-    multi-source caloric-intake normalisation procedure to produce
-    consistent per-country food and energy intake estimates.
-  * **Status**: Pending publication; available upon personal request
-    from Marco Springmann. Will be re-licensed under CC-BY-NC on
-    release, and will then become GLADE's default input. Until then the
-    default baseline diet is derived from FAOSTAT FBS (see below), and
-    GDD-IA is only needed when ``diet.source: gdd_ia`` is set.
+**Global Dietary Database for Impact Assessments (GDD-IA)**
+  * **Provider**: Marco Springmann (University College London)
+    [Springmann2026]_. GDD-IA combines regional food availability and
+    food-waste estimates, socio-demographic variation in intake from
+    dietary surveys, and energy-intake estimates based on measurements
+    of body weight, height and physical activity, to produce complete
+    diets with absolute intake levels that are comparable across
+    regions. It is a distinct dataset from the Tufts University Global
+    Dietary Database (GDD), which GLADE does not use.
+  * **Status**: Published and openly licensed (CC-BY-4.0); retrieved
+    automatically from Zenodo, so it needs no manual download. This is
+    GLADE's default intake source.
   * **Coverage**: ~185 countries, per-country mean dietary intake at
     the reference year, reported in parallel grams/day and kcal/day for
-    every food category.
-  * **Role**: With ``diet.source: gdd_ia``, primary source of
-    per-country food-group totals for all food groups except the
-    GBD-anchored risk groups (see below). Used for the published
-    results.
+    every food category. The Zenodo record covers 1990-2020 in
+    five-year steps, so ``baseline_year`` must be one of those.
+  * **Role**: With ``diet.source: gdd_ia`` (the default), primary
+    source of per-country food-group totals for all food groups except
+    the GBD-anchored risk groups (see below).
 
 **Global Burden of Disease (GBD) 2019 dietary risk exposure**
   * **Provider**: Institute for Health Metrics and Evaluation (IHME)
@@ -88,8 +89,8 @@ Data Sources
 
 **FAOSTAT FBS + QCL**
   * **Provider**: FAO Statistics Division
-  * **Role**: With ``diet.source: fbs`` (the default), FBS energy supply
-    is also the source of the **food-group totals** themselves (see
+  * **Role**: With ``diet.source: fbs``, FBS energy supply is also the
+    source of the **food-group totals** themselves (see
     :ref:`current-diets-fbs-source`). Independently of the source,
     item-level supply (FBS) drives **within-group** disaggregation of
     food-group totals into per-food consumption; production statistics
@@ -137,12 +138,11 @@ eq)`` for sugar.
 
 .. _current-diets-fbs-source:
 
-FBS-Derived Baseline Diet (default)
------------------------------------
+FBS-Derived Baseline Diet (alternative)
+---------------------------------------
 
-With ``diet.source: fbs`` (the default), the per-(country, food-group)
-intake totals are derived from FAOSTAT Food Balance Sheets instead of
-GDD-IA, so GLADE runs without any manually-obtained dietary data. The
+With ``diet.source: fbs``, the per-(country, food-group) intake totals
+are derived from FAOSTAT Food Balance Sheets instead of GDD-IA. The
 rule ``prepare_fbs_dietary_intake`` computes, per country and group,
 
 .. math::
@@ -193,11 +193,11 @@ overrides, and the within-group disaggregation apply unchanged.
 
 The FBS-derived diet is supply-based: it inherits FBS's known biases
 relative to intake surveys beyond what the waste fractions correct.
-It is the pragmatic default while GDD-IA is unpublished; results
-intended to be comparable with the published GLADE results should set
-``diet.source: gdd_ia``. The baseline diet is structural, so the two
-sources need different calibration artefact sets (see
-:doc:`calibration`).
+GDD-IA reconciles those supply estimates against survey intake and
+energy requirements, which is why it is the default. The baseline diet
+is structural, so a calibration artefact set fit against one source is
+not valid for the other; no FBS-fit set is shipped, so using this
+source means recalibrating first (see :doc:`calibration`).
 
 .. _current-diets-gbd-anchoring:
 
@@ -328,9 +328,6 @@ diet source. Plantain is routed to
 processed) are folded into ``red_meat`` so the consumption side stays
 consistent with FAOSTAT slaughter-volume animal production.
 
-A more detailed category-level mapping will be added once GDD-IA is
-published.
-
 Country Coverage
 ----------------
 
@@ -392,11 +389,11 @@ baseline-diet estimation:
 
 1. **Prepare the group-intake source** (``diet.source``):
 
-   * ``fbs`` (default) — ``prepare_fbs_dietary_intake`` derives
-     per-(country, food group) intake from FBS energy supply (see
+   * ``fbs`` — ``prepare_fbs_dietary_intake`` derives per-(country,
+     food group) intake from FBS energy supply (see
      :ref:`current-diets-fbs-source`) into ``fbs_dietary_intake.csv``.
-   * ``gdd_ia`` — ``prepare_gdd_ia_dietary_intake`` reads the parallel
-     grams and kcal CSVs, maps GDD-IA's food categories to the model's
+   * ``gdd_ia`` (default) — ``prepare_gdd_ia_dietary_intake`` reads the
+     parallel grams and kcal CSVs, maps GDD-IA's food categories to the model's
      food groups, derives the per-food-group mass in model basis
      (pooling all dairy subcategories by energy, applying the
      cooked-to-raw meat inflation), and emits two files:
@@ -781,8 +778,10 @@ Downstream Uses
 Workflow Integration
 --------------------
 
-**Snakemake rules** (see ``workflow/rules/diet.smk``):
+**Snakemake rules** (see ``workflow/rules/diet.smk``, and
+``workflow/rules/retrieve.smk`` for the download):
 
+* ``download_gdd_ia_intake``
 * ``prepare_gdd_ia_dietary_intake``
 * ``prepare_nhanes_dietary_intake``
 * ``merge_dietary_sources``
@@ -795,8 +794,9 @@ Workflow Integration
 
 **Input data**:
 
-* ``data/manually_downloaded/GDD-IA-intake_grams_{baseline_year}.csv``
-* ``data/manually_downloaded/GDD-IA-intake_kcals_{baseline_year}.csv``
+* ``data/downloads/gdd_ia/intake_grams_{baseline_year}.csv`` and
+  ``data/downloads/gdd_ia/intake_kcals_{baseline_year}.csv``
+  (auto-fetched from Zenodo)
 * ``data/manually_downloaded/IHME_GBD_2023_RISK_EXPOSURE_DIET_{1,2}/*.CSV``
 * ``data/downloads/usda_fped/Table_1_FPED_MaleFemale_{cycle}.pdf``
 * FAOSTAT FBS and QCL (auto-fetched via the FAOSTAT bulk API)
@@ -873,3 +873,8 @@ Workflow Integration
   pooled-projection helpers (FBS-code pools, production-share blends).
 
 .. Reference [Brauer2024] is defined in health.rst (Sphinx citations are global).
+
+.. [Springmann2026] Springmann M. Global dietary estimates for conducting
+   health, environmental and economic impact assessments. *Nature Food*
+   (2026). https://doi.org/10.1038/s43016-026-01388-z. Dataset:
+   https://doi.org/10.5281/zenodo.20818140

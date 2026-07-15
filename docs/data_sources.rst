@@ -17,10 +17,6 @@ Manual Download Checklist
 
 Several licensed datasets cannot be fetched automatically. While their use is free for non-commercial research purposes, these have to be downloaded manually or require API key registration.
 
-**Required only for the GDD-IA baseline diet (diet.source: gdd_ia):**
-
-1. Obtain the **GDD-IA** intake CSVs by personal request to Marco Springmann and place them as ``data/manually_downloaded/GDD-IA-intake_grams_{year}.csv`` and ``data/manually_downloaded/GDD-IA-intake_kcals_{year}.csv`` (:ref:`gdd-ia-dietary-intake`). With the default ``diet.source: fbs``, the baseline diet is derived from auto-retrieved FAOSTAT Food Balance Sheets instead (see :ref:`current-diets-fbs-source`) and no manual dietary data is needed. A public GDD-IA release is upcoming and will then become the default input.
-
 **Required only for the health module / GBD diet anchoring:**
 
 The following IHME GBD datasets are needed **only** when the health
@@ -30,14 +26,17 @@ anchors to GBD (``diet.anchor_groups_to_gbd``; see
 are not required and the workflow runs without them. If they are missing
 while needed, the workflow stops at startup with an explicit message.
 
-2. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
-3. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
+1. Create an account with IHME and download GBD death rates as described in :ref:`ihme-gbd-mortality`.
+2. Download the IHME 2023 dietary risk exposure estimates (two archives, ``IHME_GBD_2023_RISK_EXPOSURE_DIET_1`` and ``_2``) (:ref:`ihme-diet-risk-exposure`).
 
 **Optional (only to regenerate curated health inputs):**
 
-4. The IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`) is only used by a standalone curation script to regenerate the git-tracked RR age-attenuation table; it is not consumed by the normal workflow.
+3. The IHME 2019 relative risk workbook ``IHME_GBD_2019_RELATIVE_RISKS_Y2020M10D15.XLSX`` (:ref:`ihme-relative-risks`) is only used by a standalone curation script to regenerate the git-tracked RR age-attenuation table; it is not consumed by the normal workflow.
 
-The one build-time credential is a free USDA FoodData Central key, used only to refresh the nutritional data (see :doc:`introduction`). Everything else is fetched from public downloads, the Zenodo land-cover mirror (:ref:`copernicus-land-cover`), or bundled data.
+The baseline diet needs no manual downloads: the default GDD-IA source
+(:ref:`gdd-ia-dietary-intake`) is fetched automatically from Zenodo.
+
+The one build-time credential is a free USDA FoodData Central key, used only to refresh the nutritional data (see :doc:`introduction`). Everything else is fetched from public downloads, Zenodo (the GDD-IA dataset, :ref:`gdd-ia-dietary-intake`, and our land-cover mirror, :ref:`copernicus-land-cover`), or bundled data.
 
 
 .. _weight-bases:
@@ -860,23 +859,33 @@ The 2023 release ships only per-5-year-age-bucket estimates split by sex; it doe
 
 .. _gdd-ia-dietary-intake:
 
-Global Dietary Database — Integrated Assessment (GDD-IA)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Global Dietary Database for Impact Assessments (GDD-IA)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Provider**: Marco Springmann (University of Oxford / UCL).
+**Provider**: Marco Springmann (University College London).
 
 **Description**: Country-level dietary intake estimates that combine
-the Global Dietary Database (GDD) survey-based intake data with
-FAOSTAT Food Balance Sheet supply data and apply a multi-source
-caloric-intake normalisation procedure to reconcile the two against
-country-level energy totals. The result is a harmonised per-country
-intake dataset reported in parallel grams/day and kcal/day for every
-food category. The IA release is the input the model uses for the
-baseline diet pipeline; it supersedes the older GDD Country-level
-estimates download.
+regional food availability and food-waste estimates, socio-demographic
+variation in intake from dietary surveys, and energy-intake estimates
+based on measurements of body weight, height and physical activity. The
+result is a harmonised per-country intake dataset reported in parallel
+grams/day and kcal/day for every food category. It is designed for
+dietary impact assessments that need complete diets, absolute intake
+levels that minimise the risk of over- or under-estimation, and regional
+comparability. This is the model's default baseline-diet source
+(``diet.source: gdd_ia``).
 
-**Version**: Two CSVs, one in grams/day and one in kcal/day, at the
-configured ``baseline_year``.
+.. note::
+
+   GDD-IA is a distinct dataset from the **Global Dietary Database
+   (GDD)** of Tufts University, despite the similar name. The model does
+   not use the Tufts GDD.
+
+**Version**: Zenodo record `20818140
+<https://doi.org/10.5281/zenodo.20818140>`_. The record covers 1990-2020
+in five-year steps; the workflow fetches the two CSVs (grams/day and
+kcal/day) for the configured ``baseline_year``, which must therefore be
+one of those five-year steps.
 
 **Coverage**:
   * Spatial: ~185 countries (a small number are filled via configured
@@ -886,35 +895,25 @@ configured ``baseline_year``.
     vegetables, fruits, nuts and seeds, oils, sugar, legumes, poultry,
     red meat, dairy, eggs) plus out-of-scope categories (alcohol,
     seafood, spices, rendered animal fats) used only for the
-    caloric-normalisation step. All-ages, both-sexes, all-residences
-    mean strata are consumed by the pipeline.
+    caloric-normalisation step. The dataset is stratified by age, sex
+    and urban/rural residence; the pipeline consumes the all-ages,
+    both-sexes, all-residences mean strata.
 
-**Access**: Pending publication. Currently available on personal request
-from Marco Springmann; an automatic retrieval rule will be added once
-the public release is live. Only needed when ``diet.source: gdd_ia`` is
-set; the default configuration derives the baseline diet from FAOSTAT
-FBS instead (see :ref:`current-diets-fbs-source`).
+**Access**: Public. Downloaded automatically from Zenodo; no manual step
+and no registration.
 
-**License**: Pending publication; will be released under Creative
-Commons Attribution-NonCommercial (CC-BY-NC).
+**License**: CC-BY-4.0.
 
-**Citation**: Springmann M, *Global Dietary Database — Integrated
-Assessment dataset (GDD-IA)*. Pending publication. Used here with
-permission.
+**Citation**: Springmann, M. Global dietary estimates for conducting
+health, environmental and economic impact assessments. *Nature Food*
+(2026). `doi:10.1038/s43016-026-01388-z
+<https://doi.org/10.1038/s43016-026-01388-z>`_. Dataset:
+`doi:10.5281/zenodo.20818140 <https://doi.org/10.5281/zenodo.20818140>`_.
 
-**Retrieval**: Manually placed; processed by
+**Retrieval**: Downloaded by the ``download_gdd_ia_intake`` rule (which
+pins the Zenodo record id) to ``data/downloads/gdd_ia/``; processed by
 ``workflow/scripts/prepare_gdd_ia_dietary_intake.py`` (rule
 ``prepare_gdd_ia_dietary_intake``).
-
-**Manual placement steps**:
-
-1. Contact Marco Springmann to request access to the GDD-IA release for
-   your reference year.
-2. Save the two CSVs as
-   ``data/manually_downloaded/GDD-IA-intake_grams_{baseline_year}.csv``
-   and
-   ``data/manually_downloaded/GDD-IA-intake_kcals_{baseline_year}.csv``
-   where ``{baseline_year}`` matches ``config.baseline_year``.
 
 NHANES / FPED -- What We Eat in America
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1073,7 +1072,7 @@ Most datasets used in this project require attribution. Some disallow redistribu
 **Open licenses (attribution required, redistribution allowed)**:
 
 * **CC0 1.0 / Public domain** (USDA FoodData Central, IFA FUBC, BLS CPI-U): No restrictions; attribution requested
-* **CC BY 4.0** (GAEZ, FAOSTAT, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS, ISIMIP2a / LPJmL grassland yield, Copernicus Land Cover 2016+): Requires attribution
+* **CC BY 4.0** (GAEZ, FAOSTAT, GDD-IA, GLEAM 3.0 Feed Intake, SoilGrids, Cook-Patton, LUIcube, LAMASUS, ISIMIP2a / LPJmL grassland yield, Copernicus Land Cover 2016+): Requires attribution
 * **CC BY 3.0 IGO** (UN WPP): Requires attribution to UN
 * **CC BY** (USDA Costs, USDA Livestock Costs): Requires attribution
 * **Eurostat copyright** (Eurostat apro_cpsh1): Free reuse with attribution
@@ -1082,7 +1081,6 @@ Most datasets used in this project require attribution. Some disallow redistribu
 **Restrictive licenses (non-commercial use and/or no redistribution)**:
 
 * **Non-commercial, no redistribution** (IHME GBD mortality, IHME GBD relative risks, IHME GBD dietary exposure): Free for non-commercial research; data may not be redistributed or used commercially without permission
-* **Pending publication — CC-BY-NC on release** (GDD-IA): Available upon personal request from Marco Springmann; will be re-licensed under CC-BY-NC when published
 * **Non-commercial with attribution** (GADM, FADN): Free for academic/non-commercial use; GADM prohibits redistribution, FADN requires EU attribution
 * **FAO terms** (GLEAM 3.0 Supplement, FAO Nutrient Conversion): Non-commercial reuse with FAO acknowledgement; commercial use requires prior permission
 * **Custom terms** (ESA Biomass CCI, Water Footprint Network): Various provider-specific terms; see individual entries above

@@ -11,6 +11,13 @@ This directory contains datasets that must be manually downloaded because they:
 - Have terms-of-service that preclude automated bulk downloads
 - Require authentication or registration
 
+All of these are IHME GBD datasets, and all are needed **only** when the
+health module is enabled (`health.enabled: true`) or when the baseline diet
+anchors to GBD (`diet.anchor_groups_to_gbd`). With both off — the default —
+the workflow runs without any manually-downloaded data. The baseline diet
+itself needs none: the default GDD-IA source is fetched automatically from
+Zenodo (see `docs/data_sources.rst`).
+
 ## Current Files
 
 ### IHME-GBD_2023-death-rates-2020.csv
@@ -49,34 +56,6 @@ The following permalink reproduces this query for year 2020: https://vizhub.heal
 
 **Citation:**
 > Global Burden of Disease Collaborative Network. Global Burden of Disease Study 2023 (GBD 2023) Results. Seattle, United States: Institute for Health Metrics and Evaluation (IHME), 2025. Available from https://vizhub.healthdata.org/gbd-results/.
-
----
-
-### GDD-IA-intake_grams_{year}.csv / GDD-IA-intake_kcals_{year}.csv
-
-**Source:** Global Dietary Database — Integrated Assessment (GDD-IA), Marco Springmann (University of Oxford / UCL)
-**Access:** Pending publication; available on personal request from Marco Springmann.
-
-**Only needed when `diet.source: gdd_ia` is set.** The default configuration
-(`diet.source: fbs`) derives the baseline diet from auto-retrieved FAOSTAT
-Food Balance Sheets and needs no manually-obtained dietary data.
-
-**Dataset details:**
-- **Content:** Harmonised country-level mean dietary intake, reported in parallel grams/day and kcal/day per food category
-- **Coverage:** ~185 countries at the configured `baseline_year`
-- **Use case:** Survey-based per-country food-group totals for the baseline diet (used for the published results)
-
-**Placement:** Save the two CSVs as `GDD-IA-intake_grams_{year}.csv` and
-`GDD-IA-intake_kcals_{year}.csv` where `{year}` matches `baseline_year`
-in the config (default: 2020).
-
-**Processing:** Processed via `workflow/scripts/prepare_gdd_ia_dietary_intake.py`
-(rule `prepare_gdd_ia_dietary_intake`); see `docs/current_diets.rst`.
-
-**License:** Pending publication; will be released under CC-BY-NC. Used here with permission.
-
-**Citation:**
-> Springmann M, *Global Dietary Database — Integrated Assessment dataset (GDD-IA)*. Pending publication.
 
 ---
 
@@ -162,13 +141,6 @@ When new GBD data is released:
 3. Download as CSV
 4. Save as `IHME-GBD_2023-death-rates-{year}.csv` (the year in the filename must match `baseline_year`)
 6. Rerun workflow: `tools/smk processing/{name}/gbd_mortality_rates.csv`
-
-### GDD-IA Dietary Data
-
-When a new GDD-IA release arrives:
-
-1. Save the two CSVs as `GDD-IA-intake_grams_{year}.csv` and `GDD-IA-intake_kcals_{year}.csv` (the year must match `baseline_year`)
-2. Rerun workflow: `tools/smk processing/{name}/gdd_ia_dietary_intake.csv`
 
 ### IHME GBD Dietary Risk Exposure Estimates
 

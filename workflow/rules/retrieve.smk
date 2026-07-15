@@ -460,6 +460,42 @@ rule download_nhanes_fped:
         """
 
 
+rule download_gdd_ia_intake:
+    """Download the GDD-IA intake CSVs for the baseline year from Zenodo.
+
+    The Global Dietary Database for Impact Assessments (GDD-IA;
+    Springmann 2026, https://doi.org/10.1038/s43016-026-01388-z) is
+    published as a Zenodo dataset under CC-BY-4.0
+    (https://doi.org/10.5281/zenodo.20818140). The record covers
+    1990-2020 in five-year steps; `baseline_year` selects the release.
+    The record id below pins the dataset version, so refreshing to a
+    later version means bumping it here.
+
+    Not to be confused with the Global Dietary Database (GDD) of Tufts
+    University, which is a separate dataset from a different group.
+    """
+    output:
+        grams=f"data/downloads/gdd_ia/intake_grams_{config['baseline_year']}.csv",
+        kcals=f"data/downloads/gdd_ia/intake_kcals_{config['baseline_year']}.csv",
+    params:
+        base_url="https://zenodo.org/api/records/20818140/files",
+    resources:
+        runtime="15m",
+        mem_mb=200,
+    log:
+        "<logs>/shared/download_gdd_ia_intake.log",
+    benchmark:
+        "<benchmarks>/shared/download_gdd_ia_intake.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.grams})"
+        curl -L --fail --progress-bar -o "{output.grams}" \
+            "{params.base_url}/$(basename {output.grams})/content" > {log} 2>&1
+        curl -L --fail --progress-bar -o "{output.kcals}" \
+            "{params.base_url}/$(basename {output.kcals})/content" >> {log} 2>&1
+        """
+
+
 rule download_unsd_sdg:
     output:
         temp("data/downloads/unsd/SDG.zip"),
