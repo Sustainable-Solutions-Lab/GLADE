@@ -43,12 +43,11 @@ from workflow.scripts.analysis.extract_objective_breakdown import (
 )
 from workflow.scripts.analysis.extract_statistics import (
     extract_animal_production,
+    extract_consumption_tables,
     extract_crop_production,
     extract_feed_by_animal,
     extract_feed_by_category,
     extract_feed_by_source,
-    extract_food_consumption,
-    extract_food_group_consumption,
     extract_land_use,
     extract_luc_breakdown,
 )
@@ -118,8 +117,7 @@ def run_analysis(
     crop_production = extract_crop_production(n)
     land_use = extract_land_use(n)
     animal_production = extract_animal_production(n)
-    food_consumption = extract_food_consumption(n)
-    food_group_consumption = extract_food_group_consumption(n)
+    food_consumption, food_group_consumption = extract_consumption_tables(n)
     feed_by_category = extract_feed_by_category(n)
     feed_by_animal = extract_feed_by_animal(n)
     feed_by_source = extract_feed_by_source(n)
