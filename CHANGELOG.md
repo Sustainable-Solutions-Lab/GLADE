@@ -129,6 +129,19 @@ introduce breaking changes to configuration and outputs.
 - The MARS surrogate method; supported surrogates are now `pce`, `rf`, `xgb`
   and `mlp`.
 
+### Fixed
+
+- Baseline biofuel/industrial and biogas demand is enforced again. Since
+  2026-05-20 the crops-with-supply safety check in `add_biofuel_links` ran
+  before any crop production links existed, so every build silently dropped
+  the entire fixed biofuel demand (~290 MtDM globally: maize and sugarcane
+  ethanol plus palm, soybean and rapeseed oil). Baseline solves still looked
+  right because production-stability anchoring mimics the demand, but under
+  strong price signals (water or carbon pricing) the model could simply
+  abandon bioenergy crops instead of meeting their demand. Models must be
+  rebuilt for the fix to take effect; results solved on affected builds
+  understate pressure on bioenergy feedstocks.
+
 ## [0.1.0] - 2026-06-15
 
 First public release of GLADE (Global Land, Agriculture, Diet and Emissions),

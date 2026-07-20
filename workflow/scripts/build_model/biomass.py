@@ -253,6 +253,11 @@ def add_biofuel_links(
     # rows; the demand is reported by ``skipped_no_supply`` below.
     crop_links = n.links.static
     crop_links = crop_links[crop_links["carrier"] == "crop_production"]
+    if crop_links.empty:
+        raise ValueError(
+            "add_biofuel_links called before crop production links were added; "
+            "the crops-with-supply check needs them to exist"
+        )
     crops_with_supply = set(crop_links["crop"].dropna().unique())
 
     names = []
@@ -310,10 +315,6 @@ def add_biofuel_links(
         countries.append(country)
         crops.append(crop)
 
-    if not names:
-        logger.warning("No biofuel links created (all buses missing)")
-        return
-
     if skipped:
         logger.info("Skipped %d biofuel links due to missing buses", skipped)
     if skipped_no_supply:
@@ -323,6 +324,10 @@ def add_biofuel_links(
             skipped_no_supply,
             skipped_no_supply_demand,
         )
+
+    if not names:
+        logger.warning("No biofuel links created")
+        return
 
     # Fix each link at its baseline demand: p_min_pu = 1.0 forces
     # p == p_nom; with the per-link efficiency this yields the

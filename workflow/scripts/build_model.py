@@ -773,10 +773,6 @@ if __name__ == "__main__":
     biomass.add_biomass_disposal_links(
         n, cfg_countries, biomass_disposal_foods, food_dm_factor=food_dm_factor
     )
-    if biofuel_baseline_df is not None:
-        biomass.add_biofuel_links(
-            n, biofuel_baseline_df, crop_moisture=moisture_by_crop
-        )
     if enforce_fiber_demand:
         biomass.add_fiber_demand_infrastructure(n, fiber_baseline_df, cfg_countries)
 
@@ -1019,6 +1015,15 @@ if __name__ == "__main__":
         )
     elif use_actual_production:
         logger.info("Skipping multiple cropping links under actual production mode")
+
+    # Fixed biofuel/industrial and biogas baseline demand. Must run after the
+    # crop production links exist: rows whose source crop has no producible
+    # supply anywhere are skipped instead of making the model infeasible.
+    if biofuel_baseline_df is not None:
+        biomass.add_biofuel_links(
+            n, biofuel_baseline_df, crop_moisture=moisture_by_crop
+        )
+
     if snakemake.params.grazing["enabled"]:
         grassland.add_grassland_feed_links(
             n,
