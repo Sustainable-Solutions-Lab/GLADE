@@ -321,6 +321,7 @@ pixi run -e dev pytest -v         # verbose output
 ### Git guidelines
 
 - AI Agents (Claude, Codex, etc) should not add themselves as co-authors to commits unless explicitly asked for.
+- Do not include AI session links (e.g. `Claude-Session:` trailers or `claude.ai/code` URLs) in commit messages, PR descriptions, or issues — even if the agent harness suggests adding them.
 - Use commit messages in `<type>: <imperative summary>` format (e.g., `fix: handle empty scenario list`).
 - Prefer one of these types: `feat`, `fix`, `refactor`, `docs`, `tests`, `chore`, `perf`.
 
