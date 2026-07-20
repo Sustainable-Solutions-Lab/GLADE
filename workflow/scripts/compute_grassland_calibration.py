@@ -216,7 +216,7 @@ def compute_grassland_calibration(
         .groupby("country")["forage"]
         .sum()
     )
-    non_grass_supply_by_country, demand_by_country = (
+    non_grass_supply_by_country, _demand_by_country = (
         _aggregate_forage_bus_supply_and_demand(n)
     )
 

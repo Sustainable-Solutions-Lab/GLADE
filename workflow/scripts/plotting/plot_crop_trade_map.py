@@ -632,7 +632,7 @@ def _plot_map(
         top_ref = int(max_mt // 10) * 10
         if top_ref < max_mt * 0.5:
             top_ref = int(max_mt)
-        bot_ref = max(1, int(round(min_mt)))
+        bot_ref = max(1, round(min_mt))
         if bot_ref >= top_ref:
             bot_ref = max(1, top_ref // 4)
 

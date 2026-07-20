@@ -77,8 +77,8 @@ def _is_grid_aligned(
     if src_dx <= 0.0 or src_dy <= 0.0 or dst_dx <= 0.0 or dst_dy <= 0.0:
         return False, 0, 0
 
-    fx = int(round(dst_dx / src_dx))
-    fy = int(round(dst_dy / src_dy))
+    fx = round(dst_dx / src_dx)
+    fy = round(dst_dy / src_dy)
     if fx < 1 or fy < 1:
         return False, 0, 0
 
