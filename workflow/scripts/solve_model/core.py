@@ -1502,8 +1502,12 @@ def run_solve(
     #      add big-M / interpolation constraints; they never edit frozen ones.
     with _phase("pypsa.optimize.create_model"):
         logger.info("Creating linopy model...")
+        # consistency_check=False: the network is produced by our own build
+        # step, which validates its inputs; the check costs 1.5-3 s per solve.
         n.optimize.create_model(
-            include_objective_constant=False, freeze_constraints=True
+            include_objective_constant=False,
+            freeze_constraints=True,
+            consistency_check=False,
         )
         logger.info("Linopy model created.")
 
