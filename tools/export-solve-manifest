@@ -10,7 +10,7 @@ need for Snakemake on the cluster.  All input paths and params are fully
 resolved using the same config/scenario machinery as the Snakemake rules.
 
 Usage:
-    tools/export-solve-manifest <configfile> [-o manifest.json] [--scenarios S1 S2 ...]
+    tools/export-solve-manifest <configfile> [<overlay> ...] [-o manifest.json] [--scenarios S1 S2 ...]
 """
 
 import argparse
@@ -38,7 +38,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Export a JSON manifest for cluster solve+analyze jobs."
     )
-    parser.add_argument("configfile", help="Path to the config YAML file")
+    parser.add_argument(
+        "configfile",
+        nargs="+",
+        help="Config YAML file, optionally followed by overlay files "
+        "(later files override earlier ones, as with multiple --configfile "
+        "arguments to Snakemake)",
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -62,9 +68,9 @@ def main():
     )
     args = parser.parse_args()
 
-    configfile = Path(args.configfile).resolve()
+    configfiles = [Path(p).resolve() for p in args.configfile]
     default_config = PROJECT_ROOT / "config" / "default.yaml"
-    config = load_merged_config(default_config, configfile)
+    config = load_merged_config(default_config, *configfiles)
 
     name = config["name"]
     inline_analysis = config["solving"]["inline_analysis"]
@@ -103,7 +109,10 @@ def main():
             scenario_names = [s for s in scenario_names if s not in excluded]
             print(f"Excluded {len(excluded)} scenarios", file=sys.stderr)
 
-    print(f"Config: {configfile.name} (name={name})", file=sys.stderr)
+    print(
+        f"Config: {', '.join(p.name for p in configfiles)} (name={name})",
+        file=sys.stderr,
+    )
     print(
         f"Mode: {'inline_analysis' if inline_analysis else 'separate solve+analyze'}",
         file=sys.stderr,
@@ -156,7 +165,7 @@ def main():
     # Build manifest
     manifest = {
         "config_name": name,
-        "config_file": str(configfile),
+        "config_file": [str(p) for p in configfiles],
         "inline_analysis": inline_analysis,
         "solving": {
             "mem_mb": config["solving"]["mem_mb"],
