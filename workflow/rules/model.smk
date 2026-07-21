@@ -201,6 +201,7 @@ rule build_model:
         constants_script="workflow/scripts/constants.py",
     params:
         crops=config["crops"],
+        multiple_cropping=config["multiple_cropping"],
         countries=config["countries"],
         land=config["land"],
         fertilizer=config["fertilizer"],
@@ -218,7 +219,6 @@ rule build_model:
         grazing=config["grazing"],
         baseline_year=config["baseline_year"],
         validation=config["validation"],
-        deviation_penalty=config["deviation_penalty"],
         numerics=config["numerics"],
         netcdf=config["netcdf"],
         # Add health-cluster stores when health is enabled in the base config or

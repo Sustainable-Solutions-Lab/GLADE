@@ -21,6 +21,10 @@ from .utils import merge_lef
 
 logger = logging.getLogger(__name__)
 
+# Crops grown under flooded (wetland) conditions, which emit CH4 per harvested
+# cycle. Kept in sync with the multiple-cropping derivation's own set.
+WETLAND_RICE_CROPS = {"wetland-rice"}
+
 
 def compute_residue_n2o_efficiency_per_dm(
     residue_feed_items: list[str],
@@ -386,7 +390,7 @@ def add_regional_crop_production_links(
                 water_bus = np.full(len(df), "", dtype=object)
                 water_eff = np.zeros(len(df), dtype=float)
 
-            if crop == "wetland-rice" and rice_methane_factor > 0:
+            if crop in WETLAND_RICE_CROPS and rice_methane_factor > 0:
                 scaling_factor = (
                     1.0 if ws == "i" else rainfed_wetland_rice_ch4_scaling_factor
                 )
@@ -606,6 +610,8 @@ def add_multi_cropping_links(
     residue_fue_lookup: Mapping[str, float] | None = None,
     residue_n2o_eff_lookup: Mapping[str, float] | None = None,
     *,
+    rice_methane_factor: float,
+    rainfed_wetland_rice_ch4_scaling_factor: float,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
     crop_loss_multiplier: pd.Series,
@@ -632,6 +638,12 @@ def add_multi_cropping_links(
     Under ``use_actual_production`` only links with a positive observed baseline
     are built (mirroring the single-crop filter); the pinning itself is applied
     afterwards by ``fix_crop_production_to_baseline``.
+
+    Wetland-rice cycles emit CH4 exactly as on the single-crop path: a link
+    running ``m`` rice cycles carries ``m`` times the per-hectare emission factor
+    (rainfed cycles scaled by ``rainfed_wetland_rice_ch4_scaling_factor``), so
+    rice methane is invariant to whether a hectare of rice is represented as a
+    single-crop link or a cycle of a multi-cropping bundle.
     """
 
     if eligible_area.empty or cycle_yields.empty:
@@ -985,6 +997,30 @@ def add_multi_cropping_links(
     )
     index_df["has_fertilizer"] = fert_valid.astype(int)
 
+    # Rice methane, counted per cycle: a bundle running m wetland-rice cycles on
+    # one hectare floods that hectare m times. kg CH4/ha == kt CH4/Mha, so the
+    # per-hectare factor carries straight onto the kt CH4 bus, as for single
+    # crops. Rainfed cycles take the rainfed scaling factor.
+    rice_cycles = (
+        merged[merged["crop"].isin(WETLAND_RICE_CROPS)]
+        .groupby(key_cols)
+        .size()
+        .rename("rice_cycles")
+    )
+    index_df = index_df.merge(rice_cycles.reset_index(), on=key_cols, how="left")
+    index_df["rice_cycles"] = index_df["rice_cycles"].fillna(0).astype(int)
+    ch4_scaling = np.where(
+        index_df["water_supply"].eq("i").to_numpy(),
+        1.0,
+        float(rainfed_wetland_rice_ch4_scaling_factor),
+    )
+    index_df["ch4_efficiency"] = (
+        index_df["rice_cycles"].to_numpy(dtype=float)
+        * float(rice_methane_factor)
+        * ch4_scaling
+    )
+    index_df["has_ch4"] = (index_df["ch4_efficiency"] > 0).astype(int)
+
     outputs = merged.merge(index_df[[*key_cols, "link_name"]], on=key_cols, how="left")
     outputs["offset"] = outputs["output_idx"] + 1
     offset_str = outputs["offset"].astype(int).astype(str)
@@ -1069,6 +1105,37 @@ def add_multi_cropping_links(
         ].rename(columns={"fert_efficiency": "eff_value"})
         entry_frames.append(fert_entries)
 
+    ch4_entries = index_df[index_df["has_ch4"] == 1][
+        [
+            "link_name",
+            "ch4_efficiency",
+            "crop_count",
+            "has_water",
+            "has_fertilizer",
+        ]
+    ].copy()
+    if not ch4_entries.empty:
+        ch4_entries["offset"] = (
+            ch4_entries["crop_count"]
+            + ch4_entries["has_water"]
+            + ch4_entries["has_fertilizer"]
+            + 1
+        )
+        offset_str = ch4_entries["offset"].astype(int).astype(str)
+        ch4_entries["bus_col"] = "bus" + offset_str
+        ch4_entries["eff_col"] = "efficiency" + offset_str
+        ch4_entries["bus_value"] = "emission:ch4"
+        ch4_entries = ch4_entries[
+            [
+                "link_name",
+                "bus_col",
+                "bus_value",
+                "eff_col",
+                "ch4_efficiency",
+            ]
+        ].rename(columns={"ch4_efficiency": "eff_value"})
+        entry_frames.append(ch4_entries)
+
     if not residue_agg.empty:
         residue_entries = residue_agg.merge(
             index_df[
@@ -1078,6 +1145,7 @@ def add_multi_cropping_links(
                     "crop_count",
                     "has_water",
                     "has_fertilizer",
+                    "has_ch4",
                 ]
             ],
             on=key_cols,
@@ -1086,15 +1154,15 @@ def add_multi_cropping_links(
         residue_entries = residue_entries.dropna(subset=["link_name"])
         if residue_entries.empty:
             residue_entries = pd.DataFrame(columns=residue_entries.columns)
-        residue_entries[["crop_count", "has_water", "has_fertilizer"]] = (
-            residue_entries[["crop_count", "has_water", "has_fertilizer"]].fillna(0)
-        )
+        _offset_cols = ["crop_count", "has_water", "has_fertilizer", "has_ch4"]
+        residue_entries[_offset_cols] = residue_entries[_offset_cols].fillna(0)
         residue_entries = residue_entries.sort_values([*key_cols, "feed_item"])
         residue_entries["entry_order"] = residue_entries.groupby(key_cols).cumcount()
         residue_entries["offset"] = (
             residue_entries["crop_count"]
             + residue_entries["has_water"]
             + residue_entries["has_fertilizer"]
+            + residue_entries["has_ch4"]
             + residue_entries["entry_order"]
             + 1
         )
@@ -1130,6 +1198,7 @@ def add_multi_cropping_links(
                     "crop_count",
                     "has_water",
                     "has_fertilizer",
+                    "has_ch4",
                     "residue_count",
                 ]
             ],
@@ -1138,17 +1207,21 @@ def add_multi_cropping_links(
         )
         n2o_entries = n2o_entries.dropna(subset=["link_name"])
         if not n2o_entries.empty:
-            n2o_entries[
-                ["crop_count", "has_water", "has_fertilizer", "residue_count"]
-            ] = n2o_entries[
-                ["crop_count", "has_water", "has_fertilizer", "residue_count"]
-            ].fillna(0)
+            _offset_cols = [
+                "crop_count",
+                "has_water",
+                "has_fertilizer",
+                "has_ch4",
+                "residue_count",
+            ]
+            n2o_entries[_offset_cols] = n2o_entries[_offset_cols].fillna(0)
             # Mandatory soil-N2O bus offset: sits after crops, water,
-            # fertilizer, and residue feed buses. One entry per link.
+            # fertilizer, CH4 and residue feed buses. One entry per link.
             n2o_entries["offset"] = (
                 n2o_entries["crop_count"]
                 + n2o_entries["has_water"]
                 + n2o_entries["has_fertilizer"]
+                + n2o_entries["has_ch4"]
                 + n2o_entries["residue_count"]
                 + 1
             )
@@ -1331,7 +1404,12 @@ def reconcile_single_crop_baselines(
             continue
         entry = combinations.get(combo_arr[i])
         if entry is None:
-            continue
+            raise ValueError(
+                f"Multi-cropping link carries combination '{combo_arr[i]}', which "
+                "is not in the effective combination set. The built link set and "
+                "the combination set have diverged; its harvested cycles would be "
+                "double-counted against the single-crop baselines."
+            )
         country = country_arr[i]
         link_buses = [bus_arrays[col][i] for col in output_bus_cols]
         for crop in set(entry["crops"]):

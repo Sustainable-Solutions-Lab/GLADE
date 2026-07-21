@@ -998,7 +998,11 @@ if __name__ == "__main__":
     # single-crop production. They are disabled only when the effective
     # combination set (MIRCA-derived merged over config) is empty.
     multiple_cropping_cfg = effective_combinations(
-        snakemake.config, snakemake.input.multi_cropping_combinations
+        {
+            "multiple_cropping": snakemake.params.multiple_cropping,
+            "crops": snakemake.params.crops,
+        },
+        snakemake.input.multi_cropping_combinations,
     )
     enable_multiple_cropping = bool(multiple_cropping_cfg)
     if enable_multiple_cropping:
@@ -1014,6 +1018,10 @@ if __name__ == "__main__":
             residue_lookup,
             residue_fue_lookup=residue_fue_lookup,
             residue_n2o_eff_lookup=residue_n2o_eff_lookup,
+            rice_methane_factor=rice_methane_factor,
+            rainfed_wetland_rice_ch4_scaling_factor=(
+                rainfed_wetland_rice_ch4_scaling_factor
+            ),
             min_yield_t_per_ha=min_crop_yield,
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
             crop_loss_multiplier=crop_loss_multiplier,
