@@ -657,6 +657,98 @@ def add_ghg_pricing_to_objective(n: pypsa.Network, ghg_price_usd_per_t: float) -
     )
 
 
+def add_water_scarcity_pricing_to_objective(
+    n: pypsa.Network,
+    price_usd_per_m3_world_eq: float,
+    nonrenewable_cf: float | None,
+) -> None:
+    """Add water-scarcity pricing to the objective function.
+
+    Prices the accumulated water scarcity (``store:impact:water_scarcity``, in
+    Mm^3 world-equivalent) at solve time, mirroring GHG pricing. The tiered
+    water-supply links accumulate scarcity at each tier's marginal AWARE
+    characterisation factor, so a positive price shifts irrigation toward
+    low-scarcity (abundant) water.
+
+    Non-renewable groundwater carries no AWARE CF (it is a stock outside the
+    renewable budget AWARE covers), so on its own the scarcity price would
+    make fossil mining the cheapest source everywhere. When ``nonrenewable_cf``
+    is set, each mined m^3 (accumulated on
+    ``store:impact:groundwater_depletion``) is charged
+    ``nonrenewable_cf * price``, pricing a mined m^3 at the scarcity of the
+    exhausted renewable water it displaces. The default 100 is AWARE's
+    demand-exceeds-availability cutoff plus a non-renewability premium.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    price_usd_per_m3_world_eq : float
+        Shadow price per m^3 world-equivalent of water scarcity, in USD
+        (config currency year).
+    nonrenewable_cf : float | None
+        CF charged per m^3 of non-renewable groundwater; None leaves mining
+        unpriced here (handled separately via ``groundwater_depletion``).
+    """
+    # Convert USD/m3-world-eq to bnUSD/Mm3-world-eq (matching model store units).
+    price_bnusd_per_mm3 = (
+        price_usd_per_m3_world_eq / constants.MM3_PER_M3 * constants.USD_TO_BNUSD
+    )
+    n.stores.static.at["store:impact:water_scarcity", "marginal_cost_storage"] = (
+        price_bnusd_per_mm3
+    )
+    if nonrenewable_cf is not None:
+        n.stores.static.at[
+            "store:impact:groundwater_depletion", "marginal_cost_storage"
+        ] = nonrenewable_cf * price_bnusd_per_mm3
+
+
+def add_water_scarcity_cap(n: pypsa.Network, cap_mm3_world_eq: float) -> None:
+    """Cap total water scarcity at solve time (epsilon-constraint).
+
+    The water-scarcity store is extendable, so bounding its capacity bounds the
+    accumulated scarcity (Mm^3 world-equivalent). Used to trace the emissions
+    vs water-scarcity Pareto front by sweeping the cap while pricing GHG.
+    """
+    n.stores.static.at["store:impact:water_scarcity", "e_nom_max"] = cap_mm3_world_eq
+
+
+def add_groundwater_depletion_pricing_to_objective(
+    n: pypsa.Network, price_usd_per_m3: float
+) -> None:
+    """Price accumulated non-renewable groundwater depletion in the objective.
+
+    Prices the mined volume accumulated on ``store:impact:groundwater_depletion``
+    (Mm^3) at solve time, mirroring the water-scarcity and GHG pricing. A
+    positive price shifts irrigation away from groundwater mining. Active only
+    in ``water.supply.mode == "groundwater"`` (otherwise the store stays empty).
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The network containing the model.
+    price_usd_per_m3 : float
+        Shadow price per m^3 of mined groundwater, in USD (config currency year).
+    """
+    price_bnusd_per_mm3 = (
+        price_usd_per_m3 / constants.MM3_PER_M3 * constants.USD_TO_BNUSD
+    )
+    n.stores.static.at[
+        "store:impact:groundwater_depletion", "marginal_cost_storage"
+    ] = price_bnusd_per_mm3
+
+
+def add_groundwater_depletion_cap(n: pypsa.Network, cap_mm3: float) -> None:
+    """Cap total non-renewable groundwater depletion (epsilon-constraint).
+
+    The groundwater-depletion store is extendable, so bounding its capacity
+    bounds the accumulated mined volume (Mm^3). Sweeping the cap from the
+    baseline depletion down to zero traces how the food system reorganizes as
+    groundwater is ratcheted down (the core counterfactual).
+    """
+    n.stores.static.at["store:impact:groundwater_depletion", "e_nom_max"] = cap_mm3
+
+
 def add_food_incentives_to_objective(
     n: pypsa.Network, incentives_paths: list[str]
 ) -> None:
@@ -1401,6 +1493,39 @@ def run_solve(
     if smk.params.ghg_pricing_enabled:
         ghg_price = float(smk.params.ghg_price)
         add_ghg_pricing_to_objective(n, ghg_price)
+
+    # Add water-scarcity pricing and/or cap if enabled
+    scarcity_priced = smk.params.water_scarcity_pricing_enabled
+    scarcity_capped = smk.params.water_scarcity_cap is not None
+    if (scarcity_priced or scarcity_capped) and not smk.params.water_scarcity_tiers:
+        raise ValueError(
+            "water_scarcity pricing/capping requires water.supply.scarcity_tiers: "
+            "with collapsed tiers every surface characterisation factor is zero, "
+            "so the scarcity store accumulates nothing and the lever is vacuous."
+        )
+    if scarcity_priced:
+        nonrenewable_cf = smk.params.water_scarcity_nonrenewable_cf
+        if nonrenewable_cf is not None and smk.params.groundwater_pricing_enabled:
+            raise ValueError(
+                "water_scarcity.nonrenewable_cf and groundwater_depletion pricing "
+                "both charge the depletion store; set nonrenewable_cf to null to "
+                "price groundwater depletion separately."
+            )
+        add_water_scarcity_pricing_to_objective(
+            n,
+            float(smk.params.water_scarcity_price),
+            None if nonrenewable_cf is None else float(nonrenewable_cf),
+        )
+    if scarcity_capped:
+        add_water_scarcity_cap(n, float(smk.params.water_scarcity_cap))
+
+    # Add groundwater-depletion pricing and/or cap if enabled
+    if smk.params.groundwater_pricing_enabled:
+        add_groundwater_depletion_pricing_to_objective(
+            n, float(smk.params.groundwater_price)
+        )
+    if smk.params.groundwater_cap is not None:
+        add_groundwater_depletion_cap(n, float(smk.params.groundwater_cap))
 
     # Update health store marginal costs to match scenario value_per_yll.
     # The build uses the base config value; scenarios may override it.

@@ -674,12 +674,19 @@ def multi_cropping_inputs(_wildcards):
         "cell_mapping": "<processing>/{name}/region_class_cell_mapping.npz",
         "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
         "combinations": multicropping_combinations_yaml(),
+        "crop_calendar": "<processing>/{name}/water/mirca_crop_calendar.csv",
     }
     for ws in ("r", "i"):
         for crop in sorted(crops_by_supply[ws]):
             prefix = f"{crop}_{ws}"
             inputs[f"{prefix}_yield_raster"] = gaez_path(yield_kind, ws, crop)
             inputs[f"{prefix}_suitability_raster"] = gaez_path("suitability", ws, crop)
+            inputs[f"{prefix}_growing_season_start_raster"] = gaez_path(
+                "growing_season_start", ws, crop
+            )
+            inputs[f"{prefix}_growing_season_length_raster"] = gaez_path(
+                "growing_season_length", ws, crop
+            )
             if ws == "i":
                 inputs[f"{prefix}_water_requirement_raster"] = gaez_path(
                     "water_requirement", ws, crop
@@ -697,6 +704,7 @@ rule build_multi_cropping:
         moisture_content="data/curated/crop_moisture_content.csv",
     params:
         use_actual_yields=config["validation"]["use_actual_yields"],
+        water_periods=config["water"]["temporal_resolution"],
     output:
         eligible="<processing>/{name}/multi_cropping/eligible_area.csv",
         yields="<processing>/{name}/multi_cropping/cycle_yields.csv",

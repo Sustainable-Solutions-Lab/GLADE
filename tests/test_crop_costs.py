@@ -53,6 +53,10 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
         rice_methane_factor=0.0,
         rainfed_wetland_rice_ch4_scaling_factor=1.0,
         use_actual_production=False,
+        water_periods=1,
+        irrigation_calendar=pd.DataFrame(
+            columns=["region", "crop", "month", "share", "area_ha"]
+        ),
         min_yield_t_per_ha=0.01,
         seed_kg_dm_per_ha=pd.Series({"silage-maize": 0.0}),
         crop_loss_multiplier=pd.Series(dtype=float),
@@ -106,7 +110,7 @@ def _add_rice_wheat_multi_link(
             "resource_class": [0],
             "water_supply": ["r"],
             "eligible_area_ha": [1_000_000.0],
-            "water_requirement_m3_per_ha": [0.0],
+            "water_requirement_m3_per_ha_p0": [0.0],
         }
     )
     cycle_yields = pd.DataFrame(
@@ -143,6 +147,7 @@ def _add_rice_wheat_multi_link(
         ),
         global_median_cost=pd.Series({"wetland-rice": 100.0, "wheat": 200.0}),
         fertilizer_n_rates={"wetland-rice": 0.0, "wheat": 0.0},
+        water_periods=1,
         rice_methane_factor=0.0,
         rainfed_wetland_rice_ch4_scaling_factor=1.0,
         min_yield_t_per_ha=0.01,
@@ -256,7 +261,7 @@ def test_multi_cropping_rice_emits_methane_per_cycle():
             "resource_class": [0],
             "water_supply": ["i"],
             "eligible_area_ha": [1_000_000.0],
-            "water_requirement_m3_per_ha": [1000.0],
+            "water_requirement_m3_per_ha_p0": [1000.0],
         }
     )
     cycle_yields = pd.DataFrame(
@@ -279,6 +284,7 @@ def test_multi_cropping_rice_emits_methane_per_cycle():
         crop_costs=pd.Series({("wetland-rice", "USA"): 100.0}),
         global_median_cost=pd.Series({"wetland-rice": 100.0}),
         fertilizer_n_rates={"wetland-rice": 0.0},
+        water_periods=1,
         rice_methane_factor=110.0,
         rainfed_wetland_rice_ch4_scaling_factor=0.5,
         min_yield_t_per_ha=0.01,

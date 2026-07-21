@@ -66,7 +66,7 @@ These settings collectively remove the optimizer's degrees of freedom:
   adjustment to grassland feed yields to compensate for known data gaps.
 
 Additional settings select present-day water availability
-(``water.supply_scenario: current_use``) and disable health impacts, since the
+(``water.data.availability: current_use``) and disable health impacts, since the
 goal is physical mass balance rather than optimization.
 
 

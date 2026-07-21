@@ -9,7 +9,7 @@ Aggregates monthly gridded irrigation water withdrawal, stored as a depth
 area before aggregating to model regions. Produces outputs compatible with the
 sustainable water availability data from the Water Footprint Network.
 
-This script produces the same output format as build_region_water_availability.py
+This script produces the availability tables in the shared schema
 so that the two data sources can be used interchangeably.
 
 Reference:
@@ -243,7 +243,6 @@ def compute_region_growing_water(
 ) -> pd.DataFrame:
     """Compute growing-season weighted water availability.
 
-    This mirrors the function from build_region_water_availability.py
     but uses 'water_available_m3' column from monthly data.
     """
     if region_month_water.empty:
@@ -364,7 +363,7 @@ def process_huang_irrigation(
     Returns:
         Tuple of:
         - DataFrame with monthly region water (region, month, water_available_m3)
-        - DataFrame with growing season water (same format as build_region_water_availability)
+        - DataFrame with growing season water (shared availability schema)
     """
     # Load the NetCDF dataset
     ds = xr.open_dataset(nc_path, decode_times=False)

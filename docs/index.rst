@@ -94,6 +94,7 @@ Dietary constraints ensure that each country's population meets nutritional requ
 
    land_use
    crop_production
+   water
    livestock
    food_processing
    nutrition

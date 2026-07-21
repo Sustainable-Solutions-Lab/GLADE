@@ -19,9 +19,16 @@ import pandas as pd
 import pypsa
 
 from .. import constants
+from ..water_periods import (
+    calendar_period_shares,
+    crop_monthly_shares,
+    period_demand_shares,
+)
 from .utils import merge_lef
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["period_demand_shares"]
 
 # Crops grown under flooded (wetland) conditions, which emit CH4 per harvested
 # cycle. Kept in sync with the multiple-cropping derivation's own set.
@@ -330,6 +337,8 @@ def add_regional_crop_production_links(
     residue_n2o_eff_lookup: Mapping[str, float] | None = None,
     use_actual_production: bool = False,
     *,
+    water_periods: int,
+    irrigation_calendar: pd.DataFrame,
     cost_calibration: pd.Series | None = None,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
@@ -466,14 +475,49 @@ def add_regional_crop_production_links(
             if df.empty:
                 continue
 
+            # Split each irrigated crop's net requirement across the model's
+            # water periods by the observed MIRCA-OS calendar (falling back to the
+            # GAEZ growing season where MIRCA has no observation): (len(df), T)
+            # arrays of per-period field buses and (negative) efficiencies.
+            # Rainfed links carry no water. Periods with no demand get an empty bus.
+            region_str = df["region"].astype(str)
             if ws == "i":
-                water_bus = ("water:" + df["region"].astype(str)).to_numpy(dtype=object)
-                water_eff = -pd.to_numeric(
+                requirement = -pd.to_numeric(
                     df["water_requirement_m3_per_ha"], errors="coerce"
                 ).to_numpy(dtype=float)
+                nan_col = pd.Series(np.nan, index=df.index)
+                start = pd.to_numeric(
+                    df["growing_season_start_day"]
+                    if "growing_season_start_day" in df.columns
+                    else nan_col,
+                    errors="coerce",
+                ).to_numpy(dtype=float)
+                length = pd.to_numeric(
+                    df["growing_season_length_days"]
+                    if "growing_season_length_days" in df.columns
+                    else nan_col,
+                    errors="coerce",
+                ).to_numpy(dtype=float)
+                monthly = crop_monthly_shares(
+                    irrigation_calendar, crop, df["region"].to_numpy()
+                )
+                shares, _ = calendar_period_shares(
+                    monthly, start, length, water_periods
+                )  # (N, T)
+                water_eff_periods = requirement[:, None] * shares
+                period_bus = [
+                    ("water_field:" + region_str + f":p{p}").to_numpy(dtype=object)
+                    for p in range(water_periods)
+                ]
+                water_bus_periods = [
+                    np.where(water_eff_periods[:, p] != 0.0, period_bus[p], "")
+                    for p in range(water_periods)
+                ]
             else:
-                water_bus = np.full(len(df), "", dtype=object)
-                water_eff = np.zeros(len(df), dtype=float)
+                water_eff_periods = np.zeros((len(df), water_periods), dtype=float)
+                water_bus_periods = [
+                    np.full(len(df), "", dtype=object) for _ in range(water_periods)
+                ]
 
             if crop in WETLAND_RICE_CROPS and rice_methane_factor > 0:
                 scaling_factor = (
@@ -537,12 +581,20 @@ def add_regional_crop_production_links(
                 dtype=float
             )
             row_df["baseline_area_mha"] = ha / constants.HA_PER_MHA
-            row_df["bus2"] = water_bus
-            row_df["efficiency2"] = water_eff
-            row_df["bus3"] = ("fertilizer:" + df["country"].astype(str)).to_numpy()
-            row_df["efficiency3"] = fert_efficiency
-            row_df["bus4"] = ch4_bus
-            row_df["efficiency4"] = ch4_eff
+            # Water occupies a fixed block bus2 .. bus(1 + T); fertilizer, CH4,
+            # (residue and N2O below) follow at the shifted offsets. At T = 1 this
+            # is exactly the historical bus2/3/4/5/6 layout.
+            for p in range(water_periods):
+                row_df[f"bus{2 + p}"] = water_bus_periods[p]
+                row_df[f"efficiency{2 + p}"] = water_eff_periods[:, p]
+            fert_i = 2 + water_periods
+            ch4_i = fert_i + 1
+            row_df[f"bus{fert_i}"] = (
+                "fertilizer:" + df["country"].astype(str)
+            ).to_numpy()
+            row_df[f"efficiency{fert_i}"] = fert_efficiency
+            row_df[f"bus{ch4_i}"] = ch4_bus
+            row_df[f"efficiency{ch4_i}"] = ch4_eff
             row_df["harvested_area_ha"] = ha
             row_df["p_nom_max"] = (
                 pd.to_numeric(df["suitable_area"], errors="coerce").to_numpy(
@@ -644,15 +696,19 @@ def add_regional_crop_production_links(
         if residue_eff6[i] > 0.0:
             has_residue_n2o = True
 
-    all_df["bus5"] = residue_bus5
-    # efficiency5 is the NET residue yield (gross * FUE) on the feed-usable
+    # Residue (net feed-usable DM) and mandatory soil-N2O buses follow the water
+    # block (bus2 .. bus(1 + T)), fertilizer (bus(2 + T)) and CH4 (bus(3 + T)).
+    residue_i = 4 + water_periods
+    n2o_i = 5 + water_periods
+    all_df[f"bus{residue_i}"] = residue_bus5
+    # efficiency is the NET residue yield (gross * FUE) on the feed-usable
     # residue bus. Don't scale by loss_mults: the crop bus carries post-
     # loss product, but residues stay in the field and don't share the
     # storage / transport / processing loss path of the grain.
-    all_df["efficiency5"] = residue_eff5
+    all_df[f"efficiency{residue_i}"] = residue_eff5
     if has_residue_n2o:
-        all_df["bus6"] = np.where(residue_eff6 > 0.0, "emission:n2o", "")
-        all_df["efficiency6"] = residue_eff6
+        all_df[f"bus{n2o_i}"] = np.where(residue_eff6 > 0.0, "emission:n2o", "")
+        all_df[f"efficiency{n2o_i}"] = residue_eff6
 
     add_kwargs: dict[str, object] = {
         "carrier": "crop_production",
@@ -673,8 +729,9 @@ def add_regional_crop_production_links(
         "bounded_subsidy_bnusd_per_mha": all_df["bounded_subsidy_bnusd_per_mha"],
         "bounded_penalty_bnusd_per_mha": all_df["bounded_penalty_bnusd_per_mha"],
     }
-    # Multi-input buses: water, fertilizer, CH4, residue and (optional) soil-N2O.
-    for i in range(2, 7):
+    # Multi-input buses: the per-period water block, fertilizer, CH4, residue and
+    # (optional) soil-N2O, at the T-dependent offsets assigned above.
+    for i in range(2, 6 + water_periods):
         bus_col = f"bus{i}"
         if bus_col in all_df.columns:
             add_kwargs[bus_col] = all_df[bus_col]
@@ -696,6 +753,7 @@ def add_multi_cropping_links(
     residue_fue_lookup: Mapping[str, float] | None = None,
     residue_n2o_eff_lookup: Mapping[str, float] | None = None,
     *,
+    water_periods: int,
     rice_methane_factor: float,
     rainfed_wetland_rice_ch4_scaling_factor: float,
     min_yield_t_per_ha: float,
@@ -845,13 +903,7 @@ def add_multi_cropping_links(
 
     area_df = eligible_area.copy()
     if area_df.empty:
-        area_df = pd.DataFrame(
-            columns=[
-                *key_cols,
-                "eligible_area_ha",
-                "water_requirement_m3_per_ha",
-            ]
-        )
+        area_df = pd.DataFrame(columns=[*key_cols, "eligible_area_ha"])
     area_df["combination"] = area_df["combination"].astype(str)
     area_df = area_df[area_df["combination"].isin(configured)]
     area_df["resource_class"] = area_df["resource_class"].astype(int)
@@ -859,9 +911,12 @@ def add_multi_cropping_links(
     area_df["eligible_area_ha"] = pd.to_numeric(
         area_df["eligible_area_ha"], errors="coerce"
     )
-    area_df["water_requirement_m3_per_ha"] = pd.to_numeric(
-        area_df.get("water_requirement_m3_per_ha", 0.0), errors="coerce"
-    ).fillna(0.0)
+    # Per-period irrigation requirement (m3/ha), one column per intra-year water
+    # period, split by each cycle's observed calendar in build_multi_cropping.
+    # Missing columns default to 0 (e.g. rainfed-only combination sets).
+    water_cols = [f"water_requirement_m3_per_ha_p{p}" for p in range(water_periods)]
+    for col in water_cols:
+        area_df[col] = pd.to_numeric(area_df.get(col, 0.0), errors="coerce").fillna(0.0)
 
     region_to_country = region_to_country.astype(str)
     area_df["country"] = area_df["region"].map(region_to_country)
@@ -889,7 +944,7 @@ def add_multi_cropping_links(
     )
     valid_land = area_df["land_bus"].isin(n.buses.static.index)
     valid_water = ~area_df["water_supply"].eq("i") | (
-        area_df["water_requirement_m3_per_ha"] > 0
+        area_df[water_cols].sum(axis=1) > 0
     )
     n_invalid = int((~(valid_land & valid_water)).sum())
     if n_invalid:
@@ -1010,7 +1065,7 @@ def add_multi_cropping_links(
             [
                 *key_cols,
                 "eligible_area_ha",
-                "water_requirement_m3_per_ha",
+                *water_cols,
                 "country",
             ],
         ]
@@ -1283,11 +1338,12 @@ def add_multi_cropping_links(
         n.carriers.add("crop_production_multi", unit="Mha")
 
     def _water_gate(df):
-        """Validity/invalidity masks for the per-link water requirement (m3/ha)."""
-        total = df["water_requirement_m3_per_ha"].to_numpy(dtype=float)
+        """Validity/invalidity masks and total per-link requirement (m3/ha)."""
+        period_arr = df[water_cols].to_numpy(dtype=float)  # (N, T)
+        total = np.nansum(period_arr, axis=1)
         irrigated = df["water_supply"].eq("i").to_numpy()
         valid = irrigated & (total > 0)
-        # An irrigated combination with no positive water requirement is a
+        # An irrigated combination with no positive per-period requirement is a
         # data-quality hole (build_multi_cropping zero-fills empty water
         # aggregations): the link would otherwise be built with the irrigated
         # per-cycle yields but no water port, i.e. free irrigation. Drop it.
@@ -1311,16 +1367,17 @@ def add_multi_cropping_links(
             return
         water_valid, _ = _water_gate(index_df)
 
-    # bus0 is land in Mha, the water bus is Mm3, so the coefficient is
-    # m3/ha (numerically equal to Mm3/Mha). water_requirement_m3_per_ha is
-    # already in m3/ha after build_multi_cropping converts the GAEZ mm raster.
-    # Water is an input, hence the negative sign.
-    index_df["water_efficiency"] = np.where(
-        water_valid,
-        -index_df["water_requirement_m3_per_ha"].to_numpy(dtype=float),
-        0.0,
-    )
-    index_df["has_water"] = water_valid.astype(int)
+    # bus0 is land in Mha, water buses are Mm3, so each period coefficient is
+    # m3/ha (numerically equal to Mm3/Mha). The per-period columns already carry
+    # each cycle's calendar-placed requirement, so each period's own requirement
+    # is wired onto its water port. Water is an input, hence the negative sign.
+    # All T slots stay reserved (has_water = T) even where a period's demand is
+    # 0, so downstream port offsets are stable.
+    for period, col in enumerate(water_cols):
+        index_df[f"water_eff_p{period}"] = np.where(
+            water_valid, -index_df[col].to_numpy(dtype=float), 0.0
+        )
+    index_df["has_water"] = np.where(water_valid, int(water_periods), 0)
 
     fert_total = index_df["fertilizer_total"].astype(float)
     fert_valid = fert_total > 0
@@ -1387,25 +1444,27 @@ def add_multi_cropping_links(
 
     entry_frames = [outputs_entries]
 
-    water_columns = [*key_cols, "link_name", "water_efficiency", "crop_count"]
-    water_entries = index_df.loc[index_df["has_water"] == 1, water_columns].copy()
-    if not water_entries.empty:
-        water_entries["offset"] = water_entries["crop_count"] + 1
-        offset_str = water_entries["offset"].astype(int).astype(str)
-        water_entries["bus_col"] = "bus" + offset_str
-        water_entries["eff_col"] = "efficiency" + offset_str
-        water_entries.loc[water_entries["offset"].eq(1), "eff_col"] = "efficiency"
-        water_entries["bus_value"] = "water:" + water_entries["region"].astype(str)
-        water_entries = water_entries[
-            [
-                "link_name",
-                "bus_col",
-                "bus_value",
-                "eff_col",
-                "water_efficiency",
-            ]
-        ].rename(columns={"water_efficiency": "eff_value"})
-        entry_frames.append(water_entries)
+    water_eff_cols = [f"water_eff_p{p}" for p in range(water_periods)]
+    water_columns = [*key_cols, "link_name", "crop_count", *water_eff_cols]
+    water_src = index_df.loc[index_df["has_water"] > 0, water_columns].copy()
+    if not water_src.empty:
+        # One water entry per period: buses at offsets crop_count+1 .. crop_count+T
+        # (right after the crop outputs), each carrying its own calendar-placed
+        # requirement. A zero-demand period keeps its reserved port.
+        period_frames = []
+        for p in range(water_periods):
+            w = water_src.copy()
+            w["offset"] = w["crop_count"] + 1 + p
+            offset_str = w["offset"].astype(int).astype(str)
+            w["bus_col"] = "bus" + offset_str
+            w["eff_col"] = "efficiency" + offset_str
+            w.loc[w["offset"].eq(1), "eff_col"] = "efficiency"
+            w["bus_value"] = "water_field:" + w["region"].astype(str) + f":p{p}"
+            w["eff_value"] = w[f"water_eff_p{p}"]
+            period_frames.append(
+                w[["link_name", "bus_col", "bus_value", "eff_col", "eff_value"]]
+            )
+        entry_frames.append(pd.concat(period_frames, ignore_index=True))
 
     fert_entries = index_df[index_df["has_fertilizer"] == 1][
         [

@@ -174,9 +174,10 @@ rule build_model:
         costs="<processing>/{name}/faostat_crop_costs.csv",
         animal_costs="<processing>/{name}/animal_costs.csv",
         grassland_yields="<processing>/{name}/grassland_yields.csv",
-        monthly_region_water="<processing>/{name}/water/monthly_region_water.csv",
-        growing_season_water="<processing>/{name}/water/region_growing_season_water.csv",
-        blue_water_availability="<processing>/{name}/water/blue_water_availability.csv",
+        water_tiers="<processing>/{name}/water/region_water_tiers.csv",
+        groundwater_bands="<processing>/{name}/water/region_groundwater_bands.csv",
+        region_agri_consumption="<processing>/{name}/water/watergap/region_agri_consumption.csv",
+        mirca_crop_calendar="<processing>/{name}/water/mirca_crop_calendar.csv",
         luc_carbon_coefficients="<processing>/{name}/luc/luc_carbon_coefficients.csv",
         faostat_pasture_area="<processing>/{name}/faostat_pasture_area.csv",
         current_grassland_area="<processing>/{name}/luc/current_grassland_area_by_class.csv",
@@ -450,6 +451,28 @@ rule solve_model:
         ghg_pricing_enabled=lambda w: get_effective_config(w.scenario)["emissions"][
             "ghg_pricing_enabled"
         ],
+        water_scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
+        water_scarcity_pricing_enabled=lambda w: get_effective_config(w.scenario)[
+            "water_scarcity"
+        ]["pricing_enabled"],
+        water_scarcity_price=lambda w: get_effective_config(w.scenario)[
+            "water_scarcity"
+        ]["price"],
+        water_scarcity_cap=lambda w: get_effective_config(w.scenario)[
+            "water_scarcity"
+        ]["cap_mm3_world_eq"],
+        water_scarcity_nonrenewable_cf=lambda w: get_effective_config(w.scenario)[
+            "water_scarcity"
+        ]["nonrenewable_cf"],
+        groundwater_pricing_enabled=lambda w: get_effective_config(w.scenario)[
+            "groundwater_depletion"
+        ]["pricing_enabled"],
+        groundwater_price=lambda w: get_effective_config(w.scenario)[
+            "groundwater_depletion"
+        ]["price"],
+        groundwater_cap=lambda w: get_effective_config(w.scenario)[
+            "groundwater_depletion"
+        ]["cap_mm3"],
         food_incentives_enabled=lambda w: get_effective_config(w.scenario)[
             "food_incentives"
         ]["enabled"],

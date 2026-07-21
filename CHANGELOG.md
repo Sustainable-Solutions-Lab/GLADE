@@ -17,6 +17,9 @@ introduce breaking changes to configuration and outputs.
 
 ### Added
 
+- Fixed a GAEZ data artefact where a handful of cells carry a negative net
+  irrigation requirement, which flipped those crop links into spurious water
+  *producers*. Negative requirements are now clipped to zero.
 - Multiple cropping is now anchored to an observed baseline derived from
   MIRCA-OS v2 (new automated data source), using the available 2010, 2015, or
   2020 release nearest `baseline_year`. A fixed, documented sequence catalog
@@ -94,6 +97,41 @@ introduce breaking changes to configuration and outputs.
   resource-class cell coverage once per configuration and reuse it across
   crops, substantially reducing build time and peak memory without changing
   outputs.
+- **The water system has been rebuilt on a consumption basis.** Irrigation
+  previously drew from a single per-region growing-season store sized from
+  Huang et al. withdrawals. It now draws from a regional pool anchored on
+  WaterGAP 2.2e irrigation consumption, through a per-region delivery link
+  whose efficiency `eta_c` is calibrated at build time against observed
+  consumption, with availability and scarcity characterised by AWARE 2.0. The
+  three water quantities the literature conflates (crop net requirement,
+  consumption, withdrawal) are now distinct and separately reported. New
+  automatic downloads: AWARE 2.0 and WaterGAP 2.2e (ISIMIP3a). The Water
+  Footprint Network "sustainable" supply scenario and the
+  `water.supply_scenario` key are removed; the source is now
+  `water.data.availability` (`aware` or `current_use`), defaulting to `aware`.
+  **This is a results-affecting default change** — the AWARE pool is a looser
+  constraint than the previous binding present-day withdrawal cap.
+- Water supply and demand can be resolved at **intra-year periods**
+  (`water.temporal_resolution`, a divisor of 12), so a season whose surface
+  cannot meet its demand draws groundwater endogenously instead of being
+  rescued by annual averaging. Crop water demand is placed into periods by the
+  observed MIRCA-OS irrigated crop calendar, retimed to WaterGAP's monthly
+  requirement. **The default is 1 (annual), which is cheap but has a
+  consequence worth stating plainly: at annual resolution the groundwater bands
+  are nearly inert and reported depletion falls to near zero — an artefact of
+  the resolution, not a finding.** Studies about water should raise it.
+- Water supply fidelity is now two independent switches rather than a ladder:
+  `water.supply.scarcity_tiers` (convex AWARE scarcity tiers, default off —
+  each region-period pool is one flat availability cap) and
+  `water.supply.groundwater` (additive annual renewable and non-renewable
+  groundwater bands, default on). All four combinations are valid. Scarcity
+  pricing or capping now requires `scarcity_tiers` and raises otherwise, since
+  with collapsed tiers there is no scarcity signal to price.
+- New optional solve-time levers, both off by default: `water_scarcity`
+  (pricing and/or capping accumulated AWARE scarcity) and
+  `groundwater_depletion` (pricing and/or capping accumulated mining). Analysis
+  gains a `water_metrics` output with per-region withdrawal, scarcity,
+  renewable groundwater and depletion.
 - Model regions are now built **basin-aware**: GADM provinces are first split
   along AWARE hydrological basin boundaries, and each country is partitioned
   into regions balancing geography against basin scarcity

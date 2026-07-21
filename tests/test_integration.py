@@ -66,15 +66,33 @@ def test_build_solve_analyze(results_dir):
     multi = links[links["carrier"] == "crop_production_multi"]
     assert not multi.empty, "expected crop_production_multi links"
     assert (multi["baseline_area_mha"] > 0).any(), "multi links lack a baseline anchor"
-    # Irrigated multi links must carry a water port (no free irrigation).
+    # Irrigated multi links must carry per-period water ports (no free
+    # irrigation), and at the test config's temporal_resolution the demand must
+    # actually be seasonal rather than smeared evenly across the year.
     bus_cols = [c for c in multi.columns if c.startswith("bus") and c[3:].isdigit()]
     irrigated = multi[multi["water_supply"] == "irrigated"]
-    if not irrigated.empty:
-        has_water = irrigated[bus_cols].apply(
-            lambda row: any(isinstance(v, str) and v.startswith("water:") for v in row),
-            axis=1,
-        )
-        assert has_water.all(), "irrigated multi links without a water port"
+    assert not irrigated.empty, "expected irrigated multi-cropping links"
+    has_water = irrigated[bus_cols].apply(
+        lambda row: any(
+            isinstance(v, str) and v.startswith("water_field:") for v in row
+        ),
+        axis=1,
+    )
+    assert has_water.all(), "irrigated multi links without a water_field port"
+
+    found_nonuniform = False
+    for _, row in irrigated.iterrows():
+        effs = [
+            abs(float(row[f"efficiency{c[3:]}"]))
+            for c in bus_cols
+            if isinstance(row[c], str)
+            and row[c].startswith("water_field:")
+            and f"efficiency{c[3:]}" in row
+        ]
+        if len(effs) >= 2 and max(effs) > 1.2 * (sum(effs) / len(effs)):
+            found_nonuniform = True
+            break
+    assert found_nonuniform, "no irrigated multi link with a seasonal water split"
 
 
 @pytest.mark.plots

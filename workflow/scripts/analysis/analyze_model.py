@@ -51,6 +51,7 @@ from workflow.scripts.analysis.extract_statistics import (
     extract_land_use,
     extract_luc_breakdown,
 )
+from workflow.scripts.analysis.extract_water_metrics import extract_water_by_region
 from workflow.scripts.logging_config import setup_script_logging
 from workflow.scripts.snakemake_utils import load_solved_network
 from workflow.scripts.solve_namespace import ANALYSIS_OUTPUT_NAMES
@@ -149,6 +150,10 @@ def run_analysis(
     logger.info("Extracting objective breakdown...")
     objective_breakdown = extract_objective_breakdown(n)
 
+    # --- Water metrics (scarcity / withdrawal / groundwater per region) ---
+    logger.info("Extracting water metrics...")
+    water_metrics = extract_water_by_region(n)
+
     # --- GHG attribution ---
     logger.info("Computing GHG attribution...")
     food_groups = pd.read_csv(food_groups_path)
@@ -215,6 +220,7 @@ def run_analysis(
         "luc_breakdown": luc_breakdown,
         "baseline_deviation": baseline_deviation,
         "food_prices": food_prices,
+        "water_metrics": water_metrics,
     }
     # Producer-side drift guard: every output declared in the
     # canonical list must be produced here, and we must not produce

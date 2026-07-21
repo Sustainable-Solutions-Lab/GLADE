@@ -190,6 +190,10 @@ properties:
         type: number
         minimum: 0
         description: "Land areas (p_nom_max, baseline) below this many Mha are zeroed"
+      min_water_capacity_mm3:
+        type: number
+        minimum: 0
+        description: "Water supply bands below this capacity (Mm3) are dropped"
       min_water_requirement_m3_per_ha:
         type: number
         minimum: 0
@@ -407,21 +411,145 @@ properties:
 
   water:
     type: object
-    required: [supply_scenario, huang_reference_year]
+    required: [temporal_resolution, supply, data, irrigation]
     additionalProperties: false
     properties:
-      supply_scenario:
-        type: string
-        enum: [sustainable, current_use]
-        description: |
-          Water supply scenario determining which dataset is used for regional water limits:
-          - 'sustainable': Water Footprint Network blue water availability (Hoekstra & Mekonnen 2011)
-          - 'current_use': Huang et al. (2018) gridded irrigation water withdrawals
-      huang_reference_year:
+      temporal_resolution:
         type: integer
-        minimum: 1971
-        maximum: 2010
-        description: "Reference year for Huang irrigation data (only used when supply_scenario is 'current_use')"
+        enum: [1, 2, 3, 4, 6, 12]
+        description: |
+          Structural number of intra-year water periods the LP resolves (a
+          divisor of 12). Each period balances its own surface availability
+          against the crop water demand whose growing season falls in it, so
+          seasonal shortfalls draw groundwater endogenously. 1 = annual (no
+          seasonal binding); 12 = monthly (faithful); intermediate values
+          group whole months into equal blocks. Cost scales ~linearly in the
+          value on the water side of the model.
+      supply:
+        type: object
+        required: [scarcity_tiers, groundwater, pumping_cost_usd_per_m3, groundwater_ceiling_factor]
+        additionalProperties: false
+        properties:
+          scarcity_tiers:
+            type: boolean
+            description: |
+              Keep the convex AWARE scarcity tiers per region-period (true), or
+              collapse each region-period pool to one flat availability cap
+              (false). Required for water_scarcity pricing or capping, which has
+              no signal to act on once every surface CF is zero.
+          groundwater:
+            type: boolean
+            description: |
+              Emit additive annual renewable- and non-renewable-groundwater
+              bands on top of the period-bound surface supply, so mining emerges
+              endogenously wherever surface plus renewable groundwater fall
+              short. Independent of scarcity_tiers.
+          pumping_cost_usd_per_m3:
+            type: number
+            minimum: 0
+            description: "Marginal cost of non-renewable groundwater (USD per m3); merit-order separator, active only when groundwater is true"
+          groundwater_ceiling_factor:
+            type: number
+            minimum: 0
+            description: "Non-renewable groundwater ceiling as a multiple of annual agricultural consumption; generous and non-binding, active only when groundwater is true"
+      data:
+        type: object
+        required: [availability, groundwater, surface_reference_start, surface_reference_end, groundwater_trend_start, groundwater_trend_end, huang_reference_year]
+        additionalProperties: false
+        properties:
+          availability:
+            type: string
+            enum: [aware, current_use]
+            description: |
+              Regional water availability + scarcity pool source:
+              - 'aware': AWARE2.0 (Seitfudem et al. 2025, WaterGAP2.2e) convex scarcity curve and native basin geometry; pool volumes, monthly timing and within-region basin allocation set by the WaterGAP surface field
+              - 'current_use': Huang et al. (2018) gridded irrigation water withdrawals
+          groundwater:
+            type: string
+            enum: [watergap]
+            description: "Groundwater band source (depletion + renewable net abstraction); used only when supply.groundwater is true"
+          surface_reference_start:
+            type: integer
+            minimum: 1901
+            maximum: 2019
+            description: "First year (inclusive) of the WaterGAP irrigation-consumption and surface-delivery reference window"
+          surface_reference_end:
+            type: integer
+            minimum: 1901
+            maximum: 2019
+            description: "Last year (inclusive) of the WaterGAP irrigation-consumption and surface-delivery reference window"
+          groundwater_trend_start:
+            type: integer
+            minimum: 1901
+            maximum: 2019
+            description: "First year (inclusive) of the groundwater-storage depletion trend window"
+          groundwater_trend_end:
+            type: integer
+            minimum: 1901
+            maximum: 2019
+            description: "Last year (inclusive) of the groundwater-storage depletion trend window"
+          huang_reference_year:
+            type: integer
+            minimum: 1971
+            maximum: 2010
+            description: "Reference year for Huang irrigation data (only used when availability is 'current_use')"
+      irrigation:
+        type: object
+        required: [eta_min, eta_max, consumed_fraction]
+        additionalProperties: false
+        properties:
+          eta_min:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 1
+            description: "Lower clip on the calibrated consumptive irrigation efficiency eta_c = E_baseline / C"
+          eta_max:
+            type: number
+            minimum: 1
+            description: "Upper clip on eta_c; values above 1 encode deficit irrigation (observed consumption below the GAEZ requirement)"
+          consumed_fraction:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 1
+            description: "Consumed fraction C/W (consumption over withdrawal); reporting and current_use pool conversion"
+
+  water_scarcity:
+    type: object
+    required: [pricing_enabled, price, cap_mm3_world_eq, nonrenewable_cf]
+    additionalProperties: false
+    properties:
+      pricing_enabled:
+        type: boolean
+        description: "Whether to price accumulated water scarcity in the objective"
+      price:
+        type: number
+        minimum: 0
+        description: "Water-scarcity shadow price, USD per m3 world-equivalent"
+      cap_mm3_world_eq:
+        type: [number, "null"]
+        minimum: 0
+        description: "Epsilon-constraint cap on total water scarcity (Mm3 world-eq); null disables the cap"
+      nonrenewable_cf:
+        type: [number, "null"]
+        minimum: 0
+        description: "CF charged per m3 of non-renewable groundwater under scarcity pricing (AWARE cutoff 100); null leaves mining unpriced here"
+
+  groundwater_depletion:
+    type: object
+    required: [pricing_enabled, price, cap_mm3]
+    additionalProperties: false
+    properties:
+      pricing_enabled:
+        type: boolean
+        description: "Whether to price accumulated non-renewable groundwater depletion in the objective"
+      price:
+        type: number
+        minimum: 0
+        description: "Groundwater-depletion shadow price, USD per m3 mined"
+      cap_mm3:
+        type: [number, "null"]
+        minimum: 0
+        description: "Epsilon-constraint cap on total groundwater depletion (Mm3 mined); null disables the cap"
 
   fertilizer:
     type: object

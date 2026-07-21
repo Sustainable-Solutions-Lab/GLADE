@@ -64,3 +64,12 @@ crops:
 # cropgrids_crops <-> crops invariant is obvious in the test config.
 cropgrids_crops:
   - apple
+
+# Exercise the full-fidelity water path in CI: the shipped default is annual
+# with collapsed tiers (cheap), so without this nothing would cover the
+# seasonal split, the convex scarcity curve or the groundwater bands.
+water:
+  temporal_resolution: 4
+  supply:
+    scarcity_tiers: true
+    groundwater: true
