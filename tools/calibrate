@@ -111,6 +111,7 @@ ARTEFACT_FILES=(
   food_waste.yaml
   food_demand.csv
   crop_cost.csv
+  multi_crop_cost.csv
   grassland_cost.csv
   animal_cost.csv
   deviation_penalty.yaml
@@ -130,6 +131,7 @@ FOOD_DEMAND_TARGETS=(
 )
 COST_TARGETS=(
   "$CAL_DIR"/crop_cost.csv
+  "$CAL_DIR"/multi_crop_cost.csv
   "$CAL_DIR"/grassland_cost.csv
   "$CAL_DIR"/animal_cost.csv
 )
