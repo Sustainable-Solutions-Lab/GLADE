@@ -189,6 +189,29 @@ CROPGRIDS v1.08
 
 **Usage**: Fallback source of harvested area and current cropland footprint for crops listed in ``config["cropgrids_crops"]`` (e.g. ``apple``), which are not covered by GAEZ. The CROPGRIDS ``harvarea`` raster drives both ``baseline_area_mha`` and ``suitable_area`` for these crops (see ``build_crop_yields_cropgrids.py``); per-country FAOSTAT QCL yields (item 515 for apple, element 5419 hg/ha) supply the dry-matter yield, broadcast uniformly to every (region, resource_class) cell within each country.
 
+MIRCA-OS v2
+~~~~~~~~~~~
+
+**Provider**: Kebede, Nagpal, Krueger, Grafton, Siebert & others (2025)
+
+**Description**: Global gridded monthly irrigated and rainfed cropped-area dataset (an open-source update of MIRCA2000), 5-arcmin, for 23 crop classes and the years 2000-2020. The model uses the 2020 annual harvested-area grids (which count every harvested cycle) and the maximum-monthly-cropped-area grids (the AEI-capped physical field footprint) to derive the observed multiple-cropping baseline, and the 2020 subcrop monthly growing-area grids (``Rice1/2/3``) to detect repeated same-crop cycles.
+
+**Version**: v2 (adds 2020 relative to the v0.1 preprint release).
+
+**Coverage**:
+  * Spatial: Global, 5-arcmin (~10 km)
+  * Temporal: 2000, 2005, 2010, 2015, 2020 (model anchors to 2020)
+
+**Access**: HydroShare resource ``e4582ca0042148338bb5e0148b749ed6`` (https://www.hydroshare.org/resource/e4582ca0042148338bb5e0148b749ed6/).
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+**Citation**: Kebede, T. A., et al. (2025). *A global open-source dataset of monthly irrigated and rainfed cropped areas (MIRCA-OS) for the 21st century*. Scientific Data 12, 208. https://doi.org/10.1038/s41597-025-04313-4
+
+**Retrieval**: The per-file HydroShare endpoint 500s for this resource, so the grid archives are fetched as members of the whole-resource BagIt zip via partial HTTP-range extraction (``download_mirca_os_bag_member.py``); the nested RAR5 archives are unpacked with ``bsdtar`` (``extract_mirca_os_*`` rules). Note the v2 archive ships only ``ir``/``rf`` footprint layers despite its README mentioning a ``tot`` layer, so the combined footprint is taken as ``ir + rf`` (disjoint land, single-count).
+
+**Usage**: Source of the observed multiple-cropping baseline (see :doc:`crop_production`, Stage 1), derived by the ``derive_mirca_multicropping`` checkpoint. The MIRCA-OS-to-GLADE crop concordance is in ``data/curated/mirca_os_crop_mapping.csv``.
+
 FAOSTAT Prices (PP)
 ~~~~~~~~~~~~~~~~~~~~
 

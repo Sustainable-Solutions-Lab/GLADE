@@ -54,6 +54,14 @@ These settings collectively remove the optimizer's degrees of freedom:
   use to GLEAM-derived baseline levels (see :ref:`gleam-feed-baseline`).
 - **Land use**: Sparing of existing cropland and grassland is disabled so the
   model matches the historical land footprint (see :doc:`land_use`).
+- **Multi-cropping**: multi-cropping links participate in validation like any
+  other production. Each link is pinned at its MIRCA-observed baseline area,
+  and the single-crop pins are the *reconciled* baselines (each harvested
+  cycle counted once, on its multi link where one was built), so the two
+  carriers jointly reproduce the FAOSTAT harvested area. The residual
+  harvested-minus-physical land gap is absorbed by the unconditional
+  multi-cropping land-correction generators (see :doc:`land_use`), not by
+  slack.
 - **Calibration multiplier**: ``grassland_yield_multiplier`` applies a small
   adjustment to grassland feed yields to compensate for known data gaps.
 

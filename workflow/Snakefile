@@ -9,6 +9,7 @@ from snakemake.utils import min_version
 
 from validation import load_secrets_with_env_fallback, validate
 
+from workflow.scripts.multi_cropping_combinations import effective_combinations
 from workflow.scripts.solve_namespace import resolve_calibration_source_paths
 
 min_version("9.0")

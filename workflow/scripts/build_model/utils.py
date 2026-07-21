@@ -62,6 +62,27 @@ def _clip_port_coefficients(
     return n_clipped
 
 
+def clip_baseline_area_mha(n: pypsa.Network, numerics_cfg: dict) -> int:
+    """Zero sub-``min_link_area_mha`` crop baselines in place; return the count.
+
+    ``baseline_area_mha`` carries sub-hectare MIRCA-vs-FAOSTAT disaggregation
+    noise (e.g. ~1 ha of double-cropped soybean in a country FAOSTAT records no
+    soybean for). It is both pinned as a hard dispatch bound by
+    ``fix_crop_production_to_baseline`` and summed into the solve-time crop
+    growth cap. Clipping it once, before either reads it, keeps the pin and the
+    cap consistent -- otherwise a below-floor multi cycle is pinned above a
+    growth cap that has already zeroed the same baseline, and the validation
+    solve is infeasible. Called early (pre-pin) and again, idempotently, from
+    ``clip_negligible_coefficients``.
+    """
+    links = n.links.static
+    if "baseline_area_mha" not in links.columns:
+        return 0
+    return _clip_below(
+        links, "baseline_area_mha", float(numerics_cfg["min_link_area_mha"])
+    )
+
+
 def clip_negligible_coefficients(
     n: pypsa.Network,
     numerics_cfg: dict,
@@ -92,14 +113,15 @@ def clip_negligible_coefficients(
 
     # 1. Land areas below ~1 ha: the sub-Mha disaggregation noise that drives
     #    the tiny end of the bounds/RHS range.
-    n_area = _clip_below(
-        links, "p_nom_max", area_floor, mask=links["bus0"].isin(land_buses)
+    land_link_mask = links["bus0"].isin(land_buses)
+    n_area = _clip_below(links, "p_nom", area_floor, mask=land_link_mask)
+    n_area += _clip_below(links, "p_nom_max", area_floor, mask=land_link_mask)
+    n_area += clip_baseline_area_mha(n, numerics_cfg)
+    land_generator_mask = gens["carrier"].str.startswith("land_") | gens["carrier"].eq(
+        "multi_cropping_land_correction"
     )
-    if "baseline_area_mha" in links.columns:
-        n_area += _clip_below(links, "baseline_area_mha", area_floor)
-    n_area += _clip_below(
-        gens, "p_nom_max", area_floor, mask=gens["bus"].isin(land_buses)
-    )
+    n_area += _clip_below(gens, "p_nom", area_floor, mask=land_generator_mask)
+    n_area += _clip_below(gens, "p_nom_max", area_floor, mask=land_generator_mask)
 
     # 2. Trace irrigation water requirements and 3. near-zero carbon fluxes,
     #    both carried as link efficiencies onto the water / CO2 buses.

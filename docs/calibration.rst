@@ -93,6 +93,7 @@ so that ordinary builds don't need to re-solve anything. See
    * - :ref:`cost <cost-calibration>`
      - ``config/calibration/cost.yaml``
      - ``crop_cost.csv``,
+       ``multi_crop_cost.csv``,
        ``grassland_cost.csv``,
        ``animal_cost.csv``
      - Additive production-cost corrections derived from stability-
@@ -207,7 +208,7 @@ workflow when their configuration blocks are enabled (the default):
   each per-food multiplier uniformly to the baseline-diet ``target_mt``
   in ``_match_baseline_to_consume_links`` (see
   :ref:`food-demand-calibration`).
-* ``cost_calibration.enabled: true`` loads the three cost-correction
+* ``cost_calibration.enabled: true`` loads the cost-correction
   CSVs at build time (see :ref:`cost-calibration-correction`).
 * ``deviation_penalty.calibration.enabled: true`` resolves the sentinel
   ``"calibrated"`` on any of
@@ -336,7 +337,10 @@ production-stability constraint indicates how much the link's marginal
 cost would need to shift for the observed allocation to be
 cost-optimal; the per-group median becomes an additive correction. See
 :ref:`cost-calibration-correction` for how the corrections are applied
-at build time.
+at build time. Single-crop links are aggregated to per-(crop, country)
+corrections, while multi-cropping links are extracted separately to
+per-(combination, country) bundle corrections because their duals price
+one joint cycle bundle rather than one constituent crop.
 
 Rule: ``extract_cost_calibration`` in ``workflow/rules/crops.smk``.
 Script: ``workflow/scripts/extract_cost_calibration.py``. The two

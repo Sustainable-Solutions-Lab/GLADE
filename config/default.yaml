@@ -1798,6 +1798,7 @@ cost_calibration:
   generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
   scenario: "calibration"  # Scenario name used for calibration solve
   crop_correction_csv: "data/curated/calibration/{calibration_source}/crop_cost.csv"
+  multi_crop_correction_csv: "data/curated/calibration/{calibration_source}/multi_crop_cost.csv"
   grassland_correction_csv: "data/curated/calibration/{calibration_source}/grassland_cost.csv"
   animal_correction_csv: "data/curated/calibration/{calibration_source}/animal_cost.csv"
 

@@ -25,6 +25,7 @@ Diet-side penalties (food_consumption) live in
 so all three components share a single calibration artefact.
 """
 
+from collections.abc import Sequence
 import copy
 import logging
 from pathlib import Path
@@ -202,14 +203,19 @@ def add_production_stability_constraints(
     feed_enabled = feed_cfg["enabled"]
 
     # --- CROP PRODUCTION ---
+    # Single-crop and multi-cropping links draw the same cropland bus0, so they
+    # share one crop stability budget over both carriers. The multi links carry
+    # combination labels in the "crop" column, so no per-link band logic needs a
+    # special case.
     crops_cfg = land_cfg["crops"]
+    crop_carriers = ("crop_production", "crop_production_multi")
     if land_enabled and crops_cfg["enabled"]:
         if penalty_mode == "hard":
             _add_production_hard_constraints(
                 n,
                 link_p,
                 links_df,
-                "crop_production",
+                crop_carriers,
                 "crop",
                 crops_cfg,
                 slack_marginal_cost,
@@ -219,7 +225,7 @@ def add_production_stability_constraints(
                 n,
                 link_p,
                 links_df,
-                "crop_production",
+                crop_carriers,
                 "crop",
                 deviation_type,
                 crops_cfg["l1_cost"],
@@ -230,7 +236,7 @@ def add_production_stability_constraints(
                 n,
                 link_p,
                 links_df,
-                "crop_production",
+                crop_carriers,
                 "crop",
                 deviation_type,
                 quadratic_cost,
@@ -299,7 +305,7 @@ def add_production_stability_constraints(
             # cropland L1 as the land reference point.
             animal_l1_cost = crops_cfg["l1_cost"]
             if deviation_type == "absolute":
-                crop_links = links_df[links_df["carrier"] == "crop_production"]
+                crop_links = links_df[links_df["carrier"].isin(crop_carriers)]
                 grass_links = links_df[links_df["carrier"] == "grassland_production"]
                 animal_links = links_df[links_df["carrier"] == "animal_production"]
                 if not crop_links.empty and "baseline_area_mha" not in crop_links:
@@ -396,33 +402,46 @@ def add_production_stability_constraints(
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
+def _carrier_list(carrier: str | Sequence[str]) -> list[str]:
+    """Normalize a carrier argument (str or collection) to a list of carriers."""
+    return [carrier] if isinstance(carrier, str) else list(carrier)
+
+
 def _production_and_baselines(
     link_p,
     links_df,
-    carrier: str,
+    carrier: str | Sequence[str],
     min_baseline: float,
     *,
     include_all_links: bool = True,
 ) -> tuple | None:
     """Extract area expressions and baselines for production links.
 
-    Returns ``(link_names, area, baselines)`` where ``area`` is the link
-    dispatch variable (Mha) and ``baselines`` is the observed baseline area
-    (Mha).  Returns ``None`` if there are no eligible links. When
-    ``include_all_links`` is False, only links above ``min_baseline`` are
-    included; when True, all links are included (including zero-baseline).
+    ``carrier`` is a single carrier or a set of carriers (e.g.
+    ``("crop_production", "crop_production_multi")`` so multi-cropping links
+    share the crop stability budget). Returns ``(link_names, area, baselines)``
+    where ``area`` is the link dispatch variable (Mha) and ``baselines`` is the
+    observed baseline area (Mha, NaN-guarded to 0). Returns ``None`` if there
+    are no eligible links. When ``include_all_links`` is False, only links above
+    ``min_baseline`` are included; when True, all links are included.
     """
-    prod_links = links_df[links_df["carrier"] == carrier]
+    carriers = _carrier_list(carrier)
+    prod_links = links_df[links_df["carrier"].isin(carriers)]
     if prod_links.empty or "baseline_area_mha" not in prod_links.columns:
-        logger.info("No %s links with baselines; skipping stability", carrier)
+        logger.info(
+            "No %s links with baselines; skipping stability", "/".join(carriers)
+        )
         return None
+    # Guard: a missing multi-cropping anchor must not inject NaN into the term.
+    prod_links = prod_links.copy()
+    prod_links["baseline_area_mha"] = prod_links["baseline_area_mha"].fillna(0.0)
 
     if not include_all_links:
         prod_links = prod_links[prod_links["baseline_area_mha"] > min_baseline]
         if prod_links.empty:
             logger.info(
                 "No %s baselines exceed %.6g Mha; skipping stability constraints",
-                carrier,
+                "/".join(carriers),
                 min_baseline,
             )
             return None
@@ -511,7 +530,7 @@ def _add_production_hard_constraints(
     n: pypsa.Network,
     link_p,
     links_df,
-    carrier: str,
+    carrier: str | Sequence[str],
     label: str,
     cfg: dict,
     slack_marginal_cost: float,
@@ -610,7 +629,7 @@ def _add_production_l1_penalty(
     n: pypsa.Network,
     link_p,
     links_df,
-    carrier: str,
+    carrier: str | Sequence[str],
     label: str,
     deviation_type: str,
     l1_cost: float,
@@ -674,7 +693,7 @@ def _add_production_quadratic_penalty(
     n: pypsa.Network,
     link_p,
     links_df,
-    carrier: str,
+    carrier: str | Sequence[str],
     label: str,
     deviation_type: str,
     quadratic_cost: float,
@@ -1056,6 +1075,7 @@ def add_bounded_subsidy_constraints(
     n: pypsa.Network,
     carriers: list[str] = (
         "crop_production",
+        "crop_production_multi",
         "grassland_production",
         "animal_production",
     ),
@@ -1201,15 +1221,49 @@ def add_bounded_subsidy_constraints(
 # ─── Crop growth caps ──────────────────────────────────────────────────────
 
 
+def _multi_cycle_long(links_df: pd.DataFrame) -> pd.DataFrame:
+    """Long form of multi-cropping cycle outputs: one row per (link, crop).
+
+    Cycle multiplicity is counted from the crop-output ports (``crop:{crop}:*``
+    buses); a repeated crop occupies one port per cycle, so the port count is
+    the number of harvested cycles of that crop per Mha of link dispatch.
+    Columns: ``link``, ``crop``, ``group`` (``crop::country``),
+    ``multiplicity``, ``baseline_area_mha``.
+    """
+    multi = links_df[links_df["carrier"] == "crop_production_multi"]
+    if multi.empty:
+        return pd.DataFrame(
+            columns=["link", "crop", "group", "multiplicity", "baseline_area_mha"]
+        )
+    bus_cols = [
+        c
+        for c in multi.columns
+        if c.startswith("bus") and c != "bus0" and c[3:].isdigit()
+    ]
+    stacked = multi[bus_cols].astype(str).stack()
+    stacked = stacked[stacked.str.startswith("crop:")]
+    long = pd.DataFrame(
+        {
+            "link": stacked.index.get_level_values(0),
+            "crop": stacked.str.split(":").str[1].to_numpy(),
+        }
+    )
+    long = long.groupby(["link", "crop"]).size().rename("multiplicity").reset_index()
+    long["group"] = long["crop"] + "::" + long["link"].map(multi["country"]).astype(str)
+    long["baseline_area_mha"] = long["link"].map(multi["baseline_area_mha"]).fillna(0.0)
+    return long
+
+
 def add_crop_growth_cap_constraints(
     n: pypsa.Network,
     growth_cap_cfg: dict,
 ) -> None:
     """Add per-(crop, country) upper bounds on total harvested area.
 
-    Aggregates ``crop_production`` link dispatch across regions, resource
-    classes and water-supply types within each (crop, country), then bounds
-    the total at ``(1 + max_relative_increase) * sum_baseline``. This is a
+    Aggregates ``crop_production`` link dispatch -- plus multi-cropping link
+    dispatch weighted by each crop's cycle multiplicity -- across regions,
+    resource classes and water-supply types within each (crop, country), then
+    bounds the total at ``(1 + max_relative_increase) * sum_baseline``. This is a
     structural backstop against pathological extrapolation of cost-
     calibration corrections under L1 production stability — without it, a
     moderate per-Mha negative correction calibrated at a tiny baseline can
@@ -1255,19 +1309,23 @@ def add_crop_growth_cap_constraints(
         prod_links.assign(_group=group_keys.values)
         .groupby("_group")["baseline_area_mha"]
         .sum()
-        .sort_index()
     )
 
-    # Vectorised: groupby-sum Link-p over the (crop, country) key, then
-    # add all constraints in a single linopy call.
-    group_map = xr.DataArray(
-        group_keys.values,
-        coords={"name": prod_links.index},
-        dims="name",
-        name="cap_group",
-    )
-    link_vars = link_p.sel(name=prod_links.index)
-    grouped = link_vars.groupby(group_map).sum()
+    # Multi-cropping links contribute their cycle multiplicity per output crop
+    # to the same (crop, country) totals: an n-cycle link dispatching X Mha
+    # harvests m_k * X of crop k. The "crop" column holds the combination
+    # label, so cycles are counted from the crop-output ports (a repeated crop
+    # occupies one port per cycle). Their multiplicity-weighted baselines join
+    # the bound so single + multi jointly reproduce the FAOSTAT country total.
+    multi_long = _multi_cycle_long(links_df)
+    if not multi_long.empty:
+        multi_baseline = (
+            (multi_long["multiplicity"] * multi_long["baseline_area_mha"])
+            .groupby(multi_long["group"].values)
+            .sum()
+        )
+        baseline_per_group = baseline_per_group.add(multi_baseline, fill_value=0.0)
+    baseline_per_group = baseline_per_group.sort_index()
 
     upper_bounds = xr.DataArray(
         ((1.0 + cap) * baseline_per_group).to_numpy(),
@@ -1275,10 +1333,66 @@ def add_crop_growth_cap_constraints(
         dims="cap_group",
     )
 
-    m.add_constraints(
-        grouped <= upper_bounds,
-        name="GlobalConstraint-crop_growth_cap",
+    # Vectorised: groupby-sum Link-p over the (crop, country) key. Groups
+    # touched by multi links get their weighted multi expression added; since a
+    # group is a (crop, country), only the matching crop slot can touch it, so
+    # the multi expressions are built per distinct output crop (a link appears
+    # once per distinct crop, weighted by its cycle count -- no duplicate
+    # labels within a slot).
+    group_map = xr.DataArray(
+        group_keys.values,
+        coords={"name": prod_links.index},
+        dims="name",
+        name="cap_group",
     )
+    grouped_single = link_p.sel(name=prod_links.index).groupby(group_map).sum()
+    single_groups = pd.Index(grouped_single.coords["cap_group"].values)
+
+    multi_groups: pd.Index = pd.Index([], dtype=object)
+    n_constraints = 0
+    for crop, slot in multi_long.groupby("crop") if not multi_long.empty else ():
+        weights = xr.DataArray(
+            slot["multiplicity"].to_numpy(dtype=float),
+            coords={"name": slot["link"].to_numpy()},
+            dims="name",
+        )
+        slot_map = xr.DataArray(
+            slot["group"].to_numpy(),
+            coords={"name": slot["link"].to_numpy()},
+            dims="name",
+            name="cap_group",
+        )
+        grouped_multi = (
+            (link_p.sel(name=slot["link"].to_numpy()) * weights).groupby(slot_map).sum()
+        )
+        slot_groups = pd.Index(grouped_multi.coords["cap_group"].values)
+        both = slot_groups.intersection(single_groups)
+        only_multi = slot_groups.difference(single_groups)
+        if len(both):
+            m.add_constraints(
+                grouped_single.sel(cap_group=both.to_numpy())
+                + grouped_multi.sel(cap_group=both.to_numpy())
+                <= upper_bounds.sel(cap_group=both.to_numpy()),
+                name=f"GlobalConstraint-crop_growth_cap_multi_{crop}",
+            )
+            n_constraints += len(both)
+        if len(only_multi):
+            m.add_constraints(
+                grouped_multi.sel(cap_group=only_multi.to_numpy())
+                <= upper_bounds.sel(cap_group=only_multi.to_numpy()),
+                name=f"GlobalConstraint-crop_growth_cap_multi_only_{crop}",
+            )
+            n_constraints += len(only_multi)
+        multi_groups = multi_groups.union(slot_groups)
+
+    single_only = single_groups.difference(multi_groups)
+    if len(single_only):
+        m.add_constraints(
+            grouped_single.sel(cap_group=single_only.to_numpy())
+            <= upper_bounds.sel(cap_group=single_only.to_numpy()),
+            name="GlobalConstraint-crop_growth_cap",
+        )
+        n_constraints += len(single_only)
 
     constraint_names = [
         f"crop_growth_cap_{key.replace('::', '_')}" for key in baseline_per_group.index
@@ -1291,9 +1405,11 @@ def add_crop_growth_cap_constraints(
     )
 
     logger.info(
-        "Added %d crop growth cap constraints at +%.0f%%",
-        len(constraint_names),
+        "Added %d crop growth cap constraints at +%.0f%% (%d groups with "
+        "multi-cropping contributions)",
+        n_constraints,
         100.0 * cap,
+        len(multi_groups),
     )
 
 

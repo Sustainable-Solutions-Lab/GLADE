@@ -646,8 +646,8 @@ For single-season crops:
    # Convert USD/ha to bnUSD/Mha (PyPSA units)
    marginal_cost = cost_per_ha * 1e6 * USD_TO_BNUSD
 
-   # Optional: add calibration correction (bnUSD/Mha, additive)
-   marginal_cost += cost_calibration.get((crop, country), 0.0)
+   # Optional: store calibration correction for solve-time bounded application
+   bounded_correction = crop_cost_calibration.get((crop, country), 0.0)
 
 For multi-cropping systems (multiple crops per year on the same land):
 
@@ -658,6 +658,12 @@ For multi-cropping systems (multiple crops per year on the same land):
 
    # Convert to bnUSD/Mha
    marginal_cost = total_cost * 1e6 * USD_TO_BNUSD
+
+Cost-calibration corrections do not compose by cycle. Each multi-cropping
+link has one dispatch variable and one stability-band dual for the whole
+bundle, so calibration extracts direct per-(combination, country) bundle
+corrections and applies them through the same baseline-bounded
+subsidy/penalty mechanism as single-crop links.
 
 **Interpretation**:
   * The marginal cost represents the economic cost of using one Mha of land for crop production
@@ -783,6 +789,7 @@ Cost-related configuration parameters are specified in ``config/default.yaml``:
      generate: false      # Generate calibration from solved model
      scenario: "calibration"
      crop_correction_csv: "data/curated/calibration/{calibration_source}/crop_cost.csv"
+     multi_crop_correction_csv: "data/curated/calibration/{calibration_source}/multi_crop_cost.csv"
      grassland_correction_csv: "data/curated/calibration/{calibration_source}/grassland_cost.csv"
      animal_correction_csv: "data/curated/calibration/{calibration_source}/animal_cost.csv"
 

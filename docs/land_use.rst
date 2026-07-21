@@ -342,7 +342,7 @@ In many regions, the total harvested area (summed across all crops on a cropland
 
 The ``add_multi_cropping_land_correction`` function in ``land.py`` adds non-extendable generators directly on deficit **cropland buses** after crop production links are built:
 
-1. Computes **harvested area** per cropland bus by summing ``baseline_area_mha`` across crop production links
+1. Computes **harvested/physical area** per cropland bus by summing ``baseline_area_mha`` across both crop-production carriers (``crop_production`` and ``crop_production_multi``)
 2. Computes **existing supply** per cropland bus from ``land_use`` link capacities
 3. Adds generators sized to ``max(harvested − supply, 0)`` on each deficit bus
 
@@ -355,6 +355,17 @@ These generators:
 - Do not connect to emission buses (no LUC emissions)
 - Do not affect pasture pools (cropland buses only)
 
-This correction runs unconditionally in all model configurations.
+This correction runs unconditionally in all model configurations, after the
+multi-cropping links are added and the single-crop baselines reconciled.
 
-**Relationship to multi-cropping links.** The model also has explicit multi-cropping *links* (see :doc:`crop_production`) that let the optimizer allocate additional crop cycles on the same land within a single year. However, those links are disabled when ``deviation_penalty.land`` is enabled or ``use_actual_production`` is true, because reliable baseline data on multi-cropping patterns is not available. In those modes, the land correction generators fill the role of accounting for the extra harvested area that multi-cropping creates -- without them, the model would face an artificial ~55 Mha land deficit and require slack or new land conversion to remain feasible.
+**Relationship to multi-cropping links.** The model also has explicit
+multi-cropping *links* (see :doc:`crop_production`) that let the optimizer
+allocate additional crop cycles on the same land within a single year. These
+carry an observed MIRCA-OS baseline and are treated like single-crop production
+in every anchoring context: the land deviation penalty, the crop growth cap,
+and validation-mode pinning (``use_actual_production`` fixes both carriers at
+their reconciled baselines). Because each ``n``-cycle multi link draws one
+hectare of physical land while its harvested cycles are removed from the
+single-crop baselines, the correction generators only absorb the *residual*
+extra-cycle area that is not attributed to any modelled combination (e.g. mixed
+irrigated/rainfed rotations, or crops GLADE does not model).

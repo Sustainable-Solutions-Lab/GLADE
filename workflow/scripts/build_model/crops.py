@@ -9,7 +9,7 @@ crop production, multi-cropping systems, grassland feed production, and
 spared land allocation with carbon sequestration.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import logging
 
 import numpy as np
@@ -148,6 +148,83 @@ def _redistribute_excess_baseline(df: pd.DataFrame) -> pd.Series:
     return baseline
 
 
+def _apply_bounded_cost_calibration(
+    df: pd.DataFrame,
+    keys: Sequence[tuple],
+    calibration: pd.Series | None,
+    *,
+    label: str,
+    key_fields: str,
+) -> None:
+    """Store bounded cost-calibration corrections on crop production links.
+
+    Single-crop and multi-cropping links both carry additive cost corrections
+    (bnUSD/Mha) that are applied at solve time only near baseline, so they keep
+    their calibration-time meaning as *local* marginal-cost gradients rather
+    than leaking into a flat cost that pulls the LP away from baseline:
+
+    - A negative correction (model cost too high) is stored as
+      ``bounded_subsidy_bnusd_per_mha`` and applied on the first
+      ``baseline_area_mha`` units of dispatch, clipped so the base
+      ``marginal_cost`` stays non-negative. Prevents the canonical olive-USA
+      case (-0.40 bnUSD/Mha on 0.04 Mha) from leaking into runaway expansion.
+    - A positive correction (model cost too low) is stored as
+      ``bounded_penalty_bnusd_per_mha`` and applied only *above*
+      ``baseline_area_mha``. Prevents a large positive correction (e.g.
+      tomato-BEL at +346 bnUSD/Mha after winsorization) from becoming a flat
+      penalty that pushes production to zero and dumps the anchoring on the L1
+      production-stability term.
+
+    ``df`` must carry ``marginal_cost`` and ``baseline_area_mha`` columns;
+    ``keys`` holds one ``calibration`` lookup key per row, in row order. Only
+    links banded in the calibration solve (baseline area above the stability
+    floor) receive a dual, so pairs with a zero baseline are legitimately
+    absent from the artefact and correctly take a zero correction. A
+    positive-baseline pair that is missing means the artefact is stale for the
+    current link set, and raises.
+    """
+    df["bounded_subsidy_bnusd_per_mha"] = 0.0
+    df["bounded_penalty_bnusd_per_mha"] = 0.0
+    if calibration is None:
+        return
+
+    corrections = pd.Series(
+        calibration.reindex(pd.MultiIndex.from_tuples(list(keys))).to_numpy(),
+        index=df.index,
+        dtype=float,
+    )
+
+    missing = corrections.isna().to_numpy() & (
+        df["baseline_area_mha"].to_numpy(dtype=float) > 0.0
+    )
+    if missing.any():
+        missing_keys = sorted({keys[i] for i in np.flatnonzero(missing)})
+        sample = ", ".join(":".join(map(str, k)) for k in missing_keys[:5])
+        raise ValueError(
+            f"{label} cost calibration is missing {len(missing_keys)} "
+            f"{key_fields} link(s) with a positive baseline area, e.g. {sample}. "
+            "The calibration artefact is stale for the current link set; "
+            "regenerate it with `tools/calibrate cost`."
+        )
+
+    corrections = corrections.fillna(0.0)
+    pos = corrections > 0
+    neg = corrections < 0
+    df.loc[pos, "bounded_penalty_bnusd_per_mha"] = corrections[pos]
+    df.loc[neg, "bounded_subsidy_bnusd_per_mha"] = np.maximum(
+        corrections[neg], -df.loc[neg, "marginal_cost"]
+    )
+    logger.info(
+        "Applied %s cost calibration: %d/%d links (pos=%d bounded above "
+        "baseline_area, neg=%d bounded at baseline_area)",
+        label,
+        int((corrections != 0.0).sum()),
+        len(df),
+        int(pos.sum()),
+        int(neg.sum()),
+    )
+
+
 def add_regional_crop_production_links(
     n: pypsa.Network,
     crop_list: list,
@@ -178,6 +255,11 @@ def add_regional_crop_production_links(
 
     Parameters
     ----------
+    use_actual_production : bool
+        When true, only links with observed harvested area are built. The
+        pinning to baseline itself is applied later, for single-crop and
+        multi-cropping links alike, by ``fix_crop_production_to_baseline``
+        (after ``reconcile_single_crop_baselines``).
     crop_costs : pd.Series
         MultiIndex (crop, country) → cost USD/ha in base year.
     global_median_cost : pd.Series
@@ -262,10 +344,10 @@ def add_regional_crop_production_links(
                 df = df[df["yield"] >= min_yield_t_per_ha]
 
             if use_actual_production:
-                df["fixed_area_ha"] = pd.to_numeric(
-                    df["harvested_area"], errors="coerce"
-                )
-                df = df[df["fixed_area_ha"] > 0]
+                # Only links with an observed baseline are built; the pinning
+                # itself happens in ``fix_crop_production_to_baseline`` after
+                # the multi-cropping reconciliation.
+                df = df[pd.to_numeric(df["harvested_area"], errors="coerce") > 0]
 
             df["country"] = df["region"].map(region_to_country)
             df = df[df["country"].isin(allowed_countries)]
@@ -380,18 +462,6 @@ def add_regional_crop_production_links(
                 / 1e6
             )
 
-            if use_actual_production:
-                fixed_area_mha = (
-                    pd.to_numeric(df["fixed_area_ha"], errors="coerce").to_numpy(
-                        dtype=float
-                    )
-                    / 1e6
-                )
-                row_df["p_nom"] = fixed_area_mha
-                row_df["p_nom_max"] = fixed_area_mha
-                row_df["p_nom_min"] = fixed_area_mha
-                row_df["p_min_pu"] = 1.0
-
             all_rows.append(row_df)
 
     if not all_rows:
@@ -431,76 +501,15 @@ def add_regional_crop_production_links(
         * constants.USD_TO_BNUSD
     )
 
-    # Apply additive calibration correction if available.
-    #
-    # Both directions are bounded at baseline_area_mha so the corrections
-    # retain their calibration-time interpretation as *local* marginal-cost
-    # gradients at baseline rather than leaking into a flat additive cost
-    # that pulls the LP arbitrarily far from baseline:
-    #   - Negative corrections (subsidy bringing model cost down) are
-    #     stored as ``bounded_subsidy_bnusd_per_mha`` and applied at
-    #     solve time only on the first ``baseline_area_mha`` units of
-    #     dispatch. Prevents the canonical olive-USA case
-    #     (-0.40 bnUSD/Mha on 0.04 Mha) from leaking into runaway
-    #     expansion of the crop.
-    #   - Positive corrections (cost increase) are stored as
-    #     ``bounded_penalty_bnusd_per_mha`` and applied at solve time
-    #     only *above* ``baseline_area_mha``. Without this bound, a
-    #     large positive correction (e.g. +346 bnUSD/Mha on tomato:BEL
-    #     after winsorization made greenhouse tomato look cheap per
-    #     tonne) becomes a flat penalty that pushes production to zero,
-    #     forcing the L1 production-stability penalty to do the
-    #     anchoring work.
-    all_df["bounded_subsidy_bnusd_per_mha"] = 0.0
-    all_df["bounded_penalty_bnusd_per_mha"] = 0.0
-    if cost_calibration is not None:
-        missing_cal_keys = [k for k in cost_keys if k not in cost_calibration.index]
-        if missing_cal_keys:
-            # cost_calibration is generated by a prior solve; mismatched
-            # link sets surface as silent zero corrections, which weaken
-            # the calibration anchor for whichever (crop, country) pairs
-            # got added between calibration and the present solve.
-            sample = ", ".join(f"{c}:{n}" for c, n in sorted(missing_cal_keys)[:5])
-            logger.warning(
-                "cost_calibration missing %d (crop, country) pair(s); "
-                "applying zero correction. Examples: %s. Regenerate the "
-                "cost calibration if the link set has changed.",
-                len(missing_cal_keys),
-                sample,
-            )
-        cal_values = pd.Series(
-            [cost_calibration.get(k, 0.0) for k in cost_keys],
-            index=all_df.index,
-            dtype=float,
-        )
-        base_cost = all_df["marginal_cost"].copy()
-
-        positive_mask = cal_values > 0
-        negative_mask = cal_values < 0
-
-        # Positive corrections: store as bounded penalty (applied above
-        # baseline_area at solve time; no effect on marginal_cost).
-        all_df.loc[positive_mask, "bounded_penalty_bnusd_per_mha"] = cal_values.loc[
-            positive_mask
-        ]
-
-        # Negative corrections: bound the subsidy so the underlying base
-        # cost cannot go below zero, then store on the link.
-        all_df.loc[negative_mask, "bounded_subsidy_bnusd_per_mha"] = np.maximum(
-            cal_values.loc[negative_mask], -base_cost.loc[negative_mask]
-        )
-
-        n_calibrated = int((cal_values != 0.0).sum())
-        n_pos = int(positive_mask.sum())
-        n_neg = int(negative_mask.sum())
-        logger.info(
-            "Applied crop cost calibration: %d/%d links (pos=%d bounded above "
-            "baseline_area, neg=%d bounded at baseline_area)",
-            n_calibrated,
-            len(all_df),
-            n_pos,
-            n_neg,
-        )
+    # Apply additive calibration corrections as bounded subsidies/penalties
+    # near baseline (see _apply_bounded_cost_calibration for the mechanism).
+    _apply_bounded_cost_calibration(
+        all_df,
+        cost_keys,
+        cost_calibration,
+        label="crop",
+        key_fields="(crop, country)",
+    )
 
     keys = list(
         zip(
@@ -560,17 +569,9 @@ def add_regional_crop_production_links(
         "bus0": all_df["bus0"],
         "bus1": all_df["bus1"],
         "efficiency": all_df["efficiency"],
-        "bus2": all_df["bus2"],
-        "efficiency2": all_df["efficiency2"],
-        "bus3": all_df["bus3"],
-        "efficiency3": all_df["efficiency3"],
-        "bus4": all_df["bus4"],
-        "efficiency4": all_df["efficiency4"],
-        "bus5": all_df["bus5"],
-        "efficiency5": all_df["efficiency5"],
         "marginal_cost": all_df["marginal_cost"],
         "p_nom_max": all_df["p_nom_max"],
-        "p_nom_extendable": not use_actual_production,
+        "p_nom_extendable": True,
         "crop": all_df["crop"],
         "country": all_df["country"],
         "region": all_df["region"],
@@ -582,14 +583,12 @@ def add_regional_crop_production_links(
         "bounded_subsidy_bnusd_per_mha": all_df["bounded_subsidy_bnusd_per_mha"],
         "bounded_penalty_bnusd_per_mha": all_df["bounded_penalty_bnusd_per_mha"],
     }
-    if "bus6" in all_df.columns:
-        add_kwargs["bus6"] = all_df["bus6"]
-        add_kwargs["efficiency6"] = all_df["efficiency6"]
-
-    if use_actual_production:
-        add_kwargs["p_nom"] = all_df["p_nom"]
-        add_kwargs["p_nom_min"] = all_df["p_nom_min"]
-        add_kwargs["p_min_pu"] = all_df["p_min_pu"]
+    # Multi-input buses: water, fertilizer, CH4, residue and (optional) soil-N2O.
+    for i in range(2, 7):
+        bus_col = f"bus{i}"
+        if bus_col in all_df.columns:
+            add_kwargs[bus_col] = all_df[bus_col]
+            add_kwargs[f"efficiency{i}"] = all_df[f"efficiency{i}"]
 
     n.links.add(all_df.index, **add_kwargs)
 
@@ -611,6 +610,9 @@ def add_multi_cropping_links(
     seed_kg_dm_per_ha: pd.Series,
     crop_loss_multiplier: pd.Series,
     crop_marketing_cost_usd_per_t: Mapping[str, float],
+    baseline_area: pd.DataFrame | None = None,
+    use_actual_production: bool = False,
+    multi_crop_cost_calibration: pd.Series | None = None,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow.
 
@@ -619,6 +621,17 @@ def add_multi_cropping_links(
     ``seed_kg_dm_per_ha[crop] / 1000 / yield_t_per_ha``. The per-country
     supply-chain loss multiplier is applied identically so the multi-crop
     crop bus carries post-loss DM, matching the regular production path.
+
+    ``baseline_area`` (the Stage-2 ``baseline_area.csv``: MIRCA-observed physical
+    link area per ``(combination, region, resource_class, water_supply)``) anchors
+    each link via ``baseline_area_mha``. The potential cap becomes
+    ``p_nom_max = max(GAEZ eligible potential, anchored baseline)`` so the anchor
+    is never above the expansion bound, and the link stays extendable so the model
+    can add or drop cycles.
+
+    Under ``use_actual_production`` only links with a positive observed baseline
+    are built (mirroring the single-crop filter); the pinning itself is applied
+    afterwards by ``fix_crop_production_to_baseline``.
     """
 
     if eligible_area.empty or cycle_yields.empty:
@@ -639,7 +652,7 @@ def add_multi_cropping_links(
     )
     area_df["water_requirement_m3_per_ha"] = pd.to_numeric(
         area_df.get("water_requirement_m3_per_ha", 0.0), errors="coerce"
-    )
+    ).fillna(0.0)
 
     region_to_country = region_to_country.astype(str)
     area_df["country"] = area_df["region"].map(region_to_country)
@@ -756,7 +769,56 @@ def add_multi_cropping_links(
     # Multiple-cropping marginal costs: sum of per-country crop costs in bnUSD/Mha
     base["marginal_cost"] = base["total_cost"] * 1e6 * constants.USD_TO_BNUSD
     base["p_nom_extendable"] = True
-    base["p_nom_max"] = base["eligible_area_ha"] / 1e6
+
+    # Anchor each link at its MIRCA-observed baseline area (Mha), keyed by
+    # (combination, region, resource_class, water_supply). Missing anchors are 0
+    # (guarded so a missing baseline can never inject a NaN into the stability
+    # term). Cap = max(GAEZ potential, anchor) so the anchor is never
+    # above the expansion bound.
+    if baseline_area is not None and not baseline_area.empty:
+        anchor = baseline_area.copy()
+        anchor["resource_class"] = anchor["resource_class"].astype(int)
+        anchor["water_supply"] = anchor["water_supply"].astype(str)
+        anchor["baseline_area_mha"] = (
+            pd.to_numeric(anchor["baseline_area_ha"], errors="coerce").fillna(0.0) / 1e6
+        )
+        anchor = anchor.set_index(key_cols)["baseline_area_mha"]
+        base["baseline_area_mha"] = anchor.reindex(base.index).fillna(0.0)
+    else:
+        base["baseline_area_mha"] = 0.0
+    base["p_nom_max"] = np.maximum(
+        base["eligible_area_ha"] / 1e6, base["baseline_area_mha"]
+    )
+
+    # Multi-cropping cost corrections are extracted directly from each multi
+    # link's own hard-band duals: one dispatch variable, one bundle gradient.
+    # Summing the constituent cycles' single-crop corrections would compound
+    # unrelated single-cycle gradients onto double/triple-crop links.
+    _apply_bounded_cost_calibration(
+        base,
+        list(
+            zip(
+                base.index.get_level_values("combination").astype(str),
+                base["country"].astype(str),
+                strict=False,
+            )
+        ),
+        multi_crop_cost_calibration,
+        label="multi-crop",
+        key_fields="(combination, country)",
+    )
+
+    if use_actual_production:
+        base = base[base["baseline_area_mha"] > 0]
+        if base.empty:
+            logger.info(
+                "No multi-cropping links with observed baseline under actual "
+                "production mode; skipping"
+            )
+            return
+        # Restrict the per-cycle rows to the surviving links (same pattern as
+        # the water gate below).
+        merged = merged.merge(base.reset_index()[key_cols], on=key_cols, how="inner")
 
     residue_records: list[dict[str, object]] = []
     for (crop, water, region, res_class), feed_dict in residue_lookup.items():
@@ -876,34 +938,44 @@ def add_multi_cropping_links(
     if "crop_production_multi" not in n.carriers.static.index:
         n.carriers.add("crop_production_multi", unit="Mha")
 
-    water_req = index_df["water_requirement_m3_per_ha"].astype(float)
-    water_valid = (
-        index_df["water_supply"].eq("i") & np.isfinite(water_req) & (water_req > 0)
-    )
-    # Irrigated rows missing a water requirement would silently get
-    # water_efficiency=0 (free irrigation on data-quality holes), letting
-    # the LP claim the higher irrigated yield without paying water. Drop
-    # those rows so they cannot be built into the network at all.
-    water_invalid = index_df["water_supply"].eq("i") & ~np.isfinite(water_req)
+    def _water_gate(df):
+        """Validity/invalidity masks for the per-link water requirement (m3/ha)."""
+        total = df["water_requirement_m3_per_ha"].to_numpy(dtype=float)
+        irrigated = df["water_supply"].eq("i").to_numpy()
+        valid = irrigated & (total > 0)
+        # An irrigated combination with no positive water requirement is a
+        # data-quality hole (build_multi_cropping zero-fills empty water
+        # aggregations): the link would otherwise be built with the irrigated
+        # per-cycle yields but no water port, i.e. free irrigation. Drop it.
+        invalid = irrigated & ~(total > 0)
+        return valid, invalid
+
+    water_valid, water_invalid = _water_gate(index_df)
+    # Irrigated rows missing a water requirement would silently get zero water
+    # efficiency (free irrigation on data-quality holes), letting the LP claim the
+    # higher irrigated yield without paying water. Drop those rows entirely.
     if water_invalid.any():
         logger.warning(
             "Dropping %d irrigated multi-cropping links with missing water requirement",
             int(water_invalid.sum()),
         )
-        keep = ~water_invalid
-        index_df = index_df[keep].copy()
-        merged = merged[merged["link_name"].isin(index_df["link_name"])].copy()
-        water_req = index_df["water_requirement_m3_per_ha"].astype(float)
-        water_valid = (
-            index_df["water_supply"].eq("i") & np.isfinite(water_req) & (water_req > 0)
-        )
+        index_df = index_df[~water_invalid].copy()
+        # merged does not carry link_name yet (added downstream via a key_cols
+        # merge), so restrict it to the surviving links by their key columns.
+        merged = merged.merge(index_df[key_cols], on=key_cols, how="inner")
         if index_df.empty:
             return
+        water_valid, _ = _water_gate(index_df)
 
-    # bus0 is land in Mha, bus2 is water in Mm3, so the coefficient is
+    # bus0 is land in Mha, the water bus is Mm3, so the coefficient is
     # m3/ha (numerically equal to Mm3/Mha). water_requirement_m3_per_ha is
     # already in m3/ha after build_multi_cropping converts the GAEZ mm raster.
-    index_df["water_efficiency"] = np.where(water_valid, -water_req, 0.0)
+    # Water is an input, hence the negative sign.
+    index_df["water_efficiency"] = np.where(
+        water_valid,
+        -index_df["water_requirement_m3_per_ha"].to_numpy(dtype=float),
+        0.0,
+    )
     index_df["has_water"] = water_valid.astype(int)
 
     fert_total = index_df["fertilizer_total"].astype(float)
@@ -1124,6 +1196,9 @@ def add_multi_cropping_links(
         "p_nom_extendable",
         "p_nom_max",
         "marginal_cost",
+        "baseline_area_mha",
+        "bounded_subsidy_bnusd_per_mha",
+        "bounded_penalty_bnusd_per_mha",
     ]
     # Metadata columns for filtering
     metadata_cols = [
@@ -1195,6 +1270,159 @@ def add_multi_cropping_links(
     all_cols = component_cols + metadata_cols + ["crop"] + bus_cols + eff_cols + lm_cols
     kwargs = {col: link_df[col] for col in all_cols}
     n.links.add(link_df.index, **kwargs)
+
+
+def reconcile_single_crop_baselines(
+    n: pypsa.Network,
+    combinations: Mapping[str, Mapping[str, object]],
+) -> None:
+    """Remove harvested cycles now carried by multi links from single-crop anchors.
+
+    The single-crop ``crop_production`` baseline is FAOSTAT harvested area, which
+    already counts every harvested cycle. For each *built* multi link with anchored
+    baseline area ``X`` in ``(region, class, water_supply)``, crop ``k`` appearing
+    ``m_k`` times in its sequence, this subtracts ``m_k * X`` from that crop's
+    single-crop ``baseline_area_mha`` in the same cell, so each harvested cycle is
+    counted once (on the multi link). Local MIRCA-vs-FAOSTAT disagreement can drive
+    a cell negative, so any over-subtraction is redistributed onto other
+    ``(crop, country, water_supply)`` rows that still have baseline to give up
+    (preserving the FAOSTAT national total per water supply); only when a whole
+    group runs out does it spill to the residual bulk correction.
+
+    The reduction is derived from the links actually added (not the raw
+    ``baseline_area.csv``), so baselines whose multi link could not be built (e.g.
+    a missing land bus) do not strip single-crop area with nothing replacing it.
+    It is persisted on the ``crop_production`` ``baseline_area_mha`` column, which
+    the L1 stability penalty and irrigation calibration re-read, so it must run
+    before those steps.
+    """
+    links = n.links.static
+    is_crop = links["carrier"] == "crop_production"
+    multi = links[links["carrier"] == "crop_production_multi"]
+    if multi.empty or not is_crop.any():
+        return
+
+    # Cycle multiplicity is counted from the crop-output buses the link was
+    # actually built with, not from the config sequence: a combination can build
+    # with fewer cycles than configured (a cycle whose yield fell below
+    # min_yield_t_per_ha is dropped), and reconciling against the config count
+    # would strip single-crop area for a cycle that no multi link produces. The
+    # candidate crops per combination come from the config; the count comes from
+    # matching each crop's constructed output bus among the link's buses.
+    output_bus_cols = [
+        col
+        for col in multi.columns
+        if col.startswith("bus") and col != "bus0" and col[3:].isdigit()
+    ]
+    bus_arrays = {col: multi[col].to_numpy() for col in output_bus_cols}
+    combo_arr = multi["combination"].astype(str).to_numpy()
+    region_arr = multi["region"].astype(str).to_numpy()
+    class_arr = multi["resource_class"].astype(int).to_numpy()
+    ws_arr = multi["water_supply"].astype(str).to_numpy()
+    country_arr = multi["country"].astype(str).to_numpy()
+    baseline_arr = multi["baseline_area_mha"].astype(float).to_numpy()
+
+    # Required reduction (Mha) per (crop, region, class, water_supply). water_supply
+    # is already "irrigated"/"rainfed" on both carriers.
+    reductions: dict[tuple[str, str, int, str], float] = {}
+    for i in range(len(multi)):
+        area_mha = float(baseline_arr[i])
+        if area_mha <= 0:
+            continue
+        entry = combinations.get(combo_arr[i])
+        if entry is None:
+            continue
+        country = country_arr[i]
+        link_buses = [bus_arrays[col][i] for col in output_bus_cols]
+        for crop in set(entry["crops"]):
+            expected_bus = f"crop:{crop}:{country}"
+            built_cycles = sum(1 for bus in link_buses if bus == expected_bus)
+            if built_cycles == 0:
+                continue
+            key = (crop, region_arr[i], class_arr[i], ws_arr[i])
+            reductions[key] = reductions.get(key, 0.0) + built_cycles * area_mha
+    if not reductions:
+        return
+
+    df = links[is_crop]
+    link_keys = list(
+        zip(
+            df["crop"].astype(str),
+            df["region"].astype(str),
+            df["resource_class"].astype(int),
+            df["water_supply"].astype(str),
+        )
+    )
+    required = pd.Series(
+        [reductions.get(key, 0.0) for key in link_keys], index=df.index, dtype=float
+    )
+    baseline = df["baseline_area_mha"].astype(float)
+    new_baseline = baseline - required
+    # Amount over-subtracted per link (local anchor too small for the reduction).
+    over = (-new_baseline).clip(lower=0.0)
+    new_baseline = new_baseline.clip(lower=0.0)
+
+    group = (
+        df["crop"].astype(str)
+        + ":"
+        + df["country"].astype(str)
+        + ":"
+        + df["water_supply"].astype(str)
+    )
+    unplaced = 0.0
+    for _key, idx in new_baseline.groupby(group).groups.items():
+        group_over = float(over.loc[idx].sum())
+        if group_over <= 0:
+            continue
+        spare = new_baseline.loc[idx]
+        total_spare = float(spare.sum())
+        if total_spare <= 0:
+            unplaced += group_over
+            continue
+        take = min(group_over, total_spare)
+        new_baseline.loc[idx] -= spare / total_spare * take
+        if group_over > total_spare:
+            unplaced += group_over - total_spare
+    new_baseline = new_baseline.clip(lower=0.0)
+
+    n.links.static.loc[new_baseline.index, "baseline_area_mha"] = new_baseline.values
+    logger.info(
+        "Reconciled single-crop baselines against multi-cropping: reduced %.1f Mha "
+        "of harvested-cycle anchor (%.1f Mha unplaceable, left to residual)",
+        float((baseline - new_baseline).sum()),
+        unplaced,
+    )
+
+
+def fix_crop_production_to_baseline(n: pypsa.Network) -> None:
+    """Pin every crop-production link (single and multi) at its baseline area.
+
+    Validation mode (``validation.use_actual_production``). Runs after
+    ``reconcile_single_crop_baselines`` so the single-crop pins are the
+    reconciled baselines: each harvested cycle is counted once, on its multi
+    link where one was built, and the two carriers jointly reproduce the
+    observed harvested area. Links become non-extendable with
+    ``p_nom = p_nom_min = p_nom_max = baseline_area_mha`` and
+    ``p_min_pu = 1``, so dispatch equals the baseline exactly.
+    """
+    links = n.links.static
+    mask = links["carrier"].isin(["crop_production", "crop_production_multi"])
+    if not mask.any():
+        return
+    base = links.loc[mask, "baseline_area_mha"].fillna(0.0).clip(lower=0.0)
+    n.links.static.loc[mask, "p_nom"] = base
+    n.links.static.loc[mask, "p_nom_min"] = base
+    n.links.static.loc[mask, "p_nom_max"] = base
+    n.links.static.loc[mask, "p_min_pu"] = 1.0
+    n.links.static.loc[mask, "p_nom_extendable"] = False
+    n_multi = int((links.loc[mask, "carrier"] == "crop_production_multi").sum())
+    logger.info(
+        "Fixed %d crop-production links (%d multi) at baseline areas "
+        "totalling %.1f Mha",
+        int(mask.sum()),
+        n_multi,
+        float(base.sum()),
+    )
 
 
 def add_spared_land_links(
