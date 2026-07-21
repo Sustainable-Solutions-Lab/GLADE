@@ -207,7 +207,8 @@ def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
     """Apply multiplicative factors to emission efficiencies.
 
     Scales ALL emission sources for each gas:
-    - CH4: animal_production (efficiency2) + rice crop_production (efficiency4)
+    - CH4: animal_production (efficiency2) + rice cultivation on both crop
+      carriers (port swept dynamically; it shifts with water.temporal_resolution)
     - N2O: animal_production (efficiency4) + fertilizer_distribution (efficiency2)
            + residue_incorporation (efficiency, via bus1)
     - LUC: land_conversion + new_to_pasture (efficiency2)
@@ -237,16 +238,28 @@ def _apply_emission_factors(n: pypsa.Network, cfg: dict) -> None:
                 animal_mask.sum(),
             )
 
-        # CH4 from rice cultivation (via efficiency4 on crop_production links)
-        rice_ch4_mask = (n.links.static["carrier"] == "crop_production") & (
-            n.links.static.get("bus4", "") == "emission:ch4"
-        )
-        if rice_ch4_mask.any():
-            n.links.static.loc[rice_ch4_mask, "efficiency4"] *= ch4_factor
+        # CH4 from rice cultivation. The port is not fixed: it sits after the
+        # per-period water block on crop_production (bus(3 + T)) and after the
+        # cycle outputs on crop_production_multi, so sweep every secondary bus
+        # of both crop carriers rather than hard-coding one.
+        crop_carriers = ("crop_production", "crop_production_multi")
+        links = n.links.static
+        crop_mask = links["carrier"].isin(crop_carriers)
+        bus_cols = [c for c in links.columns if c.startswith("bus") and c[3:].isdigit()]
+        n_rice_ports = 0
+        for bus_col in bus_cols:
+            eff_col = f"efficiency{bus_col[3:]}"
+            if eff_col not in links.columns:
+                continue
+            mask = crop_mask & (links[bus_col] == "emission:ch4")
+            if mask.any():
+                links.loc[mask, eff_col] *= ch4_factor
+                n_rice_ports += int(mask.sum())
+        if n_rice_ports:
             logger.info(
-                "Applied CH4 factor %.3f to %d rice crop_production links",
+                "Applied CH4 factor %.3f to %d rice crop-production ports",
                 ch4_factor,
-                rice_ch4_mask.sum(),
+                n_rice_ports,
             )
 
     if n2o_factor != 1.0:

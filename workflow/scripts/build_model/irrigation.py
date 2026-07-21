@@ -60,7 +60,12 @@ def calibrate_eta_c(
     """Per-region consumptive irrigation efficiency ``eta_c`` in ``(0, eta_max]``.
 
     ``eta_c = clip(E_baseline / C, eta_min, eta_max)``, floored at
-    ``E_baseline / pool`` for baseline feasibility. Values above 1 encode
+    ``E_baseline / pool`` for baseline feasibility. Note the floor and the
+    infeasibility check below are both *annual*: at ``temporal_resolution > 1``
+    surface supply is period-bound, so a region can clear the annual test while
+    an individual period's demand still exceeds that period's surface. Those
+    periods are met from the annual groundwater bands; with
+    ``water.supply.groundwater: false`` they fall to slack instead. Values above 1 encode
     deficit irrigation (observed consumption below the GAEZ full requirement);
     see the module docstring. Regions without baseline irrigation (E = 0) or
     without observed consumption (C = 0) get 1.0 (no adjustment: the delivery
@@ -110,8 +115,9 @@ def calibrate_eta_c(
         )
     if infeasible.any():
         logger.warning(
-            "Baseline irrigation requirement E exceeds the water pool even at "
-            "eta_c=eta_max in %d regions (baseline-infeasible; expect slack or "
+            "Baseline irrigation requirement E exceeds the annual water pool "
+            "even at eta_c=eta_max in %d regions (baseline-infeasible; expect "
+            "slack or "
             "reallocation there): %s",
             int(infeasible.sum()),
             ", ".join(regions[infeasible][:10]),

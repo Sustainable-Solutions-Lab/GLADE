@@ -452,6 +452,7 @@ rule solve_model:
             "ghg_pricing_enabled"
         ],
         water_scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
+        water_groundwater=config["water"]["supply"]["groundwater"],
         water_scarcity_pricing_enabled=lambda w: get_effective_config(w.scenario)[
             "water_scarcity"
         ]["pricing_enabled"],

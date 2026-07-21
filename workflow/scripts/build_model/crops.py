@@ -509,10 +509,18 @@ def add_regional_crop_production_links(
                     ("water_field:" + region_str + f":p{p}").to_numpy(dtype=object)
                     for p in range(water_periods)
                 ]
+                # A non-finite requirement must blank the bus, not attach one
+                # with a NaN efficiency: `NaN != 0` is True.
                 water_bus_periods = [
-                    np.where(water_eff_periods[:, p] != 0.0, period_bus[p], "")
+                    np.where(
+                        np.isfinite(water_eff_periods[:, p])
+                        & (water_eff_periods[:, p] != 0.0),
+                        period_bus[p],
+                        "",
+                    )
                     for p in range(water_periods)
                 ]
+                water_eff_periods = np.nan_to_num(water_eff_periods, nan=0.0)
             else:
                 water_eff_periods = np.zeros((len(df), water_periods), dtype=float)
                 water_bus_periods = [

@@ -721,7 +721,7 @@ def add_groundwater_depletion_pricing_to_objective(
     Prices the mined volume accumulated on ``store:impact:groundwater_depletion``
     (Mm^3) at solve time, mirroring the water-scarcity and GHG pricing. A
     positive price shifts irrigation away from groundwater mining. Active only
-    in ``water.supply.mode == "groundwater"`` (otherwise the store stays empty).
+    when ``water.supply.groundwater`` is true (otherwise the store stays empty).
 
     Parameters
     ----------
@@ -1520,7 +1520,15 @@ def run_solve(
         add_water_scarcity_cap(n, float(smk.params.water_scarcity_cap))
 
     # Add groundwater-depletion pricing and/or cap if enabled
-    if smk.params.groundwater_pricing_enabled:
+    depletion_priced = smk.params.groundwater_pricing_enabled
+    depletion_capped = smk.params.groundwater_cap is not None
+    if (depletion_priced or depletion_capped) and not smk.params.water_groundwater:
+        raise ValueError(
+            "groundwater_depletion pricing/capping requires "
+            "water.supply.groundwater: without the groundwater bands nothing "
+            "is ever mined, so the lever is vacuous."
+        )
+    if depletion_priced:
         add_groundwater_depletion_pricing_to_objective(
             n, float(smk.params.groundwater_price)
         )
