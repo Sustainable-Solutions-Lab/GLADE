@@ -189,6 +189,24 @@ CROPGRIDS v1.08
 
 **Usage**: Fallback source of harvested area and current cropland footprint for crops listed in ``config["cropgrids_crops"]`` (e.g. ``apple``), which are not covered by GAEZ. The CROPGRIDS ``harvarea`` raster drives both ``baseline_area_mha`` and ``suitable_area`` for these crops (see ``build_crop_yields_cropgrids.py``); per-country FAOSTAT QCL yields (item 515 for apple, element 5419 hg/ha) supply the dry-matter yield, broadcast uniformly to every (region, resource_class) cell within each country.
 
+AWARE2.0
+~~~~~~~~
+
+**Provider**: Seitfudem, Berger, Mueller Schmied & Boulay (2025)
+
+**Description**: The updated water-scarcity characterisation method for life-cycle assessment, built on WaterGAP 2.2e. The model uses the native-basin geopackage: hydrological basin polygons carrying annual and monthly characterisation factors. The annual agricultural CF is the basin scarcity signal used to split provinces along basin boundaries when building model regions (see :doc:`land_use`).
+
+**Coverage**:
+  * Spatial: Global, 11661 native hydrological basins
+
+**Access**: Zenodo record 15133241 (https://doi.org/10.5281/zenodo.15133241), file ``AWARE20_Native_CFs_geospatial.gpkg`` (5.3 MB).
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+**Citation**: Seitfudem, G., Berger, M., Mueller Schmied, H., & Boulay, A.-M. (2025). *The updated and improved method for water scarcity impact assessment in LCA, AWARE2.0*. https://doi.org/10.5281/zenodo.15133241
+
+**Retrieval**: ``download_aware2_basins`` fetches the geopackage from Zenodo. Basins whose annual agricultural CF is missing (about a fifth of polygons, mostly ice, desert and small islands) are filled with the global median.
+
 MIRCA-OS v2
 ~~~~~~~~~~~
 

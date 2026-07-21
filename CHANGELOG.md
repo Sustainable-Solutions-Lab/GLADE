@@ -86,6 +86,20 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- Model regions are now built **basin-aware**: GADM provinces are first split
+  along AWARE hydrological basin boundaries, and each country is partitioned
+  into regions balancing geography against basin scarcity
+  (`aggregation.regions.basin_scarcity_weight`, default 2.0; 0 recovers the
+  previous purely geographic clustering). A province straddling an abundant and
+  a scarce basin is no longer pooled into one region, which used to average away
+  exactly the sub-provincial scarcity that constrains irrigation. Every region
+  is still either contained in one province or a union of whole provinces, so
+  regions remain comparable to political units. `allow_cross_border: true` is no
+  longer supported and now raises. **This changes default region geometry for
+  every config**, so all `processing/` artefacts are rebuilt and the tracked
+  calibration sets must be regenerated. Requires the AWARE2.0 basin geopackage
+  (new automatic download).
+
 - The **GDD-IA baseline-diet dataset is now retrieved automatically** from
   Zenodo ([10.5281/zenodo.20818140](https://doi.org/10.5281/zenodo.20818140),
   CC-BY-4.0) instead of being obtained on personal request and placed under

@@ -79,12 +79,19 @@ The model operates at sub-national regional resolution, balancing spatial detail
 Regional Clustering
 ~~~~~~~~~~~~~~~~~~~
 
-Optimization regions are created by clustering administrative units (GADM level 1) based on spatial proximity:
+Optimization regions are created by clustering administrative units (GADM level 1),
+basin-aware so that hydrological scarcity is not averaged away:
 
 1. **Simplification**: Simplify GADM geometries to reduce complexity while preserving boundaries
 2. **Country selection**: Filter to configured countries (``countries`` list in config)
-3. **Clustering**: Aggregate administrative units using k-means clustering on centroids
-4. **Output**: GeoJSON with region polygons (``processing/{name}/regions.geojson``)
+3. **Basin split**: Overlay provinces with the AWARE hydrological basins, giving one piece per
+   (province, basin), so a province straddling an abundant and a scarce basin can be separated
+4. **Clustering**: Per country, allocate a region budget by area and partition into exactly
+   ``target_count`` regions, balancing geography and basin scarcity. Every region is either
+   contained in one province (large provinces are split into sub-regions) or a union of whole
+   provinces (small provinces are merged) -- never a mix of partial pieces across provinces, so
+   regions stay comparable to political units
+5. **Output**: GeoJSON with region polygons (``processing/{name}/regions.geojson``)
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/intro_global_coverage.png
    :width: 100%
@@ -95,7 +102,8 @@ Optimization regions are created by clustering administrative units (GADM level 
 Key configuration parameters:
 
 - ``aggregation.regions.target_count``: Number of regions to create (default 750)
-- ``aggregation.regions.allow_cross_border``: Whether regions can span country boundaries (typically ``false``)
+- ``aggregation.regions.allow_cross_border``: Whether regions can span country boundaries (must be ``false``; basin-aware clustering has no cross-border path and raises otherwise)
+- ``aggregation.regions.basin_scarcity_weight``: Influence of AWARE basin scarcity relative to geography when partitioning a country (default 2.0; 0 recovers plain geographic clustering)
 - ``aggregation.simplify_tolerance_km``: Geometry simplification tolerance
 
 Resource Classes
