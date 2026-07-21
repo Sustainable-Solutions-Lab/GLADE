@@ -17,9 +17,6 @@ introduce breaking changes to configuration and outputs.
 
 ### Added
 
-- Fixed a GAEZ data artefact where a handful of cells carry a negative net
-  irrigation requirement, which flipped those crop links into spurious water
-  *producers*. Negative requirements are now clipped to zero.
 - Multiple cropping is now anchored to an observed baseline derived from
   MIRCA-OS v2 (new automated data source), using the available 2010, 2015, or
   2020 release nearest `baseline_year`. A fixed, documented sequence catalog
@@ -208,6 +205,9 @@ introduce breaking changes to configuration and outputs.
 
 ### Fixed
 
+- Fixed a GAEZ data artefact where a handful of cells carry a negative net
+  irrigation requirement, which flipped those crop links into spurious water
+  *producers*. Negative requirements are now clipped to zero.
 - Baseline biofuel/industrial and biogas demand is enforced again. Since
   2026-05-20 the crops-with-supply safety check in `add_biofuel_links` ran
   before any crop production links existed, so every build silently dropped
