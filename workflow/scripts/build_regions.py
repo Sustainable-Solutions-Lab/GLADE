@@ -28,6 +28,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pyproj import CRS, Geod
+import shapely
 from sklearn.cluster import AgglomerativeClustering, KMeans
 
 from workflow.scripts.logging_config import setup_script_logging
@@ -35,6 +36,9 @@ from workflow.scripts.logging_config import setup_script_logging
 logger = logging.getLogger(__name__)
 
 GEOD = Geod(ellps="WGS84")
+
+# Coordinate grid the GeoJSON writer rounds to (GDAL's default 7 decimals).
+GEOJSON_PRECISION = 1e-7
 
 
 def _compute_country_geodesic_areas(
@@ -385,6 +389,30 @@ def cluster_regions(
     rep_country = pieces.groupby("_cluster")["GID_0"].first()
     dissolved["country"] = dissolved["_cluster"].map(rep_country)
     dissolved = dissolved.set_index("region").drop(columns="_cluster")
+
+    # Snap to the GeoJSON writer's coordinate grid, then repair. Order matters.
+    # The raw dissolve leaves near-degenerate slivers that are valid in memory
+    # but tip into self-intersection once the writer truncates coordinates to 7
+    # decimals, so an in-memory validity check passes while the file on disk is
+    # invalid. Snapping first makes the in-memory geometry exactly what gets
+    # written, so repairing it afterwards actually holds. This matters because
+    # exactextract calls into native code that *segfaults* on invalid geometry
+    # rather than raising -- one bad region kills an unrelated downstream rule
+    # with an empty log and no traceback.
+    # buffer(0) first: set_precision raises on genuinely invalid input rather
+    # than repairing it. Then snap, then repair again, since snapping can itself
+    # introduce self-intersections.
+    repaired = dissolved.geometry.buffer(0)
+    snapped = shapely.set_precision(repaired.values, GEOJSON_PRECISION)
+    dissolved["geometry"] = gpd.GeoSeries(
+        snapped, index=dissolved.index, crs=dissolved.crs
+    ).buffer(0)
+    still_bad = ~dissolved.geometry.is_valid
+    if still_bad.any():
+        raise ValueError(
+            f"{int(still_bad.sum())} region geometries are invalid after "
+            "normalisation: " + ", ".join(map(str, dissolved.index[still_bad][:5]))
+        )
     return dissolved
 
 
@@ -450,3 +478,14 @@ if __name__ == "__main__":
 
     Path(snakemake.output[0]).parent.mkdir(parents=True, exist_ok=True)
     regions.to_file(snakemake.output[0], driver="GeoJSON")
+
+    # The written file is what every downstream raster aggregation reads, so
+    # validate it rather than the in-memory frame.
+    written = gpd.read_file(snakemake.output[0])
+    bad = ~written.geometry.is_valid
+    if bad.any():
+        raise ValueError(
+            f"{int(bad.sum())} region geometries are invalid as written to "
+            f"{snakemake.output[0]}; exactextract would segfault on them."
+        )
+    logger.info("Wrote %d regions, all geometries valid on disk", len(written))

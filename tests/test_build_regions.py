@@ -14,7 +14,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 
 from workflow.scripts.build_regions import (
     _largest_remainder,
@@ -144,3 +144,28 @@ def test_country_budget_uses_full_province_area():
         per_country["A"] == 2
     ), f"basin-fragmented country starved of regions: {per_country.to_dict()}"
     assert per_country["B"] == 2
+
+
+def test_dissolved_regions_are_valid_geometries():
+    """Region geometries must be valid: exactextract segfaults on invalid ones.
+
+    Downstream raster aggregation calls into native code that crashes rather
+    than raising on a self-intersecting polygon, so one bad region takes out an
+    unrelated rule with an empty log. Dissolving province-basin pieces can
+    produce them, hence the repair.
+    """
+    # An asymmetric bowtie: self-intersecting like real dissolve artefacts, and
+    # with positive area so it survives the area-weighted clustering.
+    bad = Polygon([(0, 0), (4, 4), (4, 0), (0, 3)])
+    assert not bad.is_valid, "fixture must actually be invalid"
+    pieces = gpd.GeoDataFrame(
+        {
+            "GID_0": ["A", "A"],
+            "prov": ["P1", "P2"],
+            "cf": [5.0, 50.0],
+        },
+        geometry=[bad, box(10, 0, 11, 1)],
+        crs="EPSG:4326",
+    )
+    regions = cluster_regions(pieces, 2, allow_cross_border=False, scarcity_weight=3.0)
+    assert regions.geometry.is_valid.all(), "invalid geometry escaped build_regions"
