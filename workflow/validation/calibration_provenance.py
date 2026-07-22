@@ -12,11 +12,11 @@ the active config is compared against the stamp of the set it consumes
 (``calibration.source``); a mismatch means the artefacts were fit under
 different structural assumptions and are not valid for this config.
 
-The comparison covers all *structural* config leaves: solve-time keys
-(SOLVE_TIME_CONFIG_PREFIXES) never invalidate calibration, and a small
-set of additional prefixes is exempted below because it describes run
-identity or calibration machinery rather than what the artefacts were
-fit to.
+The comparison covers all *structural* config leaves plus derived identities
+for structural curated inputs. Solve-time keys (SOLVE_TIME_CONFIG_PREFIXES)
+never invalidate calibration, and a small set of additional prefixes is
+exempted below because it describes run identity or calibration machinery
+rather than what the artefacts were fit to.
 """
 
 from pathlib import Path
@@ -24,10 +24,19 @@ from pathlib import Path
 from snakemake.logging import logger
 import yaml
 
+from workflow.scripts.multi_cropping_combinations import (
+    closest_mirca_multicropping_year,
+    effective_combinations,
+    load_catalog_combinations,
+    observed_combinations,
+)
 from workflow.scripts.solve_namespace import _is_solve_time_key, resolve_gbd_anchoring
 
 CALIBRATION_DIR = Path("data/curated/calibration")
 PROVENANCE_FILENAME = "provenance.yaml"
+MIRCA_MULTICROPPING_CATALOG = Path(
+    "data/curated/mirca_os_multicropping_combinations.yaml"
+)
 
 # Exempt from the structural snapshot, on top of the solve-time prefixes.
 PROVENANCE_EXEMPT_PREFIXES = {
@@ -80,8 +89,8 @@ def _is_exempt(key: str) -> bool:
     return any(key == p or key.startswith(p + ".") for p in PROVENANCE_EXEMPT_PREFIXES)
 
 
-def structural_snapshot(config: dict) -> dict:
-    """Flat dotted-key map of the fit-relevant structural config leaves."""
+def structural_snapshot(config: dict, project_root: Path | None = None) -> dict:
+    """Return fit-relevant structural config leaves and curated identities."""
     snapshot: dict = {}
 
     def walk(node: dict, prefix: str) -> None:
@@ -111,6 +120,20 @@ def structural_snapshot(config: dict) -> dict:
         for k, v in snapshot.items()
         if k != inactive and not k.startswith(inactive + ".")
     }
+
+    root = Path(project_root) if project_root else Path.cwd()
+    catalog_path = root / MIRCA_MULTICROPPING_CATALOG
+    source_year = closest_mirca_multicropping_year(config["baseline_year"])
+    snapshot["derived.multiple_cropping.mirca_source_year"] = source_year
+    snapshot["derived.multiple_cropping.catalog"] = load_catalog_combinations(
+        catalog_path
+    )
+    snapshot["derived.multiple_cropping.observed"] = observed_combinations(
+        config, catalog_path
+    )
+    snapshot["derived.multiple_cropping.effective"] = effective_combinations(
+        config, catalog_path
+    )
     return snapshot
 
 
@@ -164,7 +187,9 @@ def validate_calibration_provenance(
     root = Path(project_root) if project_root else Path.cwd()
     source = config["calibration"]["source"]
     stamp = load_provenance(source, root)
-    diffs = diff_snapshots(stamp["structural_config"], structural_snapshot(config))
+    diffs = diff_snapshots(
+        stamp["structural_config"], structural_snapshot(config, root)
+    )
     if not diffs:
         return
 

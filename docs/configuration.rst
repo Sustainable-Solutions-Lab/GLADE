@@ -582,15 +582,21 @@ Multiple Cropping
    :start-after: # --- section: multiple_cropping ---
    :end-before: # --- section: macronutrients ---
 
-Define sequential cropping systems as ordered lists of crops. Entries may
-repeat a crop (double rice) or mix cereals and legumes (rice→wheat, maize→soybean) and
-list multiple ``water_supplies`` (``r`` for rainfed, ``i`` for irrigated) to build both
-variants. The ``build_multi_cropping`` rule checks growing-season compatibility,
-aggregates eligible area/yields, and sums irrigated water demand; ``build_model`` turns
-each combination into a multi-output land link. Leave the section empty to disable the
-feature. Multiple cropping zones that imply relay cropping (GAEZ classes "limited double" or
-"double rice … limited triple") are still accepted here but are interpreted as sequential crop
-chains; relay-specific dynamics are not yet modelled.
+The observed combinations come from the fixed catalog in
+``data/curated/mirca_os_multicropping_combinations.yaml`` and are included when
+all their crops are modeled. The config section contains only overrides:
+
+* Set a catalog combination to ``null`` to disable it.
+* Add a new, uniquely named combination to expose greenfield potential with an
+  implicit zero baseline. Its ``crops`` are an ordered list and may repeat a
+  crop; ``water_supplies`` uses ``r`` for rainfed and ``i`` for irrigated.
+
+Catalog combinations cannot be redefined in config. The
+``build_multi_cropping`` rule applies the GAEZ multiple-cropping-zone limit,
+requires valid suitability, yield, and irrigated water data for every cycle,
+and turns the resulting areas into multi-output land links. It does not apply a
+separate growing-season-overlap test. GAEZ relay-only classes are interpreted as
+sequential crop chains; relay-specific dynamics are not yet modeled.
 
 Country Coverage
 ~~~~~~~~~~~~~~~~

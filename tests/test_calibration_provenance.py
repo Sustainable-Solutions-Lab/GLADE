@@ -5,6 +5,7 @@
 """Unit tests for calibration artefact provenance tracking."""
 
 import copy
+import shutil
 
 import pytest
 import yaml
@@ -30,6 +31,7 @@ MINIMAL_CONFIG = {
         "gdd_ia": {"cooked_to_raw": {"red_meat": 1.43}},
     },
     "crops": ["wheat", "maize"],
+    "multiple_cropping": {},
     "planning_horizon": 2030,
     "baseline_year": 2020,
     "emissions": {"ghg_price": 100},
@@ -52,6 +54,12 @@ class TestStructuralSnapshot:
         assert snap["baseline_year"] == 2020
         assert snap["food_loss_waste_calibration.food_groups"] == ["fruits"]
         assert snap["food_demand_calibration.min_multiplier"] == 0.5
+        assert snap["derived.multiple_cropping.mirca_source_year"] == 2020
+        assert set(snap["derived.multiple_cropping.observed"]) == {"wheat_maize"}
+        assert (
+            snap["derived.multiple_cropping.effective"]
+            == snap["derived.multiple_cropping.observed"]
+        )
 
     def test_drops_solve_time_and_exempt_keys(self):
         snap = structural_snapshot(MINIMAL_CONFIG)
@@ -67,6 +75,14 @@ class TestStructuralSnapshot:
         )
         assert "cost_calibration.generate" not in snap
         assert "food_loss_waste_calibration.generate" not in snap
+
+    def test_records_resolved_mirca_source_year(self):
+        config = copy.deepcopy(MINIMAL_CONFIG)
+        config["baseline_year"] = 2016
+
+        snap = structural_snapshot(config)
+
+        assert snap["derived.multiple_cropping.mirca_source_year"] == 2015
 
 
 class TestDiffSnapshots:
@@ -107,11 +123,14 @@ class TestGenerationRunDetection:
 
 class TestValidateCalibrationProvenance:
     def _write_stamp(self, root, config):
+        catalog = root / "data/curated/mirca_os_multicropping_combinations.yaml"
+        catalog.parent.mkdir(parents=True)
+        shutil.copy("data/curated/mirca_os_multicropping_combinations.yaml", catalog)
         path = root / "data/curated/calibration/unit/provenance.yaml"
         path.parent.mkdir(parents=True)
         stamp = {
             "source": "unit",
-            "structural_config": structural_snapshot(config),
+            "structural_config": structural_snapshot(config, root),
         }
         with open(path, "w") as f:
             yaml.safe_dump(stamp, f)
@@ -132,6 +151,18 @@ class TestValidateCalibrationProvenance:
         cfg["crops"] = ["wheat"]
         with pytest.raises(ValueError, match="crops"):
             validate_calibration_provenance(cfg, tmp_path)
+
+    def test_catalog_change_raises(self, tmp_path):
+        self._write_stamp(tmp_path, MINIMAL_CONFIG)
+        catalog_path = (
+            tmp_path / "data/curated/mirca_os_multicropping_combinations.yaml"
+        )
+        catalog = yaml.safe_load(catalog_path.read_text())
+        catalog.pop("wheat_maize")
+        catalog_path.write_text(yaml.safe_dump(catalog))
+
+        with pytest.raises(ValueError, match=r"derived\.multiple_cropping\.catalog"):
+            validate_calibration_provenance(MINIMAL_CONFIG, tmp_path)
 
     def test_accept_flag_downgrades_to_warning(self, tmp_path):
         self._write_stamp(tmp_path, MINIMAL_CONFIG)

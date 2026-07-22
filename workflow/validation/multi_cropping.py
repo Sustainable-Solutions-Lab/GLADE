@@ -9,6 +9,11 @@ from pathlib import Path
 import pandas as pd
 from snakemake.logging import logger
 
+from workflow.scripts.multi_cropping_combinations import (
+    effective_combinations,
+    load_catalog_combinations,
+)
+
 # The 23 base crops of MIRCA-OS v2 (Kebede et al. 2025). The concordance file
 # must cover exactly this set so the derivation fails fast on any drift.
 MIRCA_OS_BASE_CROPS = frozenset(
@@ -39,47 +44,46 @@ MIRCA_OS_BASE_CROPS = frozenset(
     }
 )
 
-# Crops in the agronomic seed set of the Stage-1 derivation. These must be
-# mapped (non-blank) for the seeded combinations to be derivable at all.
-REQUIRED_MAPPED_MIRCA_CROPS = frozenset(
-    {"Rice", "Wheat", "Maize", "Soybeans", "Cotton"}
-)
+CATALOG_PATH = Path("data/curated/mirca_os_multicropping_combinations.yaml")
 
 
 def validate_multi_cropping(config: dict, project_root: Path) -> None:
     """Validate multi-cropping combinations and the MIRCA-OS crop concordance.
 
-    Two invariants:
+    Three invariants:
 
     1. Every crop referenced by a ``config["multiple_cropping"]`` combination is
        in ``config["crops"]`` (so its crop buses exist at build time).
-    2. ``data/curated/mirca_os_crop_mapping.csv`` is exhaustive over the 23
-       MIRCA-OS base crops, every non-blank ``glade_crop`` is in
-       ``config["crops"]``, and the agronomic seed-set crops are mapped. This
+    2. Catalog entries can only be disabled; config-only entries are explicit
+       zero-baseline greenfield systems and cannot use catalog names.
+    3. ``data/curated/mirca_os_crop_mapping.csv`` is exhaustive over the 23
+       MIRCA-OS base crops and maps every crop used by the fixed catalog. This
        mirrors ``validate_cropgrids_crops`` for the CROPGRIDS concordance.
     """
     config_crops = set(config["crops"])
 
-    combinations = config.get("multiple_cropping")
-    if combinations:
-        missing: list[str] = []
-        for combo_name, entry in combinations.items():
-            if entry is None:
-                continue
-            for crop in entry["crops"]:
-                if crop not in config_crops:
-                    missing.append(f"{combo_name}: {crop}")
-        if missing:
-            detail = ", ".join(missing)
-            raise ValueError(
-                "Multi-cropping combinations reference crops not in "
-                f"config['crops']: {detail}"
-            )
+    missing = [
+        f"{combo_name}: {crop}"
+        for combo_name, entry in config["multiple_cropping"].items()
+        if entry is not None
+        for crop in entry["crops"]
+        if crop not in config_crops
+    ]
+    if missing:
+        raise ValueError(
+            "Multi-cropping combinations reference crops not in "
+            f"config['crops']: {', '.join(missing)}"
+        )
 
-    _validate_mirca_concordance(config_crops, project_root)
+    catalog_path = project_root / CATALOG_PATH
+    effective_combinations(config, catalog_path)
+    catalog = load_catalog_combinations(catalog_path)
+    _validate_mirca_concordance(config_crops, project_root, catalog)
 
 
-def _validate_mirca_concordance(config_crops: set[str], project_root: Path) -> None:
+def _validate_mirca_concordance(
+    config_crops: set[str], project_root: Path, catalog: dict[str, dict]
+) -> None:
     """Check the MIRCA-OS -> GLADE crop concordance file."""
     mapping_path = project_root / "data" / "curated" / "mirca_os_crop_mapping.csv"
     if not mapping_path.exists():
@@ -127,11 +131,9 @@ def _validate_mirca_concordance(config_crops: set[str], project_root: Path) -> N
             f"(future crops?): {', '.join(unused)}"
         )
 
-    unmapped_required = sorted(
-        crop for crop in REQUIRED_MAPPED_MIRCA_CROPS if glade.get(crop, "") == ""
-    )
-    if unmapped_required:
+    catalog_crops = {crop for entry in catalog.values() for crop in entry["crops"]}
+    unmapped_catalog = sorted(catalog_crops - set(mapped))
+    if unmapped_catalog:
         raise ValueError(
-            "mirca_os_crop_mapping.csv leaves seed-set crops unmapped: "
-            f"{unmapped_required}"
+            f"mirca_os_crop_mapping.csv does not map catalog crops: {unmapped_catalog}"
         )

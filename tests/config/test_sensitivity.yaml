@@ -61,10 +61,11 @@ crops:
   - soybean
   - white-potato
 
-# Disable multi-cropping (requires wetland-rice which is not in test crop list)
+# Keep this sensitivity fixture focused on its health and emissions parameters.
 multiple_cropping:
-  double_rice: null
-  rice_wheat: null
+  wheat_maize: null
+  wheat_soybean: null
+  maize_soybean: null
 
 # Enable health for RR sensitivity testing
 health:

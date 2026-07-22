@@ -21,14 +21,14 @@ The bag nests the grid archives as RAR5 files (extracted downstream with
 """
 
 from pathlib import Path
+import shutil
 
 import remotezip
 import requests
 
 MIRCA_OS_V2_RESOURCE = "e4582ca0042148338bb5e0148b749ed6"
 BAG_URL = (
-    "https://www.hydroshare.org/django_irods/download/bags/"
-    f"{MIRCA_OS_V2_RESOURCE}.zip"
+    f"https://www.hydroshare.org/django_irods/download/bags/{MIRCA_OS_V2_RESOURCE}.zip"
 )
 
 
@@ -51,19 +51,22 @@ def main() -> None:
     signed_url = resolve_signed_url()
     member_path = f"{MIRCA_OS_V2_RESOURCE}/data/contents/{member}"
 
-    with remotezip.RemoteZip(signed_url) as bag:
-        names = set(bag.namelist())
-        if member_path not in names:
-            raise KeyError(
-                f"Member '{member_path}' not found in MIRCA-OS v2 bag "
-                f"({len(names)} members)"
-            )
-        data = bag.read(member_path)
-
     tmp = output.with_suffix(output.suffix + ".part")
-    tmp.write_bytes(data)
-    tmp.replace(output)
-    print(f"Downloaded {len(data):,} bytes -> {output}")
+    try:
+        with remotezip.RemoteZip(signed_url) as bag:
+            names = set(bag.namelist())
+            if member_path not in names:
+                raise KeyError(
+                    f"Member '{member_path}' not found in MIRCA-OS v2 bag "
+                    f"({len(names)} members)"
+                )
+            with bag.open(member_path) as source, tmp.open("wb") as destination:
+                shutil.copyfileobj(source, destination, length=8 * 1024 * 1024)
+        tmp.replace(output)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    print(f"Downloaded {output.stat().st_size:,} bytes -> {output}")
 
 
 main()

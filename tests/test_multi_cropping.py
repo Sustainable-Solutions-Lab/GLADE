@@ -4,37 +4,60 @@
 
 """Unit tests for the MIRCA-OS multi-cropping baseline.
 
-Covers Stage-1 attribution (magnitude allocation, repeated-crop supports,
-residual conservation), the per-cycle seasonal water split (T-column magnitude
-preservation, distinct-crop period placement, repeated-crop stagger), and the
-single-crop baseline reconciliation (cycle-multiplicity reduction, no negatives,
-land balance).
+Covers baseline attribution, repeated-crop supports, residual conservation,
+single-crop baseline reconciliation, and validation-mode pinning.
 """
 
-from collections import Counter
+import json
 
+from affine import Affine
 import numpy as np
 import pandas as pd
 import pypsa
 import pytest
+from rasterio.crs import CRS
 
 from workflow.scripts.build_model.crops import (
     fix_crop_production_to_baseline,
     reconcile_single_crop_baselines,
 )
 from workflow.scripts.derive_mirca_multicropping import (
+    GridSpec,
+    _assert_grid,
     allocate,
     candidate_capacity,
     run_derivation,
 )
+from workflow.scripts.multi_cropping_combinations import (
+    closest_mirca_multicropping_year,
+    effective_combinations,
+    observed_combinations,
+)
 from workflow.scripts.solve_model.production_stability import _multi_cycle_long
+
+CATALOG = "data/curated/mirca_os_multicropping_combinations.yaml"
+
+
+def test_grid_validation_allows_only_subpixel_metadata_rounding():
+    """Known MIRCA affine rounding passes, while a real cell shift fails."""
+    crs = CRS.from_epsg(4326)
+    reference = GridSpec((2160, 4320), Affine(1 / 12, 0, -180, 0, -1 / 12, 90), crs)
+    rounded = GridSpec(
+        (2160, 4320), Affine(0.0833333, 0, -180, 0, -0.0833333, 89.999928), crs
+    )
+    _assert_grid(rounded, reference, "rounded")
+
+    shifted = GridSpec((2160, 4320), Affine(1 / 12, 0, -179.99, 0, -1 / 12, 90), crs)
+    with pytest.raises(ValueError, match="more than 1%"):
+        _assert_grid(shifted, reference, "shifted")
 
 
 def _network_with_links(rows):
     """Minimal network whose links carry the columns reconciliation reads.
 
-    Multi-cropping rows may carry an ``output_buses`` list; those become bus1,
-    bus2, ... so reconciliation can count the built crop-output cycles.
+    Multi-cropping rows carry their cycles as explicit ``crop_cycles`` metadata.
+    Optional ``output_buses`` are populated only to verify that accounting does
+    not infer crop identity from bus labels.
     """
     n = pypsa.Network()
     df = pd.DataFrame(rows).set_index("name")
@@ -57,6 +80,7 @@ def _network_with_links(rows):
             "baseline_area_mha",
             "crop",
             "combination",
+            "crop_cycles",
             "region",
             "resource_class",
             "water_supply",
@@ -68,7 +92,60 @@ def _network_with_links(rows):
     return n
 
 
-# ─── Stage-1 attribution ───────────────────────────────────────────────────
+# Baseline attribution
+
+
+@pytest.mark.parametrize(
+    "baseline_year, expected",
+    [(2000, 2010), (2012, 2010), (2013, 2015), (2017, 2015), (2024, 2020)],
+)
+def test_mirca_release_tracks_baseline_year(baseline_year, expected):
+    """The closest supported release is selected with a deterministic lower tie."""
+    assert closest_mirca_multicropping_year(baseline_year) == expected
+
+
+def test_combination_catalog_overrides_and_greenfield_additions():
+    """Config disables catalog entries and adds zero-baseline greenfield systems."""
+    config = {
+        "crops": ["wetland-rice", "wheat", "barley"],
+        "multiple_cropping": {
+            "double_rice": None,
+            "barley_wheat": {
+                "crops": ["barley", "wheat"],
+                "water_supplies": ["r"],
+            },
+        },
+    }
+
+    effective = effective_combinations(config, CATALOG)
+    observed = observed_combinations(config, CATALOG)
+
+    assert "rice_wheat" in effective
+    assert "double_rice" not in effective
+    assert "barley_wheat" in effective
+    assert "barley_wheat" not in observed
+
+
+@pytest.mark.parametrize(
+    "name, entry, match",
+    [
+        (
+            "rice_wheat",
+            {"crops": ["wetland-rice", "wheat"], "water_supplies": ["r"]},
+            "redefines a curated",
+        ),
+        ("unknown", None, "cannot disable anything"),
+    ],
+)
+def test_combination_catalog_rejects_ambiguous_overrides(name, entry, match):
+    """Catalog identities cannot be redefined and unknown names cannot be disabled."""
+    config = {
+        "crops": ["wetland-rice", "wheat"],
+        "multiple_cropping": {name: entry},
+    }
+
+    with pytest.raises(ValueError, match=match):
+        effective_combinations(config, CATALOG)
 
 
 def test_allocate_conserves_and_caps():
@@ -76,9 +153,12 @@ def test_allocate_conserves_and_caps():
     m_total = np.array([[100.0]])
     # two candidates: a 2-cycle (cap 30) and a 3-cycle (cap 10 -> extra cap 20)
     caps = [np.array([[30.0]]), np.array([[10.0]])]
-    cycles = [2, 3]
-    areas, residual = allocate(m_total, caps, cycles)
-    extra = sum((n - 1) * a for n, a in zip(cycles, areas))
+    sequences = [["a", "b"], ["c", "d", "e"]]
+    support = {crop: np.array([[100.0]]) for crop in "abcde"}
+    areas, residual = allocate(m_total, np.array([[100.0]]), caps, sequences, support)
+    extra = sum(
+        (len(crops) - 1) * area for crops, area in zip(sequences, areas, strict=True)
+    )
     # total extra-cycle capacity 30 + 20 = 50 <= 100 -> both filled, residual 50
     assert areas[0][0, 0] == pytest.approx(30.0)
     assert areas[1][0, 0] == pytest.approx(10.0)
@@ -90,12 +170,32 @@ def test_allocate_rations_when_capacity_exceeds_magnitude():
     """When capacity exceeds M_total, it is rationed proportionally, residual 0."""
     m_total = np.array([[30.0]])
     caps = [np.array([[40.0]]), np.array([[40.0]])]  # extra cap 40 + 40 = 80 > 30
-    cycles = [2, 2]
-    areas, residual = allocate(m_total, caps, cycles)
-    extra = sum((n - 1) * a for n, a in zip(cycles, areas))
+    sequences = [["a", "b"], ["c", "d"]]
+    support = {crop: np.array([[100.0]]) for crop in "abcd"}
+    areas, residual = allocate(m_total, np.array([[100.0]]), caps, sequences, support)
+    extra = sum(area for area in areas)
     assert extra[0, 0] == pytest.approx(30.0)  # sum equals M_total
     assert residual[0, 0] == pytest.approx(0.0)
     assert areas[0][0, 0] == pytest.approx(15.0)  # split evenly (equal caps)
+
+
+def test_allocate_shares_overlapping_crop_budget():
+    """The same observed crop area cannot support two full rotations."""
+    caps = [np.array([[40.0]]), np.array([[40.0]])]
+    sequences = [["wheat", "maize"], ["wheat", "soybean"]]
+    support = {
+        "wheat": np.array([[30.0]]),
+        "maize": np.array([[40.0]]),
+        "soybean": np.array([[40.0]]),
+    }
+    areas, residual = allocate(
+        np.array([[100.0]]), np.array([[100.0]]), caps, sequences, support
+    )
+
+    assert areas[0][0, 0] == pytest.approx(15.0)
+    assert areas[1][0, 0] == pytest.approx(15.0)
+    assert sum(area[0, 0] for area in areas) == pytest.approx(30.0)
+    assert residual[0, 0] == pytest.approx(70.0)
 
 
 def test_candidate_capacity_repeated_rice_disjoint_supports():
@@ -151,19 +251,42 @@ def test_run_derivation_balance_and_residual():
     )
     m_total = 20.0 + 15.0 - 10.0  # 25
     attributed = (2 - 1) * areas[("rice_wheat", "i")][0, 0]
-    # cap A_max = min(20, 15) = 15; extra cap 15 <= 25 -> attributed 15, residual 10
-    assert attributed == pytest.approx(15.0)
+    # The 10 ha physical footprint caps the attributed bundle area.
+    assert attributed == pytest.approx(10.0)
     assert residual[0, 0] == pytest.approx(m_total - attributed)
 
 
-# ─── Reconciliation multiplicity ───────────────────────────────────────────
+def test_run_derivation_keeps_water_system_budgets_separate():
+    """Rainfed extra-cycle area cannot create an irrigated baseline anchor."""
+    cell = lambda v: np.array([[v]])  # noqa: E731
+    annual = {
+        ("Rice", "ir"): cell(20.0),
+        ("Wheat", "ir"): cell(15.0),
+        ("Rice", "rf"): cell(20.0),
+        ("Wheat", "rf"): cell(15.0),
+    }
+    footprint = {"ir": cell(35.0), "rf": cell(10.0)}
+    crop_area = {
+        ("wetland-rice", "i"): cell(20.0),
+        ("wheat", "i"): cell(15.0),
+        ("wetland-rice", "r"): cell(20.0),
+        ("wheat", "r"): cell(15.0),
+    }
+    zone = {"i": cell(5), "r": cell(5)}
+    rice_support = {"i": cell(0.0), "i3": cell(0.0), "r": cell(0.0), "r3": cell(0.0)}
+    combos = [
+        {"name": "rice_wheat", "crops": ["wetland-rice", "wheat"], "water_supply": "i"}
+    ]
+
+    areas, residual, _stats = run_derivation(
+        annual, footprint, crop_area, zone, rice_support, combos
+    )
+
+    assert areas[("rice_wheat", "i")][0, 0] == pytest.approx(0.0)
+    assert residual[0, 0] == pytest.approx(25.0)
 
 
-def test_reconciliation_multiplicity_counts():
-    """Cycle multiplicity: rice-wheat subtracts X from each; double rice 2X."""
-    assert dict(Counter(["wetland-rice", "wheat"])) == {"wetland-rice": 1, "wheat": 1}
-    assert dict(Counter(["wetland-rice", "wetland-rice"])) == {"wetland-rice": 2}
-    assert dict(Counter(["wetland-rice"] * 3)) == {"wetland-rice": 3}
+# Reconciliation multiplicity
 
 
 def _crop_link(name, crop, baseline, region="r0", cls=1):
@@ -174,6 +297,7 @@ def _crop_link(name, crop, baseline, region="r0", cls=1):
         "baseline_area_mha": baseline,
         "crop": crop,
         "combination": "",
+        "crop_cycles": "",
         "region": region,
         "resource_class": cls,
         "water_supply": "irrigated",
@@ -189,6 +313,7 @@ def _multi_link(name, combo, baseline, crops, region="r0", cls=1, country="IND")
         "baseline_area_mha": baseline,
         "crop": combo,
         "combination": combo,
+        "crop_cycles": json.dumps(crops),
         "region": region,
         "resource_class": cls,
         "water_supply": "irrigated",
@@ -207,9 +332,7 @@ def test_reconciliation_reduces_singles_by_multiplicity():
             _multi_link("m", "rice_wheat", 3.0, ["wetland-rice", "wheat"]),
         ]
     )
-    reconcile_single_crop_baselines(
-        n, {"rice_wheat": {"crops": ["wetland-rice", "wheat"]}}
-    )
+    reconcile_single_crop_baselines(n)
     bl = n.links.static["baseline_area_mha"]
     assert bl["rice"] == pytest.approx(7.0)  # 10 - 3
     assert bl["wheat"] == pytest.approx(5.0)  # 8 - 3
@@ -224,9 +347,7 @@ def test_reconciliation_double_rice_subtracts_2x():
             _multi_link("m", "double_rice", 3.0, ["wetland-rice", "wetland-rice"]),
         ]
     )
-    reconcile_single_crop_baselines(
-        n, {"double_rice": {"crops": ["wetland-rice", "wetland-rice"]}}
-    )
+    reconcile_single_crop_baselines(n)
     assert n.links.static["baseline_area_mha"]["rice"] == pytest.approx(4.0)  # 10 - 6
 
 
@@ -243,9 +364,7 @@ def test_reconciliation_redistributes_over_subtraction_no_negative():
             ),  # subtract 2*1.5=3
         ]
     )
-    reconcile_single_crop_baselines(
-        n, {"double_rice": {"crops": ["wetland-rice", "wetland-rice"]}}
-    )
+    reconcile_single_crop_baselines(n)
     bl = n.links.static["baseline_area_mha"]
     assert bl["rice0"] == pytest.approx(0.0)  # floored, not negative
     assert bl["rice1"] == pytest.approx(4.0)  # absorbed the 1 Mha over-subtraction
@@ -254,29 +373,57 @@ def test_reconciliation_redistributes_over_subtraction_no_negative():
     assert bl[["rice0", "rice1"]].sum() == pytest.approx(2.0 + 5.0 - 3.0)
 
 
-def test_reconciliation_uses_built_cycles_not_config():
-    """A combo built with fewer cycles reduces singles only for produced crops.
-
-    rice_wheat configured, but the built link produces only rice (wheat cycle
-    dropped, e.g. below min_yield). Only the rice single is reduced; wheat is not.
-    """
+def test_reconciliation_uses_explicit_cycle_metadata():
+    """Cycle accounting does not infer crops from output bus names."""
     n = _network_with_links(
         [
             _crop_link("rice", "wetland-rice", 10.0),
             _crop_link("wheat", "wheat", 8.0),
-            # built with only the rice output bus
-            _multi_link("m", "rice_wheat", 3.0, ["wetland-rice"]),
+            _multi_link("m", "rice_wheat", 3.0, ["wetland-rice", "wheat"]),
         ]
     )
-    reconcile_single_crop_baselines(
-        n, {"rice_wheat": {"crops": ["wetland-rice", "wheat"]}}
-    )
+    n.links.static.loc["m", ["bus1", "bus2"]] = ["crop:wheat:IND", ""]
+    reconcile_single_crop_baselines(n)
     bl = n.links.static["baseline_area_mha"]
-    assert bl["rice"] == pytest.approx(7.0)  # 10 - 3 (rice produced)
-    assert bl["wheat"] == pytest.approx(8.0)  # unchanged: no wheat cycle built
+    assert bl["rice"] == pytest.approx(7.0)
+    assert bl["wheat"] == pytest.approx(5.0)
 
 
-# ─── Validation-mode pinning (use_actual_production) ───────────────────────
+def test_reconciliation_scales_mirca_anchor_to_faostat_budget():
+    """A bundle anchor is conservatively scaled when a crop budget is smaller."""
+    n = _network_with_links(
+        [
+            _crop_link("rice", "wetland-rice", 4.0),
+            _multi_link("m", "double_rice", 3.0, ["wetland-rice", "wetland-rice"]),
+        ]
+    )
+    reconcile_single_crop_baselines(n)
+    bl = n.links.static["baseline_area_mha"]
+    assert bl["rice"] == pytest.approx(0.0)
+    assert bl["m"] == pytest.approx(2.0)
+
+
+def test_reconciliation_scales_overlapping_combinations_jointly():
+    """Shared crop budgets scale every overlapping combination consistently."""
+    n = _network_with_links(
+        [
+            _crop_link("a", "a", 10.0),
+            _crop_link("b", "b", 100.0),
+            _crop_link("c", "c", 100.0),
+            _multi_link("ab", "a_b", 10.0, ["a", "b"]),
+            _multi_link("ac", "a_c", 10.0, ["a", "c"]),
+        ]
+    )
+    reconcile_single_crop_baselines(n)
+    bl = n.links.static["baseline_area_mha"]
+    assert bl["ab"] == pytest.approx(5.0)
+    assert bl["ac"] == pytest.approx(5.0)
+    assert bl["a"] == pytest.approx(0.0)
+    assert bl["b"] == pytest.approx(95.0)
+    assert bl["c"] == pytest.approx(95.0)
+
+
+# Validation-mode pinning (use_actual_production)
 
 
 def test_fix_pins_both_carriers_at_reconciled_baselines():
@@ -290,9 +437,7 @@ def test_fix_pins_both_carriers_at_reconciled_baselines():
             _multi_link("m", "rice_wheat", 3.0, ["wetland-rice", "wheat"]),
         ]
     )
-    reconcile_single_crop_baselines(
-        n, {"rice_wheat": {"crops": ["wetland-rice", "wheat"]}}
-    )
+    reconcile_single_crop_baselines(n)
     fix_crop_production_to_baseline(n)
     links = n.links.static
     for name, expected in [("rice", 7.0), ("wheat", 5.0), ("m", 3.0)]:
@@ -306,9 +451,8 @@ def test_fix_pins_both_carriers_at_reconciled_baselines():
     assert links.at["wheat", "p_nom"] + links.at["m", "p_nom"] == pytest.approx(8.0)
 
 
-def test_multi_cycle_long_counts_ports_per_cycle():
-    """_multi_cycle_long counts one cycle per crop-output port, so repeated
-    crops carry their multiplicity and distinct crops one row each."""
+def test_multi_cycle_long_counts_explicit_cycles():
+    """Cycle metadata preserves repeated-crop multiplicity."""
     n = _network_with_links(
         [
             _crop_link("rice", "wetland-rice", 10.0),

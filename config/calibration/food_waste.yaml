@@ -25,8 +25,8 @@
 #   tools/smk --configfile config/calibration/food_waste.yaml -- \
 #     data/curated/calibration/food_waste.yaml
 
-# Shared name across all calibration configs so the expensive upstream
-# processing is built once under processing/calibration/ and reused.
+# ``tools/calibrate`` overrides this with a source- and step-specific name so
+# another calibration config cannot overwrite this step's intermediates.
 name: "calibration"
 
 scenarios:
@@ -72,6 +72,7 @@ food_loss_waste_calibration:
   scenario: "food_waste_uncal"
 
 health:
+  enabled: false
   value_per_yll: 0
 
 emissions:

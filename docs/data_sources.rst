@@ -194,13 +194,13 @@ MIRCA-OS v2
 
 **Provider**: Kebede, Nagpal, Krueger, Grafton, Siebert & others (2025)
 
-**Description**: Global gridded monthly irrigated and rainfed cropped-area dataset (an open-source update of MIRCA2000), 5-arcmin, for 23 crop classes and the years 2000-2020. The model uses the 2020 annual harvested-area grids (which count every harvested cycle) and the maximum-monthly-cropped-area grids (the AEI-capped physical field footprint) to derive the observed multiple-cropping baseline, and the 2020 subcrop monthly growing-area grids (``Rice1/2/3``) to detect repeated same-crop cycles.
+**Description**: Global gridded monthly irrigated and rainfed cropped-area dataset (an open-source update of MIRCA2000), 5-arcmin, for 23 crop classes and the years 2000-2020. The model selects the release nearest ``baseline_year`` from 2010, 2015, and 2020 (ties select the earlier year). Its annual harvested-area grids count every harvested cycle, while the maximum-monthly-cropped-area grids provide the AEI-capped physical field footprint. The ``Rice1/2/3`` subcrop grids identify repeated same-crop cycles.
 
 **Version**: v2 (adds 2020 relative to the v0.1 preprint release).
 
 **Coverage**:
   * Spatial: Global, 5-arcmin (~10 km)
-  * Temporal: 2000, 2005, 2010, 2015, 2020 (model anchors to 2020)
+  * Temporal: 2000, 2005, 2010, 2015, 2020 (the workflow currently retrieves 2010, 2015, and 2020)
 
 **Access**: HydroShare resource ``e4582ca0042148338bb5e0148b749ed6`` (https://www.hydroshare.org/resource/e4582ca0042148338bb5e0148b749ed6/).
 
@@ -208,9 +208,9 @@ MIRCA-OS v2
 
 **Citation**: Kebede, T. A., et al. (2025). *A global open-source dataset of monthly irrigated and rainfed cropped areas (MIRCA-OS) for the 21st century*. Scientific Data 12, 208. https://doi.org/10.1038/s41597-025-04313-4
 
-**Retrieval**: The per-file HydroShare endpoint 500s for this resource, so the grid archives are fetched as members of the whole-resource BagIt zip via partial HTTP-range extraction (``download_mirca_os_bag_member.py``); the nested RAR5 archives are unpacked with ``bsdtar`` (``extract_mirca_os_*`` rules). Note the v2 archive ships only ``ir``/``rf`` footprint layers despite its README mentioning a ``tot`` layer, so the combined footprint is taken as ``ir + rf`` (disjoint land, single-count).
+**Retrieval**: The per-file HydroShare endpoint 500s for this resource, so the grid archives are fetched as members of the whole-resource BagIt zip via partial HTTP-range extraction (``download_mirca_os_bag_member.py``); the nested RAR5 archives are unpacked in one batch per product and year with ``bsdtar`` (``extract_mirca_os_*`` rules). The v2 archive ships only ``ir`` and ``rf`` footprint layers despite its README mentioning a ``tot`` layer. The derivation uses each layer with the matching water supply.
 
-**Usage**: Source of the observed multiple-cropping baseline (see :doc:`crop_production`, Stage 1), derived by the ``derive_mirca_multicropping`` checkpoint. The MIRCA-OS-to-GLADE crop concordance is in ``data/curated/mirca_os_crop_mapping.csv``.
+**Usage**: Source of the observed multiple-cropping baseline (see :doc:`crop_production`), derived by the config-specific ``derive_mirca_multicropping`` rule. The MIRCA-OS-to-GLADE crop concordance is in ``data/curated/mirca_os_crop_mapping.csv``; the fixed candidate sequence catalog is in ``data/curated/mirca_os_multicropping_combinations.yaml``.
 
 FAOSTAT Prices (PP)
 ~~~~~~~~~~~~~~~~~~~~

@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Fixed crop-sequence catalog used to attribute MIRCA-OS multiple cropping.
+#
+# MIRCA-OS reports harvested area by crop and water supply but does not identify
+# rotations directly. These sequences were selected from widely documented
+# agronomic rotations and repeated-rice systems, restricted to crops represented
+# separately by both MIRCA-OS v2 and GLADE. The derivation attributes only area
+# where every cycle is observed in the same MIRCA cell and the GAEZ multiple-
+# cropping zone permits the number and type of cycles. Consequently, inclusion
+# here defines a candidate attribution and optimization pathway; it does not
+# assert that the sequence occurs in every region.
+#
+# This catalog is tied to the MIRCA-OS v2 crop taxonomy. Edit it only when the
+# source dataset or the scientific attribution method is deliberately revised.
+
+rice_wheat:
+  crops:
+  - wetland-rice
+  - wheat
+  water_supplies: [r, i]
+
+double_rice:
+  crops:
+  - wetland-rice
+  - wetland-rice
+  water_supplies: [r, i]
+
+triple_rice:
+  crops:
+  - wetland-rice
+  - wetland-rice
+  - wetland-rice
+  water_supplies: [r, i]
+
+rice_maize:
+  crops:
+  - wetland-rice
+  - maize
+  water_supplies: [r, i]
+
+wheat_maize:
+  crops:
+  - wheat
+  - maize
+  water_supplies: [r, i]
+
+wheat_soybean:
+  crops:
+  - wheat
+  - soybean
+  water_supplies: [r, i]
+
+maize_soybean:
+  crops:
+  - maize
+  - soybean
+  water_supplies: [r, i]
+
+cotton_wheat:
+  crops:
+  - cotton
+  - wheat
+  water_supplies: [r, i]

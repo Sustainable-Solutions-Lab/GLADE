@@ -24,7 +24,6 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
             "fertilizer:USA",
         ]
     )
-
     yields = pd.DataFrame(
         {
             "region": ["regionA"],
@@ -65,21 +64,45 @@ def test_silage_maize_cost_not_zero_with_zero_harvested_area():
     assert float(links["marginal_cost"].iloc[0]) == pytest.approx(1.0)
 
 
-def _add_rice_wheat_multi_link(baseline_ha, multi_crop_cost_calibration):
+def _add_rice_wheat_multi_link(
+    baseline_ha,
+    multi_crop_cost_calibration,
+    *,
+    baseline_region="regionA",
+    baseline_combination="rice_wheat",
+    potential_region="regionA",
+    cycle_crops=("wetland-rice", "wheat"),
+):
     """Build a single rice-wheat multi-cropping link and return the network."""
     n = pypsa.Network()
     n.buses.add(
         [
-            "land:cropland:regionA_c0_r",
+            f"land:cropland:{potential_region}_c0_r",
             "crop:wetland-rice:USA",
             "crop:wheat:USA",
             "fertilizer:USA",
         ]
     )
+    n.add(
+        "Link",
+        ["single_rice", "single_wheat"],
+        bus0=[
+            f"land:cropland:{potential_region}_c0_r",
+            f"land:cropland:{potential_region}_c0_r",
+        ],
+        bus1=["crop:wetland-rice:USA", "crop:wheat:USA"],
+        carrier="crop_production",
+        baseline_area_mha=1.0,
+        crop=["wetland-rice", "wheat"],
+        country="USA",
+        water_supply="rainfed",
+        region=potential_region,
+        resource_class=0,
+    )
     eligible_area = pd.DataFrame(
         {
             "combination": ["rice_wheat"],
-            "region": ["regionA"],
+            "region": [potential_region],
             "resource_class": [0],
             "water_supply": ["r"],
             "eligible_area_ha": [1_000_000.0],
@@ -88,19 +111,19 @@ def _add_rice_wheat_multi_link(baseline_ha, multi_crop_cost_calibration):
     )
     cycle_yields = pd.DataFrame(
         {
-            "combination": ["rice_wheat", "rice_wheat"],
-            "region": ["regionA", "regionA"],
-            "resource_class": [0, 0],
-            "water_supply": ["r", "r"],
-            "cycle_index": [0, 1],
-            "crop": ["wetland-rice", "wheat"],
-            "yield_t_per_ha": [2.0, 3.0],
+            "combination": ["rice_wheat"] * len(cycle_crops),
+            "region": [potential_region] * len(cycle_crops),
+            "resource_class": [0] * len(cycle_crops),
+            "water_supply": ["r"] * len(cycle_crops),
+            "cycle_index": list(range(1, len(cycle_crops) + 1)),
+            "crop": list(cycle_crops),
+            "yield_t_per_ha": [2.0] * len(cycle_crops),
         }
     )
     baseline_area = pd.DataFrame(
         {
-            "combination": ["rice_wheat"],
-            "region": ["regionA"],
+            "combination": [baseline_combination],
+            "region": [baseline_region],
             "resource_class": [0],
             "water_supply": ["r"],
             "baseline_area_ha": [baseline_ha],
@@ -110,7 +133,7 @@ def _add_rice_wheat_multi_link(baseline_ha, multi_crop_cost_calibration):
         n=n,
         eligible_area=eligible_area,
         cycle_yields=cycle_yields,
-        region_to_country=pd.Series({"regionA": "USA"}),
+        region_to_country=pd.Series({baseline_region: "USA", potential_region: "USA"}),
         allowed_countries={"USA"},
         crop_costs=pd.Series(
             {
@@ -126,10 +149,50 @@ def _add_rice_wheat_multi_link(baseline_ha, multi_crop_cost_calibration):
         seed_kg_dm_per_ha=pd.Series({"wetland-rice": 0.0, "wheat": 0.0}),
         crop_loss_multiplier=pd.Series(dtype=float),
         crop_marketing_cost_usd_per_t={"wetland-rice": 0.0, "wheat": 0.0},
+        combinations={"rice_wheat": {"crops": ["wetland-rice", "wheat"]}},
         baseline_area=baseline_area,
         multi_crop_cost_calibration=multi_crop_cost_calibration,
     )
     return n
+
+
+def test_multi_cropping_relocates_baseline_without_local_potential():
+    """Observed anchors relocate only within their combination/country/water group."""
+    n = _add_rice_wheat_multi_link(
+        baseline_ha=250_000.0,
+        multi_crop_cost_calibration=None,
+        baseline_region="observed",
+        potential_region="eligible",
+    )
+    multi = n.links.static[n.links.static["carrier"] == "crop_production_multi"]
+    assert len(multi) == 1
+    assert multi.iloc[0]["region"] == "eligible"
+    assert multi.iloc[0]["baseline_area_mha"] == pytest.approx(0.25)
+
+
+def test_multi_cropping_ignores_disabled_catalog_baseline():
+    """A catalog baseline cannot reactivate a combination disabled by config."""
+    n = _add_rice_wheat_multi_link(
+        baseline_ha=250_000.0,
+        baseline_combination="disabled_catalog_entry",
+        multi_crop_cost_calibration=None,
+    )
+    multi = n.links.static[n.links.static["carrier"] == "crop_production_multi"]
+    assert len(multi) == 1
+    assert multi.iloc[0]["baseline_area_mha"] == 0.0
+
+
+def test_multi_cropping_keeps_incomplete_bundle_on_single_baselines():
+    """A missing cycle excludes the bundle without stripping single baselines."""
+    n = _add_rice_wheat_multi_link(
+        baseline_ha=250_000.0,
+        multi_crop_cost_calibration=None,
+        cycle_crops=("wetland-rice",),
+    )
+    multi = n.links.static[n.links.static["carrier"] == "crop_production_multi"]
+    assert multi.empty
+    singles = n.links.static[n.links.static["carrier"] == "crop_production"]
+    assert singles["baseline_area_mha"].sum() == 2.0
 
 
 def test_multi_cropping_uses_direct_bundle_cost_calibration():
@@ -202,7 +265,7 @@ def test_multi_cropping_rice_emits_methane_per_cycle():
             "region": ["regionA", "regionA"],
             "resource_class": [0, 0],
             "water_supply": ["i", "i"],
-            "cycle_index": [0, 1],
+            "cycle_index": [1, 2],
             "crop": ["wetland-rice", "wetland-rice"],
             "yield_t_per_ha": [2.0, 2.0],
         }
@@ -222,6 +285,7 @@ def test_multi_cropping_rice_emits_methane_per_cycle():
         seed_kg_dm_per_ha=pd.Series({"wetland-rice": 0.0}),
         crop_loss_multiplier=pd.Series(dtype=float),
         crop_marketing_cost_usd_per_t={"wetland-rice": 0.0},
+        combinations={"double_rice": {"crops": ["wetland-rice", "wetland-rice"]}},
     )
 
     links = n.links.static

@@ -150,6 +150,12 @@ The wrapper invokes ``tools/smk`` with the matching config and the
 appropriate output targets. Any extra flags are passed through, e.g.
 ``tools/calibrate cost -j8 --slurm``.
 
+Each source and step receives its own deterministic workflow name, such as
+``calibration-default-feed``. Its processing and result intermediates are
+therefore reusable without being overwritten by the different effective config
+of the next calibration step, and ``--check`` can assess every step
+independently.
+
 The stability calibration runs locally in-process and is inherently
 sequential (each Broyden step depends on the previous solve), so HPC
 offloading isn't worthwhile at this size. Each iteration is one paired
@@ -170,6 +176,12 @@ small exempt list; see
 active config is compared against the stamp of the set named by
 ``calibration.source``; a structural mismatch is an error listing the
 differing keys.
+
+For multi-cropping, the stamp also records the normalized curated catalog, the
+effective observed and greenfield sequence sets, and the MIRCA source year
+selected from ``baseline_year``. Editing the catalog, disabling or adding a
+sequence, or selecting a different MIRCA release therefore requires a matching
+calibration set.
 
 A config with different structural assumptions has three options:
 

@@ -367,5 +367,5 @@ and validation-mode pinning (``use_actual_production`` fixes both carriers at
 their reconciled baselines). Because each ``n``-cycle multi link draws one
 hectare of physical land while its harvested cycles are removed from the
 single-crop baselines, the correction generators only absorb the *residual*
-extra-cycle area that is not attributed to any modelled combination (e.g. mixed
-irrigated/rainfed rotations, or crops GLADE does not model).
+extra-cycle area that is not attributed to any modelled combination (for
+example, rotations outside the curated catalog or crops GLADE does not model).

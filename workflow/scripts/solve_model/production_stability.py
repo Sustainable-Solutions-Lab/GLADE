@@ -36,6 +36,7 @@ import pypsa
 import xarray as xr
 import yaml
 
+from workflow.scripts.build_model.crops import multi_crop_cycle_multiplicities
 from workflow.scripts.solve_namespace import (
     CALIBRATED_SENTINEL,
     DEVIATION_PENALTY_COMPONENT_PATHS,
@@ -1224,33 +1225,14 @@ def add_bounded_subsidy_constraints(
 def _multi_cycle_long(links_df: pd.DataFrame) -> pd.DataFrame:
     """Long form of multi-cropping cycle outputs: one row per (link, crop).
 
-    Cycle multiplicity is counted from the crop-output ports (``crop:{crop}:*``
-    buses); a repeated crop occupies one port per cycle, so the port count is
-    the number of harvested cycles of that crop per Mha of link dispatch.
+    Cycle multiplicity comes from the explicit ``crop_cycles`` link metadata.
+    A repeated crop occupies one entry per cycle, so its count is the number of
+    harvested cycles of that crop per Mha of link dispatch.
     Columns: ``link``, ``crop``, ``group`` (``crop::country``),
     ``multiplicity``, ``baseline_area_mha``.
     """
-    multi = links_df[links_df["carrier"] == "crop_production_multi"]
-    if multi.empty:
-        return pd.DataFrame(
-            columns=["link", "crop", "group", "multiplicity", "baseline_area_mha"]
-        )
-    bus_cols = [
-        c
-        for c in multi.columns
-        if c.startswith("bus") and c != "bus0" and c[3:].isdigit()
-    ]
-    stacked = multi[bus_cols].astype(str).stack()
-    stacked = stacked[stacked.str.startswith("crop:")]
-    long = pd.DataFrame(
-        {
-            "link": stacked.index.get_level_values(0),
-            "crop": stacked.str.split(":").str[1].to_numpy(),
-        }
-    )
-    long = long.groupby(["link", "crop"]).size().rename("multiplicity").reset_index()
-    long["group"] = long["crop"] + "::" + long["link"].map(multi["country"]).astype(str)
-    long["baseline_area_mha"] = long["link"].map(multi["baseline_area_mha"]).fillna(0.0)
+    long = multi_crop_cycle_multiplicities(links_df)
+    long["group"] = long["crop"] + "::" + long["country"]
     return long
 
 
@@ -1314,8 +1296,8 @@ def add_crop_growth_cap_constraints(
     # Multi-cropping links contribute their cycle multiplicity per output crop
     # to the same (crop, country) totals: an n-cycle link dispatching X Mha
     # harvests m_k * X of crop k. The "crop" column holds the combination
-    # label, so cycles are counted from the crop-output ports (a repeated crop
-    # occupies one port per cycle). Their multiplicity-weighted baselines join
+    # label, so cycles come from the explicit crop_cycles metadata (a repeated
+    # crop occurs once per cycle). Their multiplicity-weighted baselines join
     # the bound so single + multi jointly reproduce the FAOSTAT country total.
     multi_long = _multi_cycle_long(links_df)
     if not multi_long.empty:
@@ -1474,8 +1456,7 @@ def add_reforestation_cap_constraints(
     """
     if max_fraction < 0.0 or max_fraction > 1.0:
         raise ValueError(
-            "land.reforestation_cap.max_fraction must be in [0, 1], "
-            f"got {max_fraction}"
+            f"land.reforestation_cap.max_fraction must be in [0, 1], got {max_fraction}"
         )
     if buffer_mha < 0.0:
         raise ValueError(

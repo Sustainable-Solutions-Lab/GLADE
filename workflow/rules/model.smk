@@ -165,7 +165,7 @@ rule build_model:
         multi_cropping_area="<processing>/{name}/multi_cropping/eligible_area.csv",
         multi_cropping_yields="<processing>/{name}/multi_cropping/cycle_yields.csv",
         multi_cropping_baseline="<processing>/{name}/multi_cropping/baseline_area.csv",
-        multi_cropping_combinations=lambda wildcards: derived_combinations_yaml(),
+        multi_cropping_combinations=lambda wildcards: multicropping_combinations_yaml(),
         edible_portion="<processing>/{name}/fao_edible_portion.csv",
         population="<processing>/{name}/population.csv",
         baseline_diet="<processing>/{name}/dietary_intake.csv",

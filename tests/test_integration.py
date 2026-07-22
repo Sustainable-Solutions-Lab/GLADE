@@ -57,8 +57,8 @@ def test_build_solve_analyze(results_dir):
         results_dir / "analysis" / "scen-default" / "objective_breakdown.parquet"
     ).exists()
 
-    # Multi-cropping integration: the effective (MIRCA-derived) combination set
-    # restricted to the test config's crops must yield anchored multi links.
+    # Enabled catalog combinations restricted to the test config's crops must
+    # yield anchored multi links.
     import pypsa
 
     n = pypsa.Network(str(results_dir / "solved" / "model_scen-default.nc"))
@@ -85,9 +85,9 @@ def test_plots(results_dir):
     Snakemake handles the dependency automatically.
     """
     run_snakemake_target(
-        "results/test/plots/scen-default/consumption_balance.pdf",
+        "results/test/plots/scen-default/food_consumption.pdf",
         "results/test/plots/scen-default/objective_breakdown.pdf",
     )
 
-    assert (results_dir / "plots" / "scen-default" / "consumption_balance.pdf").exists()
+    assert (results_dir / "plots" / "scen-default" / "food_consumption.pdf").exists()
     assert (results_dir / "plots" / "scen-default" / "objective_breakdown.pdf").exists()

@@ -17,24 +17,21 @@ introduce breaking changes to configuration and outputs.
 
 ### Added
 
-- Multiple cropping is now anchored to an **observed 2020 baseline** derived
-  from MIRCA-OS v2 (new automated data source). A config-independent Snakemake
-  checkpoint (`derive_mirca_multicropping`) attributes MIRCA's extra-cycle
-  harvested area to crop-sequence combinations and discovers the combination
-  set itself (8+ combinations instead of the 3 previously hard-coded; the
-  static `multiple_cropping` config section now merely supplements the derived
-  set). `crop_production_multi` links are anchored at the observed baseline
-  (`p_nom_max = max(GAEZ potential, baseline)`), participate in the land
-  deviation penalty, the crop growth cap and cost calibration like single-crop
-  links (a new `multi_crop_cost.csv` calibration artefact carries
-  per-(combination, country) bundle corrections), and are pinned in
-  validation mode, with harvested cycles reconciled out of the single-crop
-  FAOSTAT baselines so each cycle is counted exactly once. Multi-cropping is
-  consequently no longer disabled when the land deviation penalty or
-  `use_actual_production` is active. The broken GAEZ `sequence_feasible`
-  gate (which rejected nearly all observed double-cropping) is removed;
-  feasibility evidence now comes from MIRCA observation plus the GAEZ
-  multiple-cropping zone.
+- Multiple cropping is now anchored to an observed baseline derived from
+  MIRCA-OS v2 (new automated data source), using the available 2010, 2015, or
+  2020 release nearest `baseline_year`. A fixed, documented sequence catalog
+  replaces dynamic combination discovery. Config entries may disable catalog
+  sequences or add zero-baseline greenfield potential under a new name.
+  Irrigated and rainfed observations are attributed separately, competing
+  rotations share crop-area budgets, and outputs are derived per config so the
+  spatial and climate inputs cannot be mixed between runs.
+  `crop_production_multi` links participate in the land deviation penalty, crop
+  growth cap, cost calibration, and validation-mode pinning like single-crop
+  links. Harvested cycles are reconciled out of the single-crop FAOSTAT
+  baselines so each cycle is counted once. A new `multi_crop_cost.csv`
+  calibration artefact carries per-(combination, country) bundle corrections.
+  The GAEZ growing-season compatibility gate is removed; observed feasibility
+  comes from MIRCA plus the GAEZ multiple-cropping zone.
 
 - New `health.segment_formulation: relax_and_fix` option (now the default):
   a two-pass LP scheme for the health module's non-convex dose-response

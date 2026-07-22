@@ -3,74 +3,169 @@ SPDX-FileCopyrightText: 2026 Koen van Greevenbroek
 
 SPDX-License-Identifier: GPL-3.0-or-later
 
-Stage 1 of the multi-cropping baseline: derive an observed baseline area for
-crop-sequence combinations from MIRCA-OS 2020, on the global 5-arcmin grid.
+Derive an observed multi-cropping baseline from MIRCA-OS.
 
-This is a config-independent Snakemake checkpoint (shared across configs). It
-writes to its output directory:
+For each water system and grid cell, MIRCA annual harvested area above the
+maximum-monthly physical footprint is the extra-cycle magnitude. The fixed
+combination catalog supplies plausible crop sequences. Candidate sequences are
+filled at a common proportional rate subject to four simultaneous budgets:
 
-  * ``combinations.yaml`` -- the discovered combination set (crop sequences and
-    water supplies in GLADE ``i``/``r`` codes), merged over
-    ``config["multiple_cropping"]`` to form the effective combination set.
-  * ``baseline/{combination}_{ws}.tif`` -- per-combination, per-water-supply
-    sparse 5-arcmin GeoTIFF of the *physical link area* ``A`` (ha): the field area
-    that runs the whole sequence once (an ``n``-cycle combination on ``A`` ha
-    harvests ``n * A`` ha).
-  * ``residual_multicrop.tif`` -- extra-cycle harvested area not attributed to any
-    combination, left for the bulk land-correction generator.
+* the extra-cycle magnitude;
+* the physical cropped footprint;
+* every constituent crop's observed harvested area; and
+* each sequence's MIRCA support and GAEZ cycle-zone capacity.
 
-Method, per cell:
-
-1. Magnitude ``M_total = sum_crops (harvested_ir + harvested_rf) - footprint``,
-   clipped at 0, where ``footprint = footprint_ir + footprint_rf`` are MIRCA's
-   AEI-capped maximum-monthly-cropped-area layers (no ``tot`` layer ships, and the
-   two systems occupy disjoint land, so the sum is single-count). ``M_total`` is
-   the harvested area above the physical field footprint -- the extra-cycle area.
-2. Candidate combinations are gated on **MIRCA observation** (both crops harvested
-   in the given system) plus the GAEZ multiple-cropping-zone cycle-count limit.
-   ``sequence_feasible`` on GAEZ windows is deliberately NOT used as the gate: GAEZ
-   attainable season lengths overshoot the farmed cycle, so it rejects ~all
-   observed irrigated double-cropping. GAEZ timing enters only later, at the
-   Stage-2 water split.
-3. Repeated same-crop cycles (double/triple rice) use the MIRCA subcrop stack
-   (``Rice1/2/3``) for mutually consistent physical supports, not ``min(area,
-   area)``.
-4. Each candidate has physical cap ``A_max`` and extra-cycle capacity
-   ``(n-1) * A_max``. The cell's ``M_total`` is allocated across candidates
-   proportionally to capacity, never exceeding it; any unallocated remainder is
-   residual. The physical link area written out is ``A = E / (n-1)``.
+The shared budgets prevent one observed crop hectare from being reused in
+several overlapping sequences. Irrigated and rainfed systems are derived
+independently. The resulting physical bundle areas are aggregated directly to
+the active configuration's regions and resource classes.
 """
 
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
+from affine import Affine
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.crs import CRS
 import xarray as xr
-import yaml
 
-from workflow.scripts.build_multi_cropping import WETLAND_RICE_CROPS, ZONE_CAPABILITIES
+from workflow.scripts.build_multi_cropping import (
+    WETLAND_RICE_CROPS,
+    ZONE_CAPABILITIES,
+    region_coverage_entries,
+)
+from workflow.scripts.multi_cropping_combinations import load_catalog_combinations
+from workflow.scripts.raster_utils import raster_bounds
 
 
-def load_tif(path: str) -> np.ndarray:
-    """Load a GeoTIFF band as float64 with negatives (nodata sentinels) zeroed."""
+@dataclass(frozen=True)
+class GridSpec:
+    """Spatial identity of a two-dimensional raster grid."""
+
+    shape: tuple[int, int]
+    transform: Affine
+    crs: CRS
+
+
+def _grid_from_raster(src, path: str) -> GridSpec:
+    if src.crs is None:
+        raise ValueError(f"Raster '{path}' has no CRS")
+    return GridSpec(src.shape, src.transform, src.crs)
+
+
+def _assert_grid(actual: GridSpec, expected: GridSpec, label: str) -> None:
+    if actual.shape != expected.shape:
+        raise ValueError(
+            f"{label} shape {actual.shape} does not match reference {expected.shape}"
+        )
+    if actual.crs != expected.crs:
+        raise ValueError(f"{label} CRS does not match the reference grid")
+    # MIRCA-OS contains one transform rounded at seven decimal places. Accept
+    # harmless metadata rounding below 1% of a pixel, but reject a real grid
+    # shift, resolution difference, or rotation.
+    pixel_tolerance = min(abs(expected.transform.a), abs(expected.transform.e)) * 0.01
+    if not np.allclose(
+        tuple(actual.transform),
+        tuple(expected.transform),
+        rtol=0.0,
+        atol=pixel_tolerance,
+    ):
+        raise ValueError(
+            f"{label} transform differs from the reference by more than 1% of a pixel"
+        )
+
+
+def load_tif(path: str, expected_grid: GridSpec | None = None) -> np.ndarray:
+    """Load a GeoTIFF as float64 and validate its complete grid identity."""
     with rasterio.open(path) as src:
+        grid = _grid_from_raster(src, path)
+        if expected_grid is not None:
+            _assert_grid(grid, expected_grid, path)
         arr = src.read(1).astype(np.float64)
+        nodata = src.nodata
+    if nodata is not None:
+        arr[arr == nodata] = 0.0
     arr[~np.isfinite(arr)] = 0.0
     arr[arr < 0] = 0.0
     return arr
 
 
-def load_subcrop_maxmonth(path: str) -> np.ndarray:
-    """Collapse a MIRCA monthly growing-area NetCDF to its max over months (ha)."""
-    da = xr.open_dataset(path)["harvested_area"]
-    arr = np.nan_to_num(da.values, nan=0.0)  # (month, lat, lon)
+def _spatial_dims(da: xr.DataArray) -> tuple[str, str]:
+    lat_dims = [dim for dim in da.dims if dim.lower() in {"lat", "latitude", "y"}]
+    lon_dims = [dim for dim in da.dims if dim.lower() in {"lon", "longitude", "x"}]
+    if len(lat_dims) != 1 or len(lon_dims) != 1:
+        raise ValueError(
+            f"Could not identify one latitude and longitude dimension in {da.dims}"
+        )
+    return lat_dims[0], lon_dims[0]
+
+
+def _coordinate_centers(grid: GridSpec) -> tuple[np.ndarray, np.ndarray]:
+    if not grid.crs.is_geographic:
+        raise ValueError("MIRCA-OS grids must use a geographic CRS")
+    height, width = grid.shape
+    x = grid.transform.c + (np.arange(width) + 0.5) * grid.transform.a
+    y = grid.transform.f + (np.arange(height) + 0.5) * grid.transform.e
+    return y, x
+
+
+def _align_spatial_dataarray(
+    da: xr.DataArray, grid: GridSpec, label: str
+) -> np.ndarray:
+    """Align a lat/lon DataArray to ``grid`` or fail on any other mismatch."""
+    lat_dim, lon_dim = _spatial_dims(da)
+    other_dims = [dim for dim in da.dims if dim not in {lat_dim, lon_dim}]
+    if other_dims:
+        raise ValueError(f"{label} still has non-spatial dimensions: {other_dims}")
+    da = da.transpose(lat_dim, lon_dim)
+    if da.shape != grid.shape:
+        raise ValueError(f"{label} shape {da.shape} does not match {grid.shape}")
+
+    expected_lat, expected_lon = _coordinate_centers(grid)
+    lat = np.asarray(da[lat_dim].values, dtype=float)
+    lon = np.asarray(da[lon_dim].values, dtype=float)
+    atol = max(abs(grid.transform.a), abs(grid.transform.e)) * 1e-5
+
+    if np.allclose(lat[::-1], expected_lat, atol=atol, rtol=0.0):
+        da = da.isel({lat_dim: slice(None, None, -1)})
+        lat = lat[::-1]
+    if np.allclose(lon[::-1], expected_lon, atol=atol, rtol=0.0):
+        da = da.isel({lon_dim: slice(None, None, -1)})
+        lon = lon[::-1]
+    if not np.allclose(lat, expected_lat, atol=atol, rtol=0.0):
+        raise ValueError(
+            f"{label} latitude coordinates do not match the reference grid"
+        )
+    if not np.allclose(lon, expected_lon, atol=atol, rtol=0.0):
+        raise ValueError(
+            f"{label} longitude coordinates do not match the reference grid"
+        )
+    return np.asarray(da.values, dtype=np.float64)
+
+
+def load_subcrop_maxmonth(path: str, grid: GridSpec) -> np.ndarray:
+    """Collapse a MIRCA monthly grid to its maximum growing area per cell."""
+    with xr.open_dataset(path) as ds:
+        if "harvested_area" not in ds:
+            raise ValueError(f"{path} is missing the 'harvested_area' variable")
+        da = ds["harvested_area"]
+        lat_dim, lon_dim = _spatial_dims(da)
+        month_dims = [dim for dim in da.dims if dim not in {lat_dim, lon_dim}]
+        if len(month_dims) != 1:
+            raise ValueError(f"{path} must have exactly one monthly dimension")
+        collapsed = da.max(month_dims[0], skipna=True)
+        arr = _align_spatial_dataarray(collapsed, grid, path)
+    arr[~np.isfinite(arr)] = 0.0
     arr[arr < 0] = 0.0
-    return arr.max(axis=0)
+    return arr
 
 
 def zone_mask(zone_arr: np.ndarray, n_cycles: int, n_rice: int) -> np.ndarray:
-    """Cells whose GAEZ multiple-cropping zone permits ``n_cycles`` (``n_rice`` rice)."""
+    """Return cells whose GAEZ zone permits the requested cycle counts."""
     allowed = [
         code
         for code, cap in ZONE_CAPABILITIES.items()
@@ -88,66 +183,89 @@ def candidate_capacity(
     zone_arr: np.ndarray,
     rice_support: dict[str, np.ndarray],
 ) -> np.ndarray:
-    """Physical cap ``A_max`` (ha) for a crop sequence in one water supply, per cell.
+    """Return the MIRCA-supported physical area cap for one crop sequence."""
+    n_cycles = len(crops)
+    n_rice = sum(crop in WETLAND_RICE_CROPS for crop in crops)
+    zmask = zone_mask(zone_arr, n_cycles, n_rice)
 
-    Distinct-crop sequences: ``A_max = min_k area_{crop_k, ws}`` where both crops
-    are observed, under the zone mask. Repeated wetland-rice sequences: disjoint
-    supports from the MIRCA subcrop stack (double = cells with a 2nd but not 3rd
-    rice cycle; triple = cells with a 3rd cycle).
-    """
-    n = len(crops)
-    n_rice = sum(1 for c in crops if c in WETLAND_RICE_CROPS)
-    zmask = zone_mask(zone_arr, n, n_rice)
-
-    repeated_rice = n_rice == n and n >= 2  # all cycles are wetland rice
-    if repeated_rice:
-        rice2 = rice_support[ws]  # area with a 2nd rice cycle (>= double)
-        rice3 = rice_support[ws + "3"]  # area with a 3rd rice cycle (triple)
-        if n == 2:
-            a_max = np.clip(rice2 - rice3, 0.0, None)  # exactly-double fields
-        elif n == 3:
-            a_max = rice3.copy()
+    if n_rice == n_cycles and n_cycles >= 2:
+        rice2 = rice_support[ws]
+        rice3 = rice_support[f"{ws}3"]
+        if n_cycles == 2:
+            area = np.clip(rice2 - rice3, 0.0, None)
+        elif n_cycles == 3:
+            area = rice3.copy()
         else:
-            raise ValueError(f"Unsupported repeated-rice cycle count: {n}")
-        return np.where(zmask, a_max, 0.0)
+            raise ValueError(f"Unsupported repeated-rice cycle count: {n_cycles}")
+        area[~zmask] = 0.0
+        return area
 
-    # Distinct-crop sequence: min over the (possibly repeated) crop areas.
-    stack = np.stack([crop_area[(c, ws)] for c in crops], axis=0)
-    both_observed = np.all(stack > 0, axis=0)
-    a_max = np.min(stack, axis=0)
-    return np.where(zmask & both_observed, a_max, 0.0)
+    area = crop_area[(crops[0], ws)].copy()
+    observed = area > 0
+    for crop in crops[1:]:
+        support = crop_area[(crop, ws)]
+        np.minimum(area, support, out=area)
+        observed &= support > 0
+    area[~(zmask & observed)] = 0.0
+    return area
+
+
+def _bounded_ratio(numerator: np.ndarray, denominator: np.ndarray) -> np.ndarray:
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.divide(
+            numerator,
+            denominator,
+            out=np.ones_like(numerator, dtype=np.float64),
+            where=denominator > 0,
+        )
+    return np.clip(np.nan_to_num(ratio, nan=0.0, posinf=1.0), 0.0, 1.0)
 
 
 def allocate(
-    m_total: np.ndarray,
+    extra_cycle_area: np.ndarray,
+    footprint_area: np.ndarray,
     capacities: list[np.ndarray],
-    cycle_counts: list[int],
+    crop_sequences: list[list[str]],
+    crop_support: dict[str, np.ndarray],
 ) -> tuple[list[np.ndarray], np.ndarray]:
-    """Allocate the extra-cycle magnitude across candidates, capped by capacity.
+    """Fill candidate capacities proportionally under shared cell budgets.
 
-    Each candidate ``i`` has extra-cycle capacity ``(n_i - 1) * A_max_i``. Per
-    cell: if total capacity fits within ``m_total`` every candidate is filled and
-    the remainder is residual; otherwise ``m_total`` is rationed proportionally to
-    capacity (no candidate exceeds its cap, and the sum never exceeds ``m_total``,
-    so no co-located rotation is invented). Returns per-candidate *physical link
-    area* ``A = E / (n-1)`` and the residual extra-cycle area.
+    A common fill ratio is used for all candidates in a cell. This is the
+    max-min fair proportional attribution: no overlapping rotation is favored,
+    and all magnitude that cannot be assigned without exceeding a crop or field
+    budget remains residual.
     """
-    extra_caps = [
-        (n - 1) * cap for n, cap in zip(cycle_counts, capacities)
-    ]  # capacity in extra-cycle units
-    total_cap = np.sum(extra_caps, axis=0)
-    # scale in [0,1]: 1 where capacity fits, else m_total/total_cap
-    with np.errstate(divide="ignore", invalid="ignore"):
-        scale = np.where(total_cap > m_total, m_total / total_cap, 1.0)
-    scale = np.clip(np.nan_to_num(scale, nan=0.0, posinf=0.0), 0.0, 1.0)
+    if len(capacities) != len(crop_sequences):
+        raise ValueError("capacities and crop_sequences must have equal length")
+    if not capacities:
+        return [], extra_cycle_area.copy()
+
+    total_physical = np.zeros_like(extra_cycle_area, dtype=np.float64)
+    total_extra = np.zeros_like(extra_cycle_area, dtype=np.float64)
+    required_by_crop = {
+        crop: np.zeros_like(extra_cycle_area, dtype=np.float64)
+        for crops in crop_sequences
+        for crop in crops
+    }
+    for capacity, crops in zip(capacities, crop_sequences, strict=True):
+        total_physical += capacity
+        total_extra += (len(crops) - 1) * capacity
+        for crop, multiplicity in Counter(crops).items():
+            required_by_crop[crop] += multiplicity * capacity
+
+    scale = np.ones_like(extra_cycle_area, dtype=np.float64)
+    np.minimum(scale, _bounded_ratio(extra_cycle_area, total_extra), out=scale)
+    np.minimum(scale, _bounded_ratio(footprint_area, total_physical), out=scale)
+    for crop, required in required_by_crop.items():
+        np.minimum(scale, _bounded_ratio(crop_support[crop], required), out=scale)
 
     areas: list[np.ndarray] = []
-    allocated_extra = np.zeros_like(m_total)
-    for n, cap in zip(cycle_counts, capacities):
-        e = (n - 1) * cap * scale  # extra-cycle area for this candidate
-        allocated_extra += e
-        areas.append(e / (n - 1))  # physical link area
-    residual = np.clip(m_total - allocated_extra, 0.0, None)
+    allocated_extra = np.zeros_like(extra_cycle_area, dtype=np.float64)
+    for capacity, crops in zip(capacities, crop_sequences, strict=True):
+        area = capacity * scale
+        areas.append(area)
+        allocated_extra += (len(crops) - 1) * area
+    residual = np.clip(extra_cycle_area - allocated_extra, 0.0, None)
     return areas, residual
 
 
@@ -158,231 +276,280 @@ def run_derivation(
     zone: dict[str, np.ndarray],
     rice_support: dict[str, np.ndarray],
     combos: list[dict],
+    harvested_totals: dict[str, np.ndarray] | None = None,
 ) -> tuple[dict[tuple[str, str], np.ndarray], np.ndarray, pd.DataFrame]:
-    """Run the full per-cell attribution over the global grid.
-
-    Parameters mirror the loaded rasters (all same shape). ``combos`` is a list of
-    dicts ``{"name", "crops": [...], "water_supply": "i"|"r"}``. Returns:
-      * ``area_rasters`` -- physical link area ``A`` (ha) per (combo name, ws).
-      * ``residual`` -- unattributed extra-cycle area (ha).
-      * ``stats`` -- per-(combo, ws) global attributed physical and extra-cycle area.
-    """
-    # Magnitude: total harvested (all crops, both systems) minus combined footprint.
-    h_total = np.sum(list(annual_harvested.values()), axis=0)
-    foot = np.clip(footprint["ir"], 0.0, None) + np.clip(footprint["rf"], 0.0, None)
-    m_total = np.clip(h_total - foot, 0.0, None)
-
-    capacities = [
-        candidate_capacity(
-            c["crops"],
-            c["water_supply"],
-            crop_area,
-            zone[c["water_supply"]],
-            rice_support,
-        )
-        for c in combos
-    ]
-    cycle_counts = [len(c["crops"]) for c in combos]
-
-    areas, residual = allocate(m_total, capacities, cycle_counts)
+    """Run independent rainfed and irrigated baseline attribution."""
+    if harvested_totals is None:
+        harvested_totals = {
+            mws: np.sum(
+                [arr for (crop, ws), arr in annual_harvested.items() if ws == mws],
+                axis=0,
+            )
+            for mws in ("ir", "rf")
+        }
 
     area_rasters: dict[tuple[str, str], np.ndarray] = {}
+    residual_total = np.zeros_like(next(iter(footprint.values())), dtype=np.float64)
     records: list[dict] = []
-    for c, area in zip(combos, areas):
-        key = (c["name"], c["water_supply"])
-        area_rasters[key] = area
-        n = len(c["crops"])
-        records.append(
-            {
-                "combination": c["name"],
-                "water_supply": c["water_supply"],
-                "cycles": n,
-                "physical_area_mha": area.sum() / 1e6,
-                "extra_cycle_area_mha": (n - 1) * area.sum() / 1e6,
-            }
+    ws_map = {"i": "ir", "r": "rf"}
+
+    for ws, mws in ws_map.items():
+        ws_combos = [combo for combo in combos if combo["water_supply"] == ws]
+        extra = np.clip(harvested_totals[mws] - footprint[mws], 0.0, None)
+        capacities = [
+            candidate_capacity(combo["crops"], ws, crop_area, zone[ws], rice_support)
+            for combo in ws_combos
+        ]
+        support = {
+            crop: crop_area[(crop, ws)]
+            for combo in ws_combos
+            for crop in combo["crops"]
+        }
+        areas, residual = allocate(
+            extra,
+            footprint[mws],
+            capacities,
+            [combo["crops"] for combo in ws_combos],
+            support,
         )
-    stats = pd.DataFrame.from_records(records)
-    return area_rasters, residual, stats
+        residual_total += residual
+
+        for combo, area in zip(ws_combos, areas, strict=True):
+            key = (combo["name"], ws)
+            area_rasters[key] = area
+            n_cycles = len(combo["crops"])
+            records.append(
+                {
+                    "combination": combo["name"],
+                    "water_supply": ws,
+                    "cycles": n_cycles,
+                    "physical_area_mha": float(area.sum()) / 1e6,
+                    "extra_cycle_area_mha": float((n_cycles - 1) * area.sum()) / 1e6,
+                    "system_extra_cycle_area_mha": float(extra.sum()) / 1e6,
+                    "system_residual_area_mha": float(residual.sum()) / 1e6,
+                }
+            )
+
+    return area_rasters, residual_total, pd.DataFrame.from_records(records)
 
 
 def build_crop_area(
     annual_harvested: dict[tuple[str, str], np.ndarray],
     glade_to_mirca: dict[str, str],
 ) -> dict[tuple[str, str], np.ndarray]:
-    """Map MIRCA (crop, ir/rf) harvested arrays to GLADE (crop, i/r) supports."""
-    ws_map = {"i": "ir", "r": "rf"}
+    """Map MIRCA crop/system arrays to GLADE crop/water codes."""
     return {
         (glade_crop, gws): annual_harvested[(mirca_crop, mws)]
         for glade_crop, mirca_crop in glade_to_mirca.items()
-        for gws, mws in ws_map.items()
+        for gws, mws in {"i": "ir", "r": "rf"}.items()
     }
-
-
-def discover_combinations(
-    stats: pd.DataFrame,
-    seed_names: set[str],
-    floor_mha: float,
-    max_combos: int,
-) -> dict[str, dict]:
-    """Select the combination set and emit a ``config["multiple_cropping"]`` block.
-
-    A combination is kept if it is in the agronomic seed set or its global
-    attributed extra-cycle area clears ``floor_mha``; the kept set is capped at
-    ``max_combos`` (largest first). Within a kept combination, only water supplies
-    with positive attributed area are listed.
-    """
-    per_combo = stats.groupby("combination")["extra_cycle_area_mha"].sum()
-    kept = [
-        name
-        for name in per_combo.index
-        if name in seed_names or per_combo[name] >= floor_mha
-    ]
-    kept = sorted(kept, key=lambda n: -per_combo[n])[:max_combos]
-
-    combos_cfg: dict[str, dict] = {}
-    for name in kept:
-        rows = stats[stats["combination"] == name]
-        supplies = sorted(
-            rows.loc[rows["physical_area_mha"] > 0, "water_supply"].unique()
-        )
-        if not supplies:
-            continue
-        crops = COMBO_CROPS[name]
-        combos_cfg[name] = {"crops": list(crops), "water_supplies": supplies}
-    return combos_cfg
-
-
-# Agronomic seed set, in GLADE crop names.
-COMBO_CROPS: dict[str, list[str]] = {
-    "rice_wheat": ["wetland-rice", "wheat"],
-    "double_rice": ["wetland-rice", "wetland-rice"],
-    "triple_rice": ["wetland-rice", "wetland-rice", "wetland-rice"],
-    "rice_maize": ["wetland-rice", "maize"],
-    "wheat_maize": ["wheat", "maize"],
-    "wheat_soybean": ["wheat", "soybean"],
-    "maize_soybean": ["maize", "soybean"],
-    "cotton_wheat": ["cotton", "wheat"],
-}
-
-
-def write_outputs(
-    area_rasters: dict[tuple[str, str], np.ndarray],
-    residual: np.ndarray,
-    combos_cfg: dict[str, dict],
-    profile: dict,
-    out_dir: Path,
-) -> None:
-    """Write combinations.yaml, per-(combo, ws) baseline rasters, and the residual."""
-    baseline_dir = out_dir / "baseline"
-    baseline_dir.mkdir(parents=True, exist_ok=True)
-
-    raster_profile = {
-        **profile,
-        "count": 1,
-        "dtype": "float32",
-        "nodata": 0.0,
-        "compress": "deflate",
-    }
-
-    for name, entry in combos_cfg.items():
-        for ws in entry["water_supplies"]:
-            arr = area_rasters[(name, ws)].astype(np.float32)
-            with rasterio.open(
-                baseline_dir / f"{name}_{ws}.tif", "w", **raster_profile
-            ) as dst:
-                dst.write(arr, 1)
-
-    with rasterio.open(
-        out_dir / "residual_multicrop.tif", "w", **raster_profile
-    ) as dst:
-        dst.write(residual.astype(np.float32), 1)
-
-    header = (
-        "# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek\n"
-        "#\n"
-        "# SPDX-License-Identifier: CC-BY-4.0\n"
-        "#\n"
-        "# Multi-cropping combination set discovered from MIRCA-OS 2020 by\n"
-        "# workflow/scripts/derive_mirca_multicropping.py (a Snakemake\n"
-        "# checkpoint). Merged over config['multiple_cropping'] to form the\n"
-        "# effective combination set. Do not hand-edit.\n"
-    )
-    with open(out_dir / "combinations.yaml", "w") as fh:
-        fh.write(header)
-        yaml.safe_dump(combos_cfg, fh, sort_keys=True, default_flow_style=False)
 
 
 def _annual_key(mirca_crop: str, mws: str) -> str:
-    """Snakemake input key for an annual raster (spaces are not valid in keys)."""
     return f"annual_{mirca_crop.replace(' ', '_')}_{mws}"
 
 
-def _load_inputs(inp, mirca_crops, glade_to_mirca):
-    """Load all rasters from a snakemake-style input mapping."""
-    annual = {
-        (mc, mws): load_tif(inp[_annual_key(mc, mws)])
-        for mc in mirca_crops
-        for mws in ("ir", "rf")
+def _load_inputs(
+    inp: dict,
+    mapping: pd.DataFrame,
+    catalog: dict[str, dict],
+    grid: GridSpec,
+) -> tuple[
+    dict[tuple[str, str], np.ndarray],
+    dict[str, np.ndarray],
+    dict[str, np.ndarray],
+    dict[str, np.ndarray],
+    dict[str, np.ndarray],
+]:
+    """Load totals plus only the crop arrays used by the fixed catalog."""
+    needed_glade = {crop for entry in catalog.values() for crop in entry["crops"]}
+    mirca_to_glade = {
+        row.mirca_crop: row.glade_crop
+        for row in mapping.itertuples()
+        if row.glade_crop in needed_glade
     }
-    footprint = {ws: load_tif(inp[f"footprint_{ws}"]) for ws in ("ir", "rf")}
-    zone = {ws: load_tif(inp[f"zone_{ws}"]) for ws in ("i", "r")}
+    annual: dict[tuple[str, str], np.ndarray] = {}
+    totals = {mws: np.zeros(grid.shape, dtype=np.float64) for mws in ("ir", "rf")}
+    for row in mapping.itertuples():
+        for mws in ("ir", "rf"):
+            arr = load_tif(inp[_annual_key(row.mirca_crop, mws)], grid)
+            totals[mws] += arr
+            if row.mirca_crop in mirca_to_glade:
+                annual[(row.mirca_crop, mws)] = arr
+
+    footprint = {mws: load_tif(inp[f"footprint_{mws}"], grid) for mws in ("ir", "rf")}
+    zone = {ws: load_tif(inp[f"zone_{ws}"], grid) for ws in ("i", "r")}
     rice_support: dict[str, np.ndarray] = {}
     for gws, mws in {"i": "ir", "r": "rf"}.items():
-        rice_support[gws] = load_subcrop_maxmonth(inp[f"rice2_{mws}"])
-        rice_support[gws + "3"] = load_subcrop_maxmonth(inp[f"rice3_{mws}"])
-    return annual, footprint, zone, rice_support
+        rice_support[gws] = load_subcrop_maxmonth(inp[f"rice2_{mws}"], grid)
+        rice_support[f"{gws}3"] = load_subcrop_maxmonth(inp[f"rice3_{mws}"], grid)
+    return annual, totals, footprint, zone, rice_support
+
+
+BASELINE_COLUMNS = [
+    "combination",
+    "region",
+    "resource_class",
+    "water_supply",
+    "baseline_area_ha",
+]
+
+
+def _load_resource_classes(path: str, grid: GridSpec) -> np.ndarray:
+    with xr.open_dataset(path) as ds:
+        if "resource_class" not in ds:
+            raise ValueError("resource_classes.nc is missing 'resource_class'")
+        try:
+            transform = Affine.from_gdal(*ds.attrs["transform"])
+            crs = CRS.from_wkt(ds.attrs["crs_wkt"])
+        except KeyError as exc:
+            raise ValueError(
+                "resource_classes.nc is missing transform or CRS metadata"
+            ) from exc
+        labels = ds["resource_class"].values.astype(np.int16)
+    _assert_grid(GridSpec(labels.shape, transform, crs), grid, path)
+    return labels
+
+
+def aggregate_baseline(
+    area_rasters: dict[tuple[str, str], np.ndarray],
+    class_labels: np.ndarray,
+    regions_gdf: gpd.GeoDataFrame,
+    grid: GridSpec,
+) -> pd.DataFrame:
+    """Aggregate physical bundle areas to region and resource class."""
+    regions = regions_gdf
+    if regions.crs is None:
+        raise ValueError("regions.geojson is missing CRS information")
+    if regions.crs != grid.crs:
+        regions = regions.to_crs(grid.crs)
+    regions_for_extract = regions.reset_index()
+    if "region" not in regions_for_extract:
+        raise ValueError("regions.geojson must provide a 'region' index or column")
+
+    height, width = grid.shape
+    xmin, ymin, xmax, ymax = raster_bounds(grid.transform, width, height)
+    region_names, rows, cells, fractions = region_coverage_entries(
+        regions_for_extract,
+        xmin,
+        ymin,
+        xmax,
+        ymax,
+        grid.crs.to_wkt(),
+        grid.shape,
+    )
+    class_at_entry = class_labels.ravel()[cells]
+    valid_classes = sorted(
+        int(value)
+        for value in np.unique(class_labels[np.isfinite(class_labels)])
+        if int(value) >= 0
+    )
+    records: list[pd.DataFrame] = []
+    for (name, ws), area in area_rasters.items():
+        values = area.ravel()[cells] * fractions
+        for resource_class in valid_classes:
+            selected = class_at_entry == resource_class
+            sums = np.bincount(
+                rows[selected], weights=values[selected], minlength=len(region_names)
+            )
+            positive = sums > 0
+            if positive.any():
+                records.append(
+                    pd.DataFrame(
+                        {
+                            "combination": name,
+                            "region": region_names[positive],
+                            "resource_class": resource_class,
+                            "water_supply": ws,
+                            "baseline_area_ha": sums[positive],
+                        }
+                    )
+                )
+    if not records:
+        return pd.DataFrame(columns=BASELINE_COLUMNS)
+    return pd.concat(records, ignore_index=True)[BASELINE_COLUMNS].sort_values(
+        ["combination", "water_supply", "region", "resource_class"],
+        ignore_index=True,
+    )
 
 
 def main() -> None:
     inp = dict(snakemake.input.items())  # type: ignore[name-defined]
     params = snakemake.params  # type: ignore[name-defined]
-    out_dir = Path(snakemake.output.out_dir)  # type: ignore[name-defined]
+
+    with rasterio.open(inp["footprint_ir"]) as src:
+        grid = _grid_from_raster(src, inp["footprint_ir"])
+        raster_profile = src.profile
 
     mapping = pd.read_csv(inp["concordance"], comment="#")
     mapping["glade_crop"] = mapping["glade_crop"].fillna("").astype(str).str.strip()
     mapping["mirca_crop"] = mapping["mirca_crop"].astype(str).str.strip()
-    mirca_crops = mapping["mirca_crop"].tolist()
+    catalog = load_catalog_combinations(inp["catalog"])
+    needed = {crop for entry in catalog.values() for crop in entry["crops"]}
     glade_to_mirca = {
-        row.glade_crop: row.mirca_crop for row in mapping.itertuples() if row.glade_crop
+        row.glade_crop: row.mirca_crop
+        for row in mapping.itertuples()
+        if row.glade_crop in needed
     }
+    missing = sorted(needed - set(glade_to_mirca))
+    if missing:
+        raise ValueError(f"MIRCA catalog crops missing from concordance: {missing}")
 
-    annual, footprint, zone, rice_support = _load_inputs(
-        inp, mirca_crops, glade_to_mirca
+    annual, totals, footprint, zone, rice_support = _load_inputs(
+        inp, mapping, catalog, grid
     )
     crop_area = build_crop_area(annual, glade_to_mirca)
-
-    seed_names = set(params.seed_combinations)
     combos = [
-        {"name": name, "crops": COMBO_CROPS[name], "water_supply": ws}
-        for name in seed_names
-        for ws in ("i", "r")
+        {"name": name, "crops": entry["crops"], "water_supply": ws}
+        for name, entry in catalog.items()
+        for ws in entry["water_supplies"]
     ]
-
-    area_rasters, residual, stats = run_derivation(
-        annual, footprint, crop_area, zone, rice_support, combos
+    areas, residual, stats = run_derivation(
+        annual,
+        footprint,
+        crop_area,
+        zone,
+        rice_support,
+        combos,
+        harvested_totals=totals,
     )
 
-    combos_cfg = discover_combinations(
-        stats,
-        seed_names,
-        float(params.coverage_floor_mha),
-        int(params.max_combinations),
+    classes = _load_resource_classes(inp["classes"], grid)
+    regions = gpd.read_file(inp["regions"])
+    baseline = aggregate_baseline(areas, classes, regions, grid)
+
+    baseline_path = Path(snakemake.output.baseline)  # type: ignore[name-defined]
+    residual_path = Path(snakemake.output.residual)  # type: ignore[name-defined]
+    stats_path = Path(snakemake.output.stats)  # type: ignore[name-defined]
+    for path in (baseline_path, residual_path, stats_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    baseline.to_csv(baseline_path, index=False)
+    stats.insert(0, "source_year", int(params.source_year))
+    stats.to_csv(stats_path, index=False)
+
+    profile = {
+        **raster_profile,
+        "count": 1,
+        "dtype": "float32",
+        "nodata": 0.0,
+        "compress": "deflate",
+    }
+    with rasterio.open(residual_path, "w", **profile) as dst:
+        dst.write(residual.astype(np.float32), 1)
+
+    total_extra = (
+        sum(
+            float(np.clip(totals[mws] - footprint[mws], 0.0, None).sum())
+            for mws in ("ir", "rf")
+        )
+        / 1e6
     )
-
-    with rasterio.open(inp["footprint_ir"]) as src:
-        profile = src.profile
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    write_outputs(area_rasters, residual, combos_cfg, profile, out_dir)
-
-    h_total = np.sum(list(annual.values()), axis=0)
-    foot = footprint["ir"] + footprint["rf"]
-    m_total = float(np.clip(h_total - foot, 0.0, None).sum()) / 1e6
-    resid = float(residual.sum()) / 1e6
+    total_residual = float(residual.sum()) / 1e6
+    share = 0.0 if total_extra == 0 else total_residual / total_extra * 100
     print(
-        f"Multi-cropping derivation: M_total={m_total:.1f} Mha, "
-        f"attributed={m_total - resid:.1f} Mha, residual={resid:.1f} Mha "
-        f"({resid / m_total * 100:.0f}% of M); {len(combos_cfg)} combinations kept"
+        f"MIRCA-OS {int(params.source_year)} multi-cropping baseline: "
+        f"extra={total_extra:.1f} Mha, attributed={total_extra - total_residual:.1f} "
+        f"Mha, residual={total_residual:.1f} Mha ({share:.0f}%)"
     )
 
 

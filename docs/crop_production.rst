@@ -474,42 +474,65 @@ Multiple Cropping
 -----------------
 
 Many production systems plant two or more sequential crops on the same parcel.
-Multiple cropping is anchored to an **observed 2020 baseline** derived from
-MIRCA-OS v2 (see :doc:`data_sources`), so the model starts from today's
+Multiple cropping is anchored to an observed reference-year baseline derived
+from MIRCA-OS v2 (see :doc:`data_sources`), so the model starts from observed
 double-cropped area -- notably India's rice-wheat and rice-rice systems -- rather
-than treating extra cropping cycles as unanchored potential. It is built in two
-stages.
+than treating every extra cropping cycle as unanchored potential. The MIRCA
+release closest to ``baseline_year`` is used; the workflow supports 2010, 2015,
+and 2020, ties select the earlier year, and a warning is emitted when the match
+is not exact.
 
-**Stage 1 (config-independent derivation).** The Snakemake checkpoint
+**Observed-baseline derivation.** The ordinary, config-specific Snakemake rule
 ``derive_mirca_multicropping`` (``workflow/scripts/derive_mirca_multicropping.py``)
-attributes MIRCA's extra-cycle harvested area -- harvested minus the AEI-capped
-physical footprint (``ir_maxmonth + rf_maxmonth``) -- to crop-sequence
-combinations on the global 5-arcmin grid, writing to
-``processing/shared/multi_cropping/``: the discovered ``combinations.yaml``,
-per-combination baseline rasters, and a residual raster for the bulk land
-correction. The effective combination set the model builds with is the derived
-set merged over the static ``multiple_cropping`` config section (derived entries
-take precedence; combinations referencing unmodeled crops are dropped).
+attributes MIRCA's extra-cycle harvested area -- annual harvested area minus the
+AEI-capped physical footprint -- independently for irrigated and rainfed land.
+It considers only the fixed candidate sequences in
+``data/curated/mirca_os_multicropping_combinations.yaml``. The catalog is tied to
+the MIRCA-OS v2 crop taxonomy and records widely documented rotations and
+repeated-rice systems that both datasets can represent; catalog membership is a
+candidate attribution, not evidence that a rotation occurs in every cell.
 
-A combination is a candidate in a cell where **both crops are observed in MIRCA**
+The rule aggregates directly to the active config's regions and resource
+classes. It writes ``baseline_area.csv``, a diagnostic
+``residual_multicrop.tif``, and ``attribution_stats.csv`` under
+``processing/{name}/multi_cropping/``. Keeping these products config-specific
+is necessary because the aggregation and GAEZ multiple-cropping-zone gate
+depend on the config's spatial and climate inputs. Extra-cycle area that cannot
+be assigned to a catalog sequence remains unattributed and is handled by the
+bulk land correction.
+
+A combination is a candidate in a cell where **every crop is observed in MIRCA**
 in that water supply and the GAEZ multiple-cropping zone permits the cycle count.
 ``sequence_feasible`` on GAEZ growing-season windows is deliberately *not* used as
 a feasibility gate: GAEZ attainable season lengths overshoot the farmed cycle and
 would reject nearly all observed irrigated double-cropping. MIRCA's observation is
-the feasibility evidence; GAEZ enters only for suitability, yields and water
-requirements.
+the feasibility evidence; beyond the zone gate, GAEZ enters only for
+suitability, yields and water requirements.
 
-**Stage 2 (build-time aggregation).** The preprocessing rule
+Within each cell and water supply, all candidate sequences receive a common
+proportional fill rate subject to the extra-cycle magnitude, physical footprint,
+each constituent crop's observed harvested-area budget, and each sequence's
+MIRCA/GAEZ support. The shared crop budgets prevent the same observed wheat,
+maize, or other crop area from being attributed independently to several
+overlapping rotations. Any area that cannot be assigned under all budgets stays
+in the residual.
+
+**Potential derivation.** The preprocessing rule
 ``build_multi_cropping`` reads the GAEZ rasters for every crop in each
 (combination, water supply) pair and, over pixels where the zone permits the cycle
 count and every crop has suitability, positive yield and (irrigated) a water
-requirement, computes the eligible potential area and per-cycle yields. The rule
-``aggregate_multicropping_baseline`` aggregates the Stage-1 rasters to the
-observed baseline on the active config's regions. The three tables land in
-``processing/{name}/multi_cropping/``: ``eligible_area.csv`` (potential area +
-the summed irrigated water requirement ``water_requirement_m3_per_ha``; zero for
-rainfed variants), ``cycle_yields.csv`` (per-cycle t/ha), and
-``baseline_area.csv`` (observed anchor area per region/class/water supply).
+requirement, computes the eligible potential area and per-cycle yields. The
+three tables in ``processing/{name}/multi_cropping/`` are
+``eligible_area.csv`` (potential area plus the summed irrigated water
+requirement ``water_requirement_m3_per_ha``; zero for rainfed variants),
+``cycle_yields.csv`` (per-cycle t/ha), and ``baseline_area.csv`` (observed
+anchor area per region/class/water supply).
+
+Catalog combinations are included automatically when all their crops are
+modeled. The ``multiple_cropping`` config section may set a catalog name to
+``null`` to disable it or add a uniquely named greenfield sequence. Greenfield
+sequences have an implicit zero baseline and expose only GAEZ-constrained
+optimization potential; catalog entries cannot be redefined in config.
 
 The RES01 classes report the agro-climatic zone the pixel belongs to. We interpret the
 numeric codes as:
@@ -541,13 +564,25 @@ rainfed or irrigated multi-output link (carrier ``crop_production_multi``) that:
 The link is anchored at its MIRCA baseline via ``baseline_area_mha`` with
 ``p_nom_max = max(GAEZ potential, baseline)`` and stays extendable, so it is
 subject to the same production-stability penalty as single-crop links and the
-model can add or drop a cycle. Because the single-crop ``crop_production``
-baselines are FAOSTAT *harvested* area (already counting every cycle), the
-harvested cycles now carried by the multi links are subtracted from the
-corresponding single-crop baselines (``m_k`` times the multi anchor for crop
-``k``), with country-level redistribution to preserve national totals. The
-crop-agnostic ``multi_cropping_land_correction`` generator absorbs only the
-residual, unattributed extra-cycle area.
+model can add or drop a complete sequence. Every configured cycle must have a
+valid yield; partial bundles are never built. If an observed local anchor lacks
+a complete GAEZ row, it is relocated within the same combination, country, and
+water supply. If that group has no valid full-sequence target under the active
+GAEZ inputs, no partial bundle is created: the harvested-area budget remains on
+the constituent single-crop baselines.
+
+Single-crop ``crop_production`` baselines are FAOSTAT *harvested* area and
+already count every cycle. The harvested cycles carried by multi links are
+therefore subtracted from the corresponding single-crop baselines
+(``m_k`` times the multi anchor for crop ``k``). Where joint MIRCA bundle
+requirements exceed a constituent crop's national FAOSTAT budget, all affected
+bundle anchors are scaled by the most restrictive crop ratio. Any cycle
+subtraction that cannot be made locally is taken from other single-crop links
+only within the same crop, country, and water supply. The build then asserts
+that single plus multiplicity-weighted multi baselines exactly reproduce every
+incoming FAOSTAT budget. The crop-agnostic
+``multi_cropping_land_correction`` generator absorbs only residual,
+unattributed extra-cycle area.
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/multi_cropping_potential_rainfed.png
    :alt: Rain-fed multi-cropping zones and regional potential

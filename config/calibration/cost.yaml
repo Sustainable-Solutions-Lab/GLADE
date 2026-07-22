@@ -20,8 +20,8 @@
 #     data/curated/calibration/grassland_cost.csv \
 #     data/curated/calibration/animal_cost.csv
 
-# Shared name across all calibration configs so the expensive upstream
-# processing is built once under processing/calibration/ and reused.
+# ``tools/calibrate`` overrides this with a source- and step-specific name so
+# another calibration config cannot overwrite this step's intermediates.
 name: "calibration"
 
 scenarios:

@@ -807,8 +807,9 @@ rule extract_cropgrids_nc:
 # The per-file iRODS endpoint 500s for this resource, so grids are fetched from
 # the whole-resource BagIt zip via partial HTTP-range extraction (see
 # ``workflow/scripts/download_mirca_os_bag_member.py``). Inside the bag the grid
-# collections are nested RAR5 archives; individual GeoTIFF/NetCDF layers are then
-# unpacked with ``bsdtar`` (libarchive; the ``7z`` build here cannot read RAR5).
+# collections are nested RAR5 archives; each required product/year batch is then
+# unpacked in one ``bsdtar`` pass (libarchive; the ``7z`` build here cannot read
+# RAR5).
 MIRCA_OS_BAG_MEMBERS = {
     "Annual_Harvested_Area_Grids": (
         "Annual Harvested Area Grids/Annual Harvested Area Grids.rar"
@@ -820,6 +821,14 @@ MIRCA_OS_BAG_MEMBERS = {
         "Monthly Growing Area Grids/Monthly Growing Area Grids.rar"
     ),
 }
+MIRCA_OS_YEARS = (2000, 2005, 2010, 2015, 2020)
+with open("data/curated/mirca_os_crop_mapping.csv") as _mirca_mapping_file:
+    MIRCA_OS_BASE_CROPS = [
+        row["mirca_crop"].strip()
+        for row in csv.DictReader(
+            line for line in _mirca_mapping_file if not line.startswith("#")
+        )
+    ]
 
 
 rule download_mirca_os_archive:
@@ -846,95 +855,96 @@ rule download_mirca_os_archive:
 
 
 rule extract_mirca_os_annual_harvested:
-    """Unpack one crop/system 2020 annual-harvested-area GeoTIFF (5-arcmin).
+    """Unpack all crop/system annual-harvested-area GeoTIFFs for one year.
 
     Harvested area sums subcrops, so a twice-cropped field counts twice; this is
-    the numerator of the extra-cycle magnitude M = harvested - footprint. Keyed by
-    the MIRCA crop label (see data/curated/mirca_os_crop_mapping.csv).
+    the numerator of the extra-cycle magnitude M = harvested - footprint. The
+    archive is scanned once for the complete batch rather than once per raster.
     """
     input:
         rar="data/downloads/mirca_os/Annual_Harvested_Area_Grids.rar",
     output:
-        "data/downloads/mirca_os/grids/annual/MIRCA-OS_{crop}_2020_{ws}_v2.tif",
+        expand(
+            "data/downloads/mirca_os/grids/annual/MIRCA-OS_{crop}_{{year}}_{ws}_v2.tif",
+            crop=MIRCA_OS_BASE_CROPS,
+            ws=("ir", "rf"),
+        ),
     wildcard_constraints:
-        # MIRCA crop labels include spaces (e.g. "Oil palm", "Others annual"),
-        # which the all-crop M_total sum needs (~21% of global harvested area).
-        crop="[A-Za-z][A-Za-z ]*",
-        ws="ir|rf",
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*MIRCA-OS_{crop}_{{year}}_{ws}_v2.tif",
+            crop=MIRCA_OS_BASE_CROPS,
+            ws=("ir", "rf"),
+        ),
     resources:
-        runtime="10m",
+        runtime="20m",
         mem_mb=1000,
     log:
-        "<logs>/shared/extract_mirca_os_annual_{crop}_{ws}.log",
-    shell:
-        r"""
-        mkdir -p "$(dirname '{output}')"
-        bsdtar -xOf {input.rar} \
-          --include="*MIRCA-OS_{wildcards.crop}_2020_{wildcards.ws}_v2.tif" \
-          > '{output}' 2> '{log}'
-        test -s '{output}'
-        """
+        "<logs>/shared/extract_mirca_os_annual_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
 
 
 rule extract_mirca_os_footprint:
-    """Unpack the 2020 maximum-monthly-cropped-area GeoTIFF for one system.
+    """Unpack both maximum-monthly-cropped-area GeoTIFFs for one year.
 
-    This is the AEI-capped physical field footprint per system; the combined
-    footprint is the ir + rf sum (disjoint land, single-count). MIRCA-OS v2 ships
-    no `tot` layer despite its README, so the derivation sums the two systems.
+    This is the AEI-capped physical field footprint per system. The derivation
+    keeps irrigated and rainfed extra-cycle magnitudes separate so observed area
+    cannot be attributed across water-supply systems.
     """
     input:
         rar="data/downloads/mirca_os/Maximum_Monthly_Cropped_Area_Grids.rar",
     output:
-        "data/downloads/mirca_os/grids/footprint/MIRCA-OS_2020_{ws}_v2.tif",
+        expand(
+            "data/downloads/mirca_os/grids/footprint/MIRCA-OS_{{year}}_{ws}_v2.tif",
+            ws=("ir", "rf"),
+        ),
     wildcard_constraints:
-        ws="ir|rf",
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*5-arcminute/MIRCA-OS_{{year}}_{ws}_v2.tif", ws=("ir", "rf")
+        ),
     resources:
         runtime="10m",
         mem_mb=1000,
     log:
-        "<logs>/shared/extract_mirca_os_footprint_{ws}.log",
-    shell:
-        r"""
-        mkdir -p "$(dirname {output})"
-        bsdtar -xOf {input.rar} \
-          --include='*5-arcminute/MIRCA-OS_2020_{wildcards.ws}_v2.tif' \
-          > {output} 2> {log}
-        test -s {output}
-        """
+        "<logs>/shared/extract_mirca_os_footprint_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
 
 
 rule extract_mirca_os_subcrop_monthly:
-    """Unpack one subcrop's monthly growing-area NetCDF (5-arcmin) for a year.
+    """Unpack the repeated-rice monthly grids for one year in one archive pass.
 
     The subcrop-resolved monthly product preserves subcrop identity
-    (Rice1/2/3, Wheat1/2, ...); the 2020 vintage feeds the multi-cropping
-    derivation's repeated-cycle detection (never crop timing).
+    (Rice1/2/3, Wheat1/2, ...). Rice2/3 feed the multi-cropping derivation's
+    repeated-cycle detection (never crop timing).
     """
     input:
         rar="data/downloads/mirca_os/Monthly_Growing_Area_Grids.rar",
     output:
-        "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{year}_{ws}.nc",
+        expand(
+            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
+            subcrop=("Rice2", "Rice3"),
+            ws=("ir", "rf"),
+        ),
     wildcard_constraints:
-        # Base crops ("Barley", "Sugar beet") and digit-suffixed sub-crops
-        # ("Rice1", "Wheat2"); the multi-cropping derivation needs the
-        # digit-suffixed rice cycles.
-        subcrop="[A-Za-z][A-Za-z0-9 ]*",
-        year="2000|2005|2010|2015|2020",
-        ws="ir|rf",
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
+            subcrop=("Rice2", "Rice3"),
+            ws=("ir", "rf"),
+        ),
     resources:
         runtime="30m",
         mem_mb=2000,
     log:
-        "<logs>/shared/extract_mirca_os_subcrop_{subcrop}_{year}_{ws}.log",
-    shell:
-        r"""
-        mkdir -p "$(dirname '{output}')"
-        bsdtar -xOf {input.rar} \
-          --include='*MIRCA-OS_{wildcards.subcrop}_{wildcards.year}_{wildcards.ws}.nc' \
-          > '{output}' 2> '{log}'
-        test -s '{output}'
-        """
+        "<logs>/shared/extract_mirca_os_subcrop_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
 
 
 rule download_grassland_yield_data:

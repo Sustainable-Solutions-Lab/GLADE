@@ -1026,20 +1026,15 @@ if __name__ == "__main__":
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
             crop_loss_multiplier=crop_loss_multiplier,
             crop_marketing_cost_usd_per_t=crop_marketing_usd_per_t,
+            combinations=multiple_cropping_cfg,
             baseline_area=multi_cropping_baseline_df,
             use_actual_production=use_actual_production,
             multi_crop_cost_calibration=multi_crop_cost_calibration,
         )
-        # Persist the single-crop baseline reduction (harvested cycles now carried
-        # by the multi links) BEFORE the land correction and the pin read
-        # baseline_area_mha.
-        crops.reconcile_single_crop_baselines(
-            n,
-            multiple_cropping_cfg,
-        )
-
-    # Clip sub-min_link_area_mha crop baselines BEFORE they are pinned or
-    # summed into the solve-time growth cap, so the pin and the cap agree.
+    # Clip sub-min_link_area_mha crop baselines before multi-crop reconciliation,
+    # pinning, or growth-cap aggregation. Reconciliation can then conserve the
+    # exact numerically retained FAOSTAT budget rather than independently clipping
+    # its single and multi decomposition afterwards.
     # clip_negligible_coefficients repeats this later (idempotently); doing it
     # here first prevents a below-floor multi cycle being pinned above an
     # already-zeroed cap, which makes the validation solve infeasible.
@@ -1049,6 +1044,12 @@ if __name__ == "__main__":
             "Clipped %d sub-min_link_area_mha crop baselines before pinning",
             n_clipped_baseline,
         )
+
+    if enable_multiple_cropping:
+        # Persist the single-crop baseline reduction (harvested cycles now carried
+        # by the multi links) before the land correction and pinning read
+        # baseline_area_mha.
+        crops.reconcile_single_crop_baselines(n)
 
     # Validation mode: pin single-crop and multi-cropping links alike at their
     # (reconciled) baseline areas. Must run after the reconciliation so each

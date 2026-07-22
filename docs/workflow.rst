@@ -78,23 +78,17 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/build_crop_yields.py``
   * **Purpose**: Aggregate yields by (region, class) for each crop
 
-**derive_mirca_multicropping** (checkpoint)
-  * **Input**: MIRCA-OS 2020 annual harvested-area and footprint grids, the rice subcrop monthly grids, the GAEZ RES01 multiple-cropping zone rasters, and the crop concordance
-  * **Output**: ``processing/shared/multi_cropping/`` -- ``combinations.yaml`` (the discovered combination set), ``baseline/{combination}_{ws}.tif`` (observed physical link area per combination), ``residual_multicrop.tif`` (unattributed extra-cycle area, diagnostic)
+**derive_mirca_multicropping**
+  * **Input**: Annual harvested-area, footprint, and rice-subcrop grids from the MIRCA-OS release nearest ``baseline_year``; resource classes; regions; GAEZ RES01 multiple-cropping-zone rasters; the crop concordance; and the fixed combination catalog
+  * **Output**: ``processing/{name}/multi_cropping/baseline_area.csv`` (observed physical link area), ``residual_multicrop.tif`` (unattributed extra-cycle area), and ``attribution_stats.csv`` (diagnostic totals)
   * **Script**: ``workflow/scripts/derive_mirca_multicropping.py``
-  * **Purpose**: Config-independent Stage-1 derivation of the observed multiple-cropping baseline from MIRCA-OS 2020. A checkpoint: the discovered combination set is merged over ``config.multiple_cropping`` to form the effective set, which determines downstream rule inputs
+  * **Purpose**: Derive and aggregate the observed multi-cropping baseline independently for irrigated and rainfed systems. This is an ordinary config-specific rule because its spatial aggregation and GAEZ zone gate depend on config inputs
 
 **build_multi_cropping**
-  * **Input**: Resource classes, regions, the derived combination set, the RES01 multiple-cropping zone rasters, and the required GAEZ RES05 rasters (yield, suitability, plus water requirement for irrigated variants) for every crop in the effective combination set
+  * **Input**: Resource classes, regions, the effective curated-plus-greenfield combination set, the RES01 multiple-cropping zone rasters, and the required GAEZ RES05 rasters (yield, suitability, plus water requirement for irrigated variants) for every crop in that set
   * **Output**: ``processing/{name}/multi_cropping/eligible_area.csv`` (eligible hectares, irrigated water requirement), ``processing/{name}/multi_cropping/cycle_yields.csv`` (per-cycle yields)
   * **Script**: ``workflow/scripts/build_multi_cropping.py``
   * **Purpose**: Filter pixels by the RES01 class and per-crop suitability/yield/water validity, aggregate eligible potential hectares to regions/resource classes, and compute per-cycle yields
-
-**aggregate_multicropping_baseline**
-  * **Input**: The Stage-1 baseline rasters for the effective combination set, resource classes, regions
-  * **Output**: ``processing/{name}/multi_cropping/baseline_area.csv``
-  * **Script**: ``workflow/scripts/aggregate_multicropping_baseline.py``
-  * **Purpose**: Aggregate the observed multi-cropping baseline to the active config's regions and resource classes; anchors ``crop_production_multi`` links
 
 **build_grassland_yields**
   * **Input**: ISIMIP grassland yield NetCDF, resource classes, regions

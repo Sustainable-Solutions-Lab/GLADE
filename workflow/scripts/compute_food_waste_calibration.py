@@ -194,7 +194,8 @@ if __name__ == "__main__":
     header = (
         "# SPDX-FileCopyrightText: 2026 Koen van Greevenbroek\n"
         "#\n"
-        "# SPDX-License-Identifier: CC-BY-4.0\n"
+        "# SPDX-License-"
+        "Identifier: CC-BY-4.0\n"
         "#\n"
         "# Per-food-group waste-retention multipliers, applied by\n"
         "# prepare_food_loss_waste.py as:\n"

@@ -700,10 +700,15 @@ properties:
                 type: array
                 minItems: 1
                 maxItems: 2
+                uniqueItems: true
                 items:
                   type: string
                   enum: [r, i]
-    description: "Multiple cropping systems (double cropping)"
+    description: |
+      Overrides and greenfield additions to the curated MIRCA-OS combination
+      catalog. Set a catalog name to null to disable it. A non-null entry must
+      use a new name and defines a zero-baseline combination that optimization
+      may develop where GAEZ indicates sufficient potential.
 
   macronutrients:
     type: object

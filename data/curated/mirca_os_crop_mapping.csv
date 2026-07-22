@@ -5,22 +5,24 @@
 # Concordance from the 23 MIRCA-OS v2 base crops (Kebede et al. 2025, HydroShare
 # resource e4582ca0042148338bb5e0148b749ed6) to GLADE model crops
 # (config["crops"]). Used by workflow/scripts/derive_mirca_multicropping.py to
-# attribute MIRCA extra-cycle harvested area to GLADE crop-sequence combinations.
+# attribute MIRCA extra-cycle harvested area to the sequences listed in
+# data/curated/mirca_os_multicropping_combinations.yaml.
 #
 # Columns:
 #   mirca_crop  - exact MIRCA-OS crop label as it appears in the annual
-#                 harvested-area GeoTIFF filenames (MIRCA-OS_{mirca_crop}_2020_{ir,rf}_v2.tif).
+#                 harvested-area GeoTIFF filenames
+#                 (MIRCA-OS_{mirca_crop}_{year}_{ir,rf}_v2.tif).
 #   glade_crop  - target crop in config["crops"], or blank to DROP the crop from
-#                 combination discovery (its extra-cycle area stays on the bulk
+#                 baseline attribution (its extra-cycle area stays on the bulk
 #                 land-correction residual). Perennials, long-duration / semi-
 #                 perennial crops, aggregate "Others" classes, fodder, and
 #                 unmappable aggregates are dropped by design (see the note).
 #
 # Every MIRCA-OS base crop appears here exactly once so the mapping is
-# exhaustive and validated fail-fast (workflow/validation/mirca_crops.py).
+# exhaustive and validated fail-fast (workflow/validation/multi_cropping.py).
 mirca_crop,glade_crop,note
 Barley,barley,
-Cassava,cassava,long-duration root crop; retained but GAEZ season feasibility usually excludes it from sequences
+Cassava,cassava,long-duration root crop; mapped for completeness but absent from the curated sequence catalog
 Cocoa,,dropped: perennial tree crop
 Coffee,,dropped: perennial tree crop
 Cotton,cotton,
