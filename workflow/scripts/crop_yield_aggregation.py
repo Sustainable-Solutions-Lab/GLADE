@@ -29,7 +29,7 @@ def load_cell_mapping(path: str) -> CellMapping:
     with np.load(path, allow_pickle=False) as data:
         return CellMapping(
             cell_ids=data["cell_ids"],
-            coverage=data["coverage"].astype(np.float64),
+            coverage=data["coverage"],
             group_ids=data["group_ids"],
             regions=data["regions"],
             n_classes=int(data["n_classes"]),

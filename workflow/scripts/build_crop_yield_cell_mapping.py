@@ -35,10 +35,11 @@ import xarray as xr  # noqa: E402
 
 def build_cell_mapping(classes_path: str, regions_path: str, output_path: str) -> None:
     """Write exact region/class coverage for each relevant raster cell."""
-    classes_ds = xr.load_dataset(classes_path)
-    class_labels = classes_ds["resource_class"].values
+    with xr.open_dataset(classes_path) as classes_ds:
+        class_labels = classes_ds["resource_class"].load().values
+        transform = np.asarray(classes_ds.attrs["transform"], dtype=float)
+        crs_wkt = str(classes_ds.attrs["crs_wkt"])
     height, width = class_labels.shape
-    transform = np.asarray(classes_ds.attrs["transform"], dtype=float)
     if transform[2] != 0 or transform[4] != 0:
         raise ValueError("Rotated resource-class grids are not supported")
 
@@ -46,8 +47,6 @@ def build_cell_mapping(classes_path: str, regions_path: str, output_path: str) -
     xmax = xmin + width * transform[1]
     ymax = transform[3]
     ymin = ymax + height * transform[5]
-    crs_wkt = str(classes_ds.attrs["crs_wkt"])
-
     regions = gpd.read_file(regions_path)
     grid_crs = CRS.from_wkt(crs_wkt)
     if regions.crs and regions.crs != grid_crs:
@@ -75,7 +74,7 @@ def build_cell_mapping(classes_path: str, regions_path: str, output_path: str) -
         dtype=np.int64,
     )
     cell_ids = np.concatenate(extracted["cell_id"].to_numpy()).astype(np.int32)
-    coverage = np.concatenate(extracted["coverage"].to_numpy()).astype(np.float32)
+    coverage = np.concatenate(extracted["coverage"].to_numpy()).astype(np.float64)
     region_ids = np.repeat(np.arange(len(extracted), dtype=np.int32), lengths)
     class_ids = class_labels.ravel()[cell_ids]
     valid = class_ids >= 0
@@ -83,7 +82,9 @@ def build_cell_mapping(classes_path: str, regions_path: str, output_path: str) -
     coverage = coverage[valid]
     class_ids = class_ids[valid]
 
-    n_classes = int(class_labels.max()) + 1
+    if not np.any(valid):
+        raise ValueError("Resource-class grid does not contain any valid classes")
+    n_classes = int(class_ids.max()) + 1
     group_ids = (region_ids[valid] * n_classes + class_ids).astype(np.int32)
     region_names = extracted["region"].astype(str).to_numpy(dtype=str)
 

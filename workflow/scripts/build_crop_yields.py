@@ -31,34 +31,26 @@ if __name__ == "__main__":
     gs_start_path: str = snakemake.input.growing_season_start_raster  # type: ignore[name-defined]
     gs_length_path: str = snakemake.input.growing_season_length_raster  # type: ignore[name-defined]
     crop_code: str = snakemake.wildcards.crop  # type: ignore[name-defined]
-    conv_csv: str | None = getattr(  # type: ignore[attr-defined]
-        snakemake.input, "yield_unit_conversions", None
-    )
-    moisture_csv: str | None = getattr(  # type: ignore[attr-defined]
-        snakemake.input, "moisture_content", None
-    )
+    conv_csv: str = snakemake.input.yield_unit_conversions  # type: ignore[name-defined]
+    moisture_csv: str = snakemake.input.moisture_content  # type: ignore[name-defined]
 
     KG_TO_TONNE = 0.001
 
     mapping = load_cell_mapping(mapping_path)
 
-    conversion_overrides: dict[str, float] = {}
-    if conv_csv:
-        conversion_overrides = (
-            pd.read_csv(conv_csv, comment="#")
-            .set_index("code")["factor_to_t_per_ha"]
-            .to_dict()
-        )
+    conversion_overrides: dict[str, float] = (
+        pd.read_csv(conv_csv, comment="#")
+        .set_index("code")["factor_to_t_per_ha"]
+        .to_dict()
+    )
 
-    use_actual_yields = bool(getattr(snakemake.params, "use_actual_yields", False))  # type: ignore[attr-defined]
+    use_actual_yields = bool(snakemake.params.use_actual_yields)  # type: ignore[name-defined]
 
-    moisture_lookup: dict[str, float] = {}
-    if moisture_csv:
-        moisture_lookup = (
-            pd.read_csv(moisture_csv, comment="#")
-            .set_index("crop")["moisture_fraction"]
-            .to_dict()
-        )
+    moisture_lookup: dict[str, float] = (
+        pd.read_csv(moisture_csv, comment="#")
+        .set_index("crop")["moisture_fraction"]
+        .to_dict()
+    )
 
     def _yield_multiplier(crop: str) -> float:
         # GAEZ publishes RES05 potential yields in kg/ha but the historical
