@@ -57,18 +57,19 @@ rule simplify_gadm:
 rule build_regions:
     input:
         world="<processing>/shared/gadm-simplified.gpkg",
+        basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
     params:
         n_regions=config["aggregation"]["regions"]["target_count"],
-        allow_cross_border=config["aggregation"]["regions"]["allow_cross_border"],
         cluster_method=config["aggregation"]["regions"]["method"],
+        basin_scarcity_weight=config["aggregation"]["regions"]["basin_scarcity_weight"],
         countries=config["countries"],
     output:
         "<processing>/{name}/regions.geojson",
     group:
         "prep"
     resources:
-        runtime="1m",
-        mem_mb=400,
+        runtime="15m",
+        mem_mb=6000,
     log:
         "<logs>/{name}/build_regions.log",
     benchmark:

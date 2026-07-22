@@ -1324,20 +1324,21 @@ properties:
     properties:
       regions:
         type: object
-        required: [target_count, allow_cross_border, method]
+        required: [target_count, method, basin_scarcity_weight]
         additionalProperties: false
         properties:
           target_count:
             type: integer
             minimum: 1
             description: "Target number of regions to create through clustering"
-          allow_cross_border:
-            type: boolean
-            description: "Whether to allow regions to cross country borders (false = cluster within each country separately)"
           method:
             type: string
             enum: [kmeans, agglomerative]
             description: "Clustering method: 'kmeans' (faster, default) or 'agglomerative' (hierarchical clustering with ward linkage)"
+          basin_scarcity_weight:
+            type: number
+            minimum: 0
+            description: "Weight of AWARE basin scarcity relative to geography when splitting provinces into regions (0 = plain geographic clustering)"
       simplify_tolerance_km:
         type: number
         minimum: 0

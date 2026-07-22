@@ -1364,8 +1364,17 @@ health:
 aggregation:
   regions:
     target_count: 750
-    allow_cross_border: false
     method: "kmeans"
+    # Basin-aware clustering: split provinces that straddle hydrological basins so
+    # a scarce sub-basin is not pooled with an abundant one (which averages away
+    # the scarcity that drives irrigation constraints). Each model region is either
+    # contained in one GADM province or a union of whole provinces (never partial
+    # pieces across provinces). basin_scarcity_weight sets how strongly the AWARE
+    # basin scarcity (CF) separates regions relative to geography, in standardised
+    # units; 0 recovers plain geographic clustering. Separation saturates around 2
+    # (area-weighted within-region CF spread 10.3 -> 7.6, against a floor of ~7.2),
+    # while larger values only inflate the biggest regions.
+    basin_scarcity_weight: 2.0
   simplify_tolerance_km: 5
   simplify_min_area_km: 25
   resource_class_quantiles: [0.25, 0.5, 0.75]

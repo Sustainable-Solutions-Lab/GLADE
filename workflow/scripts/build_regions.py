@@ -2,15 +2,43 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+"""Basin-aware clustering of GADM level-1 provinces into model regions.
+
+Provinces are first split along hydrological basin boundaries (overlay with the
+AWARE basins), so a province straddling an abundant and a scarce basin can be
+separated -- otherwise pooling the two averages away the sub-provincial water
+scarcity that drives groundwater use. The province-basin pieces are then
+clustered per country into exactly ``target_count`` regions under a nesting
+invariant: every model region is either contained in one GADM province (a large
+province is split into sub-regions) or a union of whole provinces (small
+provinces are merged), never a mix of partial pieces across provinces -- so
+regions stay cleanly comparable to political units.
+
+Within each country the regions are balanced on geography and basin scarcity
+(``basin_scarcity_weight`` sets their relative influence; 0 recovers plain
+geographic clustering). A reconciliation step splits the largest splittable
+region until the exact target is reached, since a province allocated more
+sub-regions than it has basin pieces would otherwise under-produce.
+"""
+
+import logging
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pyproj import CRS, Geod
+import shapely
 from sklearn.cluster import AgglomerativeClustering, KMeans
 
+from workflow.scripts.logging_config import setup_script_logging
+
+logger = logging.getLogger(__name__)
+
 GEOD = Geod(ellps="WGS84")
+
+# Coordinate grid the GeoJSON writer rounds to (GDAL's default 7 decimals).
+GEOJSON_PRECISION = 1e-7
 
 
 def _compute_country_geodesic_areas(
@@ -51,7 +79,7 @@ def _allocate_per_country_targets_by_weight(
     if total_target < len(nonempty):
         raise ValueError(
             "target_count is smaller than the number of countries with regions; "
-            "cannot avoid cross-border clustering with this target."
+            "every country needs at least one region."
         )
 
     # Respect global capacity (cannot exceed number of base units)
@@ -104,11 +132,18 @@ def _allocate_per_country_targets_by_weight(
 
 
 def _cluster_coords(
-    coords: np.ndarray, k: int, method: str, random_state: int = 0
+    coords: np.ndarray,
+    k: int,
+    method: str,
+    random_state: int = 0,
+    weights: np.ndarray | None = None,
 ) -> np.ndarray:
     """Cluster coordinate array into up to k clusters.
 
     Returns one label per row. If k <= 0 or k >= n, assigns unique labels.
+    ``weights`` (areas) weight the samples under k-means, so a sliver piece
+    does not pull a centroid as hard as a half-province piece; agglomerative
+    clustering has no sample weighting and ignores them.
     """
     if coords.shape[0] <= k or k <= 0:
         return np.arange(coords.shape[0])
@@ -117,126 +152,350 @@ def _cluster_coords(
 
     if method == "kmeans":
         km = KMeans(n_clusters=k, n_init=10, random_state=random_state)
-        labels = km.fit_predict(coords)
-        return labels
+        return km.fit_predict(coords, sample_weight=weights)
     elif method == "agglomerative":
         # Ward linkage minimizes within-cluster variance (good heuristic)
         ac = AgglomerativeClustering(n_clusters=k, linkage="ward")
-        labels = ac.fit_predict(coords)
-        return labels
+        return ac.fit_predict(coords)
     else:
         raise ValueError(f"Unknown clustering method: {method}")
 
 
+def _largest_remainder(quota: pd.Series, total: int) -> pd.Series:
+    """Integer apportionment summing exactly to ``total`` (floor 0).
+
+    ``quota`` sums (approximately) to ``total``; floors are taken and the
+    remaining seats distributed to the largest fractional remainders.
+    """
+    base = np.floor(quota).astype(int)
+    remaining = int(total - base.sum())
+    if remaining > 0:
+        top = (quota - np.floor(quota)).sort_values(ascending=False).index[:remaining]
+        base.loc[top] += 1
+    elif remaining < 0:
+        # floor already exceeds total (numerical): drop from smallest positive
+        drop = base[base > 0].sort_values().index[:-remaining]
+        base.loc[drop] -= 1
+    return base
+
+
+def _scarcity_features(
+    px: np.ndarray, py: np.ndarray, cf: np.ndarray, weight: float
+) -> np.ndarray:
+    """Standardised ``[x, y, weight * scarcity]`` feature matrix for clustering."""
+
+    def z(a: np.ndarray) -> np.ndarray:
+        a = np.asarray(a, dtype=float)
+        s = a.std()
+        return (a - a.mean()) / (s if s > 0 else 1.0)
+
+    return np.column_stack([z(px), z(py), weight * z(cf)])
+
+
+def _province_centroids(pieces: pd.DataFrame) -> pd.DataFrame:
+    """Area-weighted ``px``, ``py``, ``cf`` per province, plus total ``area``."""
+
+    def agg(g: pd.DataFrame) -> pd.Series:
+        w = g["area"]
+        return pd.Series(
+            {
+                "px": np.average(g["px"], weights=w),
+                "py": np.average(g["py"], weights=w),
+                "cf": np.average(g["cf"], weights=w),
+                "area": w.sum(),
+            }
+        )
+
+    return pieces.groupby("prov").apply(agg, include_groups=False)
+
+
+def cluster_country(
+    pieces: pd.DataFrame,
+    k: int,
+    scarcity_weight: float,
+    method: str,
+    random_state: int,
+) -> np.ndarray:
+    """Assign a local region id (0..k-1) to each province-basin piece of a country.
+
+    ``pieces`` has one row per (province, basin) piece with columns ``prov``,
+    ``px``, ``py`` (equal-area centroid), ``area`` and ``cf`` (basin scarcity).
+    Provinces large enough for >=2 regions are *split*: their pieces are
+    clustered (on geography + weighted scarcity) into sub-regions that stay
+    within the province. All remaining provinces are grouped into whole-province
+    regions. Every region is therefore either contained in one province or a
+    union of whole provinces, and the total is exactly ``k``.
+    """
+    prov_area = pieces.groupby("prov")["area"].sum()
+    quota = k * prov_area / prov_area.sum()
+    n_p = _largest_remainder(quota, k)
+
+    split = n_p[n_p >= 2]
+    split_total = int(split.sum())
+    remaining = [p for p in prov_area.index if n_p[p] < 2]
+    k_rem = k - split_total
+    # Ensure remaining provinces have at least one merge group to land in.
+    if remaining and k_rem < 1:
+        biggest = split.idxmax()
+        n_p[biggest] -= 1
+        split = n_p[n_p >= 2]
+        split_total = int(split.sum())
+        remaining = [p for p in prov_area.index if n_p[p] < 2]
+        k_rem = k - split_total
+
+    labels = pd.Series(-1, index=pieces.index, dtype=int)
+    next_id = 0
+
+    # Split regime: partition each large province's own pieces.
+    for prov, n_sub in split.items():
+        d = pieces[pieces["prov"] == prov]
+        n_sub = min(int(n_sub), len(d))
+        feat = _scarcity_features(
+            d["px"].to_numpy(), d["py"].to_numpy(), d["cf"].to_numpy(), scarcity_weight
+        )
+        sub = _cluster_coords(
+            feat, n_sub, method, random_state, weights=d["area"].to_numpy()
+        )
+        labels.loc[d.index] = sub + next_id
+        next_id += int(sub.max()) + 1
+
+    # Merge regime: group remaining whole provinces.
+    if remaining:
+        rem = pieces[pieces["prov"].isin(remaining)]
+        pcen = _province_centroids(rem)
+        feat = _scarcity_features(
+            pcen["px"].to_numpy(),
+            pcen["py"].to_numpy(),
+            pcen["cf"].to_numpy(),
+            scarcity_weight,
+        )
+        kk = min(int(k_rem), len(pcen))
+        grp = _cluster_coords(
+            feat, kk, method, random_state, weights=pcen["area"].to_numpy()
+        )
+        prov_to_group = dict(zip(pcen.index, grp + next_id))
+        labels.loc[rem.index] = rem["prov"].map(prov_to_group).to_numpy()
+
+    # A province allocated more sub-regions than it has basin pieces, or a merge
+    # group short of its target, under-produces. Reconcile to exactly k by
+    # repeatedly splitting the largest splittable region (a single-province
+    # region splits by piece; a whole-province group splits by province), which
+    # preserves nesting and also improves size balance.
+    labels = _reconcile_to_k(pieces, labels, k, scarcity_weight, method, random_state)
+    return labels.to_numpy()
+
+
+def _reconcile_to_k(
+    pieces: pd.DataFrame,
+    labels: pd.Series,
+    k: int,
+    scarcity_weight: float,
+    method: str,
+    random_state: int,
+) -> pd.Series:
+    """Split the largest splittable region until exactly ``k`` regions exist."""
+    labels = labels.copy()
+    area = pieces["area"]
+    current = pd.Index(labels.unique())
+    next_id = int(labels.max()) + 1
+    while len(current) < k:
+        # Rank regions by area; split the largest one that can be split.
+        region_area = area.groupby(labels).sum().sort_values(ascending=False)
+        split_done = False
+        for region in region_area.index:
+            members = labels.index[labels == region]
+            sub = pieces.loc[members]
+            provs = sub["prov"].unique()
+            if len(provs) > 1:
+                # Whole-province group: split provinces into two, keep them whole.
+                pcen = _province_centroids(sub)
+                feat = _scarcity_features(
+                    pcen["px"].to_numpy(),
+                    pcen["py"].to_numpy(),
+                    pcen["cf"].to_numpy(),
+                    scarcity_weight,
+                )
+                two = _cluster_coords(
+                    feat, 2, method, random_state, weights=pcen["area"].to_numpy()
+                )
+                move = pcen.index[two == 1]
+                labels.loc[sub.index[sub["prov"].isin(move)]] = next_id
+            elif len(sub) > 1:
+                # Single province with multiple pieces: split pieces into two.
+                feat = _scarcity_features(
+                    sub["px"].to_numpy(),
+                    sub["py"].to_numpy(),
+                    sub["cf"].to_numpy(),
+                    scarcity_weight,
+                )
+                two = _cluster_coords(
+                    feat, 2, method, random_state, weights=sub["area"].to_numpy()
+                )
+                labels.loc[sub.index[two == 1]] = next_id
+            else:
+                continue  # single indivisible piece
+            next_id += 1
+            current = pd.Index(labels.unique())
+            split_done = True
+            break
+        if not split_done:
+            break  # no region can be split further (pieces exhausted)
+    return labels
+
+
 def cluster_regions(
-    gdf: gpd.GeoDataFrame,
+    pieces: gpd.GeoDataFrame,
     target_count: int,
-    allow_cross_border: bool,
+    scarcity_weight: float,
     method: str = "kmeans",
     random_state: int = 0,
 ) -> gpd.GeoDataFrame:
-    """Cluster level-1 administrative regions into target_count clusters.
+    """Basin-aware clustering of province-basin pieces into ``target_count`` regions.
 
-    Clustering is based on centroids in a projected CRS (EPSG:3857) for a
-    reasonable Euclidean approximation. When cross-border clustering is not
-    allowed, clustering is performed per country and the per-country targets
-    are allocated proportionally to the number of base regions.
+    ``pieces`` is the overlay of GADM level-1 provinces with AWARE basins, with
+    columns ``GID_0`` (country), ``prov`` (GADM province id), ``cf`` (basin
+    scarcity) and geometry. Per-country region counts are allocated
+    proportionally to area; each country is then partitioned (see
+    ``cluster_country``) so every region is either contained in one province or a
+    union of whole provinces. Basin scarcity separates regions within a province
+    so a scarce sub-basin is not pooled with an abundant one.
     """
     if target_count <= 0:
         raise ValueError("target_count must be positive")
+    if "GID_0" not in pieces.columns:
+        raise ValueError("Expected GID_0 column for country codes")
 
-    if gdf.crs is None:
-        gdf = gdf.set_crs(4326, allow_override=True)
-
-    # Project to equal-area for reasonable Euclidean approximation
-    gdf_proj = gdf.to_crs(6933)
-    cent = gdf_proj.geometry.centroid
-    coords = np.vstack([cent.x.values, cent.y.values]).T
-
-    if allow_cross_border:
-        labels = _cluster_coords(coords, target_count, method, random_state)
-        # Create global cluster ids
-        cluster_ids = pd.Series(labels, index=gdf.index).astype(int)
-        gdf = gdf.assign(_cluster=cluster_ids)
-    else:
-        # Allocate targets per country and cluster within each
-        if "GID_0" not in gdf.columns:
-            raise ValueError(
-                "Expected GID_0 column for country codes in GADM level 1 data"
-            )
-
-        counts = gdf.groupby("GID_0").size()
-        # Compute geodesic area per country for proportional allocation
-        country_areas = _compute_country_geodesic_areas(gdf[["GID_0", "geometry"]])
-        per_country = _allocate_per_country_targets_by_weight(
-            country_areas, counts, target_count
-        )
-
-        cluster_ids = pd.Series(index=gdf.index, dtype=int)
-        next_cluster = 0
-        for country, group in gdf.groupby("GID_0"):
-            k = int(per_country.get(country, 0))
-            idx = group.index.values
-            if k <= 0:
-                # No clusters allocated (can happen if country had 0 units)
-                continue
-            sub_coords = coords[gdf.index.get_indexer(idx)]
-            labels = _cluster_coords(sub_coords, k, method, random_state)
-            # Offset labels to keep them globally unique
-            cluster_ids.loc[idx] = labels + next_cluster
-            next_cluster += int(labels.max()) + 1
-
-        gdf = gdf.assign(_cluster=cluster_ids.astype(int))
-
-    # Dissolve polygons by cluster id
-    # Keep only geometry and the minimal attributes needed to avoid duplicate columns.
-    keep_cols = [c for c in ["_cluster", "geometry"] if c in gdf.columns]
-    gdf_min = gdf[keep_cols].copy()
-    dissolved = gdf_min.dissolve(by="_cluster", as_index=False)
-
-    # Assign unique region identifiers
-    dissolved["region"] = [f"region{int(i):04d}" for i in dissolved["_cluster"]]
-
-    # Keep a representative country code if available, under a user-friendly name
-    if "GID_0" in gdf.columns:
-        # first country code within the cluster as representative
-        rep_country = gdf.groupby("_cluster")["GID_0"].first()
-        dissolved["country"] = dissolved["_cluster"].map(rep_country)
-
-    dissolved = dissolved.set_index("region")
-    dissolved = dissolved.drop(
-        columns=[c for c in ["_cluster"] if c in dissolved.columns]
+    proj = pieces.to_crs(6933)
+    cent = proj.geometry.centroid
+    pieces = pieces.assign(
+        px=cent.x.to_numpy(), py=cent.y.to_numpy(), area=proj.geometry.area.to_numpy()
     )
+
+    # Per-country region budget, proportional to area (>=1 per country). Both
+    # inputs are taken over *all* pieces, which partition each province: one
+    # piece per province would undercount the area of every province straddling
+    # several basins, starving basin-fragmented countries of regions. The
+    # capacity cap is the piece count, since a province can now be split into
+    # as many regions as it has basin pieces.
+    counts = pieces.groupby("GID_0").size()
+    country_areas = _compute_country_geodesic_areas(pieces[["GID_0", "geometry"]])
+    per_country = _allocate_per_country_targets_by_weight(
+        country_areas, counts, target_count
+    )
+
+    cluster_ids = pd.Series(-1, index=pieces.index, dtype=int)
+    next_cluster = 0
+    for country, group in pieces.groupby("GID_0"):
+        k = int(per_country.get(country, 0))
+        if k <= 0:
+            continue
+        local = cluster_country(group, k, scarcity_weight, method, random_state)
+        cluster_ids.loc[group.index] = local + next_cluster
+        next_cluster += int(local.max()) + 1
+
+    pieces = pieces.assign(_cluster=cluster_ids.astype(int))
+    dissolved = pieces[["_cluster", "geometry"]].dissolve(by="_cluster", as_index=False)
+    dissolved["region"] = [f"region{int(i):04d}" for i in dissolved["_cluster"]]
+    rep_country = pieces.groupby("_cluster")["GID_0"].first()
+    dissolved["country"] = dissolved["_cluster"].map(rep_country)
+    dissolved = dissolved.set_index("region").drop(columns="_cluster")
+
+    # Repair, then snap to the GeoJSON writer's coordinate grid. Order matters.
+    # The raw dissolve leaves near-degenerate slivers that are valid in memory
+    # but tip into self-intersection once the writer truncates coordinates to 7
+    # decimals, so an in-memory validity check passes while the file on disk is
+    # invalid. Snapping makes the in-memory geometry exactly what gets written,
+    # and set_precision's valid_output mode guarantees the snapped result is
+    # valid -- but it raises on genuinely invalid input, hence buffer(0) first.
+    # This matters because exactextract calls into native code that *segfaults*
+    # on invalid geometry rather than raising -- one bad region kills an
+    # unrelated downstream rule with an empty log and no traceback.
+    repaired = dissolved.geometry.buffer(0)
+    snapped = shapely.set_precision(repaired.values, GEOJSON_PRECISION)
+    dissolved["geometry"] = gpd.GeoSeries(
+        snapped, index=dissolved.index, crs=dissolved.crs
+    )
+    # Empty geometries are "valid", but a region collapsed to nothing by the
+    # repair or snap is just as fatal downstream as an invalid one.
+    still_bad = ~dissolved.geometry.is_valid | dissolved.geometry.is_empty
+    if still_bad.any():
+        raise ValueError(
+            f"{int(still_bad.sum())} region geometries are invalid or empty "
+            "after normalisation: "
+            + ", ".join(map(str, dissolved.index[still_bad][:5]))
+        )
     return dissolved
 
 
 if __name__ == "__main__":
-    # Use GADM level 1 (state/province boundaries). Geometries are pre-simplified.
-    gdf = gpd.read_file(snakemake.input.world)
-
-    # Filter out invalid regions
-    gdf = gdf.rename({"GID_1": "region"}, axis=1)
+    logger = setup_script_logging(log_file=snakemake.log[0] if snakemake.log else None)
+    # GADM level 1 (state/province boundaries); geometries are pre-simplified.
+    provinces = gpd.read_file(snakemake.input.world).rename(columns={"GID_1": "prov"})
     valid_mask = (
-        (gdf["region"] != "?")
-        & gdf["region"].notna()
-        & (gdf["region"] != "")
-        & (gdf["region"] != "NA")
+        (provinces["prov"] != "?")
+        & provinces["prov"].notna()
+        & (provinces["prov"] != "")
+        & (provinces["prov"] != "NA")
     )
-    gdf = gdf[valid_mask]
-
-    gdf = gdf.set_index("region", drop=True)
-
-    # Narrowing by configured countries
-    if "GID_0" not in gdf.columns:
+    provinces = provinces[valid_mask]
+    if "GID_0" not in provinces.columns:
         raise ValueError("Expected GID_0 column with ISO3 country codes in GADM data")
-    gdf = gdf[gdf["GID_0"].isin(list(snakemake.params.countries))]
+    provinces = provinces[provinces["GID_0"].isin(list(snakemake.params.countries))]
+    if provinces.crs is None:
+        provinces = provinces.set_crs(4326, allow_override=True)
 
-    gdf = cluster_regions(
-        gdf,
+    # AWARE basin scarcity (agricultural CF); fill missing with the median.
+    basins = gpd.read_file(
+        snakemake.input.basins, layer="AWARE20_Native_CFs_geospatial"
+    )
+    basins["cf"] = pd.to_numeric(basins["CF_annual_agri"], errors="coerce")
+    basins["cf"] = basins["cf"].fillna(basins["cf"].median())
+    basins = basins.to_crs(provinces.crs)
+
+    # Split provinces along basin boundaries: one piece per (province, basin).
+    pieces = gpd.overlay(
+        provinces[["GID_0", "prov", "geometry"]],
+        basins[["cf", "geometry"]],
+        how="intersection",
+        keep_geom_type=True,
+    )
+
+    # Coastal slivers and small islands can fall outside every AWARE basin and
+    # are dropped by the intersection. That is tolerable in aggregate but must
+    # never silently remove a whole country from the model.
+    missing = set(provinces["GID_0"]) - set(pieces["GID_0"])
+    if missing:
+        raise ValueError(
+            "No AWARE basin overlaps any province of: "
+            f"{', '.join(sorted(missing))}. Check the basin geopackage."
+        )
+    kept = _compute_country_geodesic_areas(pieces[["GID_0", "geometry"]]).sum()
+    total = _compute_country_geodesic_areas(provinces[["GID_0", "geometry"]]).sum()
+    logger.info(
+        "Basin overlay: %d provinces -> %d province-basin pieces, "
+        "%.2f%% of land area outside all basins",
+        provinces["prov"].nunique(),
+        len(pieces),
+        100.0 * (1.0 - kept / total),
+    )
+
+    regions = cluster_regions(
+        pieces,
         snakemake.params.n_regions,
-        snakemake.params.allow_cross_border,
+        snakemake.params.basin_scarcity_weight,
         snakemake.params.cluster_method,
     )
 
     Path(snakemake.output[0]).parent.mkdir(parents=True, exist_ok=True)
-    gdf.to_file(snakemake.output[0], driver="GeoJSON")
+    regions.to_file(snakemake.output[0], driver="GeoJSON")
+
+    # The written file is what every downstream raster aggregation reads, so
+    # validate it rather than the in-memory frame.
+    written = gpd.read_file(snakemake.output[0])
+    bad = ~written.geometry.is_valid | written.geometry.is_empty
+    if bad.any():
+        raise ValueError(
+            f"{int(bad.sum())} region geometries are invalid or empty as written "
+            f"to {snakemake.output[0]}; exactextract would segfault on them."
+        )
+    logger.info("Wrote %d regions, all geometries valid on disk", len(written))

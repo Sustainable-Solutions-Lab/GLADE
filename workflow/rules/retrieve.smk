@@ -947,6 +947,36 @@ rule extract_mirca_os_subcrop_monthly:
         "../scripts/extract_mirca_os_archive.py"
 
 
+rule download_aware2_basins:
+    """Download the AWARE2.0 native-basin polygons from Zenodo.
+
+    Source: Seitfudem, Berger, Mueller Schmied & Boulay (2025), "The updated
+    and improved method for water scarcity impact assessment in LCA, AWARE2.0",
+    https://doi.org/10.5281/zenodo.15133241 (WaterGAP2.2e). License: CC BY 4.0.
+
+    The geopackage carries the native basin geometries and their
+    characterisation factors; the annual agricultural CF is used as the basin
+    scarcity signal for basin-aware region clustering.
+    """
+    output:
+        basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
+    params:
+        base_url="https://zenodo.org/records/15133241/files",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_aware2_basins.log",
+    benchmark:
+        "<benchmarks>/shared/download_aware2_basins.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.basins})"
+        curl -L --fail --progress-bar -o "{output.basins}" \
+            "{params.base_url}/AWARE20_Native_CFs_geospatial.gpkg/content" > {log} 2>&1
+        """
+
+
 rule download_grassland_yield_data:
     """Retrieve historical managed-grassland yield from ISIMIP2a / LPJmL.
 
