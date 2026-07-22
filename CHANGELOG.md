@@ -86,9 +86,10 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
-- Crop-yield preparation now computes exact region and resource-class cell
-  coverage once per configuration and reuses it across crops, substantially
-  reducing build time and peak memory without changing crop-yield outputs.
+- Crop-yield and harvested-area preparation now compute exact region and
+  resource-class cell coverage once per configuration and reuse it across
+  crops, substantially reducing build time and peak memory without changing
+  outputs.
 - Model regions are now built **basin-aware**: GADM provinces are first split
   along AWARE hydrological basin boundaries, and each country is partitioned
   into regions balancing geography against basin scarcity

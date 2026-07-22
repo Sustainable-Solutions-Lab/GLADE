@@ -98,6 +98,8 @@ def build_cell_mapping(classes_path: str, regions_path: str, output_path: str) -
         n_classes=np.array(n_classes, dtype=np.int32),
         height=np.array(height, dtype=np.int32),
         width=np.array(width, dtype=np.int32),
+        transform=transform,
+        crs_wkt=np.array(crs_wkt),
     )
 
 

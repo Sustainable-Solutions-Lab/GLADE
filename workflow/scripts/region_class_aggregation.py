@@ -18,6 +18,8 @@ class CellMapping(NamedTuple):
     regions: np.ndarray
     n_classes: int
     shape: tuple[int, int]
+    transform: tuple[float, ...]
+    crs_wkt: str
 
     @property
     def n_groups(self) -> int:
@@ -34,7 +36,33 @@ def load_cell_mapping(path: str) -> CellMapping:
             regions=data["regions"],
             n_classes=int(data["n_classes"]),
             shape=(int(data["height"]), int(data["width"])),
+            transform=tuple(data["transform"]),
+            crs_wkt=str(data["crs_wkt"]),
         )
+
+
+def validate_raster_grid(values: np.ndarray, source, mapping: CellMapping) -> None:
+    """Fail if a raster does not use the grid represented by ``mapping``."""
+    if values.shape != mapping.shape:
+        raise ValueError(
+            f"Raster shape {values.shape} does not match cell mapping "
+            f"shape {mapping.shape}"
+        )
+    transform = source.transform.to_gdal()
+    if not np.allclose(transform, mapping.transform, rtol=0.0, atol=1e-12):
+        raise ValueError(
+            f"Raster transform {transform} does not match cell mapping "
+            f"transform {mapping.transform}"
+        )
+    if source.crs is None:
+        raise ValueError("Raster CRS does not match cell mapping CRS")
+    actual_crs_wkt = source.crs.to_wkt()
+    if actual_crs_wkt != mapping.crs_wkt:
+        # Avoid importing pyproj when equivalent WKT strings already match.
+        from pyproj import CRS
+
+        if CRS.from_wkt(actual_crs_wkt) != CRS.from_wkt(mapping.crs_wkt):
+            raise ValueError("Raster CRS does not match cell mapping CRS")
 
 
 def _mapped_values(values: np.ndarray, mapping: CellMapping) -> np.ndarray:

@@ -9,15 +9,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from workflow.scripts.crop_yield_aggregation import (
-    load_cell_mapping,
-    weighted_mean_by_group,
-    weighted_sum_by_group,
-)
 from workflow.scripts.raster_utils import (
     calculate_all_cell_areas,
     read_raster_float,
     scale_fraction,
+)
+from workflow.scripts.region_class_aggregation import (
+    load_cell_mapping,
+    validate_raster_grid,
+    weighted_mean_by_group,
+    weighted_sum_by_group,
 )
 
 if __name__ == "__main__":
@@ -69,6 +70,7 @@ if __name__ == "__main__":
         return base_scale * (override / KG_TO_TONNE)
 
     y_raw, y_src = read_raster_float(yield_path)
+    validate_raster_grid(y_raw, y_src, mapping)
     y_tpha = y_raw * _yield_multiplier(crop_code)
     if use_actual_yields:
         moisture_fraction = float(moisture_lookup[crop_code])
@@ -79,6 +81,7 @@ if __name__ == "__main__":
     del y_raw, y_tpha
 
     s_raw, s_src = read_raster_float(suit_path)
+    validate_raster_grid(s_raw, s_src, mapping)
     s_src.close()
     s_frac = scale_fraction(s_raw)
     area_ha = s_frac * cell_area_ha_1d[:, np.newaxis]
@@ -87,6 +90,7 @@ if __name__ == "__main__":
 
     if water_path:
         water_raw_mm, water_src = read_raster_float(water_path)
+        validate_raster_grid(water_raw_mm, water_src, mapping)
         water_src.close()
         water_m3_per_ha = water_raw_mm * 10.0  # 1 mm over 1 ha equals 10 m3
         water_by_group = weighted_mean_by_group(water_m3_per_ha, mapping)
@@ -101,10 +105,12 @@ if __name__ == "__main__":
         water_by_group[weight != 0] = 0.0
 
     gs_start_raw, gs_start_src = read_raster_float(gs_start_path)
+    validate_raster_grid(gs_start_raw, gs_start_src, mapping)
     gs_start_src.close()
     gs_start_by_group = weighted_mean_by_group(gs_start_raw, mapping)
     del gs_start_raw
     gs_length_raw, gs_length_src = read_raster_float(gs_length_path)
+    validate_raster_grid(gs_length_raw, gs_length_src, mapping)
     gs_length_src.close()
     gs_length_by_group = weighted_mean_by_group(gs_length_raw, mapping)
     del gs_length_raw

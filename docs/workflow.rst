@@ -71,11 +71,11 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/aggregate_class_areas.py``
   * **Purpose**: Compute available land area per (region, class, water, crop)
 
-**build_crop_yield_cell_mapping**
+**build_region_class_cell_mapping**
   * **Input**: Resource classes, regions
-  * **Output**: ``processing/{name}/crop_yield_cell_mapping.npz``
-  * **Script**: ``workflow/scripts/build_crop_yield_cell_mapping.py``
-  * **Purpose**: Cache exact region and resource-class coverage by GAEZ grid cell
+  * **Output**: ``processing/{name}/region_class_cell_mapping.npz``
+  * **Script**: ``workflow/scripts/build_region_class_cell_mapping.py``
+  * **Purpose**: Cache exact region and resource-class coverage by GAEZ grid cell for crop-yield and harvested-area aggregation
 
 **build_crop_yields**
   * **Wildcards**: ``{crop}`` (crop name), ``{water_supply}`` ("r" or "i")
@@ -83,6 +83,13 @@ Data Preparation Rules
   * **Output**: ``processing/{name}/crop_yields/{crop}_{water_supply}.csv``
   * **Script**: ``workflow/scripts/build_crop_yields.py``
   * **Purpose**: Aggregate yields by (region, class) for each crop
+
+**build_harvested_area_gaez**
+  * **Wildcards**: ``{crop}`` (crop name), ``{water_supply}`` ("r" or "i")
+  * **Input**: Reusable region/cell coverage mapping, GAEZ harvested-area raster, crop shares
+  * **Output**: ``processing/{name}/harvested_area/gaez/{crop}_{water_supply}.csv``
+  * **Script**: ``workflow/scripts/build_harvested_area.py``
+  * **Purpose**: Aggregate harvested area by (region, class) and attribute pooled GAEZ crop modules
 
 **derive_mirca_multicropping**
   * **Input**: Annual harvested-area, footprint, and rice-subcrop grids from the MIRCA-OS release nearest ``baseline_year``; resource classes; regions; GAEZ RES01 multiple-cropping-zone rasters; the crop concordance; and the fixed combination catalog
