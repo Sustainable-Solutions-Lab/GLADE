@@ -608,6 +608,12 @@ if __name__ == "__main__":
     ) * (1.0 - moisture_df["moisture_fraction"])
 
     # Optional cost calibration corrections (crops, multi-crops, grassland, animals)
+    # Configs that accept a calibration provenance mismatch (test/tutorial
+    # grade) may build (crop, country) links the artefact's own build did not
+    # carry; the missing-correction check then warns instead of raising.
+    require_complete_cost_calibration = not bool(
+        snakemake.config["calibration"]["accept_provenance_mismatch"]
+    )
     crop_cost_calibration = None
     multi_crop_cost_calibration = None
     grassland_cost_calibration = None
@@ -997,6 +1003,7 @@ if __name__ == "__main__":
         water_periods=water_periods,
         irrigation_calendar=irrigation_calendar_df,
         cost_calibration=crop_cost_calibration,
+        require_complete_cost_calibration=require_complete_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
         seed_kg_dm_per_ha=seed_kg_dm_per_ha,
         crop_loss_multiplier=crop_loss_multiplier,
@@ -1040,6 +1047,7 @@ if __name__ == "__main__":
             baseline_area=multi_cropping_baseline_df,
             use_actual_production=use_actual_production,
             multi_crop_cost_calibration=multi_crop_cost_calibration,
+            require_complete_cost_calibration=require_complete_cost_calibration,
         )
     # Clip sub-min_link_area_mha crop baselines before multi-crop reconciliation,
     # pinning, or growth-cap aggregation. Reconciliation can then conserve the

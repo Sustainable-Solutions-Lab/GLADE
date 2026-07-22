@@ -76,6 +76,7 @@ def _add_rice_wheat_multi_link(
     baseline_combination="rice_wheat",
     potential_region="regionA",
     cycle_crops=("wetland-rice", "wheat"),
+    require_complete_cost_calibration=True,
 ):
     """Build a single rice-wheat multi-cropping link and return the network."""
     n = pypsa.Network()
@@ -157,6 +158,7 @@ def _add_rice_wheat_multi_link(
         combinations={"rice_wheat": {"crops": ["wetland-rice", "wheat"]}},
         baseline_area=baseline_area,
         multi_crop_cost_calibration=multi_crop_cost_calibration,
+        require_complete_cost_calibration=require_complete_cost_calibration,
     )
     return n
 
@@ -222,6 +224,21 @@ def test_multi_cropping_raises_on_stale_cost_calibration():
             baseline_ha=500_000.0,
             multi_crop_cost_calibration=pd.Series({("maize_soybean", "USA"): 1.0}),
         )
+
+
+def test_multi_cropping_stale_calibration_warns_when_not_required():
+    """With accept_provenance_mismatch, a missing pair warns and takes zero."""
+    n = _add_rice_wheat_multi_link(
+        baseline_ha=500_000.0,
+        multi_crop_cost_calibration=pd.Series({("maize_soybean", "USA"): 1.0}),
+        require_complete_cost_calibration=False,
+    )
+
+    links = n.links.static[n.links.static["carrier"] == "crop_production_multi"]
+    assert len(links) == 1
+    link = links.iloc[0]
+    assert float(link["bounded_penalty_bnusd_per_mha"]) == pytest.approx(0.0)
+    assert float(link["bounded_subsidy_bnusd_per_mha"]) == pytest.approx(0.0)
 
 
 def test_multi_cropping_zero_baseline_missing_correction_is_zero():

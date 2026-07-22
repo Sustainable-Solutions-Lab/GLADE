@@ -233,6 +233,7 @@ def _apply_bounded_cost_calibration(
     *,
     label: str,
     key_fields: str,
+    require_complete: bool,
 ) -> None:
     """Store bounded cost-calibration corrections on crop production links.
 
@@ -259,7 +260,10 @@ def _apply_bounded_cost_calibration(
     floor) receive a dual, so pairs with a zero baseline are legitimately
     absent from the artefact and correctly take a zero correction. A
     positive-baseline pair that is missing means the artefact is stale for the
-    current link set, and raises.
+    current link set and raises when ``require_complete`` -- except for configs
+    that declare ``calibration.accept_provenance_mismatch`` (test/tutorial
+    grade), whose region map may legitimately carry (crop, country) pairs the
+    artefact's build did not; those warn and take a zero correction.
     """
     df["bounded_subsidy_bnusd_per_mha"] = 0.0
     df["bounded_penalty_bnusd_per_mha"] = 0.0
@@ -278,12 +282,15 @@ def _apply_bounded_cost_calibration(
     if missing.any():
         missing_keys = sorted({keys[i] for i in np.flatnonzero(missing)})
         sample = ", ".join(":".join(map(str, k)) for k in missing_keys[:5])
-        raise ValueError(
+        message = (
             f"{label} cost calibration is missing {len(missing_keys)} "
             f"{key_fields} link(s) with a positive baseline area, e.g. {sample}. "
             "The calibration artefact is stale for the current link set; "
             "regenerate it with `tools/calibrate cost`."
         )
+        if require_complete:
+            raise ValueError(message)
+        logger.warning("%s Proceeding with zero corrections for them.", message)
 
     corrections = corrections.fillna(0.0)
     pos = corrections > 0
@@ -339,6 +346,7 @@ def add_regional_crop_production_links(
     *,
     water_periods: int,
     irrigation_calendar: pd.DataFrame,
+    require_complete_cost_calibration: bool = True,
     cost_calibration: pd.Series | None = None,
     min_yield_t_per_ha: float,
     seed_kg_dm_per_ha: pd.Series,
@@ -659,6 +667,7 @@ def add_regional_crop_production_links(
         cost_calibration,
         label="crop",
         key_fields="(crop, country)",
+        require_complete=require_complete_cost_calibration,
     )
 
     keys = list(
@@ -772,6 +781,7 @@ def add_multi_cropping_links(
     baseline_area: pd.DataFrame | None = None,
     use_actual_production: bool = False,
     multi_crop_cost_calibration: pd.Series | None = None,
+    require_complete_cost_calibration: bool = True,
 ) -> None:
     """Add multi-cropping production links with a vectorised workflow.
 
@@ -1207,6 +1217,7 @@ def add_multi_cropping_links(
         multi_crop_cost_calibration,
         label="multi-crop",
         key_fields="(combination, country)",
+        require_complete=require_complete_cost_calibration,
     )
 
     if use_actual_production:
