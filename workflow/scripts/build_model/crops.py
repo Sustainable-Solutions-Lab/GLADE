@@ -53,9 +53,10 @@ def multi_crop_cycle_multiplicities(links: pd.DataFrame) -> pd.DataFrame:
             "to account for harvested-cycle multiplicity. Rebuild the model."
         )
 
-    records: list[dict[str, object]] = []
-    for link, row in multi.iterrows():
-        raw = row["crop_cycles"]
+    records: list[tuple[object, ...]] = []
+    for link, raw, country, baseline_area_mha in multi[
+        ["crop_cycles", "country", "baseline_area_mha"]
+    ].itertuples(index=True, name=None):
         try:
             cycles = json.loads(str(raw))
         except (TypeError, ValueError) as exc:
@@ -74,13 +75,13 @@ def multi_crop_cycle_multiplicities(links: pd.DataFrame) -> pd.DataFrame:
             )
         for crop, multiplicity in Counter(cycles).items():
             records.append(
-                {
-                    "link": link,
-                    "crop": crop,
-                    "country": str(row["country"]),
-                    "multiplicity": int(multiplicity),
-                    "baseline_area_mha": float(row["baseline_area_mha"]),
-                }
+                (
+                    link,
+                    crop,
+                    str(country),
+                    int(multiplicity),
+                    float(baseline_area_mha),
+                )
             )
     return pd.DataFrame.from_records(records, columns=columns)
 
@@ -293,6 +294,24 @@ def _apply_bounded_cost_calibration(
         int(pos.sum()),
         int(neg.sum()),
     )
+
+
+def _crop_cost_values(
+    crops: pd.Series,
+    countries: pd.Series,
+    crop_costs: pd.Series,
+    global_median_cost: pd.Series,
+) -> np.ndarray:
+    """Look up country crop costs, falling back only when the key is absent."""
+    keys = pd.MultiIndex.from_arrays(
+        [crops.astype(str).to_numpy(), countries.astype(str).to_numpy()]
+    )
+    values = crop_costs.reindex(keys).to_numpy(dtype=float)
+    missing = ~keys.isin(crop_costs.index)
+    if missing.any():
+        fallback = crops.astype(str).map(global_median_cost).fillna(0.0).to_numpy()
+        values[missing] = fallback[missing]
+    return values
 
 
 def add_regional_crop_production_links(
@@ -548,9 +567,10 @@ def add_regional_crop_production_links(
     # Look up per-(crop, country) cost, falling back to global median
     cost_keys = list(zip(all_df["crop"].astype(str), all_df["country"].astype(str)))
     per_link_cost = pd.Series(
-        [crop_costs.get(k, global_median_cost.get(k[0], 0.0)) for k in cost_keys],
+        _crop_cost_values(
+            all_df["crop"], all_df["country"], crop_costs, global_median_cost
+        ),
         index=all_df.index,
-        dtype=float,
     )
     # Convert USD/ha to bnUSD/Mha
     all_df["marginal_cost"] = per_link_cost * 1e6 * constants.USD_TO_BNUSD
@@ -904,20 +924,47 @@ def add_multi_cropping_links(
         cycle_df = cycle_df[~low_yield_mask]
 
     merged = cycle_df.merge(area_df, on=key_cols, how="inner")
-    valid_keys: list[tuple[object, ...]] = []
-    for key, cycles in merged.groupby(key_cols, sort=False):
-        combo = str(key[0])
-        expected = [str(crop) for crop in combinations[combo]["crops"]]
-        ordered = cycles.sort_values("cycle_index")
-        got_indices = ordered["cycle_index"].astype(int).tolist()
-        got_crops = ordered["crop"].astype(str).tolist()
-        if got_indices == list(range(1, len(expected) + 1)) and got_crops == expected:
-            valid_keys.append(key)
+    expected_cycles = pd.Series(
+        {
+            (str(combination), cycle_index): str(crop)
+            for combination, settings in combinations.items()
+            for cycle_index, crop in enumerate(settings["crops"], start=1)
+        }
+    )
+    expected_counts = pd.Series(
+        {
+            str(combination): len(settings["crops"])
+            for combination, settings in combinations.items()
+        }
+    )
+    cycle_index_int = merged["cycle_index"].astype(int)
+    cycle_keys = pd.MultiIndex.from_arrays(
+        [merged["combination"].astype(str), cycle_index_int]
+    )
+    merged["_cycle_index_int"] = cycle_index_int
+    merged["_valid_cycle"] = (
+        merged["crop"].astype(str).to_numpy()
+        == expected_cycles.reindex(cycle_keys).to_numpy()
+    )
+    sequence_stats = merged.groupby(key_cols, sort=False).agg(
+        cycle_count=("cycle_index", "size"),
+        distinct_cycles=("_cycle_index_int", "nunique"),
+        valid_cycles=("_valid_cycle", "all"),
+    )
+    sequence_stats["expected_count"] = sequence_stats.index.get_level_values(
+        "combination"
+    ).map(expected_counts)
+    valid_sequences = sequence_stats[
+        sequence_stats["valid_cycles"]
+        & sequence_stats["cycle_count"].eq(sequence_stats["expected_count"])
+        & sequence_stats["distinct_cycles"].eq(sequence_stats["expected_count"])
+    ]
+    valid_keys = valid_sequences.index
+    merged = merged.drop(columns=["_cycle_index_int", "_valid_cycle"])
 
-    if valid_keys:
-        valid_index = pd.MultiIndex.from_tuples(valid_keys, names=key_cols)
+    if not valid_keys.empty:
         merged_index = pd.MultiIndex.from_frame(merged[key_cols])
-        merged = merged[merged_index.isin(valid_index)].copy()
+        merged = merged[merged_index.isin(valid_keys)].copy()
     else:
         merged = merged.iloc[0:0].copy()
 
@@ -975,10 +1022,9 @@ def add_multi_cropping_links(
     base = base.join(crop_counts)
 
     # Look up per-(crop, country) cost and sum across crops in combination
-    merged["cost_usd_per_ha"] = [
-        crop_costs.get((c, cc), global_median_cost.get(c, 0.0))
-        for c, cc in zip(merged["crop"], merged["country"])
-    ]
+    merged["cost_usd_per_ha"] = _crop_cost_values(
+        merged["crop"], merged["country"], crop_costs, global_median_cost
+    )
     # Marketing markup per cycle: marketing_cost_per_t * yield (post seed/loss)
     marketing_per_t = merged["crop"].astype(str).map(crop_marketing_cost_usd_per_t)
     if marketing_per_t.isna().any():
@@ -1024,48 +1070,58 @@ def add_multi_cropping_links(
         if not anchor_df.empty
         else pd.Series(dtype=float)
     )
-    unavailable_groups: list[dict[str, str]] = []
-    unavailable_mha = 0.0
     anchor_group_cols = ["combination", "country", "water_supply"]
-    for group_key, source in anchor_df.groupby(anchor_group_cols, sort=False):
-        combination, country, water_supply = map(str, group_key)
-        destination_mask = (
-            (base.index.get_level_values("combination") == combination)
-            & (base["country"].astype(str).to_numpy() == country)
-            & (base.index.get_level_values("water_supply") == water_supply)
-        )
-        destinations = base.index[destination_mask]
-        if destinations.empty:
-            unavailable_mha += float(source["baseline_area_mha"].sum())
-            unavailable_groups.append(
-                {
-                    "combination": combination,
-                    "country": country,
-                    "water_supply": water_supply,
-                }
-            )
-            continue
-
-        local = anchor_by_key.reindex(destinations).fillna(0.0)
-        base.loc[destinations, "baseline_area_mha"] += local.to_numpy()
-        local_total = float(source["baseline_area_mha"].sum())
-        matched_total = float(local.sum())
-        relocate = local_total - matched_total
-        if relocate > 1e-12:
-            weights = base.loc[destinations, "eligible_area_ha"].astype(float)
-            base.loc[destinations, "baseline_area_mha"] += (
-                relocate * weights / float(weights.sum())
-            ).to_numpy()
-
-    if unavailable_groups:
+    anchor_group_totals = anchor_df.groupby(anchor_group_cols, sort=False)[
+        "baseline_area_mha"
+    ].sum()
+    destination_groups = pd.MultiIndex.from_arrays(
+        [
+            base.index.get_level_values("combination").astype(str),
+            base["country"].astype(str),
+            base.index.get_level_values("water_supply").astype(str),
+        ],
+        names=anchor_group_cols,
+    )
+    available_groups = destination_groups.unique()
+    unavailable = anchor_group_totals[~anchor_group_totals.index.isin(available_groups)]
+    if not unavailable.empty:
+        unavailable_groups = [
+            dict(zip(anchor_group_cols, map(str, group), strict=True))
+            for group in unavailable.index[:10]
+        ]
         logger.warning(
             "Retaining %.3f Mha of MIRCA anchors on single-crop baselines because "
             "%d combination/country/water groups have no valid full-sequence "
             "GAEZ target (examples: %s)",
-            unavailable_mha,
-            len(unavailable_groups),
-            unavailable_groups[:10],
+            float(unavailable.sum()),
+            len(unavailable),
+            unavailable_groups,
         )
+
+    local_anchor = anchor_by_key.reindex(base.index).fillna(0.0)
+    matched_group_totals = (
+        pd.Series(local_anchor.to_numpy(), index=destination_groups)
+        .groupby(level=anchor_group_cols, sort=False)
+        .sum()
+    )
+    relocation = anchor_group_totals.sub(matched_group_totals, fill_value=0.0).clip(
+        lower=0.0
+    )
+    relocation_by_link = pd.Series(
+        destination_groups.map(relocation).fillna(0.0), index=base.index
+    )
+    eligible_group_totals = (
+        pd.Series(
+            base["eligible_area_ha"].to_numpy(dtype=float), index=destination_groups
+        )
+        .groupby(level=anchor_group_cols, sort=False)
+        .transform("sum")
+    )
+    base["baseline_area_mha"] = local_anchor + (
+        relocation_by_link
+        * base["eligible_area_ha"].astype(float)
+        / eligible_group_totals.to_numpy()
+    )
 
     base["p_nom_max"] = np.maximum(
         base["eligible_area_ha"] / constants.HA_PER_MHA,
@@ -1679,10 +1735,10 @@ def reconcile_single_crop_baselines(
             float(link_scales.min()),
         )
 
-    # Re-expand the scaled anchors so all subsequent accounting uses exactly the
-    # metadata and baselines now stored on the network.
+    # Refresh the expanded anchors so all subsequent accounting uses exactly the
+    # baselines now stored on the network.
     multi = n.links.static[n.links.static["carrier"] == "crop_production_multi"]
-    cycle_long = multi_crop_cycle_multiplicities(n.links.static)
+    cycle_long["baseline_area_mha"] = cycle_long["link"].map(multi["baseline_area_mha"])
     cycle_long["region"] = cycle_long["link"].map(multi["region"])
     cycle_long["resource_class"] = (
         cycle_long["link"].map(multi["resource_class"]).astype(int)
@@ -1710,21 +1766,25 @@ def reconcile_single_crop_baselines(
     remaining_required = total_required.sub(locally_taken, fill_value=0.0).clip(
         lower=0.0
     )
-    for group, remainder in remaining_required.items():
-        if remainder <= 1e-12:
-            continue
-        idx = single.index[group_index == group]
-        available = new_baseline.loc[idx]
-        total_available = float(available.sum())
-        if remainder > total_available + 1e-9:
-            raise ValueError(
-                "Scaled multi-cropping anchors still exceed the FAOSTAT crop "
-                f"budget for {group}: need {remainder:.6g} Mha but only "
-                f"{total_available:.6g} Mha remains"
-            )
-        new_baseline.loc[idx] -= (
-            available / total_available * min(float(remainder), total_available)
+    remaining_by_link = pd.Series(
+        group_index.map(remaining_required).fillna(0.0), index=single.index
+    )
+    available_by_group = new_baseline.groupby(group_index).transform("sum")
+    invalid = remaining_by_link > available_by_group + 1e-9
+    if invalid.any():
+        link = invalid[invalid].index[0]
+        group = tuple(group_index[single.index.get_loc(link)])
+        raise ValueError(
+            "Scaled multi-cropping anchors still exceed the FAOSTAT crop "
+            f"budget for {group}: need {remaining_by_link[link]:.6g} Mha but "
+            f"only {available_by_group[link]:.6g} Mha remains"
         )
+    active = remaining_by_link > 1e-12
+    new_baseline.loc[active] -= (
+        new_baseline.loc[active]
+        / available_by_group.loc[active]
+        * np.minimum(remaining_by_link.loc[active], available_by_group.loc[active])
+    )
 
     new_baseline = new_baseline.clip(lower=0.0)
     n.links.static.loc[new_baseline.index, "baseline_area_mha"] = new_baseline

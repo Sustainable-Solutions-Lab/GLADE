@@ -230,7 +230,7 @@ rule build_model:
         "build_model"
     resources:
         runtime="1m",
-        mem_mb=900,
+        mem_mb=1500,
     log:
         "<logs>/{name}/build_model.log",
     benchmark:

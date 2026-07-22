@@ -6,17 +6,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 from pathlib import Path
 
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.enums import Resampling
+from rasterio.env import set_gdal_config
 from rasterio.warp import reproject
-import xarray as xr
 
 from workflow.scripts.raster_utils import calculate_all_cell_areas, scale_fraction
+from workflow.scripts.region_class_aggregation import (
+    load_cell_mapping,
+    weighted_sum_by_group,
+)
 
 
 def read_raster_float(path: str):
@@ -74,18 +75,11 @@ def load_scaled_fraction(
         return scale_fraction(arr)
 
 
-def raster_bounds(transform, width: int, height: int):
-    xmin = transform.c
-    ymax = transform.f
-    xmax = xmin + width * transform.a
-    ymin = ymax + height * transform.e
-    return xmin, ymin, xmax, ymax
-
-
 if __name__ == "__main__":
+    set_gdal_config("GDAL_CACHEMAX", 128 * 1024**2)
+
     # Inputs
-    regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
-    classes_nc: str = snakemake.input.classes  # type: ignore[name-defined]
+    cell_mapping_path: str = snakemake.input.cell_mapping  # type: ignore[name-defined]
     # Suitability/area inputs as lists of file paths
     sr_files: list[str] = list(snakemake.input.sr)  # type: ignore[attr-defined]
     si_files: list[str] = list(snakemake.input.si)  # type: ignore[attr-defined]
@@ -93,9 +87,7 @@ if __name__ == "__main__":
 
     irrigated_area_source: str = snakemake.params.irrigated_area_source  # type: ignore[name-defined]
 
-    # Load classes
-    ds = xr.load_dataset(classes_nc)
-    classes = ds["resource_class"].values.astype(np.int16)
+    cell_mapping = load_cell_mapping(cell_mapping_path)
 
     # Reference grid parameters from a suitability raster (rainfed)
     # Use first rainfed suitability file as reference
@@ -106,17 +98,9 @@ if __name__ == "__main__":
         height, width = sr0.shape
         transform = src0.transform
         crs = src0.crs
-        xmin, ymin, xmax, ymax = raster_bounds(transform, width, height)
-        crs_wkt = crs.to_wkt() if crs else None
         cell_area_rows = calculate_all_cell_areas(src0, repeat=False)
     finally:
         src0.close()
-
-    # Regions
-    regions_gdf = gpd.read_file(regions_path)
-    if regions_gdf.crs and crs and regions_gdf.crs != crs:
-        regions_gdf = regions_gdf.to_crs(crs)
-    regions_for_extract = regions_gdf.reset_index()
 
     # Cell areas
     cell_area_rows = cell_area_rows.astype(np.float32, copy=False)
@@ -151,47 +135,14 @@ if __name__ == "__main__":
     area_r_raw = sr_max
 
     def aggregate_area(area: np.ndarray, ws: str) -> pd.DataFrame:
-        out = []
-        valid_mask = classes >= 0
-        if not np.any(valid_mask):
-            return pd.DataFrame(
-                columns=["region", "resource_class", "water_supply", "area_ha"]
-            )
-        class_ids = np.unique(classes[valid_mask])
-        work_arr = np.empty_like(area, dtype=np.float32)
-        for cls in class_ids:
-            mask = classes == cls
-            if not np.any(mask):
-                continue
-            work_arr.fill(np.nan)
-            work_arr[mask] = area[mask]
-            a_src = NumPyRasterSource(
-                work_arr,
-                xmin=xmin,
-                ymin=ymin,
-                xmax=xmax,
-                ymax=ymax,
-                nodata=np.nan,
-                srs_wkt=crs_wkt,
-            )
-            a_stats = exact_extract(
-                a_src,
-                regions_for_extract,
-                ["sum"],
-                include_cols=["region"],
-                output="pandas",
-            )
-            if a_stats.empty:
-                continue
-            a_stats = a_stats.rename(columns={"sum": "area_ha"})
-            a_stats["resource_class"] = cls
-            a_stats["water_supply"] = ws
-            out.append(a_stats)
-        if not out:
-            return pd.DataFrame(
-                columns=["region", "resource_class", "water_supply", "area_ha"]
-            )
-        return pd.concat(out, ignore_index=True)
+        area_ha = weighted_sum_by_group(area, cell_mapping)
+        index = pd.MultiIndex.from_product(
+            [cell_mapping.regions, range(cell_mapping.n_classes)],
+            names=["region", "resource_class"],
+        )
+        result = pd.DataFrame({"area_ha": area_ha}, index=index).reset_index()
+        result["water_supply"] = ws
+        return result
 
     if irrigated_area_source == "potential":
         area_i_raw = max_suitability(si_files)
@@ -211,9 +162,11 @@ if __name__ == "__main__":
     # rainfed gets the remainder. This keeps the model's land budget faithful
     # to the underlying physical cell area regardless of how the two
     # suitability rasters overlap.
-    area_i = np.minimum(area_i_raw, area_r_raw)
-    area_r = np.maximum(area_r_raw - area_i, 0.0)
-    del area_i_raw, area_r_raw
+    np.minimum(area_i_raw, area_r_raw, out=area_i_raw)
+    np.subtract(area_r_raw, area_i_raw, out=area_r_raw)
+    np.maximum(area_r_raw, 0.0, out=area_r_raw)
+    area_i = area_i_raw
+    area_r = area_r_raw
 
     df_r = aggregate_area(area_r, "r")
     del area_r

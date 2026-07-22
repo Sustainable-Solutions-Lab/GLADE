@@ -636,8 +636,8 @@ rule derive_mirca_multicropping:
     params:
         source_year=MIRCA_MULTICROPPING_YEAR,
     resources:
-        runtime="15m",
-        mem_mb=8000,
+        runtime="2m",
+        mem_mb=3000,
     log:
         "<logs>/{name}/derive_mirca_multicropping.log",
     benchmark:
@@ -671,8 +671,7 @@ def multi_cropping_inputs(_wildcards):
         "actual_yield" if config["validation"]["use_actual_yields"] else "yield"
     )
     inputs = {
-        "classes": "<processing>/{name}/resource_classes.nc",
-        "regions": "<processing>/{name}/regions.geojson",
+        "cell_mapping": "<processing>/{name}/region_class_cell_mapping.npz",
         "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
         "combinations": multicropping_combinations_yaml(),
     }
@@ -705,7 +704,7 @@ rule build_multi_cropping:
         "prep"
     resources:
         runtime="2m",
-        mem_mb=5500,
+        mem_mb=2500,
     log:
         "<logs>/{name}/build_multi_cropping.log",
     benchmark:
@@ -737,15 +736,14 @@ rule build_grassland_yields:
 rule build_luicube_grassland_yields:
     input:
         luicube="<processing>/shared/luc/luicube_grassland.nc",
-        classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
+        cell_mapping="<processing>/{name}/region_class_cell_mapping.npz",
     output:
         "<processing>/{name}/luicube_grassland_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=2600,
+        mem_mb=1000,
     log:
         "<logs>/{name}/build_luicube_grassland_yields.log",
     benchmark:

@@ -21,11 +21,13 @@ independently. The resulting physical bundle areas are aggregated directly to
 the active configuration's regions and resource classes.
 """
 
-from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from affine import Affine
+from exactextract import exact_extract
+from exactextract.raster import NumPyRasterSource
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -33,11 +35,7 @@ import rasterio
 from rasterio.crs import CRS
 import xarray as xr
 
-from workflow.scripts.build_multi_cropping import (
-    WETLAND_RICE_CROPS,
-    ZONE_CAPABILITIES,
-    region_coverage_entries,
-)
+from workflow.scripts.build_multi_cropping import WETLAND_RICE_CROPS, ZONE_CAPABILITIES
 from workflow.scripts.multi_cropping_combinations import load_catalog_combinations
 from workflow.scripts.raster_utils import raster_bounds
 
@@ -79,13 +77,17 @@ def _assert_grid(actual: GridSpec, expected: GridSpec, label: str) -> None:
         )
 
 
-def load_tif(path: str, expected_grid: GridSpec | None = None) -> np.ndarray:
-    """Load a GeoTIFF as float64 and validate its complete grid identity."""
+def load_tif(
+    path: str,
+    expected_grid: GridSpec | None = None,
+    dtype: np.dtype = np.dtype(np.float64),
+) -> np.ndarray:
+    """Load a GeoTIFF and validate its complete grid identity."""
     with rasterio.open(path) as src:
         grid = _grid_from_raster(src, path)
         if expected_grid is not None:
             _assert_grid(grid, expected_grid, path)
-        arr = src.read(1).astype(np.float64)
+        arr = src.read(1).astype(dtype)
         nodata = src.nodata
     if nodata is not None:
         arr[arr == nodata] = 0.0
@@ -192,15 +194,15 @@ def candidate_capacity(
         rice2 = rice_support[ws]
         rice3 = rice_support[f"{ws}3"]
         if n_cycles == 2:
-            area = np.clip(rice2 - rice3, 0.0, None)
+            area = np.clip(np.subtract(rice2, rice3, dtype=np.float64), 0.0, None)
         elif n_cycles == 3:
-            area = rice3.copy()
+            area = rice3.astype(np.float64)
         else:
             raise ValueError(f"Unsupported repeated-rice cycle count: {n_cycles}")
         area[~zmask] = 0.0
         return area
 
-    area = crop_area[(crops[0], ws)].copy()
+    area = crop_area[(crops[0], ws)].astype(np.float64)
     observed = area > 0
     for crop in crops[1:]:
         support = crop_area[(crop, ws)]
@@ -240,31 +242,31 @@ def allocate(
     if not capacities:
         return [], extra_cycle_area.copy()
 
-    total_physical = np.zeros_like(extra_cycle_area, dtype=np.float64)
-    total_extra = np.zeros_like(extra_cycle_area, dtype=np.float64)
-    required_by_crop = {
-        crop: np.zeros_like(extra_cycle_area, dtype=np.float64)
-        for crops in crop_sequences
-        for crop in crops
-    }
+    total = np.zeros_like(extra_cycle_area, dtype=np.float64)
     for capacity, crops in zip(capacities, crop_sequences, strict=True):
-        total_physical += capacity
-        total_extra += (len(crops) - 1) * capacity
-        for crop, multiplicity in Counter(crops).items():
-            required_by_crop[crop] += multiplicity * capacity
+        total += (len(crops) - 1) * capacity
 
     scale = np.ones_like(extra_cycle_area, dtype=np.float64)
-    np.minimum(scale, _bounded_ratio(extra_cycle_area, total_extra), out=scale)
-    np.minimum(scale, _bounded_ratio(footprint_area, total_physical), out=scale)
-    for crop, required in required_by_crop.items():
-        np.minimum(scale, _bounded_ratio(crop_support[crop], required), out=scale)
+    np.minimum(scale, _bounded_ratio(extra_cycle_area, total), out=scale)
+    total.fill(0.0)
+    for capacity in capacities:
+        total += capacity
+    np.minimum(scale, _bounded_ratio(footprint_area, total), out=scale)
+
+    for crop in dict.fromkeys(crop for crops in crop_sequences for crop in crops):
+        total.fill(0.0)
+        for capacity, crops in zip(capacities, crop_sequences, strict=True):
+            multiplicity = crops.count(crop)
+            if multiplicity:
+                total += multiplicity * capacity
+        np.minimum(scale, _bounded_ratio(crop_support[crop], total), out=scale)
 
     areas: list[np.ndarray] = []
     allocated_extra = np.zeros_like(extra_cycle_area, dtype=np.float64)
     for capacity, crops in zip(capacities, crop_sequences, strict=True):
-        area = capacity * scale
-        areas.append(area)
-        allocated_extra += (len(crops) - 1) * area
+        np.multiply(capacity, scale, out=capacity)
+        areas.append(capacity)
+        allocated_extra += (len(crops) - 1) * capacity
     residual = np.clip(extra_cycle_area - allocated_extra, 0.0, None)
     return areas, residual
 
@@ -277,6 +279,7 @@ def run_derivation(
     rice_support: dict[str, np.ndarray],
     combos: list[dict],
     harvested_totals: dict[str, np.ndarray] | None = None,
+    area_sink: Callable[[tuple[str, str], np.ndarray], None] | None = None,
 ) -> tuple[dict[tuple[str, str], np.ndarray], np.ndarray, pd.DataFrame]:
     """Run independent rainfed and irrigated baseline attribution."""
     if harvested_totals is None:
@@ -314,9 +317,13 @@ def run_derivation(
         )
         residual_total += residual
 
+        area = None
         for combo, area in zip(ws_combos, areas, strict=True):
             key = (combo["name"], ws)
-            area_rasters[key] = area
+            if area_sink is None:
+                area_rasters[key] = area
+            else:
+                area_sink(key, area)
             n_cycles = len(combo["crops"])
             records.append(
                 {
@@ -329,6 +336,9 @@ def run_derivation(
                     "system_residual_area_mha": float(residual.sum()) / 1e6,
                 }
             )
+        if area_sink is not None:
+            area = None
+            del areas
 
     return area_rasters, residual_total, pd.DataFrame.from_records(records)
 
@@ -372,17 +382,28 @@ def _load_inputs(
     totals = {mws: np.zeros(grid.shape, dtype=np.float64) for mws in ("ir", "rf")}
     for row in mapping.itertuples():
         for mws in ("ir", "rf"):
-            arr = load_tif(inp[_annual_key(row.mirca_crop, mws)], grid)
+            arr = load_tif(
+                inp[_annual_key(row.mirca_crop, mws)], grid, np.dtype(np.float32)
+            )
             totals[mws] += arr
             if row.mirca_crop in mirca_to_glade:
                 annual[(row.mirca_crop, mws)] = arr
 
-    footprint = {mws: load_tif(inp[f"footprint_{mws}"], grid) for mws in ("ir", "rf")}
-    zone = {ws: load_tif(inp[f"zone_{ws}"], grid) for ws in ("i", "r")}
+    footprint = {
+        mws: load_tif(inp[f"footprint_{mws}"], grid, np.dtype(np.float32))
+        for mws in ("ir", "rf")
+    }
+    zone = {
+        ws: load_tif(inp[f"zone_{ws}"], grid, np.dtype(np.int16)) for ws in ("i", "r")
+    }
     rice_support: dict[str, np.ndarray] = {}
     for gws, mws in {"i": "ir", "r": "rf"}.items():
-        rice_support[gws] = load_subcrop_maxmonth(inp[f"rice2_{mws}"], grid)
-        rice_support[f"{gws}3"] = load_subcrop_maxmonth(inp[f"rice3_{mws}"], grid)
+        rice_support[gws] = load_subcrop_maxmonth(inp[f"rice2_{mws}"], grid).astype(
+            np.float32
+        )
+        rice_support[f"{gws}3"] = load_subcrop_maxmonth(
+            inp[f"rice3_{mws}"], grid
+        ).astype(np.float32)
     return annual, totals, footprint, zone, rice_support
 
 
@@ -411,6 +432,114 @@ def _load_resource_classes(path: str, grid: GridSpec) -> np.ndarray:
     return labels
 
 
+def region_coverage_entries(
+    regions_gdf: gpd.GeoDataFrame,
+    grid: GridSpec,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return exact region/cell coverage entries for the MIRCA grid."""
+    height, width = grid.shape
+    xmin, ymin, xmax, ymax = raster_bounds(grid.transform, width, height)
+    source = NumPyRasterSource(
+        np.zeros(grid.shape, dtype=np.float64),
+        xmin=xmin,
+        ymin=ymin,
+        xmax=xmax,
+        ymax=ymax,
+        nodata=np.nan,
+        srs_wkt=grid.crs.to_wkt(),
+    )
+    result = exact_extract(
+        source,
+        regions_gdf,
+        ["cell_id", "coverage"],
+        include_cols=["region"],
+        output="pandas",
+    )
+    lengths = result["cell_id"].map(len).to_numpy()
+    rows = np.repeat(np.arange(len(result)), lengths)
+    cells = np.concatenate(result["cell_id"].to_numpy()).astype(np.int64)
+    fractions = np.concatenate(result["coverage"].to_numpy()).astype(np.float64)
+    return result["region"].to_numpy(), rows, cells, fractions
+
+
+@dataclass
+class BaselineAggregator:
+    """Accumulate exact region/class sums without retaining full rasters."""
+
+    region_names: np.ndarray
+    rows: np.ndarray
+    cells: np.ndarray
+    fractions: np.ndarray
+    class_at_entry: np.ndarray
+    valid_classes: list[int]
+    records: list[pd.DataFrame] = field(default_factory=list)
+
+    @classmethod
+    def create(
+        cls,
+        class_labels: np.ndarray,
+        regions_gdf: gpd.GeoDataFrame,
+        grid: GridSpec,
+    ) -> "BaselineAggregator":
+        regions = regions_gdf
+        if regions.crs is None:
+            raise ValueError("regions.geojson is missing CRS information")
+        if regions.crs != grid.crs:
+            regions = regions.to_crs(grid.crs)
+        regions_for_extract = regions.reset_index()
+        if "region" not in regions_for_extract:
+            raise ValueError("regions.geojson must provide a 'region' index or column")
+
+        region_names, rows, cells, fractions = region_coverage_entries(
+            regions_for_extract, grid
+        )
+        valid_classes = sorted(
+            int(value)
+            for value in np.unique(class_labels[np.isfinite(class_labels)])
+            if int(value) >= 0
+        )
+        return cls(
+            region_names,
+            rows,
+            cells,
+            fractions,
+            class_labels.ravel()[cells],
+            valid_classes,
+        )
+
+    def add(self, key: tuple[str, str], area: np.ndarray) -> None:
+        name, ws = key
+        values = area.ravel()[self.cells] * self.fractions
+        for resource_class in self.valid_classes:
+            selected = self.class_at_entry == resource_class
+            sums = np.bincount(
+                self.rows[selected],
+                weights=values[selected],
+                minlength=len(self.region_names),
+            )
+            positive = sums > 0
+            if positive.any():
+                self.records.append(
+                    pd.DataFrame(
+                        {
+                            "combination": name,
+                            "region": self.region_names[positive],
+                            "resource_class": resource_class,
+                            "water_supply": ws,
+                            "baseline_area_ha": sums[positive],
+                        }
+                    )
+                )
+
+    def result(self) -> pd.DataFrame:
+        if not self.records:
+            return pd.DataFrame(columns=BASELINE_COLUMNS)
+        return pd.concat(self.records, ignore_index=True)[BASELINE_COLUMNS].sort_values(
+            ["combination", "water_supply", "region", "resource_class"],
+            ignore_index=True,
+        )
+
+
 def aggregate_baseline(
     area_rasters: dict[tuple[str, str], np.ndarray],
     class_labels: np.ndarray,
@@ -418,59 +547,10 @@ def aggregate_baseline(
     grid: GridSpec,
 ) -> pd.DataFrame:
     """Aggregate physical bundle areas to region and resource class."""
-    regions = regions_gdf
-    if regions.crs is None:
-        raise ValueError("regions.geojson is missing CRS information")
-    if regions.crs != grid.crs:
-        regions = regions.to_crs(grid.crs)
-    regions_for_extract = regions.reset_index()
-    if "region" not in regions_for_extract:
-        raise ValueError("regions.geojson must provide a 'region' index or column")
-
-    height, width = grid.shape
-    xmin, ymin, xmax, ymax = raster_bounds(grid.transform, width, height)
-    region_names, rows, cells, fractions = region_coverage_entries(
-        regions_for_extract,
-        xmin,
-        ymin,
-        xmax,
-        ymax,
-        grid.crs.to_wkt(),
-        grid.shape,
-    )
-    class_at_entry = class_labels.ravel()[cells]
-    valid_classes = sorted(
-        int(value)
-        for value in np.unique(class_labels[np.isfinite(class_labels)])
-        if int(value) >= 0
-    )
-    records: list[pd.DataFrame] = []
-    for (name, ws), area in area_rasters.items():
-        values = area.ravel()[cells] * fractions
-        for resource_class in valid_classes:
-            selected = class_at_entry == resource_class
-            sums = np.bincount(
-                rows[selected], weights=values[selected], minlength=len(region_names)
-            )
-            positive = sums > 0
-            if positive.any():
-                records.append(
-                    pd.DataFrame(
-                        {
-                            "combination": name,
-                            "region": region_names[positive],
-                            "resource_class": resource_class,
-                            "water_supply": ws,
-                            "baseline_area_ha": sums[positive],
-                        }
-                    )
-                )
-    if not records:
-        return pd.DataFrame(columns=BASELINE_COLUMNS)
-    return pd.concat(records, ignore_index=True)[BASELINE_COLUMNS].sort_values(
-        ["combination", "water_supply", "region", "resource_class"],
-        ignore_index=True,
-    )
+    aggregator = BaselineAggregator.create(class_labels, regions_gdf, grid)
+    for key, area in area_rasters.items():
+        aggregator.add(key, area)
+    return aggregator.result()
 
 
 def main() -> None:
@@ -504,7 +584,10 @@ def main() -> None:
         for name, entry in catalog.items()
         for ws in entry["water_supplies"]
     ]
-    areas, residual, stats = run_derivation(
+    classes = _load_resource_classes(inp["classes"], grid)
+    regions = gpd.read_file(inp["regions"])
+    aggregator = BaselineAggregator.create(classes, regions, grid)
+    _areas, residual, stats = run_derivation(
         annual,
         footprint,
         crop_area,
@@ -512,11 +595,9 @@ def main() -> None:
         rice_support,
         combos,
         harvested_totals=totals,
+        area_sink=aggregator.add,
     )
-
-    classes = _load_resource_classes(inp["classes"], grid)
-    regions = gpd.read_file(inp["regions"])
-    baseline = aggregate_baseline(areas, classes, regions, grid)
+    baseline = aggregator.result()
 
     baseline_path = Path(snakemake.output.baseline)  # type: ignore[name-defined]
     residual_path = Path(snakemake.output.residual)  # type: ignore[name-defined]

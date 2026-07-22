@@ -143,81 +143,20 @@ def aggregate_gridded_to_regions(
 
 
 def load_crop_growing_seasons(crop_files: Iterable[str]) -> pd.DataFrame:
-    """Load and aggregate crop growing seasons from yield files.
-
-    This is a copy of the function from build_region_water_availability.py
-    to ensure consistency.
-    """
-    records = []
-    for path_str in crop_files:
-        path = Path(path_str)
-        stem = path.stem
-        if "_" not in stem:
-            continue
-        crop, water_supply = stem.split("_", 1)
-
-        df = pd.read_csv(path)
-
-        pivot = (
-            df.pivot(
-                index=["region", "resource_class"], columns="variable", values="value"
-            )
-            .rename_axis(columns=None)
-            .reset_index()
-        )
-
-        # CROPGRIDS-backed crops (config["cropgrids_crops"]) don't carry
-        # GAEZ growing-season rasters and contribute no irrigation demand
-        # (they're rainfed-only). Skip them rather than dropna-erroring.
-        required = {
-            "suitable_area",
-            "growing_season_start_day",
-            "growing_season_length_days",
-        }
-        if not required.issubset(pivot.columns):
-            continue
-
-        pivot = pivot.dropna(
-            subset=[
-                "region",
-                "suitable_area",
-                "growing_season_start_day",
-                "growing_season_length_days",
-            ]
-        )
-        pivot = pivot[pivot["suitable_area"] > 0]
-        if pivot.empty:
-            continue
-
-        pivot["resource_class"] = pivot["resource_class"].astype(int)
-        for column in [
-            "suitable_area",
-            "growing_season_start_day",
-            "growing_season_length_days",
-        ]:
-            pivot[column] = pd.to_numeric(pivot[column], errors="coerce")
-
-        grouped = pivot.groupby("region")
-        for region, group in grouped:
-            weight = group["suitable_area"].sum()
-            if weight <= 0:
-                continue
-            start = (
-                group["growing_season_start_day"] * group["suitable_area"]
-            ).sum() / weight
-            length = (
-                group["growing_season_length_days"] * group["suitable_area"]
-            ).sum() / weight
-            records.append(
-                {
-                    "region": region,
-                    "crop": crop,
-                    "water_supply": water_supply,
-                    "total_area": weight,
-                    "growing_season_start_day": start,
-                    "growing_season_length_days": length,
-                }
-            )
+    """Load area-weighted crop growing seasons from yield files."""
+    crop_files = list(crop_files)
+    irrigated_files = [path for path in crop_files if Path(path).stem.endswith("_i")]
+    records = [
+        record
+        for path in irrigated_files
+        for record in _load_crop_growing_season_file(path)
+    ]
+    if not records:
+        records = [
+            record
+            for path in crop_files
+            for record in _load_crop_growing_season_file(path)
+        ]
     if not records:
         return pd.DataFrame(
             columns=[
@@ -230,6 +169,71 @@ def load_crop_growing_seasons(crop_files: Iterable[str]) -> pd.DataFrame:
             ]
         )
     return pd.DataFrame(records)
+
+
+def _load_crop_growing_season_file(path_str: str) -> list[dict]:
+    """Load area-weighted growing seasons from one crop-yield file."""
+    path = Path(path_str)
+    stem = path.stem
+    if "_" not in stem:
+        return []
+    crop, water_supply = stem.split("_", 1)
+
+    required = {
+        "suitable_area",
+        "growing_season_start_day",
+        "growing_season_length_days",
+    }
+    df = pd.read_csv(
+        path,
+        usecols=["region", "resource_class", "variable", "value"],
+    )
+    df = df[df["variable"].isin(required)]
+    if not required.issubset(df["variable"].unique()):
+        return []
+
+    pivot = (
+        df.pivot(index=["region", "resource_class"], columns="variable", values="value")
+        .rename_axis(columns=None)
+        .reset_index()
+    )
+    pivot = pivot.dropna(
+        subset=[
+            "region",
+            "suitable_area",
+            "growing_season_start_day",
+            "growing_season_length_days",
+        ]
+    )
+    pivot = pivot[pivot["suitable_area"] > 0]
+    if pivot.empty:
+        return []
+
+    regions = pivot["region"].to_numpy()
+    area = pivot["suitable_area"].to_numpy()
+    start = pivot["growing_season_start_day"].to_numpy()
+    length = pivot["growing_season_length_days"].to_numpy()
+    group_starts = np.flatnonzero(np.r_[True, regions[1:] != regions[:-1]])
+    group_ends = np.r_[group_starts[1:], len(regions)]
+
+    records = []
+    for first, last in zip(group_starts, group_ends, strict=True):
+        weight = area[first:last].sum()
+        records.append(
+            {
+                "region": regions[first],
+                "crop": crop,
+                "water_supply": water_supply,
+                "total_area": weight,
+                "growing_season_start_day": (start[first:last] * area[first:last]).sum()
+                / weight,
+                "growing_season_length_days": (
+                    length[first:last] * area[first:last]
+                ).sum()
+                / weight,
+            }
+        )
+    return records
 
 
 def compute_region_growing_water(
@@ -277,14 +281,14 @@ def compute_region_growing_water(
     }
     region_total_area = dict.fromkeys(crop_seasons["region"].unique(), 0.0)
 
-    for _, row in irrigated.iterrows():
-        region = row["region"]
+    for row in irrigated.itertuples(index=False):
+        region = row.region
         overlaps = compute_month_overlaps(
-            row["growing_season_start_day"], row["growing_season_length_days"]
+            row.growing_season_start_day, row.growing_season_length_days
         )
         if overlaps.sum() <= 0:
             continue
-        area = row["total_area"]
+        area = row.total_area
         region_total_area[region] = region_total_area.get(region, 0.0) + area
         fraction = overlaps / MONTH_LENGTHS
         region_month_demand[region] = (
@@ -386,8 +390,6 @@ def process_huang_irrigation(
     regions_gdf = gpd.read_file(regions_path)[["region", "geometry"]]
     regions_list = regions_gdf["region"].tolist()
 
-    monthly_records = []
-
     lon_unique = np.sort(np.unique(lon.astype(float)))
     lat_unique = np.sort(np.unique(lat.astype(float)))
     lon_diffs = np.diff(lon_unique)
@@ -421,6 +423,7 @@ def process_huang_irrigation(
     # The dataset spans 1971-2010, with monthly data = 480 time steps
     year_start_idx = (reference_year - 1971) * 12
 
+    monthly_rasters = []
     for month in range(1, 13):
         time_idx = year_start_idx + month - 1
         monthly_values = np.asarray(data.isel({time_dim: time_idx}).values, dtype=float)
@@ -431,25 +434,36 @@ def process_huang_irrigation(
         # before aggregating; a coverage-weighted sum of a depth is meaningless.
         monthly_volume_m3 = monthly_data * MM_TO_M * cell_area_m2
 
-        # Aggregate to regions (coverage-weighted sum of per-cell volumes)
-        result = aggregate_gridded_to_regions(
-            monthly_volume_m3, lon_values, lat_values, regions_gdf
+        monthly_rasters.append(
+            NumPyRasterSource(
+                monthly_volume_m3,
+                xmin=lon_min - lon_res / 2,
+                ymin=lat_min - lat_res / 2,
+                xmax=lon_max + lon_res / 2,
+                ymax=lat_max + lat_res / 2,
+                nodata=np.nan,
+                name=f"month_{month}",
+                srs_wkt='GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]',
+            )
         )
 
-        for _, row in result.iterrows():
-            water_m3 = float(row["value"])
-            monthly_records.append(
-                {
-                    "region": row["region"],
-                    "month": month,
-                    "water_available_m3": water_m3,
-                }
-            )
+    result = exact_extract(
+        monthly_rasters,
+        regions_gdf.reset_index(),
+        ["sum"],
+        include_cols=["region"],
+        output="pandas",
+    )
 
     ds.close()
 
     # Build monthly dataframe
-    monthly_df = pd.DataFrame(monthly_records)
+    monthly_df = result.melt(
+        id_vars="region", var_name="month", value_name="water_available_m3"
+    )
+    monthly_df["month"] = (
+        monthly_df["month"].str.removesuffix("_sum").str[6:].astype(int)
+    )
     monthly_df = monthly_df.sort_values(["region", "month"]).reset_index(drop=True)
 
     # Load crop growing seasons and compute growing season water
