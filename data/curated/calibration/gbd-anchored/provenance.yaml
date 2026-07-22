@@ -4,12 +4,12 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/gsa.yaml
-generated_at: '2026-07-22T00:59:36+00:00'
-git_commit: 548ef138989c4a0ed28a90adeb0e4626b044a8ed
+generated_at: '2026-07-22T19:57:11+00:00'
+git_commit: 81a69806335b9eeba703c84240982fd8ba8d131d
 source: gbd-anchored
 structural_config:
   aggregation.irrigated_area_source: current
-  aggregation.regions.allow_cross_border: false
+  aggregation.regions.basin_scarcity_weight: 2.0
   aggregation.regions.method: kmeans
   aggregation.regions.target_count: 750
   aggregation.resource_class_quantiles:
@@ -991,14 +991,27 @@ structural_config:
   numerics.min_grassland_yield_t_per_ha: 0.05
   numerics.min_land_area_ha: 100
   numerics.min_link_area_mha: 1.0e-06
+  numerics.min_water_capacity_mm3: 1.0e-06
   numerics.min_water_requirement_m3_per_ha: 0.1
   optimal_taxes.enabled: false
   residues.max_feed_fraction: 0.3
   residues.max_feed_fraction_by_region.Asia: 0.7
   residues.max_feed_fraction_by_region.Southern Asia: 0.85
   residues.max_feed_fraction_by_region.Sub-Saharan Africa: 0.7
-  water.huang_reference_year: 2010
-  water.supply_scenario: current_use
+  water.data.availability: aware
+  water.data.groundwater_trend_end: 2019
+  water.data.groundwater_trend_start: 2000
+  water.data.huang_reference_year: 2010
+  water.data.surface_reference_end: 2019
+  water.data.surface_reference_start: 1990
+  water.irrigation.consumed_fraction: 0.58
+  water.irrigation.eta_max: 5.0
+  water.irrigation.eta_min: 0.2
+  water.supply.groundwater: true
+  water.supply.groundwater_ceiling_factor: 3.0
+  water.supply.pumping_cost_usd_per_m3: 0.04
+  water.supply.scarcity_tiers: false
+  water.temporal_resolution: 1
   weight_conversion.carcass_to_fresh.meat-cattle: 0.67
   weight_conversion.carcass_to_fresh.meat-chicken: 0.6
   weight_conversion.carcass_to_fresh.meat-pig: 0.73
