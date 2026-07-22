@@ -384,28 +384,29 @@ def cluster_regions(
     dissolved["country"] = dissolved["_cluster"].map(rep_country)
     dissolved = dissolved.set_index("region").drop(columns="_cluster")
 
-    # Snap to the GeoJSON writer's coordinate grid, then repair. Order matters.
+    # Repair, then snap to the GeoJSON writer's coordinate grid. Order matters.
     # The raw dissolve leaves near-degenerate slivers that are valid in memory
     # but tip into self-intersection once the writer truncates coordinates to 7
     # decimals, so an in-memory validity check passes while the file on disk is
-    # invalid. Snapping first makes the in-memory geometry exactly what gets
-    # written, so repairing it afterwards actually holds. This matters because
-    # exactextract calls into native code that *segfaults* on invalid geometry
-    # rather than raising -- one bad region kills an unrelated downstream rule
-    # with an empty log and no traceback.
-    # buffer(0) first: set_precision raises on genuinely invalid input rather
-    # than repairing it. Then snap, then repair again, since snapping can itself
-    # introduce self-intersections.
+    # invalid. Snapping makes the in-memory geometry exactly what gets written,
+    # and set_precision's valid_output mode guarantees the snapped result is
+    # valid -- but it raises on genuinely invalid input, hence buffer(0) first.
+    # This matters because exactextract calls into native code that *segfaults*
+    # on invalid geometry rather than raising -- one bad region kills an
+    # unrelated downstream rule with an empty log and no traceback.
     repaired = dissolved.geometry.buffer(0)
     snapped = shapely.set_precision(repaired.values, GEOJSON_PRECISION)
     dissolved["geometry"] = gpd.GeoSeries(
         snapped, index=dissolved.index, crs=dissolved.crs
-    ).buffer(0)
-    still_bad = ~dissolved.geometry.is_valid
+    )
+    # Empty geometries are "valid", but a region collapsed to nothing by the
+    # repair or snap is just as fatal downstream as an invalid one.
+    still_bad = ~dissolved.geometry.is_valid | dissolved.geometry.is_empty
     if still_bad.any():
         raise ValueError(
-            f"{int(still_bad.sum())} region geometries are invalid after "
-            "normalisation: " + ", ".join(map(str, dissolved.index[still_bad][:5]))
+            f"{int(still_bad.sum())} region geometries are invalid or empty "
+            "after normalisation: "
+            + ", ".join(map(str, dissolved.index[still_bad][:5]))
         )
     return dissolved
 
@@ -475,10 +476,10 @@ if __name__ == "__main__":
     # The written file is what every downstream raster aggregation reads, so
     # validate it rather than the in-memory frame.
     written = gpd.read_file(snakemake.output[0])
-    bad = ~written.geometry.is_valid
+    bad = ~written.geometry.is_valid | written.geometry.is_empty
     if bad.any():
         raise ValueError(
-            f"{int(bad.sum())} region geometries are invalid as written to "
-            f"{snakemake.output[0]}; exactextract would segfault on them."
+            f"{int(bad.sum())} region geometries are invalid or empty as written "
+            f"to {snakemake.output[0]}; exactextract would segfault on them."
         )
     logger.info("Wrote %d regions, all geometries valid on disk", len(written))
