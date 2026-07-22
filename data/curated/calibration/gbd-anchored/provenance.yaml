@@ -4,8 +4,8 @@
 # tools/calibrate; do not edit by hand.
 # Licensing: see the annotation in REUSE.toml.
 base_config: config/gsa.yaml
-generated_at: '2026-07-22T19:57:11+00:00'
-git_commit: 81a69806335b9eeba703c84240982fd8ba8d131d
+generated_at: '2026-07-22T21:38:01+00:00'
+git_commit: ac8ebe7e7bcd34da622fb4294165ea98aa4bb063
 source: gbd-anchored
 structural_config:
   aggregation.irrigated_area_source: current
@@ -1007,7 +1007,6 @@ structural_config:
   water.irrigation.consumed_fraction: 0.58
   water.irrigation.eta_max: 5.0
   water.irrigation.eta_min: 0.2
-  water.supply.groundwater: true
   water.supply.groundwater_ceiling_factor: 3.0
   water.supply.pumping_cost_usd_per_m3: 0.04
   water.supply.scarcity_tiers: false

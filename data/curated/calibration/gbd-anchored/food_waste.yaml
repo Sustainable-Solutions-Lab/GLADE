@@ -16,8 +16,8 @@ fruits:
 oil:
   baseline_consumption_mt: 101.94318941038546
   baseline_negative_slack_mt: 0.34906473755836487
-  baseline_positive_slack_mt: 51.10373346695246
-  waste_retention_multiplier: 1.9915244288011165
+  baseline_positive_slack_mt: 51.10373316892924
+  waste_retention_multiplier: 1.9915244172063191
 starchy_vegetable:
   baseline_consumption_mt: 548.2428959218498
   baseline_negative_slack_mt: 0.0
