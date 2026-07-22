@@ -149,11 +149,29 @@ def yield_and_suitability_for_crop(w):
     return inputs
 
 
+rule build_region_class_cell_mapping:
+    input:
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
+    output:
+        mapping="<processing>/{name}/region_class_cell_mapping.npz",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=600,
+    log:
+        "<logs>/{name}/build_region_class_cell_mapping.log",
+    benchmark:
+        "<benchmarks>/{name}/build_region_class_cell_mapping.tsv"
+    script:
+        "../scripts/build_region_class_cell_mapping.py"
+
+
 rule build_crop_yields:
     input:
         unpack(yield_and_suitability_for_crop),
-        classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
+        cell_mapping="<processing>/{name}/region_class_cell_mapping.npz",
         yield_unit_conversions="data/curated/yield_unit_conversions.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
     params:
@@ -168,7 +186,7 @@ rule build_crop_yields:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=1300,
+        mem_mb=700,
     log:
         "<logs>/{name}/build_crop_yields_{crop}_{water_supply}.log",
     benchmark:
@@ -437,7 +455,7 @@ def _harvested_area_inputs(w):
     """Get inputs for build_harvested_area_gaez, including FDD shares when relevant."""
     inputs = {
         "harvested_area_raster": gaez_path("harvested_area", w.water_supply, w.crop),
-        "classes": f"<processing>/{w.name}/resource_classes.nc",
+        "cell_mapping": f"<processing>/{w.name}/region_class_cell_mapping.npz",
         "regions": f"<processing>/{w.name}/regions.geojson",
         "crop_mapping": "data/curated/gaez_crop_code_mapping.csv",
         "faostat_production": f"<processing>/{w.name}/faostat_crop_production.csv",
@@ -481,7 +499,7 @@ rule build_harvested_area_gaez:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=700,
+        mem_mb=400,
     log:
         "<logs>/{name}/build_harvested_area_gaez_{crop}_{water_supply}.log",
     benchmark:

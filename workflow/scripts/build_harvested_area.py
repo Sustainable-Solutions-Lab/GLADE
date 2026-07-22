@@ -7,78 +7,42 @@ SPDX-License-Identifier: GPL-3.0-or-later
 import logging
 from pathlib import Path
 
-from osgeo import gdal, osr
+import geopandas as gpd
+import numpy as np
+import pandas as pd
 
-gdal.UseExceptions()
-osr.UseExceptions()
-
-from exactextract import exact_extract  # noqa: E402
-from exactextract.raster import NumPyRasterSource  # noqa: E402
-import geopandas as gpd  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import xarray as xr  # noqa: E402
-
-from workflow.scripts.harvested_area_shares import (  # noqa: E402
+from workflow.scripts.harvested_area_shares import (
     RES06_HAR_SCALE_TO_HA,
     apply_country_shares,
     load_mapping,
     shares_for_crop,
     shares_from_fdd,
 )
-from workflow.scripts.raster_utils import raster_bounds, read_raster_float  # noqa: E402
+from workflow.scripts.raster_utils import read_raster_float
+from workflow.scripts.region_class_aggregation import (
+    CellMapping,
+    load_cell_mapping,
+    validate_raster_grid,
+    weighted_sum_by_group,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _extract_harvested_area(
     raster: np.ndarray,
-    transform,
-    crs_wkt: str | None,
-    class_labels: np.ndarray,
-    regions: gpd.GeoDataFrame,
+    mapping: CellMapping,
 ) -> pd.DataFrame:
-    xmin, ymin, xmax, ymax = raster_bounds(transform, raster.shape[1], raster.shape[0])
-
-    regions_for_extract = regions.reset_index(drop=True)
-
-    records: list[pd.DataFrame] = []
-    n_classes = (
-        int(np.nanmax(class_labels)) + 1 if np.isfinite(class_labels).any() else 0
+    values = weighted_sum_by_group(raster, mapping)
+    return pd.DataFrame(
+        {
+            "region": np.tile(mapping.regions, mapping.n_classes),
+            "resource_class": np.repeat(
+                np.arange(mapping.n_classes), len(mapping.regions)
+            ),
+            "value": values.reshape(len(mapping.regions), mapping.n_classes).T.ravel(),
+        }
     )
-    for cls in range(n_classes):
-        mask = class_labels == cls
-        if not np.any(mask):
-            continue
-        masked = np.where(mask, raster, np.nan)
-        raster_src = NumPyRasterSource(
-            masked,
-            xmin=xmin,
-            ymin=ymin,
-            xmax=xmax,
-            ymax=ymax,
-            nodata=np.nan,
-            srs_wkt=crs_wkt,
-        )
-        stats = exact_extract(
-            raster_src,
-            regions_for_extract,
-            ["sum"],
-            include_cols=["region"],
-            output="pandas",
-        )
-        if stats.empty:
-            continue
-        stats = stats.rename(columns={"sum": "value"})
-        stats["resource_class"] = cls
-        records.append(stats)
-
-    if not records:
-        return pd.DataFrame(columns=["region", "resource_class", "value"])
-
-    combined = pd.concat(records, ignore_index=True)
-    combined["resource_class"] = combined["resource_class"].astype(int)
-    return combined
 
 
 def _optional_path(value) -> Path:
@@ -144,7 +108,7 @@ def _yield_weighted_residual_addition(
 
 
 if __name__ == "__main__":
-    classes_nc = Path(snakemake.input.classes)  # type: ignore[name-defined]
+    cell_mapping_path = Path(snakemake.input.cell_mapping)  # type: ignore[name-defined]
     raster_path = Path(snakemake.input.harvested_area_raster)  # type: ignore[name-defined]
     regions_path = Path(snakemake.input.regions)  # type: ignore[name-defined]
     mapping_path = Path(snakemake.input.crop_mapping)  # type: ignore[name-defined]
@@ -158,14 +122,12 @@ if __name__ == "__main__":
     output_path = Path(snakemake.output[0])  # type: ignore[name-defined]
     crop = str(snakemake.wildcards.crop)  # type: ignore[name-defined]
 
-    ds = xr.load_dataset(classes_nc)
-    class_labels = ds["resource_class"].values.astype(np.int16)
+    cell_mapping = load_cell_mapping(cell_mapping_path)
 
     harvested_raw, src = read_raster_float(raster_path)
     try:
-        harvested_raw = harvested_raw * RES06_HAR_SCALE_TO_HA
-        transform = src.transform
-        crs_wkt = src.crs.to_wkt() if src.crs else None
+        validate_raster_grid(harvested_raw, src, cell_mapping)
+        harvested_raw *= RES06_HAR_SCALE_TO_HA
     finally:
         src.close()
 
@@ -199,13 +161,7 @@ if __name__ == "__main__":
             non_food_crops=non_food_crops,
         )
 
-    extracted = _extract_harvested_area(
-        harvested_raw,
-        transform,
-        crs_wkt,
-        class_labels,
-        regions,
-    )
+    extracted = _extract_harvested_area(harvested_raw, cell_mapping)
 
     extracted = extracted.merge(regions[["region", "country"]], on="region", how="left")
     extracted = apply_country_shares(extracted, shares_lookup, fallback_share)
