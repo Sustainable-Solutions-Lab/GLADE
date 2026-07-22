@@ -134,7 +134,7 @@ Data Preparation Rules
   * **Purpose**: Observed per-(region, crop) monthly irrigation demand shares, retimed by iterative proportional fitting so region-month totals follow WaterGAP while each crop's annual total and observed season are preserved
 
 **compose_water_supply**
-  * **Input**: The selected availability source's outputs, plus the WaterGAP groundwater bands when ``water.supply.groundwater``
+  * **Input**: The selected availability source's outputs, plus the renewable-groundwater CF bands and consumption anchor for the ``aware`` source
   * **Output**: ``processing/{name}/water/`` -- ``region_water_tiers.csv`` (per-period surface), ``region_groundwater_bands.csv`` (annual per-region groundwater), and the availability tables copied through
   * **Script**: ``workflow/scripts/compose_water_supply.py``
   * **Purpose**: Group months into the model's intra-year periods and finish the supply tables: keep the convex scarcity curve or collapse it to a flat cap, and emit the groundwater bands

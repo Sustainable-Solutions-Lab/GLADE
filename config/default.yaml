@@ -264,23 +264,23 @@ water:
   # at T=1 is an artefact of the resolution, not a finding. Studies about water
   # should raise this (4 is a reasonable seasonality/solve-time compromise).
   temporal_resolution: 1
-  # Structural (build-time) water-supply configuration. The two switches below
-  # are independent: tier resolution and the groundwater split can be varied
-  # separately.
+  # Structural (build-time) water-supply configuration. Groundwater is always
+  # part of the aware supply: additive renewable- and non-renewable-groundwater
+  # bands (annual, per region) on top of the period-bound surface supply, so
+  # mining emerges endogenously wherever surface plus renewable groundwater
+  # fall short. Studies wanting a groundwater-free system can constrain it at
+  # solve time (groundwater_depletion.cap_mm3: 0 caps mining; scarcity pricing
+  # penalises the renewable draw).
   supply:
-    # Convex AWARE scarcity tiers per region-period, so drawing more water costs
-    # more where water is scarcer. False collapses each region-period pool to one
-    # flat cap -- a plain availability constraint, cheaper and sufficient where
-    # water is not the object of study. Scarcity pricing (see water_scarcity)
-    # requires this.
+    # Convex AWARE scarcity tiers per region-period (and renewable-groundwater
+    # bands), so drawing more water costs more where water is scarcer. False
+    # collapses each pool to one flat cap -- a plain availability constraint,
+    # cheaper and sufficient where water is not the object of study. Scarcity
+    # pricing (see water_scarcity) requires this.
     scarcity_tiers: false
-    # Additive renewable- and non-renewable-groundwater bands (annual, per
-    # region) on top of the period-bound surface supply, so mining emerges
-    # endogenously wherever surface plus renewable groundwater fall short.
-    groundwater: true
     # Marginal cost of non-renewable groundwater (USD per m3): a small pumping-
     # energy cost (~100 m lift at ~0.1 USD/kWh) that also orders groundwater last
-    # in the merit order. Only active when groundwater is true.
+    # in the merit order.
     pumping_cost_usd_per_m3: 0.04
     # Non-renewable groundwater ceiling as a multiple of a region's annual
     # agricultural consumption. Generous and non-binding: mining is drawn only to
@@ -335,19 +335,22 @@ water_scarcity:
   pricing_enabled: false
   price: 0                  # Shadow price, USD per m3 world-equivalent
   cap_mm3_world_eq: null    # Epsilon-constraint cap (Mm3 world-eq); null = no cap
-  # CF applied to non-renewable groundwater under scarcity pricing: each mined
-  # m3 is charged nonrenewable_cf * price. AWARE covers renewable water only and
-  # excludes fossil stocks, so this is a bridging weight that prices a mined m3
-  # at the scarcity of the exhausted renewable water it displaces, closing the
-  # otherwise free substitution into fossil groundwater. 100 is AWARE's
-  # demand-exceeds-availability cutoff plus a non-renewability premium. Set null
-  # to leave mining unpriced here, e.g. when groundwater_depletion prices or caps
-  # it separately (combining both pricings is an error).
+  # CF applied to non-renewable groundwater under scarcity pricing or capping:
+  # each mined m3 is charged nonrenewable_cf * price, and counts
+  # nonrenewable_cf-fold against cap_mm3_world_eq (a joint constraint). AWARE
+  # covers renewable water only and excludes fossil stocks, so this is a
+  # bridging weight that prices a mined m3 at the scarcity of the exhausted
+  # renewable water it displaces, closing the otherwise free substitution into
+  # fossil groundwater. 100 is AWARE's demand-exceeds-availability cutoff plus
+  # a non-renewability premium. Set null to leave mining out of both, e.g.
+  # when groundwater_depletion prices or caps it separately (combining both
+  # pricings is an error; a null-cf scarcity cap with mining unconstrained
+  # logs a porosity warning).
   nonrenewable_cf: 100
 
 # --- section: groundwater_depletion ---
 # Solve-time pricing and/or capping of accumulated non-renewable groundwater
-# depletion (Mm3 mined). Active only when water.supply.groundwater is true; both
+# depletion (Mm3 mined). Requires water.data.availability: aware; both
 # default off.
 groundwater_depletion:
   pricing_enabled: false

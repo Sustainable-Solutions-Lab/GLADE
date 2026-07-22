@@ -84,6 +84,7 @@ rule build_region_water_aware:
         basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
         regions="<processing>/{name}/regions.geojson",
         watergap_surface="<processing>/{name}/water/watergap/region_watergap_surface.csv",
+        watergap_groundwater="<processing>/{name}/water/watergap/region_groundwater_depletion.csv",
         watergap_pirruse=_WATERGAP_ISIMIP.format(var="pirruse"),
         watergap_pirrusegw=_WATERGAP_ISIMIP.format(var="pirrusegw"),
         watergap_continentalarea=_WATERGAP_CONTINENTALAREA,
@@ -94,6 +95,7 @@ rule build_region_water_aware:
         monthly_region="<processing>/{name}/water/aware/monthly_region_water.csv",
         region_growing="<processing>/{name}/water/aware/region_growing_season_water.csv",
         tiers="<processing>/{name}/water/aware/region_water_tiers.csv",
+        renewable_gw_tiers="<processing>/{name}/water/aware/region_renewable_gw_tiers.csv",
     group:
         "prep"
     resources:
@@ -133,13 +135,14 @@ rule build_region_water_current_use:
 
 
 # Rule for regional WaterGAP 2.2e (ISIMIP3a) water fields: irrigation surface
-# availability (pirruse - pirrusegw, the cap for the AWARE curve) and the
-# groundwater bands (mined = storage trend; renewable = pirrusegw - mined).
+# availability (pirruse - pirrusegw, the cap for the AWARE curve) and renewable
+# groundwater (pirrusegw minus irrigation's share of the storage-decline trend).
 rule build_region_watergap:
     input:
         groundwstor=_WATERGAP_ISIMIP.format(var="groundwstor"),
         pirruse=_WATERGAP_ISIMIP.format(var="pirruse"),
         pirrusegw=_WATERGAP_ISIMIP.format(var="pirrusegw"),
+        ptotusegw=_WATERGAP_ISIMIP.format(var="ptotusegw"),
         continentalarea=_WATERGAP_CONTINENTALAREA,
         regions="<processing>/{name}/regions.geojson",
     params:
@@ -225,25 +228,24 @@ def water_availability_inputs(w):
 
 
 def water_groundwater_input(w):
-    """Groundwater depletion table and consumption anchor (groundwater only)."""
-    if config["water"]["supply"]["groundwater"]:
+    """Renewable-GW curve and consumption anchor (aware availability only)."""
+    if config["water"]["data"]["availability"] == "aware":
         return {
-            "groundwater": f"<processing>/{w.name}/water/watergap/region_groundwater_depletion.csv",
+            "renewable_gw_tiers": f"<processing>/{w.name}/water/aware/region_renewable_gw_tiers.csv",
             "region_agri": f"<processing>/{w.name}/water/watergap/region_agri_consumption.csv",
         }
     return {}
 
 
 # Compose the scenario-agnostic water-supply tables from the selected
-# availability source: per-period surface tiers (source "renewable") and,
-# with supply.groundwater, the annual per-region groundwater bands.
+# availability source: per-period surface tiers (source "renewable") and, for
+# the aware source, the annual per-region groundwater bands.
 rule compose_water_supply:
     input:
         unpack(water_availability_inputs),
         unpack(water_groundwater_input),
     params:
         scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
-        groundwater=config["water"]["supply"]["groundwater"],
         availability=config["water"]["data"]["availability"],
         temporal_resolution=config["water"]["temporal_resolution"],
         consumed_fraction=config["water"]["irrigation"]["consumed_fraction"],

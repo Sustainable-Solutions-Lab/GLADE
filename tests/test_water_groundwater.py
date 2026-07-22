@@ -132,16 +132,14 @@ def test_monthly_flux_uses_watergap_continental_area(tmp_path):
 # --------------------------------------------------------------------------- #
 # Tier decomposition
 # --------------------------------------------------------------------------- #
-def _groundwater_bands(mined: dict, renewable_gw: dict) -> pd.DataFrame:
-    """Region-indexed band-volume table (the compose groundwater input)."""
-    regions = sorted(set(mined) | set(renewable_gw))
-    return pd.DataFrame(
-        {
-            "mined_mm3": [mined.get(r, 0.0) for r in regions],
-            "renewable_gw_mm3": [renewable_gw.get(r, 0.0) for r in regions],
-        },
-        index=pd.Index(regions, name="region"),
-    )
+def _renewable_gw_tiers(volumes_cfs: dict) -> pd.DataFrame:
+    """Per-region renewable-GW CF bands as build_region_water_aware emits them."""
+    rows = [
+        {"region": region, "tier": tier, "capacity_mm3": cap, "marginal_cf": cf}
+        for region, bands in volumes_cfs.items()
+        for tier, (cap, cf) in enumerate(bands)
+    ]
+    return pd.DataFrame(rows, columns=["region", "tier", "capacity_mm3", "marginal_cf"])
 
 
 def _agri(mm3: dict) -> pd.Series:
@@ -151,21 +149,33 @@ def _agri(mm3: dict) -> pd.Series:
 def test_annual_bands_are_per_region_gw_only():
     """The bands table is annual per-region groundwater only (surface is separate)."""
     tiers = _renewable_tiers()  # r1 surface = 60, r2 surface = 20
-    bands_in = _groundwater_bands({"r1": 25.0, "r2": 100.0}, {"r1": 10.0, "r2": 50.0})
+    gw_tiers = _renewable_gw_tiers(
+        {"r1": [(6.0, 2.0), (4.0, 8.0)], "r2": [(50.0, 30.0)]}
+    )
     agri = _agri({"r1": 40.0, "r2": 12.0})
-    out = build_groundwater_bands(tiers, bands_in, agri, ceiling_factor=3.0)
+    out = build_groundwater_bands(
+        gw_tiers, tiers, agri, ceiling_factor=3.0, scarcity_tiers=True
+    )
 
-    # GW-only, annual (no surface, no period/tier columns): one row per source.
-    assert set(out.columns) == {"region", "source", "capacity_mm3", "marginal_cf"}
+    # GW-only, annual (no surface, no period columns): band-indexed rows.
+    assert set(out.columns) == {
+        "region",
+        "source",
+        "band",
+        "capacity_mm3",
+        "marginal_cf",
+    }
     assert set(out["source"].unique()) == {
         "groundwater_renewable",
         "groundwater_nonrenewable",
     }
 
-    # Renewable groundwater at the full WaterGAP volume (annual, no /T, no clip).
-    renew_gw = out[out.source == "groundwater_renewable"].set_index("region")[
-        "capacity_mm3"
-    ]
+    # Renewable groundwater keeps its own curve bands (annual, no /T, no clip).
+    renew_gw = (
+        out[out.source == "groundwater_renewable"]
+        .groupby("region")["capacity_mm3"]
+        .sum()
+    )
     assert renew_gw["r1"] == pytest.approx(10.0)
     assert renew_gw["r2"] == pytest.approx(50.0)
 
@@ -177,23 +187,38 @@ def test_annual_bands_are_per_region_gw_only():
     assert nonrenew["r2"] == pytest.approx(3.0 * 12.0)
 
 
-def test_annual_bands_merit_cf_and_fallback():
-    """Renewable GW at the scarcest surface CF; non-renewable cf 0; the C=0
-    fallback sizes the ceiling from the region's surface scale."""
+def test_annual_bands_curve_cfs_collapse_and_fallback():
+    """Renewable GW keeps its curve CFs (collapsing to one cf-0 band with tiers
+    off); non-renewable cf 0; the C=0 fallback sizes the ceiling from the
+    region's surface scale."""
     tiers = _renewable_tiers()
-    bands_in = _groundwater_bands({"r1": 25.0, "r2": 0.0}, {"r1": 10.0, "r2": 0.0})
+    gw_tiers = _renewable_gw_tiers({"r1": [(6.0, 2.0), (4.0, 8.0)]})
     # r1 has a consumption anchor; r2 has none (C absent) -> surface fallback.
     agri = _agri({"r1": 40.0})
-    out = build_groundwater_bands(tiers, bands_in, agri, ceiling_factor=3.0)
+    out = build_groundwater_bands(
+        gw_tiers, tiers, agri, ceiling_factor=3.0, scarcity_tiers=True
+    )
 
-    r1 = out[out.region == "r1"].set_index("source")
-    # Renewable GW sits at the region's scarcest surface CF (drawn after surface).
-    assert r1.loc["groundwater_renewable", "marginal_cf"] == pytest.approx(5.0)
-    assert r1.loc["groundwater_nonrenewable", "marginal_cf"] == pytest.approx(0.0)
+    r1_renew = out[(out.region == "r1") & (out.source == "groundwater_renewable")]
+    # The bands carry the AWARE curve slice CFs, not a borrowed surface CF.
+    assert r1_renew.sort_values("band")["marginal_cf"].tolist() == [2.0, 8.0]
+    r1_nonrenew = out[(out.region == "r1") & (out.source == "groundwater_nonrenewable")]
+    assert r1_nonrenew["marginal_cf"].iloc[0] == pytest.approx(0.0)
 
     # r2 has no consumption anchor: ceiling falls back to surface scale (20 * 3).
     r2_nonrenew = out[(out.region == "r2") & (out.source == "groundwater_nonrenewable")]
     assert r2_nonrenew["capacity_mm3"].iloc[0] == pytest.approx(3.0 * 20.0)
+
+    # With scarcity tiers off the renewable bands collapse to one flat cf-0 band.
+    collapsed = build_groundwater_bands(
+        gw_tiers, tiers, agri, ceiling_factor=3.0, scarcity_tiers=False
+    )
+    c1 = collapsed[
+        (collapsed.region == "r1") & (collapsed.source == "groundwater_renewable")
+    ]
+    assert len(c1) == 1
+    assert c1["capacity_mm3"].iloc[0] == pytest.approx(10.0)
+    assert c1["marginal_cf"].iloc[0] == pytest.approx(0.0)
 
 
 def test_collapse_single_flat_cap():

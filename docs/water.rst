@@ -160,9 +160,11 @@ discharge timing strands that delivery in the wet months and overstates
 dry-season mining (globally ~265 km3/yr).
 
 GLADE therefore keeps AWARE's scarcity structure -- the per-basin CF curve --
-but sets surface volume and timing from WaterGAP's monthly climatological
-irrigation surface consumption (:math:`\text{pirruse} - \text{pirrusegw}`,
-ISIMIP3a WaterGAP 2.2e). The builder overlays that 0.5-degree WaterGAP field
+but sets the curve's draw domain from WaterGAP's joint renewable envelope:
+monthly climatological irrigation surface consumption
+(:math:`\text{pirruse} - \text{pirrusegw}`, ISIMIP3a WaterGAP 2.2e) plus the
+annual renewable-groundwater volume, split at each basin's surface fraction
+(see `Source bands`_). The builder overlays the 0.5-degree WaterGAP fields
 directly with every (model-region, AWARE-basin) intersection. Each regional
 total is conserved exactly, but its within-region basin split follows
 WaterGAP's grid-cell delivery rather than AWARE basin area. Where WaterGAP
@@ -303,41 +305,46 @@ window (see :doc:`data_sources`).
 Source bands
 ------------
 
-With ``water.supply.groundwater`` two groundwater ``source`` bands expand the
-supply envelope so that mining emerges endogenously wherever surface falls short
-of demand (it is no longer capped at renewable availability). Unlike surface,
-which is period-bound, **groundwater is an annual per-region resource**: an
-aquifer integrates recharge over the year and can be pumped in any period. Each
-region therefore gets a ``groundwater:{region}`` bus, fed by the two annual bands
-and distributed to every period's water bus by free delivery links, so a dry
-period can draw the whole year's recharge:
+AWARE treats renewable water as **one resource**: its availability is basin
+discharge including baseflow, and CF application is source-agnostic. The model
+therefore builds each basin's CF curve over the *joint renewable envelope* --
+WaterGAP surface delivery plus renewable groundwater -- and splits it at the
+basin's surface fraction. The lower (more abundant) slice is the period-bound
+surface delivery; the upper slice is renewable groundwater, the marginal,
+costlier-to-access renewable source. Two groundwater ``source`` band families
+then expand the supply beyond surface so that mining emerges endogenously
+wherever surface falls short of demand. Unlike surface, which is period-bound,
+**groundwater is an annual per-region resource**: an aquifer integrates
+recharge over the year and can be pumped in any period. Each region therefore
+gets a ``groundwater:{region}`` bus, fed by the annual bands and distributed to
+every period's water bus by free delivery links, so a dry period can draw the
+whole year's recharge:
 
 .. csv-table::
-   :header: source, Meaning, Sizing (annual, per region), Scarcity / impact
+   :header: source, Meaning, Sizing, Scarcity / impact
 
-   ``renewable`` (surface), "Surface + recharged blue water", "That period's convex surface curve (period-bound)", "AWARE CF -> ``impact:water_scarcity``"
-   ``groundwater_renewable``, "Recharged groundwater abstraction", ":math:`\max(\text{pirrusegw} - \text{mined},\ 0)`", "AWARE CF + tally on ``impact:groundwater_renewable``"
-   ``groundwater_nonrenewable``, "Mined (depleting) groundwater", ":math:`\text{ceiling\_factor} \times C` (generous, non-binding)", "Mined volume -> ``impact:groundwater_depletion``"
+   ``renewable`` (surface), "Surface blue water", "That period's convex surface curve (period-bound)", "AWARE CF -> ``impact:water_scarcity``"
+   ``groundwater_renewable``, "Recharged groundwater abstraction", ":math:`\max(\text{pirrusegw} - \text{mined}_{irr},\ 0)` (annual), in CF bands of the joint curve's upper slice", "AWARE CF + tally on ``impact:groundwater_renewable``"
+   ``groundwater_nonrenewable``, "Mined (depleting) groundwater", ":math:`\text{ceiling\_factor} \times C` (annual; generous, non-binding)", "Mined volume -> ``impact:groundwater_depletion``"
 
 ``compose_water_supply.py`` writes the surface tiers (per region-period) to
 ``region_water_tiers.csv`` and the annual groundwater bands (per region) to
-``region_groundwater_bands.csv``. The renewable band is the WaterGAP volume,
-priced at the region's scarcest surface CF so it is drawn after surface but
-before mining. The non-renewable band's capacity is a deliberately generous
-ceiling (``water.supply.groundwater_ceiling_factor`` times annual consumption):
-the volume actually mined is set endogenously by how far surface plus renewable
-groundwater fall short of demand -- the pumping cost keeps the draw minimal, so
-the ceiling itself does not bind. The groundwater sizing fields come from
-WaterGAP 2.2e via ``build_region_watergap.py`` (see :doc:`data_sources`): mining
-is the groundwater-storage decline and renewable groundwater is the recharged
-part of irrigation groundwater consumption (:math:`\text{pirrusegw}`). The
-subtraction crosses sectors -- the storage decline reflects all users, so heavy
-municipal or industrial mining also shrinks the irrigation renewable band (a
-conservative attribution). There is
-no endogenous inter-period surface storage; current reservoir operation enters
+``region_groundwater_bands.csv``. The non-renewable band's capacity is a
+deliberately generous ceiling (``water.supply.groundwater_ceiling_factor``
+times annual consumption): the volume actually mined is set endogenously by how
+far surface plus renewable groundwater fall short of demand -- the pumping cost
+keeps the draw minimal, so the ceiling itself does not bind. The groundwater
+sizing fields come from WaterGAP 2.2e via ``build_region_watergap.py`` (see
+:doc:`data_sources`): the storage decline reflects all users, so irrigation's
+mined volume :math:`\text{mined}_{irr}` is the decline times irrigation's share
+of all-sector potential groundwater consumption
+(:math:`\text{pirrusegw}/\text{ptotusegw}`), and renewable groundwater is the
+recharged remainder of irrigation groundwater consumption. There is no
+endogenous inter-period surface storage; current reservoir operation enters
 through the WaterGAP monthly surface profile, so mining reflects the deficit
-under today's regulation. With ``water.supply.groundwater: false`` there are no
-groundwater bands and the supply is surface only.
+under today's regulation. The ``current_use`` availability source emits no
+groundwater bands: its withdrawal pool already contains the
+groundwater-supplied part of observed use.
 
 Scarcity accounting
 -------------------
@@ -357,12 +364,13 @@ in ``build_region_water_aware.py`` (as the model draws down a basin's pool its
 AMD falls and the CF rises), discretised into tiers, and drawn low-CF-first via
 a negligible merit-order regularizer. At solve time the accumulated scarcity can
 be priced (``water_scarcity.price``) or capped
-(``water_scarcity.cap_mm3_world_eq``). A cap alone is porous when
-``water.supply.groundwater`` is on: ``nonrenewable_cf`` applies only under
-scarcity *pricing*, so with mining neither priced nor capped the LP can meet
-the cap by substituting CF-free mining, deterred only by the pumping cost.
-Combine the cap with a ``groundwater_depletion`` price or cap for a closed
-sweep (the solve logs a warning otherwise).
+(``water_scarcity.cap_mm3_world_eq``). With ``nonrenewable_cf`` set, the cap is
+a *joint* constraint charging each mined m3 ``nonrenewable_cf``-fold against
+it, mirroring how pricing charges mining -- without that term a bare cap would
+be porous (the LP could meet it by substituting CF-free mining, deterred only
+by the pumping cost). With ``nonrenewable_cf: null`` the cap binds the scarcity
+store alone; combine it with a ``groundwater_depletion`` price or cap for a
+closed sweep (the solve logs a porosity warning otherwise).
 
 Groundwater depletion accounting
 --------------------------------
@@ -381,14 +389,15 @@ scarcity pricing alone the CF-free mined band would become the cheapest source
 wherever the scarcity charge exceeds the pumping cost, and "relief" would be
 substitution into fossil groundwater rather than conservation.
 ``water_scarcity.nonrenewable_cf`` therefore charges each mined m3 at
-``nonrenewable_cf * water_scarcity.price``. The default 100 -- AWARE's
+``nonrenewable_cf * water_scarcity.price`` (and counts it
+``nonrenewable_cf``-fold against a scarcity cap). The default 100 -- AWARE's
 demand-exceeds-availability cutoff plus a non-renewability premium -- is a
 precautionary anchor pricing a mined m3 at least at the scarcity of the
 exhausted renewable water it displaces. Set it to ``null`` to study depletion
 as a separate axis via the ``groundwater_depletion`` options (enabling both
 pricings together is an error).
 
-The renewable-groundwater band additionally tallies its drawn volume on
+The renewable-groundwater bands additionally tally their drawn volume on
 ``impact:groundwater_renewable`` (via a ``bus3`` output) purely for reporting
 and as a hook for future policy; it does not affect the baseline solve.
 
@@ -424,12 +433,12 @@ Model components
    Bus, ``water:source``, ``water_source``, "Free global water source"
    Bus, ``water:{region}:p{p}``, ``water``, "Regional consumption pool (per period)"
    Bus, ``water_field:{region}:p{p}``, ``water_field``, "Beneficial/applied water for crops (per period)"
-   Bus, ``groundwater:{region}``, ``groundwater``, "Annual per-region aquifer pool (when supply.groundwater)"
+   Bus, ``groundwater:{region}``, ``groundwater``, "Annual per-region aquifer pool (aware availability)"
    Bus, ``impact:water_scarcity``, ``water_scarcity``, "Accumulated AWARE scarcity"
    Bus, ``impact:groundwater_depletion``, ``groundwater_depletion``, "Accumulated mined volume"
    Bus, ``impact:groundwater_renewable``, ``groundwater_renewable``, "Renewable-GW volume tally"
    Link, ``supply:water:{region}:p{p}:t{n}``, ``water_supply``, "Tiered surface supply (source, CF)"
-   Link, ``supply:groundwater:{region}:{source}``, ``water_supply``, "Annual groundwater bands (when supply.groundwater)"
+   Link, ``supply:groundwater:{region}:{source}:b{n}``, ``water_supply``, "Annual groundwater bands (aware availability)"
    Link, ``deliver:groundwater:{region}:p{p}``, ``groundwater_delivery``, "Annual aquifer -> period pool (free)"
    Link, ``irrigate:{region}:p{p}``, ``irrigation_delivery``, "Consumption -> field (eta_c)"
    Store, ``store:impact:water_scarcity``, ``water_scarcity``, "Priced/capped at solve time"

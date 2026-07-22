@@ -20,6 +20,8 @@ directly, on both a withdrawal and a consumption basis:
 - ``pirruse`` (kg m-2 s-1 = mm/s): potential irrigation water consumption (the
   evapotranspired portion), all sources.
 - ``pirrusegw``: the part of ``pirruse`` supplied from groundwater.
+- ``ptotusegw``: potential groundwater consumption of *all* sectors; the
+  denominator of irrigation's share of groundwater abstraction.
 
 The model works on a consumption basis (crops draw beneficial ET, delivered from
 the consumption-basis pool), so the ``use`` (consumption) variables are the right
@@ -38,18 +40,23 @@ ones. From them:
   discharge timing and strands that delivery in the wet months. The AWARE
   scarcity (CF) curve is kept; the per region-month volumes are rescaled to this
   envelope in ``build_region_water_aware.py``.
-- **mined groundwater** = the groundwater-storage decline (attributed to
-  irrigation downstream by the consumption pool).
-- **renewable groundwater** = ``max(pirrusegw - mined, 0)``: the recharged part
-  of irrigation groundwater consumption.
+- **mined groundwater** = the groundwater-storage decline. The trend reflects
+  all users, so irrigation's part is attributed by its share of potential
+  groundwater consumption (``pirrusegw / ptotusegw``, same basis and window);
+  a basin mined by municipal or industrial pumping then no longer zeroes
+  irrigation's renewable band.
+- **renewable groundwater** = ``max(pirrusegw - mined_irrigation, 0)``: the
+  recharged part of irrigation groundwater consumption.
 
 Outputs (keyed by model ``region``):
 
 - ``region_watergap_surface.csv``: ``region, month, surface_consumption_mm3`` --
   monthly climatological irrigation surface consumption, the availability
   envelope for the AWARE curve;
-- ``region_groundwater_depletion.csv``: ``region, mined_mm3, renewable_gw_mm3``
-  -- the additive groundwater bands consumed by ``compose_water_supply.py``;
+- ``region_groundwater_depletion.csv``: ``region, mined_mm3,
+  irrigation_gw_share, mined_irrigation_mm3, renewable_gw_mm3`` -- the
+  renewable-groundwater volume anchor (and mining diagnostics) consumed by
+  ``build_region_water_aware.py`` and ``compose_water_supply.py``;
 - ``region_agri_consumption.csv``: ``region, agri_consumption_m3`` -- annual
   total irrigation consumption (``pirruse``), the demand anchor for ``eta_c``
   and the mining ceiling. Replaces the AWARE 2019 ``agri_pHWC`` anchor so that
@@ -221,6 +228,7 @@ if __name__ == "__main__":
     continental_area_path: str = snakemake.input.continentalarea  # type: ignore[name-defined]
     pirruse_path: str = snakemake.input.pirruse  # type: ignore[name-defined]
     pirrusegw_path: str = snakemake.input.pirrusegw  # type: ignore[name-defined]
+    ptotusegw_path: str = snakemake.input.ptotusegw  # type: ignore[name-defined]
     regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
     trend_start: int = int(snakemake.params.trend_start)  # type: ignore[name-defined]
     trend_end: int = int(snakemake.params.trend_end)  # type: ignore[name-defined]
@@ -252,6 +260,7 @@ if __name__ == "__main__":
 
     irr_total = monthly_to_regions(pirruse_path, "pirruse")
     irr_gw = monthly_to_regions(pirrusegw_path, "pirrusegw")
+    total_gw = monthly_to_regions(ptotusegw_path, "ptotusegw")
 
     region_index = pd.Index(sorted(regions_gdf["region"]), name="region")
 
@@ -271,13 +280,26 @@ if __name__ == "__main__":
     Path(surface_out).parent.mkdir(parents=True, exist_ok=True)
     surface.to_csv(surface_out, index=False)
 
-    # Groundwater bands (annual): mined from the storage trend; renewable = the
-    # recharged remainder of irrigation groundwater consumption (pirrusegw - mined).
+    # Groundwater (annual): mined from the storage trend, attributed to
+    # irrigation by its share of all-sector groundwater consumption; renewable =
+    # the recharged remainder of irrigation groundwater consumption
+    # (pirrusegw - mined_irrigation). Regions with a storage decline but no
+    # potential groundwater use (a climate-driven trend, not abstraction) get
+    # share 0.
+    irr_gw_annual = irr_gw.sum(axis=1)
+    total_gw_annual = total_gw.sum(axis=1)
+    share = (
+        irr_gw_annual.div(total_gw_annual)
+        .where(total_gw_annual > 0, 0.0)
+        .clip(0.0, 1.0)
+    )
     depletion = pd.DataFrame({"region": region_index}).assign(
         mined_mm3=lambda d: d["region"].map(mined * MM3_PER_M3).fillna(0.0),
+        irrigation_gw_share=lambda d: d["region"].map(share).fillna(0.0),
+        mined_irrigation_mm3=lambda d: d["mined_mm3"] * d["irrigation_gw_share"],
         renewable_gw_mm3=lambda d: (
-            d["region"].map(irr_gw.sum(axis=1) * MM3_PER_M3).fillna(0.0)
-            - d["mined_mm3"]
+            d["region"].map(irr_gw_annual * MM3_PER_M3).fillna(0.0)
+            - d["mined_irrigation_mm3"]
         ).clip(lower=0.0),
     )
     Path(depletion_out).parent.mkdir(parents=True, exist_ok=True)

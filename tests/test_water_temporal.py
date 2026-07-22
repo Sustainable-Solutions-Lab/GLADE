@@ -69,24 +69,32 @@ def test_groundwater_bands_are_annual_per_region():
     # Groundwater is an annual per-region resource (one renewable + one mined band
     # per region), independent of the number of periods -- not split /T.
     surface = aggregate_months_to_periods(_monthly_tiers(), 4)
-    groundwater = pd.DataFrame(
-        {"mined_mm3": [0.0], "renewable_gw_mm3": [40.0]},
-        index=pd.Index(["r"], name="region"),
+    gw_tiers = pd.DataFrame(
+        {
+            "region": ["r", "r"],
+            "tier": [0, 1],
+            "capacity_mm3": [25.0, 15.0],
+            "marginal_cf": [3.0, 9.0],
+        }
     )
     agri = pd.Series({"r": 100.0})
-    bands = build_groundwater_bands(surface, groundwater, agri, ceiling_factor=3.0)
+    bands = build_groundwater_bands(
+        gw_tiers, surface, agri, ceiling_factor=3.0, scarcity_tiers=True
+    )
     renewable = bands[bands["source"] == "groundwater_renewable"]
     nonrenewable = bands[bands["source"] == "groundwater_nonrenewable"]
-    # One annual band each: renewable = full WaterGAP volume; ceiling = 3 * C.
-    assert set(bands.columns) == {"region", "source", "capacity_mm3", "marginal_cf"}
-    assert len(renewable) == 1
-    assert renewable["capacity_mm3"].iloc[0] == pytest.approx(40.0)
+    # Annual bands: renewable = the curve slice volumes; ceiling = 3 * C.
+    assert set(bands.columns) == {
+        "region",
+        "source",
+        "band",
+        "capacity_mm3",
+        "marginal_cf",
+    }
+    assert renewable["capacity_mm3"].sum() == pytest.approx(40.0)
+    assert renewable.sort_values("band")["marginal_cf"].tolist() == [3.0, 9.0]
     assert len(nonrenewable) == 1
     assert nonrenewable["capacity_mm3"].iloc[0] == pytest.approx(300.0)
-    # Renewable GW borrows the region's scarcest surface CF; mining is cf 0.
-    assert renewable["marginal_cf"].iloc[0] == pytest.approx(
-        surface["marginal_cf"].max()
-    )
     assert nonrenewable["marginal_cf"].iloc[0] == 0.0
 
 

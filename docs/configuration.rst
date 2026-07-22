@@ -641,8 +641,7 @@ Water Supply
    :end-before: # --- section: fertilizer ---
 
 * ``water.temporal_resolution`` sets the number of intra-year periods the LP resolves for water (a divisor of 12). The default 1 is annual and cheap; raise it (4 is a reasonable compromise) for any study about water, since at annual resolution the whole year's pool serves every season and the groundwater bands go nearly inert. See :doc:`water`.
-* ``water.supply.scarcity_tiers`` keeps the convex AWARE scarcity tiers (true) or collapses each region-period pool to one flat availability cap (false, the default). Required for ``water_scarcity`` pricing or capping.
-* ``water.supply.groundwater`` adds annual renewable and non-renewable groundwater bands on top of the period-bound surface supply (default true), so mining emerges endogenously where surface falls short.
+* ``water.supply.scarcity_tiers`` keeps the convex AWARE scarcity curves (true) or collapses each pool to one flat availability cap (false, the default). Required for ``water_scarcity`` pricing or capping. Groundwater is always part of the aware supply: annual renewable and non-renewable bands on top of the period-bound surface, so mining emerges endogenously where surface falls short; constrain it at solve time (e.g. ``groundwater_depletion.cap_mm3: 0``) to study a mining-free system.
 * ``water.data.availability`` selects the water availability dataset: ``aware`` (AWARE 2.0 scarcity curve on WaterGAP volumes, the default) or ``current_use`` (Huang et al. irrigation withdrawals, for validation against present-day use).
 * ``water.data.huang_reference_year`` selects the year (1971-2010) used for the Huang monthly withdrawals when ``availability`` is ``current_use``.
 * ``water.irrigation.eta_min`` / ``eta_max`` clip the build-time consumptive-efficiency calibration; ``consumed_fraction`` is the consumption-over-withdrawal ratio used for reporting.

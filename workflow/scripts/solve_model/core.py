@@ -711,11 +711,33 @@ def add_water_scarcity_cap(n: pypsa.Network, cap_mm3_world_eq: float) -> None:
     vs water-scarcity Pareto front by sweeping the cap while pricing GHG.
 
     Non-renewable groundwater carries no CF and does not count against this
-    cap; with ``water.supply.groundwater`` on, combine the cap with a
-    groundwater_depletion price or cap, or the LP can satisfy it by mining
-    (``run_solve`` warns in that case).
+    plain cap. With ``water_scarcity.nonrenewable_cf`` set, ``run_solve`` adds
+    the joint cap (``add_water_scarcity_joint_cap``) instead, which charges
+    mining against the cap at that CF; with ``nonrenewable_cf: null`` the LP
+    can satisfy this cap by mining (``run_solve`` warns in that case).
     """
     n.stores.static.at["store:impact:water_scarcity", "e_nom_max"] = cap_mm3_world_eq
+
+
+def add_water_scarcity_joint_cap(
+    n: pypsa.Network, cap_mm3_world_eq: float, nonrenewable_cf: float
+) -> None:
+    """Cap scarcity plus CF-weighted mining jointly (epsilon-constraint).
+
+    Adds ``e_scarcity + nonrenewable_cf * e_depletion <= cap`` on the two
+    accumulating impact stores, mirroring how scarcity *pricing* charges mined
+    volume at ``nonrenewable_cf``: without the mining term, a scarcity cap is
+    porous -- the LP can meet it by substituting CF-free mined groundwater,
+    deterred only by the pumping cost. Must run after
+    ``n.optimize.create_model()``.
+    """
+    e = n.model.variables["Store-e"].sel(snapshot=n.snapshots[-1])
+    lhs = e.sel(Store="store:impact:water_scarcity") + nonrenewable_cf * e.sel(
+        Store="store:impact:groundwater_depletion"
+    )
+    n.model.add_constraints(
+        lhs <= cap_mm3_world_eq, name="GlobalConstraint-water_scarcity_joint_cap"
+    )
 
 
 def add_groundwater_depletion_pricing_to_objective(
@@ -725,8 +747,8 @@ def add_groundwater_depletion_pricing_to_objective(
 
     Prices the mined volume accumulated on ``store:impact:groundwater_depletion``
     (Mm^3) at solve time, mirroring the water-scarcity and GHG pricing. A
-    positive price shifts irrigation away from groundwater mining. Active only
-    when ``water.supply.groundwater`` is true (otherwise the store stays empty).
+    positive price shifts irrigation away from groundwater mining. Requires the
+    aware availability source (otherwise the store stays empty).
 
     Parameters
     ----------
@@ -1502,15 +1524,18 @@ def run_solve(
     # Add water-scarcity pricing and/or cap if enabled
     scarcity_priced = smk.params.water_scarcity_pricing_enabled
     scarcity_capped = smk.params.water_scarcity_cap is not None
+    depletion_priced = smk.params.groundwater_pricing_enabled
+    depletion_capped = smk.params.groundwater_cap is not None
+    nonrenewable_cf = smk.params.water_scarcity_nonrenewable_cf
+    groundwater_available = smk.params.water_availability == "aware"
     if (scarcity_priced or scarcity_capped) and not smk.params.water_scarcity_tiers:
         raise ValueError(
             "water_scarcity pricing/capping requires water.supply.scarcity_tiers: "
-            "with collapsed tiers every surface characterisation factor is zero, "
+            "with collapsed tiers every characterisation factor is zero, "
             "so the scarcity store accumulates nothing and the lever is vacuous."
         )
     if scarcity_priced:
-        nonrenewable_cf = smk.params.water_scarcity_nonrenewable_cf
-        if nonrenewable_cf is not None and smk.params.groundwater_pricing_enabled:
+        if nonrenewable_cf is not None and depletion_priced:
             raise ValueError(
                 "water_scarcity.nonrenewable_cf and groundwater_depletion pricing "
                 "both charge the depletion store; set nonrenewable_cf to null to "
@@ -1521,30 +1546,32 @@ def run_solve(
             float(smk.params.water_scarcity_price),
             None if nonrenewable_cf is None else float(nonrenewable_cf),
         )
-    if scarcity_capped:
+    # A cap with nonrenewable_cf set charges mining against the cap via a joint
+    # constraint, added after model creation below. Without it, the plain
+    # e_nom_max cap applies -- porous to CF-free mining.
+    scarcity_joint_cap = (
+        scarcity_capped and groundwater_available and nonrenewable_cf is not None
+    )
+    if scarcity_capped and not scarcity_joint_cap:
         add_water_scarcity_cap(n, float(smk.params.water_scarcity_cap))
+        if groundwater_available and not (
+            scarcity_priced or depletion_priced or depletion_capped
+        ):
+            logger.warning(
+                "water_scarcity cap is porous: nonrenewable_cf is null and "
+                "groundwater mining is neither priced nor capped, so the LP "
+                "can meet the cap by substituting mined groundwater. Set "
+                "nonrenewable_cf or combine with a groundwater_depletion "
+                "price or cap for a closed sweep."
+            )
 
     # Add groundwater-depletion pricing and/or cap if enabled
-    depletion_priced = smk.params.groundwater_pricing_enabled
-    depletion_capped = smk.params.groundwater_cap is not None
-    if (depletion_priced or depletion_capped) and not smk.params.water_groundwater:
+    if (depletion_priced or depletion_capped) and not groundwater_available:
         raise ValueError(
             "groundwater_depletion pricing/capping requires "
-            "water.supply.groundwater: without the groundwater bands nothing "
-            "is ever mined, so the lever is vacuous."
-        )
-    if (
-        scarcity_capped
-        and smk.params.water_groundwater
-        and not (scarcity_priced or depletion_priced or depletion_capped)
-    ):
-        # nonrenewable_cf charges mining only under scarcity *pricing*; a bare
-        # cap leaves CF-free mining as an escape deterred only by pumping cost.
-        logger.warning(
-            "water_scarcity cap is porous: groundwater mining carries no CF and "
-            "is neither priced nor capped, so the LP can meet the cap by "
-            "substituting mined groundwater. Combine with a "
-            "groundwater_depletion price or cap for a closed sweep."
+            "water.data.availability: aware: the current_use pool folds "
+            "groundwater into observed use, so nothing is ever mined and the "
+            "lever is vacuous."
         )
     if depletion_priced:
         add_groundwater_depletion_pricing_to_objective(
@@ -1772,6 +1799,11 @@ def run_solve(
     )
     with _phase("add_residue_feed_constraints"):
         add_residue_feed_constraints(n, max_feed_fraction, max_feed_fraction_by_country)
+
+    if scarcity_joint_cap:
+        add_water_scarcity_joint_cap(
+            n, float(smk.params.water_scarcity_cap), float(nonrenewable_cf)
+        )
 
     # Deviation penalty constraints (land + feed via production_stability;
     # diet via diet_stability). Resolve the "calibrated" sentinel once;

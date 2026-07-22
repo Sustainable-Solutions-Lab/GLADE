@@ -64,8 +64,8 @@ def calibrate_eta_c(
     infeasibility check below are both *annual*: at ``temporal_resolution > 1``
     surface supply is period-bound, so a region can clear the annual test while
     an individual period's demand still exceeds that period's surface. Those
-    periods are met from the annual groundwater bands; with
-    ``water.supply.groundwater: false`` they fall to slack instead. Values above 1 encode
+    periods are met from the annual groundwater bands; under the current_use
+    availability source (no bands) they fall to slack instead. Values above 1 encode
     deficit irrigation (observed consumption below the GAEZ full requirement);
     see the module docstring. Regions without baseline irrigation (E = 0) or
     without observed consumption (C = 0) get 1.0 (no adjustment: the delivery

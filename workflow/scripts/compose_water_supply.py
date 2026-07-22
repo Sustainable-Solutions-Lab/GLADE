@@ -18,33 +18,29 @@ produces two tables the model build consumes:
   source``): the **per-period surface** supply. Surface is period-bound -- a
   river cannot be pumped next season without a reservoir -- so each period's cap
   binds its own draw.
-- ``region_groundwater_bands.csv`` (``region, source, capacity_mm3,
-  marginal_cf``): the **annual per-region groundwater** bands, only in
-  ``groundwater`` mode. Groundwater is an aquifer, an annual buffer that can be
-  pumped in any period, so it attaches to a single per-region groundwater bus in
-  the model build and is shared across periods rather than split per period.
+- ``region_groundwater_bands.csv`` (``region, source, band, capacity_mm3,
+  marginal_cf``): the **annual per-region groundwater** bands, emitted for the
+  ``aware`` availability source. Groundwater is an aquifer, an annual buffer
+  that can be pumped in any period, so it attaches to a single per-region
+  groundwater bus in the model build and is shared across periods rather than
+  split per period. The renewable bands (``source = groundwater_renewable``)
+  carry the AWARE CF curve slice computed in ``build_region_water_aware`` (the
+  upper part of the joint renewable envelope); the non-renewable / mined band
+  (``source = groundwater_nonrenewable``) is a generous non-binding aquifer
+  ceiling carrying a real pumping cost that orders it last. Because
+  groundwater is additive rather than a relabel of surface, mining emerges
+  endogenously wherever surface plus renewable groundwater fall short -- it is
+  not capped at renewable availability. The ``current_use`` source emits no
+  bands: its Huang withdrawal pool already contains the groundwater-supplied
+  part, so additive bands would double-count it.
 
 Keeping the month grouping here means changing the temporal resolution does not
 re-run the expensive basin overlay.
 
-Two independent switches finish the tables:
-
-- ``supply.scarcity_tiers``: keep the convex per-period surface scarcity curve,
-  or collapse each region-period's pool to one flat tier (cf = 0) -- a simple
-  availability cap for studies where water is not the focus.
-- ``supply.groundwater``: additionally emit the annual renewable and
-  non-renewable groundwater bands. The renewable groundwater (``source =
-  groundwater_renewable``, WaterGAP volume, priced at the scarcest surface CF)
-  and the non-renewable / mined band (``source = groundwater_nonrenewable``, a
-  generous non-binding aquifer ceiling carrying a real pumping cost that orders
-  it last) meet whatever surface cannot. Because groundwater is additive rather
-  than a relabel of surface, mining emerges endogenously wherever surface plus
-  renewable groundwater fall short -- it is no longer capped at renewable
-  availability.
-
-The bands are always derived from the *uncollapsed* curve, so the CF that
-renewable groundwater borrows stays physical even when the surface table itself
-is collapsed to a flat cap.
+``supply.scarcity_tiers`` finishes the tables: keep the convex scarcity curves
+(per-period surface and annual renewable groundwater), or collapse each pool to
+one flat cf = 0 tier/band -- a simple availability cap for studies where water
+is not the focus.
 
 The monthly and growing-season availability tables are copied through unchanged.
 """
@@ -56,16 +52,11 @@ import numpy as np
 import pandas as pd
 
 TIER_COLUMNS = ["region", "period", "tier", "capacity_mm3", "marginal_cf", "source"]
-GW_BAND_COLUMNS = ["region", "source", "capacity_mm3", "marginal_cf"]
+GW_BAND_COLUMNS = ["region", "source", "band", "capacity_mm3", "marginal_cf"]
 
 # Number of equal-volume tiers the merged per-period convex curve is binned into
 # (matches N_TIERS in build_region_water_aware).
 N_TIERS = 8
-
-# AWARE characterisation-factor ceiling (matches build_region_water_aware CF_MAX);
-# used to price renewable groundwater in regions that have no surface water at all
-# (so no surface CF to borrow) -- treat them as maximally scarce.
-CF_MAX = 100.0
 
 
 def month_to_period(months: np.ndarray, temporal_resolution: int) -> np.ndarray:
@@ -133,67 +124,78 @@ def collapse_single(tiers: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_groundwater_bands(
+    renewable_gw_tiers: pd.DataFrame,
     surface_tiers: pd.DataFrame,
-    groundwater: pd.DataFrame,
     agri_consumption_mm3: pd.Series,
     ceiling_factor: float,
+    scarcity_tiers: bool,
 ) -> pd.DataFrame:
     """Annual per-region groundwater bands (renewable + non-renewable).
 
-    Both bands are *annual*: an aquifer integrates recharge over the year and can
+    All bands are *annual*: an aquifer integrates recharge over the year and can
     be pumped in any period, so -- unlike surface, which is period-bound -- they
     attach to a single per-region groundwater bus in the model build, shared
-    across all periods. ``surface_tiers`` (the per-period surface curve) supplies
-    the region's scarcest surface CF and total surface volume; ``groundwater`` is
-    region-indexed with ``mined_mm3`` and ``renewable_gw_mm3``;
-    ``agri_consumption_mm3`` is region-indexed annual consumption C (Mm3).
+    across all periods.
 
-    - ``groundwater_renewable``: the WaterGAP renewable groundwater volume, priced
-      at the region's scarcest surface CF so it is drawn after surface but before
-      mining (``CF_MAX`` where the region has no surface water to borrow a CF
-      from -- such regions are maximally scarce);
+    - ``groundwater_renewable``: the AWARE CF bands of the renewable-groundwater
+      slice of the joint renewable envelope (``renewable_gw_tiers``, from
+      ``build_region_water_aware``). With ``scarcity_tiers`` off they collapse
+      to one flat cf = 0 band per region, mirroring the surface collapse.
     - ``groundwater_nonrenewable``: a generous non-binding aquifer ceiling
-      (``ceiling_factor * C``), cf 0, ordered last by its pumping cost. Falls back
-      to the region's total surface capacity where consumption C is missing/zero.
-      The volume actually mined is set endogenously by how far surface plus
-      renewable groundwater fall short of demand.
-
-    Returned per region (columns ``GW_BAND_COLUMNS``); regions cover the full
-    groundwater table, including those with groundwater but no surface tiers.
+      (``ceiling_factor * C`` with C the annual consumption anchor, falling
+      back to the region's total surface capacity where C is zero), cf 0,
+      ordered last by its pumping cost. The volume actually mined is set
+      endogenously by how far surface plus renewable groundwater fall short of
+      demand.
     """
-    regions = groundwater.index
-    surf = surface_tiers.groupby("region").agg(
-        max_cf=("marginal_cf", "max"), surface_sum=("capacity_mm3", "sum")
+    renewable = renewable_gw_tiers.rename(columns={"tier": "band"}).assign(
+        source="groundwater_renewable"
     )
-    max_cf = surf["max_cf"].reindex(regions).fillna(CF_MAX)
-    surface_sum = surf["surface_sum"].reindex(regions).fillna(0.0)
-    renewable_gw = groundwater["renewable_gw_mm3"].reindex(regions).fillna(0.0)
+    if not scarcity_tiers and not renewable.empty:
+        renewable = (
+            renewable.groupby("region", as_index=False)["capacity_mm3"]
+            .sum()
+            .assign(band=0, marginal_cf=0.0, source="groundwater_renewable")
+        )
+
+    regions = pd.Index(
+        sorted(
+            set(renewable["region"])
+            | set(agri_consumption_mm3.index)
+            | set(surface_tiers["region"])
+        ),
+        name="region",
+    )
+    surface_sum = (
+        surface_tiers.groupby("region")["capacity_mm3"]
+        .sum()
+        .reindex(regions)
+        .fillna(0.0)
+    )
     consumption = agri_consumption_mm3.reindex(regions).fillna(0.0)
     # Ceiling anchor: annual consumption, falling back to surface scale where C = 0.
     anchor = consumption.where(consumption > 0.0, surface_sum)
-    ceiling = ceiling_factor * anchor
+    non = pd.DataFrame(
+        {
+            "region": regions,
+            "source": "groundwater_nonrenewable",
+            "band": 0,
+            "capacity_mm3": (ceiling_factor * anchor).to_numpy(),
+            "marginal_cf": 0.0,
+        }
+    )
 
-    base = pd.DataFrame({"region": regions})
-    ren = base.assign(
-        source="groundwater_renewable",
-        capacity_mm3=renewable_gw.to_numpy(),
-        marginal_cf=max_cf.to_numpy(),
-    )
-    non = base.assign(
-        source="groundwater_nonrenewable",
-        capacity_mm3=ceiling.to_numpy(),
-        marginal_cf=0.0,
-    )
-    bands = pd.concat([ren, non], ignore_index=True)
+    bands = pd.concat([renewable, non], ignore_index=True)
     bands = bands[bands["capacity_mm3"] > 0.0]
     return (
-        bands[GW_BAND_COLUMNS].sort_values(["region", "source"]).reset_index(drop=True)
+        bands[GW_BAND_COLUMNS]
+        .sort_values(["region", "source", "band"])
+        .reset_index(drop=True)
     )
 
 
 if __name__ == "__main__":
     scarcity_tiers = bool(snakemake.params.scarcity_tiers)  # type: ignore[name-defined]
-    groundwater_enabled = bool(snakemake.params.groundwater)  # type: ignore[name-defined]
     availability: str = snakemake.params.availability  # type: ignore[name-defined]
     temporal_resolution = int(snakemake.params.temporal_resolution)  # type: ignore[name-defined]
     consumed_fraction = float(snakemake.params.consumed_fraction)  # type: ignore[name-defined]
@@ -214,14 +216,12 @@ if __name__ == "__main__":
     else:
         surface = collapse_single(tiers)
 
-    # Groundwater supply: annual per-region bands (region_groundwater_bands.csv).
-    # Derived from the uncollapsed curve so the CF the renewable band borrows is
-    # the region's real scarcest surface CF, not the collapsed tier's zero.
-    if groundwater_enabled:
+    # Groundwater supply: annual per-region bands (region_groundwater_bands.csv),
+    # aware source only (the current_use pool already contains the
+    # groundwater-supplied part of observed use).
+    if availability == "aware":
         ceiling_factor = float(snakemake.params.groundwater_ceiling_factor)  # type: ignore[name-defined]
-        groundwater = pd.read_csv(snakemake.input.groundwater).set_index(  # type: ignore[name-defined]
-            "region"
-        )
+        renewable_gw_tiers = pd.read_csv(snakemake.input.renewable_gw_tiers)  # type: ignore[name-defined]
         agri_consumption_mm3 = (
             pd.read_csv(snakemake.input.region_agri).set_index("region")[  # type: ignore[name-defined]
                 "agri_consumption_m3"
@@ -229,7 +229,11 @@ if __name__ == "__main__":
             * 1e-6
         )
         bands = build_groundwater_bands(
-            tiers, groundwater, agri_consumption_mm3, ceiling_factor
+            renewable_gw_tiers,
+            tiers,
+            agri_consumption_mm3,
+            ceiling_factor,
+            scarcity_tiers,
         )
     else:
         bands = pd.DataFrame(columns=GW_BAND_COLUMNS)

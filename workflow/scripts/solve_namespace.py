@@ -457,7 +457,7 @@ def build_scenario_entry(
         "biofuel_demand_scale": eff["biomass"]["biofuel_demand_scale"],
         "ghg_pricing_enabled": eff["emissions"]["ghg_pricing_enabled"],
         "water_scarcity_tiers": eff["water"]["supply"]["scarcity_tiers"],
-        "water_groundwater": eff["water"]["supply"]["groundwater"],
+        "water_availability": eff["water"]["data"]["availability"],
         "water_scarcity_pricing_enabled": eff["water_scarcity"]["pricing_enabled"],
         "water_scarcity_price": eff["water_scarcity"]["price"],
         "water_scarcity_cap": eff["water_scarcity"]["cap_mm3_world_eq"],

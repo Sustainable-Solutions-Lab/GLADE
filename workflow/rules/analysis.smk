@@ -138,7 +138,7 @@ if config["solving"]["inline_analysis"]:
                 "emissions"
             ]["ghg_pricing_enabled"],
             water_scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
-            water_groundwater=config["water"]["supply"]["groundwater"],
+            water_availability=config["water"]["data"]["availability"],
             water_scarcity_pricing_enabled=lambda w: get_effective_config(w.scenario)[
                 "water_scarcity"
             ]["pricing_enabled"],

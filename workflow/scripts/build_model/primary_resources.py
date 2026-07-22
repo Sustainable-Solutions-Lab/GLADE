@@ -82,16 +82,17 @@ def add_primary_resources(
     exceed it, so a seasonal shortfall must draw groundwater). Capacities are
     already in Mm^3.
 
-    **Groundwater** (``groundwater_bands``, groundwater mode only) is instead an
-    *annual* per-region resource: an aquifer integrates recharge over the year
-    and can be pumped in any period. Each region gets a ``groundwater:{region}``
-    bus fed by two supply links from ``water:source`` -- renewable (WaterGAP
-    volume, scarcity-priced at the region's scarcest surface CF, tallied on
-    ``impact:groundwater_renewable``) and non-renewable (a generous ceiling, mined
-    volume on ``impact:groundwater_depletion``, ordered last by its pumping cost)
-    -- and free ``groundwater_delivery`` links distribute it to every period bus.
-    The annual cap therefore lets a dry period draw the whole year's recharge,
-    unlike surface which is period-bound.
+    **Groundwater** (``groundwater_bands``, aware availability only) is instead
+    an *annual* per-region resource: an aquifer integrates recharge over the
+    year and can be pumped in any period. Each region gets a
+    ``groundwater:{region}`` bus fed by supply links from ``water:source`` --
+    renewable CF bands (the upper slice of the joint AWARE renewable envelope,
+    scarcity-priced at their own curve CFs and tallied on
+    ``impact:groundwater_renewable``) and a non-renewable ceiling band (mined
+    volume on ``impact:groundwater_depletion``, ordered last by its pumping
+    cost) -- and free ``groundwater_delivery`` links distribute it to every
+    period bus. The annual cap therefore lets a dry period draw the whole
+    year's recharge, unlike surface which is period-bound.
 
     Because the water itself is free, the unpriced LP is indifferent to which
     tier it draws from within a region and lands on an arbitrary (high-CF) mix.
@@ -181,11 +182,11 @@ def add_primary_resources(
     )
 
     # Annual per-region groundwater (aquifer). Each region's groundwater:{region}
-    # bus is fed by renewable and non-renewable supply links (annual caps, same
-    # impact wiring as the surface tiers) and distributed to every period water
-    # bus by free delivery links, so the year's recharge is shared across periods
-    # (a dry period can draw all of it). Empty bands (non-groundwater modes) skip
-    # this entirely.
+    # bus is fed by renewable CF bands and a non-renewable ceiling band (annual
+    # caps, same impact wiring as the surface tiers) and distributed to every
+    # period water bus by free delivery links, so the year's recharge is shared
+    # across periods (a dry period can draw all of it). An empty bands table
+    # (current_use availability) skips this entirely.
     gw = groundwater_bands[groundwater_bands["region"].isin(water_region_list)]
     gw = _retain_material_water_capacities(gw, min_water_capacity_mm3)
     if not gw.empty:
@@ -201,7 +202,14 @@ def add_primary_resources(
         gw_nonrenew = (gw["source"] == "groundwater_nonrenewable").to_numpy()
         gw_cf = gw["marginal_cf"].to_numpy()
         n.links.add(
-            ("supply:groundwater:" + gw["region"] + ":" + gw["source"]).to_numpy(),
+            (
+                "supply:groundwater:"
+                + gw["region"]
+                + ":"
+                + gw["source"]
+                + ":b"
+                + gw["band"].astype(int).astype(str)
+            ).to_numpy(),
             bus0="water:source",
             bus1=("groundwater:" + gw["region"]).to_numpy(),
             bus2=np.where(

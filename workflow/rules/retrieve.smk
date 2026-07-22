@@ -1034,16 +1034,19 @@ rule download_watergap_isimip:
     public files under files.isimip.org.
 
     We fetch the groundwater storage compartment (``groundwstor``; its negative
-    long-term trend is groundwater depletion, Doll et al. 2014) and the potential
+    long-term trend is groundwater depletion, Doll et al. 2014), the potential
     irrigation water consumption, total (``pirruse``) and from groundwater
-    (``pirrusegw``). The surface part (``pirruse - pirrusegw``) is WaterGAP's
+    (``pirrusegw``), and all-sector potential groundwater consumption
+    (``ptotusegw``, the denominator of irrigation's share of the depletion
+    trend). The surface part (``pirruse - pirrusegw``) is WaterGAP's
     irrigation surface availability, used to cap the AWARE scarcity curve;
-    ``pirrusegw`` gives the renewable groundwater band.
+    ``pirrusegw`` gives the renewable groundwater bands.
     """
     output:
         groundwstor="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_groundwstor_global_monthly_1901_2019.nc",
         pirruse="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_pirruse_global_monthly_1901_2019.nc",
         pirrusegw="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_pirrusegw_global_monthly_1901_2019.nc",
+        ptotusegw="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_ptotusegw_global_monthly_1901_2019.nc",
     params:
         base_url="https://files.isimip.org/ISIMIP3a/OutputData/water_global/WaterGAP2-2e/gswp3-w5e5/historical",
     resources:
@@ -1056,7 +1059,7 @@ rule download_watergap_isimip:
     shell:
         r"""
         mkdir -p "$(dirname {output.groundwstor})"
-        for out in "{output.groundwstor}" "{output.pirruse}" "{output.pirrusegw}"; do
+        for out in "{output.groundwstor}" "{output.pirruse}" "{output.pirrusegw}" "{output.ptotusegw}"; do
             curl -L --fail --progress-bar -o "$out" \
                 "{params.base_url}/$(basename "$out")" >> {log} 2>&1
         done

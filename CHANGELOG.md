@@ -118,18 +118,34 @@ introduce breaking changes to configuration and outputs.
   consequence worth stating plainly: at annual resolution the groundwater bands
   are nearly inert and reported depletion falls to near zero — an artefact of
   the resolution, not a finding.** Studies about water should raise it.
-- Water supply fidelity is now two independent switches rather than a ladder:
-  `water.supply.scarcity_tiers` (convex AWARE scarcity tiers, default off —
-  each region-period pool is one flat availability cap) and
-  `water.supply.groundwater` (additive annual renewable and non-renewable
-  groundwater bands, default on). All four combinations are valid. Scarcity
-  pricing or capping now requires `scarcity_tiers` and raises otherwise, since
-  with collapsed tiers there is no scarcity signal to price.
+- Surface water and renewable groundwater are characterised as **one AWARE
+  renewable resource**: each basin's CF curve spans the joint envelope
+  (WaterGAP surface delivery plus renewable groundwater) and is split at the
+  basin's surface fraction — the lower slice is period-bound surface, the
+  upper slice becomes annual per-region renewable-groundwater CF bands. This
+  replaces the earlier draft's flat renewable-groundwater band at the region's
+  scarcest surface CF, which saturated at the AWARE cutoff (CF 100) almost
+  everywhere and drifted with the temporal resolution. Groundwater is always
+  part of the aware supply (the `water.supply.groundwater` switch is removed;
+  cap mining at solve time via `groundwater_depletion.cap_mm3: 0` for a
+  mining-free system); the `current_use` source emits no groundwater bands,
+  since its observed-withdrawal pool already contains groundwater. Irrigation's
+  share of the groundwater-storage depletion trend is attributed by its share
+  of all-sector potential groundwater consumption (new WaterGAP `ptotusegw`
+  download), so basins mined by municipal or industrial pumping no longer
+  zero irrigation's renewable band. Water supply fidelity remains a single
+  switch, `water.supply.scarcity_tiers` (convex AWARE scarcity curves, default
+  off — each pool is one flat availability cap). Scarcity pricing or capping
+  requires it and raises otherwise, since with collapsed curves there is no
+  scarcity signal to price.
 - New optional solve-time levers, both off by default: `water_scarcity`
   (pricing and/or capping accumulated AWARE scarcity) and
-  `groundwater_depletion` (pricing and/or capping accumulated mining). Analysis
-  gains a `water_metrics` output with per-region withdrawal, scarcity,
-  renewable groundwater and depletion.
+  `groundwater_depletion` (pricing and/or capping accumulated mining). With
+  `water_scarcity.nonrenewable_cf` set, mined groundwater is charged at that
+  CF under scarcity pricing *and* counts CF-fold against a scarcity cap (a
+  joint constraint), so neither lever can be satisfied by free substitution
+  into fossil groundwater. Analysis gains a `water_metrics` output with
+  per-region withdrawal, scarcity, renewable groundwater and depletion.
 - Model regions are now built **basin-aware**: GADM provinces are first split
   along AWARE hydrological basin boundaries, and each country is partitioned
   into regions balancing geography against basin scarcity

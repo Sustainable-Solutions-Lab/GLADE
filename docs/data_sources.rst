@@ -214,7 +214,7 @@ WaterGAP 2.2e
 
 **Provider**: Mueller Schmied et al. (2024), via ISIMIP3a
 
-**Description**: Global hydrological and water-use model output. The model uses the groundwater storage compartment (``groundwstor``; its long-term decline is groundwater depletion), and potential irrigation water consumption in total (``pirruse``) and from groundwater (``pirrusegw``). The surface part (``pirruse - pirrusegw``) is the irrigation surface availability that scales the AWARE scarcity curve; ``pirrusegw`` gives the renewable groundwater band; ``pirruse`` anchors the consumptive-efficiency calibration and the mining ceiling.
+**Description**: Global hydrological and water-use model output. The model uses the groundwater storage compartment (``groundwstor``; its long-term decline is groundwater depletion), potential irrigation water consumption in total (``pirruse``) and from groundwater (``pirrusegw``), and all-sector potential groundwater consumption (``ptotusegw``, the denominator of irrigation's share of the depletion trend). The surface part (``pirruse - pirrusegw``) is the irrigation surface availability that scales the AWARE scarcity curve; ``pirrusegw`` (net of irrigation-attributed mining) gives the renewable groundwater bands; ``pirruse`` anchors the consumptive-efficiency calibration and the mining ceiling.
 
 **Coverage**:
   * Spatial: Global, 0.5 degree

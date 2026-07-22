@@ -429,31 +429,25 @@ properties:
           value on the water side of the model.
       supply:
         type: object
-        required: [scarcity_tiers, groundwater, pumping_cost_usd_per_m3, groundwater_ceiling_factor]
+        required: [scarcity_tiers, pumping_cost_usd_per_m3, groundwater_ceiling_factor]
         additionalProperties: false
         properties:
           scarcity_tiers:
             type: boolean
             description: |
-              Keep the convex AWARE scarcity tiers per region-period (true), or
-              collapse each region-period pool to one flat availability cap
-              (false). Required for water_scarcity pricing or capping, which has
-              no signal to act on once every surface CF is zero.
-          groundwater:
-            type: boolean
-            description: |
-              Emit additive annual renewable- and non-renewable-groundwater
-              bands on top of the period-bound surface supply, so mining emerges
-              endogenously wherever surface plus renewable groundwater fall
-              short. Independent of scarcity_tiers.
+              Keep the convex AWARE scarcity curves (per-region-period surface
+              tiers and annual renewable-groundwater bands, true), or collapse
+              each pool to one flat availability cap (false). Required for
+              water_scarcity pricing or capping, which has no signal to act on
+              once every CF is zero.
           pumping_cost_usd_per_m3:
             type: number
             minimum: 0
-            description: "Marginal cost of non-renewable groundwater (USD per m3); merit-order separator, active only when groundwater is true"
+            description: "Marginal cost of non-renewable groundwater (USD per m3); merit-order separator"
           groundwater_ceiling_factor:
             type: number
             minimum: 0
-            description: "Non-renewable groundwater ceiling as a multiple of annual agricultural consumption; generous and non-binding, active only when groundwater is true"
+            description: "Non-renewable groundwater ceiling as a multiple of annual agricultural consumption; generous and non-binding"
       data:
         type: object
         required: [availability, surface_reference_start, surface_reference_end, groundwater_trend_start, groundwater_trend_end, huang_reference_year]
@@ -530,7 +524,7 @@ properties:
       nonrenewable_cf:
         type: [number, "null"]
         minimum: 0
-        description: "CF charged per m3 of non-renewable groundwater under scarcity pricing (AWARE cutoff 100); null leaves mining unpriced here"
+        description: "CF charged per m3 of non-renewable groundwater under scarcity pricing and capping (AWARE cutoff 100); null leaves mining out of both"
 
   groundwater_depletion:
     type: object
