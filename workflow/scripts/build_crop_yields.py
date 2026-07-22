@@ -11,7 +11,7 @@ from osgeo import gdal, osr
 gdal.UseExceptions()
 osr.UseExceptions()
 
-from exactextract import exact_extract  # noqa: E402
+from exactextract import Operation, exact_extract  # noqa: E402
 from exactextract.raster import NumPyRasterSource  # noqa: E402
 import geopandas as gpd  # noqa: E402
 import numpy as np  # noqa: E402
@@ -47,11 +47,11 @@ if __name__ == "__main__":
     KG_TO_TONNE = 0.001
 
     # Load classes
-    ds = xr.load_dataset(classes_nc)
-    class_labels = ds["resource_class"].values.astype(np.int16)
+    with xr.open_dataset(classes_nc) as ds:
+        class_labels = ds["resource_class"].load().values
 
     # Load rasters
-    y_raw, y_src = read_raster_float(yield_path)
+    y_tpha, y_src = read_raster_float(yield_path)
     conversion_overrides: dict[str, float] = {}
     if conv_csv:
         conversion_overrides = (
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     def _yield_multiplier(crop: str) -> float:
         # GAEZ publishes RES05 potential yields in kg/ha but the historical
-        # “actual yield” variant in t/ha. Validation runs toggle
+        # "actual yield" variant in t/ha. Validation runs toggle
         # ``use_actual_yields`` so we keep the raster units untouched in that
         # mode while the standard pathway still divides by 1_000.
         base_scale = 1.0 if use_actual_yields else KG_TO_TONNE
@@ -86,17 +86,17 @@ if __name__ == "__main__":
         # multiplier so the same table works for both actual and potential runs.
         return base_scale * (override / KG_TO_TONNE)
 
-    y_tpha = y_raw * _yield_multiplier(crop_code)
+    y_tpha *= _yield_multiplier(crop_code)
     if use_actual_yields:
         moisture_fraction = float(moisture_lookup[crop_code])
-        y_tpha = y_tpha * (1.0 - moisture_fraction)
+        y_tpha *= 1.0 - moisture_fraction
     s_raw, _ = read_raster_float(suit_path)
     s_frac = scale_fraction(s_raw)
     if water_path:
-        water_raw_mm, _ = read_raster_float(water_path)
-        water_m3_per_ha = water_raw_mm * 10.0  # 1 mm over 1 ha equals 10 m³
+        water_m3_per_ha, _ = read_raster_float(water_path)
+        water_m3_per_ha *= 10.0  # 1 mm over 1 ha equals 10 m3
     else:
-        water_m3_per_ha = np.zeros_like(y_raw)
+        water_m3_per_ha = np.zeros_like(y_tpha)
     gs_start_raw, _ = read_raster_float(gs_start_path)
     gs_length_raw, _ = read_raster_float(gs_length_path)
 
@@ -108,7 +108,8 @@ if __name__ == "__main__":
     # Use 1D cell areas and broadcast to save memory
     cell_area_ha_1d = calculate_all_cell_areas(y_src, repeat=False)
 
-    area_ha = s_frac * cell_area_ha_1d[:, np.newaxis]
+    s_frac *= cell_area_ha_1d[:, np.newaxis]
+    area_ha = s_frac
 
     # Regions
     regions_gdf = gpd.read_file(regions_path)
@@ -116,7 +117,8 @@ if __name__ == "__main__":
         regions_gdf = regions_gdf.to_crs(crs)
     regions_for_extract = regions_gdf.reset_index()
 
-    # Create raster sources once (before the loop) to avoid repeated allocations
+    # Build every class-specific operation up front so exactextract traverses each
+    # region geometry only once for all variables and resource classes.
     raster_kwargs = {
         "xmin": xmin,
         "ymin": ymin,
@@ -125,108 +127,93 @@ if __name__ == "__main__":
         "nodata": np.nan,
         "srs_wkt": crs_wkt,
     }
-    y_src_np = NumPyRasterSource(y_tpha, **raster_kwargs)
-    a_src_np = NumPyRasterSource(area_ha.astype(np.float32), **raster_kwargs)
-    water_src_np = NumPyRasterSource(water_m3_per_ha, **raster_kwargs)
-    gs_start_src_np = NumPyRasterSource(gs_start_raw, **raster_kwargs)
-    gs_length_src_np = NumPyRasterSource(gs_length_raw, **raster_kwargs)
+    y_src_np = NumPyRasterSource(y_tpha, name="yield", **raster_kwargs)
+    a_src_np = NumPyRasterSource(area_ha, name="suitable_area", **raster_kwargs)
+    water_src_np = NumPyRasterSource(
+        water_m3_per_ha, name="water_requirement", **raster_kwargs
+    )
+    gs_start_src_np = NumPyRasterSource(
+        gs_start_raw, name="growing_season_start", **raster_kwargs
+    )
+    gs_length_src_np = NumPyRasterSource(
+        gs_length_raw, name="growing_season_length", **raster_kwargs
+    )
+    value_sources = [
+        y_src_np,
+        a_src_np,
+        water_src_np,
+        gs_start_src_np,
+        gs_length_src_np,
+    ]
 
-    # Aggregate mean yield and sum area per class using weighted extraction
-    out = []
     n_classes = (
         int(np.nanmax(class_labels)) + 1 if np.isfinite(class_labels).any() else 0
     )
+    # Operation borrows its weight RasterSource, so keep the owners alive.
+    class_sources = []
+    operations = []
+    valid_classes = []
     for cls in range(n_classes):
-        # Create binary mask as weight (only allocation per iteration)
-        mask_float = (class_labels == cls).astype(np.float32)
-        if not np.any(mask_float > 0):
+        class_mask = class_labels == cls
+        if not np.any(class_mask):
             continue
-
-        # Use the mask as weights (0=not this class, 1=this class)
-        # Don't set nodata so 0s are treated as zero weight, not missing data
         mask_src = NumPyRasterSource(
-            mask_float,
+            class_mask,
             xmin=xmin,
             ymin=ymin,
             xmax=xmax,
             ymax=ymax,
+            name=f"resource_class_{cls}",
             srs_wkt=crs_wkt,
         )
+        class_sources.append(mask_src)
+        valid_classes.append(cls)
+        operations.extend(
+            [
+                Operation("weighted_mean", f"yield_{cls}", y_src_np, mask_src),
+                Operation("weighted_sum", f"suitable_area_{cls}", a_src_np, mask_src),
+                Operation(
+                    "weighted_mean",
+                    f"water_requirement_m3_per_ha_{cls}",
+                    water_src_np,
+                    mask_src,
+                ),
+                Operation(
+                    "weighted_mean",
+                    f"growing_season_start_day_{cls}",
+                    gs_start_src_np,
+                    mask_src,
+                ),
+                Operation(
+                    "weighted_mean",
+                    f"growing_season_length_days_{cls}",
+                    gs_length_src_np,
+                    mask_src,
+                ),
+            ]
+        )
 
-        # Use weighted operations with class mask as weight
-        y_stats = exact_extract(
-            y_src_np,
+    out = []
+    if operations:
+        stats = exact_extract(
+            value_sources,
             regions_for_extract,
-            ["weighted_mean"],
-            weights=mask_src,
+            operations,
             include_cols=["region"],
             output="pandas",
         )
-        a_stats = exact_extract(
-            a_src_np,
-            regions_for_extract,
-            ["weighted_sum"],
-            weights=mask_src,
-            include_cols=["region"],
-            output="pandas",
-        )
-        water_stats = exact_extract(
-            water_src_np,
-            regions_for_extract,
-            ["weighted_mean"],
-            weights=mask_src,
-            include_cols=["region"],
-            output="pandas",
-        )
-        gs_start_stats = exact_extract(
-            gs_start_src_np,
-            regions_for_extract,
-            ["weighted_mean"],
-            weights=mask_src,
-            include_cols=["region"],
-            output="pandas",
-        )
-        gs_length_stats = exact_extract(
-            gs_length_src_np,
-            regions_for_extract,
-            ["weighted_mean"],
-            weights=mask_src,
-            include_cols=["region"],
-            output="pandas",
-        )
-        if y_stats.empty or a_stats.empty:
-            continue
-        merged = (
-            y_stats.rename(columns={"weighted_mean": "yield"})
-            .merge(
-                a_stats.rename(columns={"weighted_sum": "suitable_area"}),
-                on="region",
-                how="inner",
-            )
-            .merge(
-                water_stats.rename(
-                    columns={"weighted_mean": "water_requirement_m3_per_ha"}
-                ),
-                on="region",
-                how="left",
-            )
-            .merge(
-                gs_start_stats.rename(
-                    columns={"weighted_mean": "growing_season_start_day"}
-                ),
-                on="region",
-                how="left",
-            )
-            .merge(
-                gs_length_stats.rename(
-                    columns={"weighted_mean": "growing_season_length_days"}
-                ),
-                on="region",
-                how="left",
-            )
-        )
-        merged["resource_class"] = cls
-        out.append(merged)
+        variables = [
+            "yield",
+            "suitable_area",
+            "water_requirement_m3_per_ha",
+            "growing_season_start_day",
+            "growing_season_length_days",
+        ]
+        for cls in valid_classes:
+            columns = {f"{variable}_{cls}": variable for variable in variables}
+            class_stats = stats[["region", *columns]].rename(columns=columns)
+            class_stats["resource_class"] = cls
+            out.append(class_stats)
 
     if out:
         df = (
