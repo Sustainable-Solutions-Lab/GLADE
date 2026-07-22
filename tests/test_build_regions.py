@@ -82,22 +82,27 @@ def test_cluster_country_splits_province_by_scarcity():
 
 
 def test_cluster_country_reconciles_when_pieces_scarce():
-    # A single one-piece province asked for more regions than it has pieces:
-    # reconciliation cannot exceed piece count, so it produces what it can.
+    # P1's area earns it two sub-regions, but it is a single indivisible piece,
+    # so the split regime under-produces; reconciliation must recover the
+    # deficit by splitting the merge group (P2's pieces) instead.
     pieces = pd.DataFrame(
         {
-            "prov": ["P1", "P2"],
-            "px": [0.0, 1.0],
-            "py": [0.0, 0.0],
-            "area": [1.0, 1.0],
-            "cf": [5.0, 5.0],
+            "prov": ["P1", "P2", "P2", "P2"],
+            "px": [0.0, 10.0, 12.0, 14.0],
+            "py": [0.0, 0.0, 0.0, 0.0],
+            "area": [10.0, 1.0, 1.0, 1.0],
+            "cf": [5.0, 10.0, 50.0, 90.0],
         }
     )
     labels = cluster_country(
-        pieces, 2, scarcity_weight=3.0, method="kmeans", random_state=0
+        pieces, 3, scarcity_weight=2.0, method="kmeans", random_state=0
     )
-    assert len(set(labels)) == 2  # two one-piece provinces -> two regions
+    df = pieces.assign(region=labels)
+    assert df["region"].nunique() == 3
     assert _nesting_holds(pieces, labels)
+    # The indivisible P1 stays one region; P2's pieces supply the other two.
+    assert df.loc[df["prov"] == "P1", "region"].nunique() == 1
+    assert df.loc[df["prov"] == "P2", "region"].nunique() == 2
 
 
 def test_country_budget_uses_full_province_area():
