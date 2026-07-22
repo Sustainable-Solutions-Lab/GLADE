@@ -132,11 +132,18 @@ def _allocate_per_country_targets_by_weight(
 
 
 def _cluster_coords(
-    coords: np.ndarray, k: int, method: str, random_state: int = 0
+    coords: np.ndarray,
+    k: int,
+    method: str,
+    random_state: int = 0,
+    weights: np.ndarray | None = None,
 ) -> np.ndarray:
     """Cluster coordinate array into up to k clusters.
 
     Returns one label per row. If k <= 0 or k >= n, assigns unique labels.
+    ``weights`` (areas) weight the samples under k-means, so a sliver piece
+    does not pull a centroid as hard as a half-province piece; agglomerative
+    clustering has no sample weighting and ignores them.
     """
     if coords.shape[0] <= k or k <= 0:
         return np.arange(coords.shape[0])
@@ -145,13 +152,11 @@ def _cluster_coords(
 
     if method == "kmeans":
         km = KMeans(n_clusters=k, n_init=10, random_state=random_state)
-        labels = km.fit_predict(coords)
-        return labels
+        return km.fit_predict(coords, sample_weight=weights)
     elif method == "agglomerative":
         # Ward linkage minimizes within-cluster variance (good heuristic)
         ac = AgglomerativeClustering(n_clusters=k, linkage="ward")
-        labels = ac.fit_predict(coords)
-        return labels
+        return ac.fit_predict(coords)
     else:
         raise ValueError(f"Unknown clustering method: {method}")
 
@@ -185,6 +190,23 @@ def _scarcity_features(
         return (a - a.mean()) / (s if s > 0 else 1.0)
 
     return np.column_stack([z(px), z(py), weight * z(cf)])
+
+
+def _province_centroids(pieces: pd.DataFrame) -> pd.DataFrame:
+    """Area-weighted ``px``, ``py``, ``cf`` per province, plus total ``area``."""
+
+    def agg(g: pd.DataFrame) -> pd.Series:
+        w = g["area"]
+        return pd.Series(
+            {
+                "px": np.average(g["px"], weights=w),
+                "py": np.average(g["py"], weights=w),
+                "cf": np.average(g["cf"], weights=w),
+                "area": w.sum(),
+            }
+        )
+
+    return pieces.groupby("prov").apply(agg, include_groups=False)
 
 
 def cluster_country(
@@ -231,28 +253,27 @@ def cluster_country(
         feat = _scarcity_features(
             d["px"].to_numpy(), d["py"].to_numpy(), d["cf"].to_numpy(), scarcity_weight
         )
-        sub = _cluster_coords(feat, n_sub, method, random_state)
+        sub = _cluster_coords(
+            feat, n_sub, method, random_state, weights=d["area"].to_numpy()
+        )
         labels.loc[d.index] = sub + next_id
         next_id += int(sub.max()) + 1
 
     # Merge regime: group remaining whole provinces.
     if remaining:
         rem = pieces[pieces["prov"].isin(remaining)]
-        prov_px = rem.groupby("prov").apply(
-            lambda g: np.average(g["px"], weights=g["area"]), include_groups=False
-        )
-        prov_py = rem.groupby("prov").apply(
-            lambda g: np.average(g["py"], weights=g["area"]), include_groups=False
-        )
-        prov_cf = rem.groupby("prov").apply(
-            lambda g: np.average(g["cf"], weights=g["area"]), include_groups=False
-        )
+        pcen = _province_centroids(rem)
         feat = _scarcity_features(
-            prov_px.to_numpy(), prov_py.to_numpy(), prov_cf.to_numpy(), scarcity_weight
+            pcen["px"].to_numpy(),
+            pcen["py"].to_numpy(),
+            pcen["cf"].to_numpy(),
+            scarcity_weight,
         )
-        kk = min(int(k_rem), len(prov_px))
-        grp = _cluster_coords(feat, kk, method, random_state)
-        prov_to_group = dict(zip(prov_px.index, grp + next_id))
+        kk = min(int(k_rem), len(pcen))
+        grp = _cluster_coords(
+            feat, kk, method, random_state, weights=pcen["area"].to_numpy()
+        )
+        prov_to_group = dict(zip(pcen.index, grp + next_id))
         labels.loc[rem.index] = rem["prov"].map(prov_to_group).to_numpy()
 
     # A province allocated more sub-regions than it has basin pieces, or a merge
@@ -287,23 +308,16 @@ def _reconcile_to_k(
             provs = sub["prov"].unique()
             if len(provs) > 1:
                 # Whole-province group: split provinces into two, keep them whole.
-                pcen = sub.groupby("prov").apply(
-                    lambda g: pd.Series(
-                        {
-                            "px": np.average(g["px"], weights=g["area"]),
-                            "py": np.average(g["py"], weights=g["area"]),
-                            "cf": np.average(g["cf"], weights=g["area"]),
-                        }
-                    ),
-                    include_groups=False,
-                )
+                pcen = _province_centroids(sub)
                 feat = _scarcity_features(
                     pcen["px"].to_numpy(),
                     pcen["py"].to_numpy(),
                     pcen["cf"].to_numpy(),
                     scarcity_weight,
                 )
-                two = _cluster_coords(feat, 2, method, random_state)
+                two = _cluster_coords(
+                    feat, 2, method, random_state, weights=pcen["area"].to_numpy()
+                )
                 move = pcen.index[two == 1]
                 labels.loc[sub.index[sub["prov"].isin(move)]] = next_id
             elif len(sub) > 1:
@@ -314,7 +328,9 @@ def _reconcile_to_k(
                     sub["cf"].to_numpy(),
                     scarcity_weight,
                 )
-                two = _cluster_coords(feat, 2, method, random_state)
+                two = _cluster_coords(
+                    feat, 2, method, random_state, weights=sub["area"].to_numpy()
+                )
                 labels.loc[sub.index[two == 1]] = next_id
             else:
                 continue  # single indivisible piece
