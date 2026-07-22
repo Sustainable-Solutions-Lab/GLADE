@@ -34,6 +34,22 @@ def read_raster_float(path: str):
     return arr, src
 
 
+def read_raster_cells_float(
+    path: str,
+    cell_ids: np.ndarray,
+    expected_shape: tuple[int, int],
+) -> np.ndarray:
+    with rasterio.open(path) as src:
+        if src.shape != expected_shape:
+            raise ValueError(
+                f"Raster shape mismatch for {path}: {src.shape} != {expected_shape}"
+            )
+        arr = src.read(1).ravel()[cell_ids].astype(float)
+        if src.nodata is not None:
+            arr = np.where(arr == src.nodata, np.nan, arr)
+    return arr
+
+
 def weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
     order = np.argsort(values)
     values = values[order]
@@ -120,21 +136,6 @@ def shares_by_region(
     return countries.map(lambda country: lookup.get(country, fallback)).to_numpy(float)
 
 
-def sum_by_region(
-    values: np.ndarray,
-    region_raster: np.ndarray,
-    n_regions: int,
-) -> np.ndarray:
-    valid = (region_raster >= 0) & np.isfinite(values)
-    if not np.any(valid):
-        return np.zeros(n_regions, dtype=float)
-    return np.bincount(
-        region_raster[valid].ravel(),
-        weights=values[valid].ravel(),
-        minlength=n_regions,
-    )
-
-
 def compute_max_yield_score(
     yield_paths: list[str],
     pairs: list[tuple[str, str]],
@@ -180,19 +181,20 @@ def compute_regional_harvested_area_score(
     mapping_df = load_mapping(Path(mapping_path))
     production_df = pd.read_csv(production_path)
     n_regions = len(regions_gdf)
-    numerator = np.zeros(expected_shape, dtype=float)
-    denominator = np.zeros(expected_shape, dtype=float)
-    region_valid = region_raster >= 0
-    share_grid_cache: dict[str, np.ndarray] = {}
+    region_cell_ids = np.flatnonzero(region_raster.ravel() >= 0)
+    region_ids = region_raster.ravel()[region_cell_ids]
+    numerator = np.zeros(len(region_cell_ids), dtype=float)
+    denominator = np.zeros(len(region_cell_ids), dtype=float)
+    region_share_cache: dict[str, np.ndarray] = {}
 
     for yield_path, harvested_path, (crop, _water_supply) in zip(
         yield_paths, harvested_paths, pairs, strict=True
     ):
-        y_raw, y_src = read_raster_float(yield_path)
-        try:
-            validate_raster_shape(y_raw, expected_shape, yield_path)
-        finally:
-            y_src.close()
+        y_raw = read_raster_cells_float(
+            yield_path,
+            region_cell_ids,
+            expected_shape,
+        )
         y = scale_yield(
             y_raw,
             crop,
@@ -201,19 +203,18 @@ def compute_regional_harvested_area_score(
             moisture=moisture,
         )
 
-        harvested_raw, harvested_src = read_raster_float(harvested_path)
-        try:
-            validate_raster_shape(harvested_raw, expected_shape, harvested_path)
-        finally:
-            harvested_src.close()
-
+        harvested = read_raster_cells_float(
+            harvested_path,
+            region_cell_ids,
+            expected_shape,
+        )
         harvested = np.where(
-            np.isfinite(harvested_raw) & (harvested_raw > 0.0),
-            harvested_raw * RES06_HAR_SCALE_TO_HA,
+            np.isfinite(harvested) & (harvested > 0.0),
+            harvested * RES06_HAR_SCALE_TO_HA,
             0.0,
         )
-        if crop not in share_grid_cache:
-            region_shares = shares_by_region(
+        if crop not in region_share_cache:
+            region_share_cache[crop] = shares_by_region(
                 crop,
                 regions_gdf,
                 mapping_df,
@@ -221,11 +222,8 @@ def compute_regional_harvested_area_score(
                 fdd_shares_path,
                 non_food_crops,
             )
-            share_grid = np.zeros(expected_shape, dtype=float)
-            share_grid[region_valid] = region_shares[region_raster[region_valid]]
-            share_grid_cache[crop] = share_grid
-        share_grid = share_grid_cache[crop]
-        crop_area = harvested * share_grid
+        region_shares = region_share_cache[crop]
+        crop_area = harvested * region_shares[region_ids]
 
         scale_mask = np.isfinite(y) & (y > 0.0) & (crop_area > 0.0)
         if not np.any(scale_mask):
@@ -234,22 +232,59 @@ def compute_regional_harvested_area_score(
         if not np.isfinite(scale) or scale <= 0.0:
             continue
 
-        regional_area = sum_by_region(crop_area, region_raster, n_regions)
-        region_weight = np.zeros(expected_shape, dtype=float)
-        region_weight[region_valid] = regional_area[region_raster[region_valid]]
+        regional_area = np.bincount(
+            region_ids,
+            weights=crop_area,
+            minlength=n_regions,
+        )
+        region_weight = regional_area[region_ids]
 
         normalized = y / scale
-        valid = region_valid & np.isfinite(normalized) & (normalized > 0.0)
+        valid = np.isfinite(normalized) & (normalized > 0.0)
         valid &= region_weight > 0.0
         numerator[valid] += region_weight[valid] * normalized[valid]
         denominator[valid] += region_weight[valid]
 
-    return np.divide(
+    score = np.full(expected_shape, np.nan, dtype=float)
+    score.ravel()[region_cell_ids] = np.divide(
         numerator,
         denominator,
-        out=np.full(expected_shape, np.nan, dtype=float),
+        out=np.full(len(region_cell_ids), np.nan, dtype=float),
         where=denominator > 0.0,
     )
+    return score
+
+
+def classify_by_region(
+    score: np.ndarray,
+    region_raster: np.ndarray,
+    quantiles: list[float],
+) -> np.ndarray:
+    """Assign positive scores to unweighted within-region quantile bins."""
+    flat_score = score.ravel()
+    flat_regions = region_raster.ravel()
+    valid_cell_ids = np.flatnonzero(
+        (flat_regions >= 0) & np.isfinite(flat_score) & (flat_score > 0.0)
+    )
+    classes = np.full(flat_score.shape, -1, dtype=np.int8)
+    if not valid_cell_ids.size:
+        return classes.reshape(score.shape)
+
+    order = np.argsort(flat_regions[valid_cell_ids], kind="stable")
+    sorted_cell_ids = valid_cell_ids[order]
+    sorted_regions = flat_regions[sorted_cell_ids]
+    starts = np.r_[0, np.flatnonzero(np.diff(sorted_regions)) + 1]
+    stops = np.r_[starts[1:], len(sorted_cell_ids)]
+
+    for start, stop in zip(starts, stops, strict=True):
+        cell_ids = sorted_cell_ids[start:stop]
+        thresholds = np.quantile(flat_score[cell_ids], quantiles)
+        classes[cell_ids] = np.searchsorted(
+            thresholds[1:-1],
+            flat_score[cell_ids],
+            side="right",
+        )
+    return classes.reshape(score.shape)
 
 
 if __name__ == "__main__":
@@ -351,32 +386,19 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown resource class score method: {score_method}")
 
     # Build xarray DataArrays
-    y_da = xr.DataArray(score, dims=("y", "x"))
     reg_da = xr.DataArray(region_raster, dims=("y", "x"))
 
-    # Vectorized per-region quantiles and class assignment
-    # Ignore cells with zero/negative scores so unsuitable or uncovered pixels
-    # do not collapse the quantile bins.
-    positive_y = xr.where((y_da > 0) & np.isfinite(y_da), y_da, np.nan)
-    reg_quantiles = positive_y.groupby(reg_da).quantile(quantiles)
-    thresholds = reg_quantiles.sel(group=reg_da).reset_coords(drop=True)
-
-    class_da = xr.full_like(y_da, np.nan, dtype=float)
-    for ci in range(len(quantiles) - 1):
-        lo = thresholds.isel(quantile=ci)
-        hi = thresholds.isel(quantile=ci + 1)
-        if ci == len(quantiles) - 2:
-            sel = (reg_da >= 0) & np.isfinite(y_da) & (y_da >= lo)
-        else:
-            sel = (reg_da >= 0) & np.isfinite(y_da) & (y_da >= lo) & (y_da < hi)
-        class_da = xr.where(sel, float(ci), class_da)
+    class_da = xr.DataArray(
+        classify_by_region(score, region_raster, quantiles),
+        dims=("y", "x"),
+    )
 
     ds = xr.Dataset(
         {
             "region_id": reg_da.astype(np.int32),
-            "resource_class": class_da.fillna(-1).astype(np.int8),
+            "resource_class": class_da,
         }
-    )
+    ).assign_coords(quantile=quantiles[-2])
     # Store transform/CRS/bounds as attrs for downstream use
     ds.attrs.update(
         {

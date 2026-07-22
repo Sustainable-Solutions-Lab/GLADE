@@ -132,7 +132,7 @@ rule compute_resource_classes:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=1900,
+        mem_mb=900,
     log:
         "<logs>/{name}/compute_resource_classes.log",
     benchmark:
@@ -143,11 +143,10 @@ rule compute_resource_classes:
 
 rule aggregate_class_areas:
     input:
-        classes="<processing>/{name}/resource_classes.nc",
+        cell_mapping="<processing>/{name}/region_class_cell_mapping.npz",
         sr=[gaez_path("suitability", "r", crop) for crop in gaez_crops()],
         si=[gaez_path("suitability", "i", crop) for crop in gaez_crops()],
         irrigated_share="data/downloads/gaez_land_equipped_for_irrigation_share.tif",
-        regions="<processing>/{name}/regions.geojson",
     params:
         irrigated_area_source=config["aggregation"]["irrigated_area_source"],
     output:
@@ -156,7 +155,7 @@ rule aggregate_class_areas:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=3000,
+        mem_mb=800,
     log:
         "<logs>/{name}/aggregate_class_areas.log",
     benchmark:

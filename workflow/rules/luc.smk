@@ -304,7 +304,7 @@ rule build_grazing_only_land:
 rule build_luc_carbon_coefficients:
     input:
         classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
+        cell_mapping=rules.build_region_class_cell_mapping.output.mapping,
         agb=rules.prepare_luc_inputs.output.agb,
         soc=rules.prepare_luc_inputs.output.soc,
         regrowth=rules.prepare_luc_inputs.output.regrowth,

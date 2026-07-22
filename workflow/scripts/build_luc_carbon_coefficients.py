@@ -12,12 +12,14 @@ osr.UseExceptions()
 from pathlib import Path  # noqa: E402
 
 from affine import Affine  # noqa: E402
-from exactextract import exact_extract  # noqa: E402
-from exactextract.raster import NumPyRasterSource  # noqa: E402
-import geopandas as gpd  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import xarray as xr  # noqa: E402
+
+from workflow.scripts.region_class_aggregation import (  # noqa: E402
+    CellMapping,
+    load_cell_mapping,
+)
 
 CO2_PER_C = 44.0 / 12.0
 ZONE_ORDER = ["tropical", "temperate", "boreal"]
@@ -143,9 +145,38 @@ def _ensure_mode_zero(mode: str) -> None:
         )
 
 
+def _weighted_mean_by_group(
+    values: np.ndarray,
+    weights: np.ndarray,
+    mapping: CellMapping,
+) -> np.ndarray:
+    """Return weighted means for every exact region/resource-class group."""
+    mapped_values = values.ravel()[mapping.cell_ids]
+    mapped_weights = weights.ravel()[mapping.cell_ids] * mapping.coverage
+    valid = ~np.isnan(mapped_values) & ~np.isnan(mapped_weights)
+    group_ids = mapping.group_ids[valid]
+    mapped_weights = mapped_weights[valid]
+    numerator = np.bincount(
+        group_ids,
+        weights=mapped_values[valid] * mapped_weights,
+        minlength=mapping.n_groups,
+    )
+    denominator = np.bincount(
+        group_ids,
+        weights=mapped_weights,
+        minlength=mapping.n_groups,
+    )
+    return np.divide(
+        numerator,
+        denominator,
+        out=np.full(mapping.n_groups, np.nan),
+        where=denominator != 0,
+    )
+
+
 def main() -> None:
     classes_path: str = snakemake.input.classes  # type: ignore[name-defined]
-    regions_path: str = snakemake.input.regions  # type: ignore[name-defined]
+    cell_mapping_path: str = snakemake.input.cell_mapping  # type: ignore[name-defined]
     agb_path: str = snakemake.input.agb  # type: ignore[name-defined]
     soc_path: str = snakemake.input.soc  # type: ignore[name-defined]
     regrowth_path: str = snakemake.input.regrowth  # type: ignore[name-defined]
@@ -163,11 +194,10 @@ def main() -> None:
 
     Path(coeffs_out).parent.mkdir(parents=True, exist_ok=True)
 
-    classes_ds = xr.load_dataset(classes_path)
-    transform, height, width, lon, lat = _load_transform(classes_ds)
-    resource_class = classes_ds["resource_class"].astype(np.int16).values
+    with xr.open_dataset(classes_path) as classes_ds:
+        _transform, height, width, lon, lat = _load_transform(classes_ds)
 
-    zone_idx = _zone_index(lat, width)
+    zone_idx = _zone_index(lat, 1)
     params = _zone_parameters(zone_params_path)
 
     agb = xr.load_dataset(agb_path)["agb_tc_per_ha"].astype(np.float32).values
@@ -179,11 +209,11 @@ def main() -> None:
     )
 
     lc_masks_path: str = snakemake.input.lc_masks  # type: ignore[name-defined]
-    lc_ds = xr.load_dataset(lc_masks_path)
-    cropland_frac = lc_ds["cropland_fraction"].astype(np.float32).values
-    pasture_frac = lc_ds["pasture_fraction"].astype(np.float32).values
-    forest_frac = lc_ds["forest_fraction"].astype(np.float32).values
-    grazing_intensity = lc_ds["grazing_intensity"].astype(np.float32).values
+    with xr.open_dataset(lc_masks_path) as lc_ds:
+        cropland_frac = lc_ds["cropland_fraction"].load().values
+        pasture_frac = lc_ds["pasture_fraction"].load().values
+        forest_frac = lc_ds["forest_fraction"].load().values
+        grazing_intensity = lc_ds["grazing_intensity"].load().values
     # Dominant-cover partition (see ``prepare_luc_inputs``): ``pasture_frac`` is
     # the open grazed land (LUIcube grass not overlapping forest/cropland), so
     # genuinely grazed open land is pasture -- not natural land -- for carbon,
@@ -297,6 +327,39 @@ def main() -> None:
             natural_frac > 0, nonforest_frac / natural_frac, 0.0
         ).astype(np.float32)
 
+    del (
+        agb,
+        soc_0_30,
+        regrowth_tc,
+        grazing_intensity,
+        zone_idx,
+        bgb_ratio_nat,
+        bgb_ratio_nonforest,
+        soc_depth_factor,
+        agb_crop,
+        bgb_ratio_crop,
+        agb_past,
+        bgb_ratio_past,
+        soc_factor_crop,
+        soc_factor_past,
+        agb_nonforest_zone,
+        soc_factor_past_eff,
+        agb_past_eff,
+        agb_obs,
+        soc_0_30_nat,
+        agb_forest,
+        agb_nonforest,
+        soc_nat,
+        bgb_forest,
+        s_forest,
+        bgb_nonforest,
+        s_nonforest,
+        bgb_crop,
+        s_ag_crop,
+        bgb_past,
+        s_ag_past,
+    )
+
     pulses_ds = xr.Dataset(
         {
             "P_crop_forest_tCO2_per_ha": (
@@ -321,6 +384,14 @@ def main() -> None:
     pulses_ds.to_netcdf(
         pulses_out,
         encoding={v: {"zlib": True, "dtype": "float32"} for v in pulses_ds.data_vars},
+    )
+    del pulses_ds
+    del (
+        p_crop_forest,
+        p_crop_nonforest,
+        p_past_forest,
+        p_past_nonforest,
+        regrowth,
     )
 
     use_names = [
@@ -357,30 +428,17 @@ def main() -> None:
         annual_out,
         encoding={"LEF_tCO2_per_ha_yr": {"zlib": True, "dtype": "float32"}},
     )
+    del annual_ds, lef_stack
 
     # --- Aggregate per-pixel LEFs to per-region/class coefficients ---
-    # Uses exact_extract with region polygons and class masks so that tiny
-    # regions that don't cover a full grid cell still get correct
-    # area-weighted LEFs via fractional cell overlaps.
-
-    regions_gdf = gpd.read_file(regions_path)
-    crs_wkt = classes_ds.attrs.get("crs_wkt")
-    if crs_wkt:
-        regions_gdf = regions_gdf.to_crs(crs_wkt)
-    regions_for_extract = regions_gdf.reset_index()
-
-    xmin = float(transform.c)
-    ymax = float(transform.f)
-    xmax = xmin + width * transform.a
-    ymin = ymax + height * transform.e
-    raster_kwargs = {
-        "xmin": xmin,
-        "ymin": ymin,
-        "xmax": xmax,
-        "ymax": ymax,
-        "nodata": np.nan,
-        "srs_wkt": crs_wkt,
-    }
+    # Reuse the exact fractional cell coverage shared by crop raster rules.
+    mapping = load_cell_mapping(cell_mapping_path)
+    if mapping.shape != (height, width):
+        raise ValueError(
+            f"Cell mapping shape {mapping.shape} does not match resource-class "
+            f"shape {(height, width)}"
+        )
+    unit_share = np.ones_like(share_forest)
 
     # For conversion uses, the LEF is weighted by the relevant land-cover
     # fraction (forest or nonforest), and the conversion_share tracks how
@@ -388,34 +446,34 @@ def main() -> None:
     weighted_uses: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {
         # (lef_array, area_weight, conversion_share)
         "cropland_forest": (
-            lef_crop_forest.astype(np.float32),
+            lef_crop_forest,
             forest_frac,
             share_forest,
         ),
         "cropland_nonforest": (
-            lef_crop_nonforest.astype(np.float32),
+            lef_crop_nonforest,
             nonforest_frac,
             share_nonforest,
         ),
         "pasture_forest": (
-            lef_past_forest.astype(np.float32),
+            lef_past_forest,
             forest_frac,
             share_forest,
         ),
         "pasture_nonforest": (
-            lef_past_nonforest.astype(np.float32),
+            lef_past_nonforest,
             nonforest_frac,
             share_nonforest,
         ),
         "spared_cropland": (
-            lef_spared.astype(np.float32),
+            lef_spared,
             cropland_frac,
-            np.ones_like(share_forest),
+            unit_share,
         ),
         "spared_grassland": (
-            lef_spared.astype(np.float32),
+            lef_spared,
             pasture_frac,
-            np.ones_like(share_forest),
+            unit_share,
         ),
     }
     water_options = {
@@ -427,64 +485,22 @@ def main() -> None:
         "spared_grassland": ("r",),
     }
 
-    n_classes = (
-        int(np.nanmax(resource_class)) + 1
-        if np.isfinite(resource_class.astype(float)).any()
-        else 0
-    )
-
     frames: list[pd.DataFrame] = []
-    for cls in range(n_classes):
-        mask_float = (resource_class == cls).astype(np.float32)
-        if not np.any(mask_float > 0):
-            continue
-
-        # Area-weighted mean LEF and conversion share per region for each use type
-        for use, (lef_arr, lc_weight, conv_share) in weighted_uses.items():
-            composite_weight = mask_float * lc_weight
-            composite_src = NumPyRasterSource(
-                composite_weight,
-                xmin=xmin,
-                ymin=ymin,
-                xmax=xmax,
-                ymax=ymax,
-                srs_wkt=crs_wkt,
+    region_ids = np.repeat(np.arange(len(mapping.regions)), mapping.n_classes)
+    class_ids = np.tile(np.arange(mapping.n_classes), len(mapping.regions))
+    group_regions = mapping.regions[region_ids]
+    for use, (lef_arr, lc_weight, conv_share) in weighted_uses.items():
+        lef_stats = _weighted_mean_by_group(lef_arr, lc_weight, mapping)
+        share_stats = _weighted_mean_by_group(conv_share, natural_frac, mapping)
+        for cls in range(mapping.n_classes):
+            class_mask = class_ids == cls
+            merged = pd.DataFrame(
+                {
+                    "region": group_regions[class_mask],
+                    "LEF_tCO2_per_ha_yr": lef_stats[class_mask],
+                    "conversion_share": share_stats[class_mask],
+                }
             )
-            lef_src = NumPyRasterSource(lef_arr, **raster_kwargs)
-            lef_stats = exact_extract(
-                lef_src,
-                regions_for_extract,
-                ["weighted_mean"],
-                weights=composite_src,
-                include_cols=["region"],
-                output="pandas",
-            )
-
-            # Aggregate conversion_share using the same weight (nonag area)
-            share_src = NumPyRasterSource(
-                conv_share.astype(np.float32), **raster_kwargs
-            )
-            # Weight shares by natural_frac * mask to get area-weighted mean share
-            nonag_weight = mask_float * natural_frac
-            nonag_weight_src = NumPyRasterSource(
-                nonag_weight.astype(np.float32),
-                xmin=xmin,
-                ymin=ymin,
-                xmax=xmax,
-                ymax=ymax,
-                srs_wkt=crs_wkt,
-            )
-            share_stats = exact_extract(
-                share_src,
-                regions_for_extract,
-                ["weighted_mean"],
-                weights=nonag_weight_src,
-                include_cols=["region"],
-                output="pandas",
-            )
-
-            merged = lef_stats.rename(columns={"weighted_mean": "LEF_tCO2_per_ha_yr"})
-            merged["conversion_share"] = share_stats["weighted_mean"]
             merged["resource_class"] = cls
             merged["use"] = use
             merged = merged.dropna(subset=["LEF_tCO2_per_ha_yr"])

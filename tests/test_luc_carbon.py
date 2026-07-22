@@ -7,12 +7,10 @@
 import textwrap
 
 from affine import Affine
-import geopandas as gpd
 import numpy as np
 from osgeo import gdal, osr
 import pandas as pd
 import pytest
-from shapely.geometry import box
 import xarray as xr
 
 from workflow.scripts.build_luc_carbon_coefficients import (
@@ -20,9 +18,11 @@ from workflow.scripts.build_luc_carbon_coefficients import (
     _correct_subpixel_soc,
     _decompose_agb,
     _ensure_mode_zero,
+    _weighted_mean_by_group,
     _zone_index,
     _zone_parameters,
 )
+from workflow.scripts.region_class_aggregation import CellMapping
 
 gdal.UseExceptions()
 osr.UseExceptions()
@@ -43,6 +43,32 @@ class TestCO2PerC:
         """CO2_PER_C equals the molar mass ratio 44/12."""
         assert pytest.approx(44.0 / 12.0) == CO2_PER_C
         assert pytest.approx(3.66667, rel=1e-4) == CO2_PER_C
+
+
+# ---------------------------------------------------------------------------
+# Tests: _weighted_mean_by_group
+# ---------------------------------------------------------------------------
+
+
+def test_weighted_mean_by_group_uses_cell_coverage_and_weights():
+    """Group means combine explicit weights with fractional cell coverage."""
+    mapping = CellMapping(
+        cell_ids=np.array([0, 1, 2, 3], dtype=np.int32),
+        coverage=np.array([1.0, 0.5, 0.25, 1.0]),
+        group_ids=np.array([0, 0, 1, 1], dtype=np.int32),
+        regions=np.array(["north", "south"]),
+        n_classes=1,
+        shape=(2, 2),
+        transform=(0.0, 1.0, 0.0, 2.0, 0.0, -1.0),
+        crs_wkt="",
+    )
+    values = np.array([[10.0, 20.0], [30.0, np.nan]])
+    weights = np.array([[1.0, 2.0], [4.0, 1.0]])
+
+    result = _weighted_mean_by_group(values, weights, mapping)
+
+    assert result[0] == pytest.approx(15.0)
+    assert result[1] == pytest.approx(30.0)
 
 
 # ---------------------------------------------------------------------------
@@ -756,18 +782,24 @@ def _make_synthetic_inputs(tmp_path, *, height=2, width=2):
     zone_path = tmp_path / "zone_params.csv"
     zone_path.write_text(zone_csv)
 
-    # Region GeoDataFrame: one region covering the full grid
-    region_gdf = gpd.GeoDataFrame(
-        {"region": ["test_region"]},
-        geometry=[box(0, 0, 2, 2)],
-        crs="EPSG:4326",
+    mapping_path = tmp_path / "cell_mapping.npz"
+    cell_ids = np.arange(height * width, dtype=np.int32)
+    np.savez(
+        mapping_path,
+        cell_ids=cell_ids,
+        coverage=np.ones(height * width, dtype=np.float64),
+        group_ids=np.zeros(height * width, dtype=np.int32),
+        regions=np.array(["test_region"]),
+        n_classes=np.array(1, dtype=np.int32),
+        height=np.array(height, dtype=np.int32),
+        width=np.array(width, dtype=np.int32),
+        transform=np.asarray(transform.to_gdal()),
+        crs_wkt=np.array(WGS84_WKT),
     )
-    regions_path = tmp_path / "regions.geojson"
-    region_gdf.to_file(str(regions_path), driver="GeoJSON")
 
     return {
         "classes": str(classes_path),
-        "regions": str(regions_path),
+        "cell_mapping": str(mapping_path),
         "agb": str(agb_path),
         "soc": str(soc_path),
         "regrowth": str(regrowth_path),

@@ -86,6 +86,10 @@ introduce breaking changes to configuration and outputs.
 
 ### Changed
 
+- Spatial preprocessing and model construction now reuse region/class cell
+  mappings, bound raster cache memory, and vectorize repeated aggregation and
+  crop-link operations. This substantially reduces the time and peak memory
+  needed to build a default model without changing its contents.
 - Crop-yield and harvested-area preparation now compute exact region and
   resource-class cell coverage once per configuration and reuse it across
   crops, substantially reducing build time and peak memory without changing

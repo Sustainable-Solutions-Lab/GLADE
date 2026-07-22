@@ -6,21 +6,17 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 from pathlib import Path
 
-from exactextract import exact_extract
-from exactextract.raster import NumPyRasterSource
-import geopandas as gpd
 import numpy as np
 import pandas as pd
-import xarray as xr
+import rasterio
 
 from workflow.scripts.multi_cropping_combinations import effective_combinations
 from workflow.scripts.raster_utils import (
     calculate_all_cell_areas,
     load_raster_array,
-    raster_bounds,
-    read_raster_float,
     scale_fraction,
 )
+from workflow.scripts.region_class_aggregation import load_cell_mapping
 
 ZONE_CAPABILITIES: dict[int, dict[str, int | bool]] = {
     0: {"valid": False, "max_cycles": 0, "max_wetland_rice": 0},
@@ -51,109 +47,6 @@ ZONE_CAPABILITIES: dict[int, dict[str, int | bool]] = {
 }
 
 WETLAND_RICE_CROPS = {"wetland-rice"}
-
-
-# exactextract's NumPyRasterSource retains, at the C++ level, the numpy array it
-# is handed, and that memory is never reclaimed even after the source is GC'd.
-# Because this module wraps a fresh full-grid array on every call (once per combo
-# x class x period), that leak accumulates to tens of GB. Reusing a single buffer
-# per grid shape means only one array is ever retained -- copying the caller's
-# transient array into the buffer lets the transient be freed normally.
-_EXTRACT_BUFFERS: dict[tuple[int, ...], np.ndarray] = {}
-
-
-def get_extract_buffer(shape: tuple[int, ...]) -> np.ndarray:
-    """Return the reused float64 exact_extract buffer for ``shape``.
-
-    Callers may fill the buffer themselves (e.g. accumulate directly into it)
-    and pass it to the aggregation functions, which skip the defensive copy
-    when handed the buffer itself.
-    """
-    buffer = _EXTRACT_BUFFERS.get(shape)
-    if buffer is None:
-        buffer = np.empty(shape, dtype=np.float64)
-        _EXTRACT_BUFFERS[shape] = buffer
-    return buffer
-
-
-def aggregate_raster_by_region(
-    data_array: np.ndarray,
-    regions_gdf: gpd.GeoDataFrame,
-    xmin: float,
-    ymin: float,
-    xmax: float,
-    ymax: float,
-    crs_wkt: str | None,
-    stat: str = "sum",
-) -> pd.DataFrame:
-    """Aggregate raster data by regions using exact_extract.
-
-    The data is copied into a reused per-shape buffer before being handed to
-    ``NumPyRasterSource`` to avoid a per-call memory leak (see ``_EXTRACT_BUFFERS``).
-    """
-    buffer = get_extract_buffer(data_array.shape)
-    if data_array is not buffer:
-        buffer[:] = data_array
-    src = NumPyRasterSource(
-        buffer,
-        xmin=xmin,
-        ymin=ymin,
-        xmax=xmax,
-        ymax=ymax,
-        nodata=np.nan,
-        srs_wkt=crs_wkt,
-    )
-    return exact_extract(
-        src,
-        regions_gdf,
-        [stat],
-        include_cols=["region"],
-        output="pandas",
-    )
-
-
-def region_coverage_entries(
-    regions_gdf: gpd.GeoDataFrame,
-    xmin: float,
-    ymin: float,
-    xmax: float,
-    ymax: float,
-    crs_wkt: str | None,
-    shape: tuple[int, int],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Per-region cell coverage fractions for a grid, extracted once.
-
-    Returns ``(region_names, rows, cells, fracs)`` where ``rows`` indexes into
-    ``region_names``, ``cells`` are flat row-major indices into the grid, and
-    ``fracs`` is the fraction of each cell covered by the region. For an
-    all-finite value grid ``v``,
-    ``np.bincount(rows, weights=v.ravel()[cells] * fracs, minlength=len(region_names))``
-    reproduces exact_extract's ``sum`` op, so any number of rasters sharing the
-    grid can be aggregated without recomputing the polygon coverage.
-    """
-    buffer = get_extract_buffer(shape)
-    buffer.fill(0.0)  # cell values are irrelevant here but must be finite
-    src = NumPyRasterSource(
-        buffer,
-        xmin=xmin,
-        ymin=ymin,
-        xmax=xmax,
-        ymax=ymax,
-        nodata=np.nan,
-        srs_wkt=crs_wkt,
-    )
-    res = exact_extract(
-        src,
-        regions_gdf,
-        ["cell_id", "coverage"],
-        include_cols=["region"],
-        output="pandas",
-    )
-    lengths = res["cell_id"].map(len).to_numpy()
-    rows = np.repeat(np.arange(len(res)), lengths)
-    cells = np.concatenate([np.asarray(a, dtype=np.int64) for a in res["cell_id"]])
-    fracs = np.concatenate([np.asarray(a, dtype=np.float64) for a in res["coverage"]])
-    return res["region"].to_numpy(), rows, cells, fracs
 
 
 def compute_eligibility_mask(
@@ -245,8 +138,7 @@ if __name__ == "__main__":
         for ws in ("r", "i")
         if f"multiple_cropping_zone_{ws}" in inputs
     }
-    classes_nc = inputs.pop("classes")
-    regions_path = inputs.pop("regions")
+    mapping_path = inputs.pop("cell_mapping")
     inputs.pop("combinations")
     conv_csv = inputs.pop("yield_unit_conversions")
     moisture_csv = inputs.pop("moisture_content")
@@ -307,29 +199,15 @@ if __name__ == "__main__":
             .to_dict()
         )
 
-    ds = xr.load_dataset(classes_nc)
-    if "resource_class" not in ds:
-        raise ValueError("resource_classes.nc is missing 'resource_class' data")
-    class_labels = ds["resource_class"].values.astype(np.int16)
+    mapping = load_cell_mapping(mapping_path)
 
     # Use any available crop/ws pair to get raster dimensions
     sample_crop, sample_ws = next(iter(crop_files.keys()))
-    yield_arr_ref, yield_src = read_raster_float(
-        crop_files[(sample_crop, sample_ws)]["yield"]
-    )
-    try:
-        height, width = yield_arr_ref.shape
-        if class_labels.shape != (height, width):
-            raise ValueError(
-                "Resource class grid does not match GAEZ raster dimensions for multiple cropping"
-            )
-        transform = yield_src.transform
-        crs = yield_src.crs
-        crs_wkt = crs.to_wkt() if crs else None
-        xmin, ymin, xmax, ymax = raster_bounds(transform, width, height)
+    with rasterio.open(crop_files[(sample_crop, sample_ws)]["yield"]) as yield_src:
+        height, width = yield_src.shape
+        if mapping.shape != (height, width):
+            raise ValueError("Cell mapping does not match GAEZ raster dimensions")
         cell_area_ha = calculate_all_cell_areas(yield_src)
-    finally:
-        yield_src.close()
 
     zone_arrays: dict[str, np.ndarray] = {}
     for ws, path in zone_paths.items():
@@ -339,11 +217,6 @@ if __name__ == "__main__":
                 f"Multiple cropping zone raster for water supply '{ws}' has unexpected dimensions"
             )
         zone_arrays[ws] = zone_arr.astype(np.int16, copy=False)
-
-    regions_gdf = gpd.read_file(regions_path)
-    if regions_gdf.crs and crs and regions_gdf.crs != crs:
-        regions_gdf = regions_gdf.to_crs(crs)
-    regions_for_extract = regions_gdf.reset_index()
 
     def conversion_factor(crop: str) -> float:
         base_scale = 1.0 if use_actual_yields else KG_TO_TONNE
@@ -393,21 +266,6 @@ if __name__ == "__main__":
             # with the single-crop path in build_crop_yields.
             water_requirement_data[(crop, ws)] = water_arr * 10.0
 
-    valid_classes = [
-        int(cls)
-        for cls in np.unique(class_labels[np.isfinite(class_labels)])
-        if int(cls) >= 0
-    ]
-
-    # Region coverage fractions are identical for every raster on this grid, so
-    # extract them once and aggregate all combo/class/period/cycle rasters with
-    # gathers + bincount instead of one exact_extract call per raster.
-    region_names, cov_rows, cov_cells, cov_fracs = region_coverage_entries(
-        regions_for_extract, xmin, ymin, xmax, ymax, crs_wkt, (height, width)
-    )
-    n_regions = len(region_names)
-    class_at_entry = class_labels.ravel()[cov_cells]
-
     eligible_records: list[pd.DataFrame] = []
     cycle_records: list[pd.DataFrame] = []
 
@@ -432,90 +290,81 @@ if __name__ == "__main__":
         eligible_fraction = np.where(combined_mask, min_fraction, np.nan)
         eligible_area = eligible_fraction * cell_area_ha
 
-        # Coverage entries restricted to the combo's eligible cells; per class,
-        # every aggregation is a gather over these entries + bincount against
-        # the same coverage fractions exact_extract would apply.
-        combo_at_entry = combined_mask.ravel()[cov_cells]
-        ea_flat = eligible_area.ravel()
+        selected = combined_mask.ravel()[mapping.cell_ids]
+        cells = mapping.cell_ids[selected]
+        groups = mapping.group_ids[selected]
+        area_entries = eligible_area.ravel()[cells] * mapping.coverage[selected]
+        area_by_group = np.bincount(
+            groups, weights=area_entries, minlength=mapping.n_groups
+        )
+        positive = area_by_group > 0
+        if not positive.any():
+            continue
+        positive_groups = np.flatnonzero(positive)
+        region_ids, resource_classes = np.divmod(positive_groups, mapping.n_classes)
+        area_stats = pd.DataFrame(
+            {
+                "region": mapping.regions[region_ids],
+                "eligible_area_ha": area_by_group[positive],
+            }
+        )
 
-        for cls in valid_classes:
-            sel = combo_at_entry & (class_at_entry == cls)
-            if not sel.any():
-                continue
-            rows_s = cov_rows[sel]
-            cells_s = cov_cells[sel]
-            fracs_s = cov_fracs[sel]
-            ea_entries = ea_flat[cells_s] * fracs_s
-
-            area_by_region = np.bincount(
-                rows_s, weights=ea_entries, minlength=n_regions
+        # Annual irrigation requirement (m3/ha): aggregate the summed-cycle
+        # demand*area numerator against the same eligible-area denominator.
+        if ws == "i" and total_water_arr is not None:
+            volume = np.bincount(
+                groups,
+                weights=total_water_arr.ravel()[cells] * area_entries,
+                minlength=mapping.n_groups,
             )
-            pos = area_by_region > 0
-            if not pos.any():
-                continue
-            area_stats = pd.DataFrame(
-                {
-                    "region": region_names[pos],
-                    "eligible_area_ha": area_by_region[pos],
-                }
+            area_stats["water_requirement_m3_per_ha"] = (
+                volume[positive] / area_by_group[positive]
             )
+        else:
+            area_stats["water_requirement_m3_per_ha"] = 0.0
 
-            # Annual irrigation requirement (m3/ha): aggregate the summed-cycle
-            # demand*area numerator against the same eligible-area denominator.
-            if ws == "i" and total_water_arr is not None:
-                volume = np.bincount(
-                    rows_s,
-                    weights=total_water_arr.ravel()[cells_s] * ea_entries,
-                    minlength=n_regions,
-                )
-                area_stats["water_requirement_m3_per_ha"] = (
-                    volume[pos] / area_by_region[pos]
-                )
-            else:
-                area_stats["water_requirement_m3_per_ha"] = 0.0
-
-            area_stats["resource_class"] = cls
-            area_stats["combination"] = combo_name
-            area_stats["water_supply"] = ws
-            eligible_records.append(
-                area_stats[
-                    [
-                        "combination",
-                        "region",
-                        "resource_class",
-                        "water_supply",
-                        "eligible_area_ha",
-                        "water_requirement_m3_per_ha",
-                    ]
+        area_stats["resource_class"] = resource_classes
+        area_stats["combination"] = combo_name
+        area_stats["water_supply"] = ws
+        eligible_records.append(
+            area_stats[
+                [
+                    "combination",
+                    "region",
+                    "resource_class",
+                    "water_supply",
+                    "eligible_area_ha",
+                    "water_requirement_m3_per_ha",
                 ]
-            )
+            ]
+        )
 
-            # Calculate yields for each crop cycle
-            for idx, (crop_name, yield_arr) in enumerate(
-                zip(crop_sequence, yield_stack), start=1
-            ):
-                numerator = np.bincount(
-                    rows_s,
-                    weights=yield_arr.ravel()[cells_s] * ea_entries,
-                    minlength=n_regions,
+        # Calculate yields for each crop cycle
+        for idx, (crop_name, yield_arr) in enumerate(
+            zip(crop_sequence, yield_stack), start=1
+        ):
+            numerator = np.bincount(
+                groups,
+                weights=yield_arr.ravel()[cells] * area_entries,
+                minlength=mapping.n_groups,
+            )
+            yield_t_per_ha = numerator[positive] / area_by_group[positive]
+            keep = yield_t_per_ha > 0
+            if not keep.any():
+                continue
+            cycle_records.append(
+                pd.DataFrame(
+                    {
+                        "combination": combo_name,
+                        "region": mapping.regions[region_ids][keep],
+                        "resource_class": resource_classes[keep],
+                        "water_supply": ws,
+                        "cycle_index": idx,
+                        "crop": crop_name,
+                        "yield_t_per_ha": yield_t_per_ha[keep],
+                    }
                 )
-                yield_t_per_ha = numerator[pos] / area_by_region[pos]
-                keep = yield_t_per_ha > 0
-                if not keep.any():
-                    continue
-                cycle_records.append(
-                    pd.DataFrame(
-                        {
-                            "combination": combo_name,
-                            "region": region_names[pos][keep],
-                            "resource_class": cls,
-                            "water_supply": ws,
-                            "cycle_index": idx,
-                            "crop": crop_name,
-                            "yield_t_per_ha": yield_t_per_ha[keep],
-                        }
-                    )
-                )
+            )
 
     if eligible_records:
         eligible_df = pd.concat(eligible_records, ignore_index=True)
