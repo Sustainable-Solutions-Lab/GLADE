@@ -149,11 +149,29 @@ def yield_and_suitability_for_crop(w):
     return inputs
 
 
+rule build_crop_yield_cell_mapping:
+    input:
+        classes="<processing>/{name}/resource_classes.nc",
+        regions="<processing>/{name}/regions.geojson",
+    output:
+        mapping="<processing>/{name}/crop_yield_cell_mapping.npz",
+    group:
+        "prep"
+    resources:
+        runtime="1m",
+        mem_mb=600,
+    log:
+        "<logs>/{name}/build_crop_yield_cell_mapping.log",
+    benchmark:
+        "<benchmarks>/{name}/build_crop_yield_cell_mapping.tsv"
+    script:
+        "../scripts/build_crop_yield_cell_mapping.py"
+
+
 rule build_crop_yields:
     input:
         unpack(yield_and_suitability_for_crop),
-        classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
+        cell_mapping="<processing>/{name}/crop_yield_cell_mapping.npz",
         yield_unit_conversions="data/curated/yield_unit_conversions.csv",
         moisture_content="data/curated/crop_moisture_content.csv",
     params:
@@ -168,7 +186,7 @@ rule build_crop_yields:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=1300,
+        mem_mb=700,
     log:
         "<logs>/{name}/build_crop_yields_{crop}_{water_supply}.log",
     benchmark:

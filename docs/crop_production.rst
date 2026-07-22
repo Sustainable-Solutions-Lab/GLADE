@@ -115,12 +115,12 @@ The following figures show yield potential maps for three major crops, illustrat
 Yield Aggregation
 -----------------
 
-Yields are aggregated from the input resolution gridcells to (region, resource_class, water_supply) combinations by ``workflow/scripts/build_crop_yields.py``.
+Yields are aggregated from the input resolution gridcells to (region, resource_class, water_supply) combinations by ``workflow/scripts/build_crop_yields.py``. Exact region-to-cell coverage fractions are computed once per configuration by ``workflow/scripts/build_crop_yield_cell_mapping.py`` and reused for every crop and water supply.
 
 Aggregation Process
 ~~~~~~~~~~~~~~~~~~~
 
-1. **Load resource classes**: Read the class assignment raster (see :doc:`land_use`)
+1. **Load the cell mapping**: Read the reusable region, resource-class, cell, and exact coverage arrays derived from the class raster (see :doc:`land_use`)
 
 2. **Load crop-specific rasters**:
 

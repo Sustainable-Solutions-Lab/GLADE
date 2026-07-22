@@ -71,9 +71,15 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/aggregate_class_areas.py``
   * **Purpose**: Compute available land area per (region, class, water, crop)
 
+**build_crop_yield_cell_mapping**
+  * **Input**: Resource classes, regions
+  * **Output**: ``processing/{name}/crop_yield_cell_mapping.npz``
+  * **Script**: ``workflow/scripts/build_crop_yield_cell_mapping.py``
+  * **Purpose**: Cache exact region and resource-class coverage by GAEZ grid cell
+
 **build_crop_yields**
   * **Wildcards**: ``{crop}`` (crop name), ``{water_supply}`` ("r" or "i")
-  * **Input**: Resource classes, GAEZ rasters (yield, suitability, water, growing season)
+  * **Input**: Reusable region/cell coverage mapping, GAEZ rasters (yield, suitability, water, growing season)
   * **Output**: ``processing/{name}/crop_yields/{crop}_{water_supply}.csv``
   * **Script**: ``workflow/scripts/build_crop_yields.py``
   * **Purpose**: Aggregate yields by (region, class) for each crop
