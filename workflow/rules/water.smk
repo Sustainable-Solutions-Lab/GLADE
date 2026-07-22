@@ -165,39 +165,20 @@ rule build_region_watergap:
         "../scripts/build_region_watergap.py"
 
 
-# MIRCA-OS v2 crops with more than one irrigated sub-crop cycle in the monthly
-# grids; every other base crop ships a single grid without a cycle digit. Used
-# to expand each mapped base crop into its sub-crop grid filenames.
-_MIRCA_SUBCROP_CYCLES = {"Rice": 3, "Wheat": 2}
-
-
 def mirca_calendar_grids(w):
-    """2015 irrigated monthly growing-area grids for every mapped MIRCA crop.
+    """2015 irrigated monthly growing-area grids for every calendar crop.
 
-    Reads the crop concordance plus the calendar-only supplement and expands
-    each non-dropped MIRCA base crop into its sub-crop grid(s) (``Rice1/2/3``,
-    ``Wheat1/2``, else the base label), keyed ``nc_{subcrop}`` for
+    One entry per subcrop label in ``MIRCA_OS_CALENDAR_SUBCROPS`` (the
+    concordance plus the calendar-only supplement, expanded to MIRCA's subcrop
+    naming in retrieve.smk), keyed ``nc_{subcrop}`` for
     ``build_mirca_crop_calendar``.
     """
-    import pandas as pd
-
-    mapping = pd.concat(
-        [
-            pd.read_csv("data/curated/mirca_os_crop_mapping.csv", comment="#"),
-            pd.read_csv("data/curated/mirca_os_calendar_supplement.csv", comment="#"),
-        ],
-        ignore_index=True,
-    )
-    mapping = mapping[mapping["glade_crop"].notna() & (mapping["glade_crop"] != "")]
-    grids = {}
-    for base in mapping["mirca_crop"].unique():
-        n = _MIRCA_SUBCROP_CYCLES.get(base, 1)
-        labels = [f"{base}{i}" for i in range(1, n + 1)] if n > 1 else [base]
-        for label in labels:
-            grids[f"nc_{label}"] = (
-                f"data/downloads/mirca_os/grids/monthly/MIRCA-OS_{label}_2015_ir.nc"
-            )
-    return grids
+    return {
+        f"nc_{label}": (
+            f"data/downloads/mirca_os/grids/monthly/MIRCA-OS_{label}_2015_ir.nc"
+        )
+        for label in MIRCA_OS_CALENDAR_SUBCROPS
+    }
 
 
 # Observed irrigated crop calendar: per (region, crop) monthly water-demand

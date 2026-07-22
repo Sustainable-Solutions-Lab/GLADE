@@ -823,12 +823,45 @@ MIRCA_OS_BAG_MEMBERS = {
 }
 MIRCA_OS_YEARS = (2000, 2005, 2010, 2015, 2020)
 with open("data/curated/mirca_os_crop_mapping.csv") as _mirca_mapping_file:
-    MIRCA_OS_BASE_CROPS = [
+    _mirca_mapping_rows = list(
+        csv.DictReader(line for line in _mirca_mapping_file if not line.startswith("#"))
+    )
+MIRCA_OS_BASE_CROPS = [row["mirca_crop"].strip() for row in _mirca_mapping_rows]
+
+# Monthly-grid subcrop labels feeding the irrigated crop calendar: every
+# GLADE-mapped base crop from the concordance plus the calendar-only
+# supplement, expanded into MIRCA-OS's subcrop naming (Rice1/2/3, Wheat1/2,
+# else the base label). Shared with water.smk's calendar input function so the
+# extraction rule below provably produces what build_mirca_crop_calendar needs.
+MIRCA_SUBCROP_CYCLES = {"Rice": 3, "Wheat": 2}
+with open("data/curated/mirca_os_calendar_supplement.csv") as _mirca_supplement_file:
+    _mirca_calendar_bases = [
         row["mirca_crop"].strip()
-        for row in csv.DictReader(
-            line for line in _mirca_mapping_file if not line.startswith("#")
+        for row in _mirca_mapping_rows
+        + list(
+            csv.DictReader(
+                line for line in _mirca_supplement_file if not line.startswith("#")
+            )
         )
+        if row["glade_crop"].strip()
     ]
+MIRCA_OS_CALENDAR_SUBCROPS = sorted(
+    {
+        label
+        for base in _mirca_calendar_bases
+        for label in (
+            [f"{base}{i}" for i in range(1, MIRCA_SUBCROP_CYCLES[base] + 1)]
+            if base in MIRCA_SUBCROP_CYCLES
+            else [base]
+        )
+    }
+)
+# All monthly grid members one archive pass must yield: the irrigated calendar
+# grids plus the repeated-rice grids (both systems) for multi-cropping.
+_MIRCA_MONTHLY_MEMBERS = sorted(
+    {(subcrop, "ir") for subcrop in MIRCA_OS_CALENDAR_SUBCROPS}
+    | {(subcrop, ws) for subcrop in ("Rice2", "Rice3") for ws in ("ir", "rf")}
+)
 
 
 rule download_mirca_os_archive:
@@ -916,27 +949,32 @@ rule extract_mirca_os_footprint:
 
 
 rule extract_mirca_os_subcrop_monthly:
-    """Unpack the repeated-rice monthly grids for one year in one archive pass.
+    """Unpack all needed monthly growing-area grids for one year in one pass.
 
     The subcrop-resolved monthly product preserves subcrop identity
-    (Rice1/2/3, Wheat1/2, ...). Rice2/3 feed the multi-cropping derivation's
-    repeated-cycle detection (never crop timing).
+    (Rice1/2/3, Wheat1/2, ...). The irrigated grids of every calendar crop
+    feed build_mirca_crop_calendar; Rice2/3 (both systems) additionally feed
+    the multi-cropping derivation's repeated-cycle detection.
     """
     input:
         rar="data/downloads/mirca_os/Monthly_Growing_Area_Grids.rar",
     output:
         expand(
-            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
-            subcrop=("Rice2", "Rice3"),
-            ws=("ir", "rf"),
+            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{year}_{ws}.nc",
+            zip,
+            subcrop=[m[0] for m in _MIRCA_MONTHLY_MEMBERS],
+            ws=[m[1] for m in _MIRCA_MONTHLY_MEMBERS],
+            allow_missing=True,
         ),
     wildcard_constraints:
         year="|".join(map(str, MIRCA_OS_YEARS)),
     params:
         member_globs=expand(
-            "*MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
-            subcrop=("Rice2", "Rice3"),
-            ws=("ir", "rf"),
+            "*MIRCA-OS_{subcrop}_{year}_{ws}.nc",
+            zip,
+            subcrop=[m[0] for m in _MIRCA_MONTHLY_MEMBERS],
+            ws=[m[1] for m in _MIRCA_MONTHLY_MEMBERS],
+            allow_missing=True,
         ),
     resources:
         runtime="30m",
