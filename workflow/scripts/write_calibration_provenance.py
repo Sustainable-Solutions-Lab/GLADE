@@ -91,7 +91,7 @@ def main() -> int:
         print("true" if resolve_gbd_anchoring(config) else "false")
         return 0
 
-    snapshot = structural_snapshot(config)
+    snapshot = structural_snapshot(config, PROJECT_ROOT)
 
     if args.check:
         try:

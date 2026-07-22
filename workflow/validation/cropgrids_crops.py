@@ -8,6 +8,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from workflow.scripts.multi_cropping_combinations import effective_combinations
+
+CATALOG_PATH = Path("data/curated/mirca_os_multicropping_combinations.yaml")
+
 
 def validate_cropgrids_crops(config: dict, project_root: Path) -> None:
     """Check cross-array invariants for ``cropgrids_crops``.
@@ -53,7 +57,7 @@ def validate_cropgrids_crops(config: dict, project_root: Path) -> None:
                 f"appear in irrigation.irrigated_crops: {', '.join(overlap_irrigation)}"
             )
 
-    combos = config.get("multiple_cropping") or {}
+    combos = effective_combinations(config, project_root / CATALOG_PATH)
     multi_crops = set()
     for entry in combos.values():
         if entry is None:

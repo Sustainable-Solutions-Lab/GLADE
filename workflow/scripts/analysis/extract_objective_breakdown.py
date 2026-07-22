@@ -258,6 +258,12 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
             "baseline_area_mha",
         ),
         (
+            "crop_production_multi",
+            "Crop production",
+            "bounded_subsidy_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
             "grassland_production",
             "Crop production",
             "bounded_subsidy_bnusd_per_mha",
@@ -295,6 +301,12 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
     for carrier, category, rate_col, baseline_col in [
         (
             "crop_production",
+            "Crop production",
+            "bounded_penalty_bnusd_per_mha",
+            "baseline_area_mha",
+        ),
+        (
+            "crop_production_multi",
             "Crop production",
             "bounded_penalty_bnusd_per_mha",
             "baseline_area_mha",

@@ -34,8 +34,8 @@
 #   tools/smk --configfile config/calibration/food_demand.yaml -- \
 #     data/curated/calibration/food_demand.csv
 
-# Shared name across all calibration configs so the expensive upstream
-# processing is built once under processing/calibration/ and reused.
+# ``tools/calibrate`` overrides this with a source- and step-specific name so
+# another calibration config cannot overwrite this step's intermediates.
 name: "calibration"
 
 scenarios:
@@ -74,6 +74,7 @@ food_demand_calibration:
   scenario: "food_demand_uncal"
 
 health:
+  enabled: false
   value_per_yll: 0
 
 emissions:

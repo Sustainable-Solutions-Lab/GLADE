@@ -32,6 +32,7 @@ from workflow.scripts.build_model import (
 )
 from workflow.scripts.constants import FEED_CATEGORIES, HA_PER_MHA, USD_TO_BNUSD
 from workflow.scripts.logging_config import setup_script_logging
+from workflow.scripts.multi_cropping_combinations import effective_combinations
 
 if __name__ == "__main__":
     # Configure logging
@@ -370,6 +371,7 @@ if __name__ == "__main__":
 
     multi_cropping_area_df = read_csv(snakemake.input.multi_cropping_area)
     multi_cropping_cycle_df = read_csv(snakemake.input.multi_cropping_yields)
+    multi_cropping_baseline_df = read_csv(snakemake.input.multi_cropping_baseline)
 
     luc_lef_lookup = pd.DataFrame(
         columns=["region", "resource_class", "water_supply", "use", "lef"]
@@ -612,8 +614,9 @@ if __name__ == "__main__":
         float
     ) * (1.0 - moisture_df["moisture_fraction"])
 
-    # Optional cost calibration corrections (crops, grassland, animals)
+    # Optional cost calibration corrections (crops, multi-crops, grassland, animals)
     crop_cost_calibration = None
+    multi_crop_cost_calibration = None
     grassland_cost_calibration = None
     animal_cost_calibration = None
     if hasattr(snakemake.input, "crop_cost_calibration"):
@@ -623,6 +626,15 @@ if __name__ == "__main__":
         ]
         logger.info(
             "Loaded crop cost calibration: %d entries", len(crop_cost_calibration)
+        )
+    if hasattr(snakemake.input, "multi_crop_cost_calibration"):
+        cal_df = read_csv(snakemake.input.multi_crop_cost_calibration)
+        multi_crop_cost_calibration = cal_df.set_index(["combination", "country"])[
+            "correction_bnusd_per_mha"
+        ].astype(float)
+        logger.info(
+            "Loaded multi-crop cost calibration: %d entries",
+            len(multi_crop_cost_calibration),
         )
     if hasattr(snakemake.input, "grassland_cost_calibration"):
         cal_df = read_csv(snakemake.input.grassland_cost_calibration)
@@ -981,20 +993,18 @@ if __name__ == "__main__":
         crop_loss_multiplier=crop_loss_multiplier,
         crop_marketing_cost_usd_per_t=crop_marketing_usd_per_t,
     )
-    land.add_multi_cropping_land_correction(
-        n,
-        land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
+    # Multi-cropping links carry an observed baseline (baseline_area.csv), so they
+    # are anchored -- and, under actual-production mode, pinned -- exactly like
+    # single-crop production. They are disabled only when the effective
+    # combination set (MIRCA-derived merged over config) is empty.
+    multiple_cropping_cfg = effective_combinations(
+        {
+            "multiple_cropping": snakemake.params.multiple_cropping,
+            "crops": snakemake.params.crops,
+        },
+        snakemake.input.multi_cropping_combinations,
     )
-
-    # Multi-cropping is disabled when running with actual production or when
-    # the land deviation penalty is active (penalty anchors land area to
-    # baseline; extra harvested area from multi-cropping would bias the
-    # deviation accounting).
-    dp_cfg = snakemake.params.deviation_penalty
-    land_deviation_active = dp_cfg["enabled"] and dp_cfg["land"]["enabled"]
-    enable_multiple_cropping = bool(snakemake.params.multiple_cropping) and (
-        not use_actual_production and not land_deviation_active
-    )
+    enable_multiple_cropping = bool(multiple_cropping_cfg)
     if enable_multiple_cropping:
         crops.add_multi_cropping_links(
             n,
@@ -1008,13 +1018,44 @@ if __name__ == "__main__":
             residue_lookup,
             residue_fue_lookup=residue_fue_lookup,
             residue_n2o_eff_lookup=residue_n2o_eff_lookup,
+            rice_methane_factor=rice_methane_factor,
+            rainfed_wetland_rice_ch4_scaling_factor=(
+                rainfed_wetland_rice_ch4_scaling_factor
+            ),
             min_yield_t_per_ha=min_crop_yield,
             seed_kg_dm_per_ha=seed_kg_dm_per_ha,
             crop_loss_multiplier=crop_loss_multiplier,
             crop_marketing_cost_usd_per_t=crop_marketing_usd_per_t,
+            combinations=multiple_cropping_cfg,
+            baseline_area=multi_cropping_baseline_df,
+            use_actual_production=use_actual_production,
+            multi_crop_cost_calibration=multi_crop_cost_calibration,
         )
-    elif use_actual_production:
-        logger.info("Skipping multiple cropping links under actual production mode")
+    # Clip sub-min_link_area_mha crop baselines before multi-crop reconciliation,
+    # pinning, or growth-cap aggregation. Reconciliation can then conserve the
+    # exact numerically retained FAOSTAT budget rather than independently clipping
+    # its single and multi decomposition afterwards.
+    # clip_negligible_coefficients repeats this later (idempotently); doing it
+    # here first prevents a below-floor multi cycle being pinned above an
+    # already-zeroed cap, which makes the validation solve infeasible.
+    n_clipped_baseline = utils.clip_baseline_area_mha(n, snakemake.params.numerics)
+    if n_clipped_baseline:
+        logger.info(
+            "Clipped %d sub-min_link_area_mha crop baselines before pinning",
+            n_clipped_baseline,
+        )
+
+    if enable_multiple_cropping:
+        # Persist the single-crop baseline reduction (harvested cycles now carried
+        # by the multi links) before the land correction and pinning read
+        # baseline_area_mha.
+        crops.reconcile_single_crop_baselines(n)
+
+    # Validation mode: pin single-crop and multi-cropping links alike at their
+    # (reconciled) baseline areas. Must run after the reconciliation so each
+    # harvested cycle is pinned exactly once.
+    if use_actual_production:
+        crops.fix_crop_production_to_baseline(n)
 
     # Fixed biofuel/industrial and biogas baseline demand. Must run after the
     # crop production links exist: rows whose source crop has no producible
@@ -1023,6 +1064,15 @@ if __name__ == "__main__":
         biomass.add_biofuel_links(
             n, biofuel_baseline_df, crop_moisture=moisture_by_crop
         )
+
+    # Land correction runs AFTER the multi links and the single-baseline
+    # reconciliation, and sums both crop carriers, so the cropland-bus demand
+    # (net (n-1)*A per n-cycle attribution) balances and the residual lands on
+    # the bulk generator.
+    land.add_multi_cropping_land_correction(
+        n,
+        land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
+    )
 
     if snakemake.params.grazing["enabled"]:
         grassland.add_grassland_feed_links(

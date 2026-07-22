@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from workflow.scripts.multi_cropping_combinations import effective_combinations
 from workflow.scripts.raster_utils import (
     calculate_all_cell_areas,
     load_raster_array,
@@ -52,34 +53,27 @@ ZONE_CAPABILITIES: dict[int, dict[str, int | bool]] = {
 WETLAND_RICE_CROPS = {"wetland-rice"}
 
 
-def sequence_feasible(
-    starts: list[np.ndarray], lengths: list[np.ndarray]
-) -> np.ndarray:
-    if not starts or not lengths or len(starts) != len(lengths):
-        raise ValueError("Starts and lengths must be equally-sized non-empty lists")
+# exactextract's NumPyRasterSource retains, at the C++ level, the numpy array it
+# is handed, and that memory is never reclaimed even after the source is GC'd.
+# Because this module wraps a fresh full-grid array on every call (once per combo
+# x class x period), that leak accumulates to tens of GB. Reusing a single buffer
+# per grid shape means only one array is ever retained -- copying the caller's
+# transient array into the buffer lets the transient be freed normally.
+_EXTRACT_BUFFERS: dict[tuple[int, ...], np.ndarray] = {}
 
-    feasible = np.ones_like(starts[0], dtype=bool)
-    for arr in [*starts, *lengths]:
-        feasible &= np.isfinite(arr)
-    for arr in lengths:
-        feasible &= arr > 0
 
-    if not feasible.any():
-        return feasible
+def get_extract_buffer(shape: tuple[int, ...]) -> np.ndarray:
+    """Return the reused float64 exact_extract buffer for ``shape``.
 
-    prev_end = starts[0] + lengths[0]
-    for idx in range(1, len(starts)):
-        start = starts[idx]
-        length = lengths[idx]
-        # Shift later crops forward by full years until they start after the previous crop
-        lag = np.maximum(prev_end - start, 0.0)
-        shift_cycles = np.ceil(lag / 365.0)
-        adjusted_start = start + shift_cycles * 365.0
-        prev_end = adjusted_start + length
-
-    total_span = prev_end - starts[0]
-    feasible &= np.isfinite(total_span) & (total_span <= 365.0)
-    return feasible
+    Callers may fill the buffer themselves (e.g. accumulate directly into it)
+    and pass it to the aggregation functions, which skip the defensive copy
+    when handed the buffer itself.
+    """
+    buffer = _EXTRACT_BUFFERS.get(shape)
+    if buffer is None:
+        buffer = np.empty(shape, dtype=np.float64)
+        _EXTRACT_BUFFERS[shape] = buffer
+    return buffer
 
 
 def aggregate_raster_by_region(
@@ -92,9 +86,16 @@ def aggregate_raster_by_region(
     crs_wkt: str | None,
     stat: str = "sum",
 ) -> pd.DataFrame:
-    """Aggregate raster data by regions using exact_extract."""
+    """Aggregate raster data by regions using exact_extract.
+
+    The data is copied into a reused per-shape buffer before being handed to
+    ``NumPyRasterSource`` to avoid a per-call memory leak (see ``_EXTRACT_BUFFERS``).
+    """
+    buffer = get_extract_buffer(data_array.shape)
+    if data_array is not buffer:
+        buffer[:] = data_array
     src = NumPyRasterSource(
-        data_array,
+        buffer,
         xmin=xmin,
         ymin=ymin,
         xmax=xmax,
@@ -111,18 +112,71 @@ def aggregate_raster_by_region(
     )
 
 
+def region_coverage_entries(
+    regions_gdf: gpd.GeoDataFrame,
+    xmin: float,
+    ymin: float,
+    xmax: float,
+    ymax: float,
+    crs_wkt: str | None,
+    shape: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per-region cell coverage fractions for a grid, extracted once.
+
+    Returns ``(region_names, rows, cells, fracs)`` where ``rows`` indexes into
+    ``region_names``, ``cells`` are flat row-major indices into the grid, and
+    ``fracs`` is the fraction of each cell covered by the region. For an
+    all-finite value grid ``v``,
+    ``np.bincount(rows, weights=v.ravel()[cells] * fracs, minlength=len(region_names))``
+    reproduces exact_extract's ``sum`` op, so any number of rasters sharing the
+    grid can be aggregated without recomputing the polygon coverage.
+    """
+    buffer = get_extract_buffer(shape)
+    buffer.fill(0.0)  # cell values are irrelevant here but must be finite
+    src = NumPyRasterSource(
+        buffer,
+        xmin=xmin,
+        ymin=ymin,
+        xmax=xmax,
+        ymax=ymax,
+        nodata=np.nan,
+        srs_wkt=crs_wkt,
+    )
+    res = exact_extract(
+        src,
+        regions_gdf,
+        ["cell_id", "coverage"],
+        include_cols=["region"],
+        output="pandas",
+    )
+    lengths = res["cell_id"].map(len).to_numpy()
+    rows = np.repeat(np.arange(len(res)), lengths)
+    cells = np.concatenate([np.asarray(a, dtype=np.int64) for a in res["cell_id"]])
+    fracs = np.concatenate([np.asarray(a, dtype=np.float64) for a in res["coverage"]])
+    return res["region"].to_numpy(), rows, cells, fracs
+
+
 def compute_eligibility_mask(
     crop_sequence: list[str],
     ws: str,
     zone_arr: np.ndarray,
     suitability_data: dict,
-    start_data: dict,
-    length_data: dict,
     yield_data: dict,
     water_requirement_data: dict,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    """Compute combined eligibility mask and return mask, min_fraction, total_water."""
-    # Zone capability check
+    """Compute combined eligibility mask and return mask, min_fraction, total_water.
+
+    The eligible (expansion-potential) area for a combination is the GAEZ-suitable
+    area where the multiple-cropping zone permits the cycle count (and, for
+    irrigated, the water requirement is defined). ``sequence_feasible`` on GAEZ
+    windows is deliberately NOT used as a gate: GAEZ attainable season lengths
+    overshoot the farmed cycle, so it rejects ~all observed double-cropping
+    (including repeated same-crop combos fed identical windows). This mirrors the
+    Stage-1 decoupling -- feasibility from observation, GAEZ only for the water
+    split -- and keeps the potential cap aligned with the anchored baseline
+    (``p_nom_max = max(potential, anchor)``).
+    """
+    # Zone capability check (enforces cycle count and wetland-rice-cycle limit)
     rice_cycles = sum(1 for crop in crop_sequence if crop in WETLAND_RICE_CROPS)
     allowed_zone_codes = [
         code
@@ -145,11 +199,6 @@ def compute_eligibility_mask(
     min_fraction[~np.isfinite(min_fraction)] = np.nan
     min_fraction = np.clip(min_fraction, 0.0, 1.0, out=min_fraction)
 
-    # Growing season feasibility
-    start_stack = [start_data[(crop, ws)] for crop in crop_sequence]
-    length_stack = [length_data[(crop, ws)] for crop in crop_sequence]
-    feasible_mask = sequence_feasible(start_stack, length_stack)
-
     # Yield check
     yield_stack = [yield_data[(crop, ws)] for crop in crop_sequence]
     positive_yield = np.ones_like(min_fraction, dtype=bool)
@@ -166,9 +215,7 @@ def compute_eligibility_mask(
         valid_water = np.ones_like(min_fraction, dtype=bool)
         total_water_arr = None
 
-    combined_mask = (
-        feasible_mask & valid_suit & positive_yield & valid_water & zone_mask
-    )
+    combined_mask = valid_suit & positive_yield & valid_water & zone_mask
     return combined_mask, min_fraction, total_water_arr
 
 
@@ -177,7 +224,11 @@ if __name__ == "__main__":
     combos: list[dict[str, object]] = []
     use_actual_yields = bool(getattr(snakemake.params, "use_actual_yields", False))  # type: ignore[attr-defined]
 
-    for name, entry in snakemake.params.combinations.items():  # type: ignore[attr-defined,name-defined]
+    combinations = effective_combinations(
+        snakemake.config,  # type: ignore[attr-defined,name-defined]
+        snakemake.input.combinations,  # type: ignore[attr-defined,name-defined]
+    )
+    for name, entry in combinations.items():
         if entry is None:
             continue
         crops = [str(c) for c in entry["crops"]]
@@ -196,6 +247,7 @@ if __name__ == "__main__":
     }
     classes_nc = inputs.pop("classes")
     regions_path = inputs.pop("regions")
+    inputs.pop("combinations")
     conv_csv = inputs.pop("yield_unit_conversions")
     moisture_csv = inputs.pop("moisture_content")
 
@@ -204,8 +256,6 @@ if __name__ == "__main__":
     suffixes = {
         "_yield_raster": "yield",
         "_suitability_raster": "suitability",
-        "_growing_season_start_raster": "season_start",
-        "_growing_season_length_raster": "season_length",
         "_water_requirement_raster": "water_requirement",
     }
     for key, path in inputs.items():
@@ -304,16 +354,12 @@ if __name__ == "__main__":
 
     yield_data: dict[tuple[str, str], np.ndarray] = {}
     suitability_data: dict[tuple[str, str], np.ndarray] = {}
-    start_data: dict[tuple[str, str], np.ndarray] = {}
-    length_data: dict[tuple[str, str], np.ndarray] = {}
     water_requirement_data: dict[tuple[str, str], np.ndarray] = {}
 
     for (crop, ws), files in crop_files.items():
         factor = conversion_factor(crop)
         y_arr = load_raster_array(files["yield"])
         suitability_arr = load_raster_array(files["suitability"])
-        start_arr = load_raster_array(files["season_start"])
-        length_arr = load_raster_array(files["season_length"])
         if y_arr.shape != (height, width):
             raise ValueError(
                 f"Yield raster for '{crop}' ({ws}) has unexpected dimensions"
@@ -322,14 +368,6 @@ if __name__ == "__main__":
             raise ValueError(
                 f"Suitability raster for '{crop}' ({ws}) has unexpected dimensions"
             )
-        if start_arr.shape != (height, width):
-            raise ValueError(
-                f"Growing season start raster for '{crop}' ({ws}) has unexpected dimensions"
-            )
-        if length_arr.shape != (height, width):
-            raise ValueError(
-                f"Growing season length raster for '{crop}' ({ws}) has unexpected dimensions"
-            )
 
         y_scaled = y_arr * factor
         if use_actual_yields and crop in moisture_lookup:
@@ -337,8 +375,6 @@ if __name__ == "__main__":
             y_scaled = y_scaled * (1.0 - moisture_lookup[crop])
         yield_data[(crop, ws)] = y_scaled
         suitability_data[(crop, ws)] = scale_fraction(suitability_arr)
-        start_data[(crop, ws)] = start_arr
-        length_data[(crop, ws)] = length_arr
 
         if ws == "i":
             path = files.get("water_requirement")
@@ -363,6 +399,15 @@ if __name__ == "__main__":
         if int(cls) >= 0
     ]
 
+    # Region coverage fractions are identical for every raster on this grid, so
+    # extract them once and aggregate all combo/class/period/cycle rasters with
+    # gathers + bincount instead of one exact_extract call per raster.
+    region_names, cov_rows, cov_cells, cov_fracs = region_coverage_entries(
+        regions_for_extract, xmin, ymin, xmax, ymax, crs_wkt, (height, width)
+    )
+    n_regions = len(region_names)
+    class_at_entry = class_labels.ravel()[cov_cells]
+
     eligible_records: list[pd.DataFrame] = []
     cycle_records: list[pd.DataFrame] = []
 
@@ -378,8 +423,6 @@ if __name__ == "__main__":
             ws,
             zone_arr,
             suitability_data,
-            start_data,
-            length_data,
             yield_data,
             water_requirement_data,
         )
@@ -389,60 +432,51 @@ if __name__ == "__main__":
         eligible_fraction = np.where(combined_mask, min_fraction, np.nan)
         eligible_area = eligible_fraction * cell_area_ha
 
+        # Coverage entries restricted to the combo's eligible cells; per class,
+        # every aggregation is a gather over these entries + bincount against
+        # the same coverage fractions exact_extract would apply.
+        combo_at_entry = combined_mask.ravel()[cov_cells]
+        ea_flat = eligible_area.ravel()
+
         for cls in valid_classes:
-            class_mask = (class_labels == cls) & combined_mask
-            if not np.any(class_mask):
+            sel = combo_at_entry & (class_at_entry == cls)
+            if not sel.any():
                 continue
+            rows_s = cov_rows[sel]
+            cells_s = cov_cells[sel]
+            fracs_s = cov_fracs[sel]
+            ea_entries = ea_flat[cells_s] * fracs_s
 
-            # Aggregate area by region
-            area_array = np.where(class_mask, eligible_area, np.nan)
-            area_stats = aggregate_raster_by_region(
-                area_array, regions_for_extract, xmin, ymin, xmax, ymax, crs_wkt
+            area_by_region = np.bincount(
+                rows_s, weights=ea_entries, minlength=n_regions
             )
-            if area_stats.empty:
+            pos = area_by_region > 0
+            if not pos.any():
                 continue
-            area_stats = area_stats.rename(columns={"sum": "eligible_area_ha"})
-            area_stats = area_stats.replace([np.inf, -np.inf], np.nan).dropna(
-                subset=["eligible_area_ha"]
+            area_stats = pd.DataFrame(
+                {
+                    "region": region_names[pos],
+                    "eligible_area_ha": area_by_region[pos],
+                }
             )
-            area_stats = area_stats[area_stats["eligible_area_ha"] > 0]
-            if area_stats.empty:
-                continue
 
-            # Calculate water requirements for irrigated crops
+            # Annual irrigation requirement (m3/ha): aggregate the summed-cycle
+            # demand*area numerator against the same eligible-area denominator.
             if ws == "i" and total_water_arr is not None:
-                water_numerator = np.where(
-                    class_mask, total_water_arr * eligible_area, np.nan
+                volume = np.bincount(
+                    rows_s,
+                    weights=total_water_arr.ravel()[cells_s] * ea_entries,
+                    minlength=n_regions,
                 )
-                water_stats = aggregate_raster_by_region(
-                    water_numerator,
-                    regions_for_extract,
-                    xmin,
-                    ymin,
-                    xmax,
-                    ymax,
-                    crs_wkt,
+                area_stats["water_requirement_m3_per_ha"] = (
+                    volume[pos] / area_by_region[pos]
                 )
-                if not water_stats.empty:
-                    water_stats = water_stats.rename(columns={"sum": "water_volume_m3"})
-                    area_stats = area_stats.merge(water_stats, on="region", how="left")
-                    area_stats = area_stats.replace([np.inf, -np.inf], np.nan).dropna(
-                        subset=["water_volume_m3"]
-                    )
-                    area_stats["water_requirement_m3_per_ha"] = (
-                        area_stats["water_volume_m3"] / area_stats["eligible_area_ha"]
-                    )
-                    area_stats = area_stats.replace([np.inf, -np.inf], np.nan).dropna(
-                        subset=["water_requirement_m3_per_ha"]
-                    )
-                    area_stats.drop(columns=["water_volume_m3"], inplace=True)
             else:
                 area_stats["water_requirement_m3_per_ha"] = 0.0
 
             area_stats["resource_class"] = cls
             area_stats["combination"] = combo_name
             area_stats["water_supply"] = ws
-            area_for_cycles = area_stats.copy()
             eligible_records.append(
                 area_stats[
                     [
@@ -460,47 +494,27 @@ if __name__ == "__main__":
             for idx, (crop_name, yield_arr) in enumerate(
                 zip(crop_sequence, yield_stack), start=1
             ):
-                numerator = np.where(class_mask, yield_arr * eligible_area, np.nan)
-                numerator_stats = aggregate_raster_by_region(
-                    numerator, regions_for_extract, xmin, ymin, xmax, ymax, crs_wkt
+                numerator = np.bincount(
+                    rows_s,
+                    weights=yield_arr.ravel()[cells_s] * ea_entries,
+                    minlength=n_regions,
                 )
-                if numerator_stats.empty:
+                yield_t_per_ha = numerator[pos] / area_by_region[pos]
+                keep = yield_t_per_ha > 0
+                if not keep.any():
                     continue
-
-                numerator_stats = numerator_stats.rename(
-                    columns={"sum": "yield_times_area"}
-                )
-                merged = area_for_cycles.merge(numerator_stats, on="region", how="left")
-                merged = merged.replace([np.inf, -np.inf], np.nan).dropna(
-                    subset=["yield_times_area"]
-                )
-                merged["yield_t_per_ha"] = (
-                    merged["yield_times_area"] / merged["eligible_area_ha"]
-                )
-                merged = (
-                    merged.replace([np.inf, -np.inf], np.nan)
-                    .dropna(subset=["yield_t_per_ha"])
-                    .query("yield_t_per_ha > 0")
-                )
-                if merged.empty:
-                    continue
-                merged["combination"] = combo_name
-                merged["resource_class"] = cls
-                merged["water_supply"] = ws
-                merged["cycle_index"] = idx
-                merged["crop"] = crop_name
                 cycle_records.append(
-                    merged[
-                        [
-                            "combination",
-                            "region",
-                            "resource_class",
-                            "water_supply",
-                            "cycle_index",
-                            "crop",
-                            "yield_t_per_ha",
-                        ]
-                    ]
+                    pd.DataFrame(
+                        {
+                            "combination": combo_name,
+                            "region": region_names[pos][keep],
+                            "resource_class": cls,
+                            "water_supply": ws,
+                            "cycle_index": idx,
+                            "crop": crop_name,
+                            "yield_t_per_ha": yield_t_per_ha[keep],
+                        }
+                    )
                 )
 
     if eligible_records:
@@ -511,7 +525,7 @@ if __name__ == "__main__":
         )
         eligible_df["water_requirement_m3_per_ha"] = pd.to_numeric(
             eligible_df["water_requirement_m3_per_ha"], errors="coerce"
-        )
+        ).fillna(0.0)
         eligible_df.sort_values(
             ["combination", "water_supply", "region", "resource_class"],
             inplace=True,

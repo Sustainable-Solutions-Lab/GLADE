@@ -26,10 +26,11 @@ representative central value rather than a sum (which would inflate the
 correction by the number of classes) or a mean (which would dilute it
 toward zero when only one class binds).
 
-Outputs three CSVs:
-  - crop:      (crop, country, correction_bnusd_per_mha)
-  - grassland: (country, correction_bnusd_per_mha)
-  - animal:    (product, country, correction_bnusd_per_mt_feed)
+Outputs four CSVs:
+  - crop:       (crop, country, correction_bnusd_per_mha)
+  - multi-crop: (combination, country, correction_bnusd_per_mha)
+  - grassland:  (country, correction_bnusd_per_mha)
+  - animal:     (product, country, correction_bnusd_per_mt_feed)
 """
 
 import logging
@@ -123,7 +124,10 @@ def extract_corrections(
         + max_duals.reindex(all_links, fill_value=0.0)
     )
 
-    # Map link names to group columns using link metadata
+    # Map link names to group columns using link metadata. The inner join
+    # restricts to the target carrier. Single-crop and multi-cropping links
+    # can share the same production-stability prefix, so callers extract
+    # them separately using different carriers and grouping columns.
     links = n.links.static
     carrier_links = links[links["carrier"] == carrier]
     link_meta = carrier_links[group_cols].copy()
@@ -132,7 +136,17 @@ def extract_corrections(
         {"correction": corrections.values},
         index=corrections.index,
     )
+    n_before = len(corrections_df)
     corrections_df = corrections_df.join(link_meta, how="inner")
+    n_excluded = n_before - len(corrections_df)
+    if n_excluded:
+        logger.info(
+            "Excluded %d banded links of other carriers from %s dual "
+            "extraction (each carrier is extracted separately with its own "
+            "grouping columns)",
+            n_excluded,
+            carrier,
+        )
 
     if corrections_df.empty:
         logger.warning("No %s links matched stability constraints", carrier)
@@ -188,6 +202,26 @@ def main() -> None:
     crop_path.parent.mkdir(parents=True, exist_ok=True)
     crop_result.to_csv(crop_path, index=False)
     logger.info("Wrote %d crop corrections to %s", len(crop_result), crop_path)
+
+    # --- Multi-crop corrections ---
+    multi_crop_result = extract_corrections(
+        n,
+        prefix="crop_production",
+        carrier="crop_production_multi",
+        group_cols=["combination", "country"],
+    )
+    multi_crop_result = multi_crop_result.rename(
+        columns={"correction": "correction_bnusd_per_mha"}
+    )
+
+    multi_crop_path = Path(snakemake.output.multi_crop_correction)
+    multi_crop_path.parent.mkdir(parents=True, exist_ok=True)
+    multi_crop_result.to_csv(multi_crop_path, index=False)
+    logger.info(
+        "Wrote %d multi-crop corrections to %s",
+        len(multi_crop_result),
+        multi_crop_path,
+    )
 
     # --- Grassland corrections ---
     grassland_result = extract_corrections(

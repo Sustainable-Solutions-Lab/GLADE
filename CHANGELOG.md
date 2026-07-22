@@ -17,6 +17,22 @@ introduce breaking changes to configuration and outputs.
 
 ### Added
 
+- Multiple cropping is now anchored to an observed baseline derived from
+  MIRCA-OS v2 (new automated data source), using the available 2010, 2015, or
+  2020 release nearest `baseline_year`. A fixed, documented sequence catalog
+  replaces dynamic combination discovery. Config entries may disable catalog
+  sequences or add zero-baseline greenfield potential under a new name.
+  Irrigated and rainfed observations are attributed separately, competing
+  rotations share crop-area budgets, and outputs are derived per config so the
+  spatial and climate inputs cannot be mixed between runs.
+  `crop_production_multi` links participate in the land deviation penalty, crop
+  growth cap, cost calibration, and validation-mode pinning like single-crop
+  links. Harvested cycles are reconciled out of the single-crop FAOSTAT
+  baselines so each cycle is counted once. A new `multi_crop_cost.csv`
+  calibration artefact carries per-(combination, country) bundle corrections.
+  The GAEZ growing-season compatibility gate is removed; observed feasibility
+  comes from MIRCA plus the GAEZ multiple-cropping zone.
+
 - New `health.segment_formulation: relax_and_fix` option (now the default):
   a two-pass LP scheme for the health module's non-convex dose-response
   curves (solve the relaxation, pin each non-convex curve to the segment of

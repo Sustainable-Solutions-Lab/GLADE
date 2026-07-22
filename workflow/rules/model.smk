@@ -109,6 +109,7 @@ def build_model_cost_calibration_input(wildcards):
     if cal_cfg["enabled"]:
         return {
             "crop_cost_calibration": cal_cfg["crop_correction_csv"],
+            "multi_crop_cost_calibration": cal_cfg["multi_crop_correction_csv"],
             "grassland_cost_calibration": cal_cfg["grassland_correction_csv"],
             "animal_cost_calibration": cal_cfg["animal_correction_csv"],
         }
@@ -163,6 +164,8 @@ rule build_model:
         cropland_baseline="<processing>/{name}/cropland_baseline_by_class.csv",
         multi_cropping_area="<processing>/{name}/multi_cropping/eligible_area.csv",
         multi_cropping_yields="<processing>/{name}/multi_cropping/cycle_yields.csv",
+        multi_cropping_baseline="<processing>/{name}/multi_cropping/baseline_area.csv",
+        multi_cropping_combinations=lambda wildcards: multicropping_combinations_yaml(),
         edible_portion="<processing>/{name}/fao_edible_portion.csv",
         population="<processing>/{name}/population.csv",
         baseline_diet="<processing>/{name}/dietary_intake.csv",
@@ -216,7 +219,6 @@ rule build_model:
         grazing=config["grazing"],
         baseline_year=config["baseline_year"],
         validation=config["validation"],
-        deviation_penalty=config["deviation_penalty"],
         numerics=config["numerics"],
         netcdf=config["netcdf"],
         # Add health-cluster stores when health is enabled in the base config or

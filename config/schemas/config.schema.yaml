@@ -698,12 +698,17 @@ properties:
                   type: string
               water_supplies:
                 type: array
-                minItems: 2
-                maxItems: 3
+                minItems: 1
+                maxItems: 2
+                uniqueItems: true
                 items:
                   type: string
                   enum: [r, i]
-    description: "Multiple cropping systems (double cropping)"
+    description: |
+      Overrides and greenfield additions to the curated MIRCA-OS combination
+      catalog. Set a catalog name to null to disable it. A non-null entry must
+      use a new name and defines a zero-baseline combination that optimization
+      may develop where GAEZ indicates sufficient potential.
 
   macronutrients:
     type: object
@@ -1658,7 +1663,7 @@ properties:
 
   cost_calibration:
     type: object
-    required: [enabled, generate, scenario, crop_correction_csv, grassland_correction_csv, animal_correction_csv]
+    required: [enabled, generate, scenario, crop_correction_csv, multi_crop_correction_csv, grassland_correction_csv, animal_correction_csv]
     additionalProperties: false
     properties:
       enabled:
@@ -1673,6 +1678,9 @@ properties:
       crop_correction_csv:
         type: string
         description: "Path to crop cost calibration correction CSV"
+      multi_crop_correction_csv:
+        type: string
+        description: "Path to multi-cropping cost calibration correction CSV"
       grassland_correction_csv:
         type: string
         description: "Path to grassland cost calibration correction CSV"

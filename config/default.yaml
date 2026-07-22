@@ -387,7 +387,7 @@ crops:
 # land can be brought into production for them. Each entry must:
 #   * appear in `crops`,
 #   * be absent from `irrigation.irrigated_crops` (rainfed-only),
-#   * not appear in any `multiple_cropping` combination,
+#   * not appear in any curated or configured multi-cropping combination,
 #   * have a row in data/curated/cropgrids_crop_mapping.csv,
 # enforced by workflow/validation/cropgrids_crops.py.
 cropgrids_crops:
@@ -441,28 +441,10 @@ non_food_crops:
 - biomass-sorghum
 
 # --- section: multiple_cropping ---
-multiple_cropping:
-  double_rice:
-    crops:
-    - wetland-rice
-    - wetland-rice
-    water_supplies:
-    - r
-    - i
-  rice_wheat:
-    crops:
-    - wetland-rice
-    - wheat
-    water_supplies:
-    - r
-    - i
-  maize_soybean:
-    crops:
-    - maize
-    - soybean
-    water_supplies:
-    - r
-    - i
+# Observed systems come from the curated MIRCA-OS catalog. Set a catalog name
+# to null to disable it, or add a uniquely named combination to expose
+# zero-baseline greenfield potential. Catalog combinations cannot be redefined.
+multiple_cropping: {}
 
 # --- section: macronutrients ---
 macronutrients: {}
@@ -1798,6 +1780,7 @@ cost_calibration:
   generate: false     # Generate calibration from solved model (breaks DAG cycle when true)
   scenario: "calibration"  # Scenario name used for calibration solve
   crop_correction_csv: "data/curated/calibration/{calibration_source}/crop_cost.csv"
+  multi_crop_correction_csv: "data/curated/calibration/{calibration_source}/multi_crop_cost.csv"
   grassland_correction_csv: "data/curated/calibration/{calibration_source}/grassland_cost.csv"
   animal_correction_csv: "data/curated/calibration/{calibration_source}/animal_cost.csv"
 

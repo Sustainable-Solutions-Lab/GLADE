@@ -93,12 +93,23 @@ def add_multi_cropping_land_correction(
     multiple crops per year on the same land), this adds non-extendable
     generators sized to the deficit. This avoids forcing land conversion
     or slack to accommodate what is really existing multi-cropped land.
+
+    Both single-crop and multi-cropping links draw ``baseline_area_mha`` Mha of
+    physical land from their cropland ``bus0``, so the harvested sum spans
+    ``{crop_production, crop_production_multi}``. This must run *after* the
+    multi-cropping links are added and the single-crop baselines reconciled
+    (design 6.2): with the reconciliation, an ``n``-cycle attribution reduces the
+    singles by ``n * A`` and the multi link adds ``A``, so the cropland-bus demand
+    net falls by ``(n - 1) * A`` -- exactly the land saved by sharing a field, and
+    the residual (unattributed extra-cycle area) still lands on this generator.
     """
-    crop_links = n.links.static[n.links.static["carrier"] == "crop_production"]
+    crop_links = n.links.static[
+        n.links.static["carrier"].isin(["crop_production", "crop_production_multi"])
+    ]
     if crop_links.empty:
         return
 
-    # Harvested area per cropland bus (bus0)
+    # Harvested/physical area per cropland bus (bus0), across both carriers
     harvested = crop_links.groupby("bus0")["baseline_area_mha"].sum()
 
     # Existing cropland supply per cropland bus (bus1 of land_use links)

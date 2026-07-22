@@ -800,6 +800,153 @@ rule extract_cropgrids_nc:
         """
 
 
+# MIRCA-OS v2 (Kebede et al. 2025, Scientific Data 12, 208), HydroShare resource
+# e4582ca0..., CC BY 4.0. Supersedes the v0.1 resource 60a890eb...; v2 adds 2020,
+# the model baseline year, which the multi-cropping derivation anchors to.
+#
+# The per-file iRODS endpoint 500s for this resource, so grids are fetched from
+# the whole-resource BagIt zip via partial HTTP-range extraction (see
+# ``workflow/scripts/download_mirca_os_bag_member.py``). Inside the bag the grid
+# collections are nested RAR5 archives; each required product/year batch is then
+# unpacked in one ``bsdtar`` pass (libarchive; the ``7z`` build here cannot read
+# RAR5).
+MIRCA_OS_BAG_MEMBERS = {
+    "Annual_Harvested_Area_Grids": (
+        "Annual Harvested Area Grids/Annual Harvested Area Grids.rar"
+    ),
+    "Maximum_Monthly_Cropped_Area_Grids": (
+        "Maximum Cropped Area Grids/Maximum Monthly Cropped Area Grids.rar"
+    ),
+    "Monthly_Growing_Area_Grids": (
+        "Monthly Growing Area Grids/Monthly Growing Area Grids.rar"
+    ),
+}
+MIRCA_OS_YEARS = (2000, 2005, 2010, 2015, 2020)
+with open("data/curated/mirca_os_crop_mapping.csv") as _mirca_mapping_file:
+    MIRCA_OS_BASE_CROPS = [
+        row["mirca_crop"].strip()
+        for row in csv.DictReader(
+            line for line in _mirca_mapping_file if not line.startswith("#")
+        )
+    ]
+
+
+rule download_mirca_os_archive:
+    """Download one MIRCA-OS v2 grid archive (nested RAR5) from the HydroShare bag.
+
+    Pulls a single member of the BagIt zip via HTTP-range partial extraction, so
+    a 32 MB / 284 MB / 1.5 GB grid archive does not require the full ~10 GB bag.
+    """
+    output:
+        "data/downloads/mirca_os/{archive}.rar",
+    wildcard_constraints:
+        archive="|".join(MIRCA_OS_BAG_MEMBERS),
+    params:
+        member=lambda w: MIRCA_OS_BAG_MEMBERS[w.archive],
+    resources:
+        runtime="120m",
+        mem_mb=1000,
+    log:
+        "<logs>/shared/download_mirca_os_{archive}.log",
+    benchmark:
+        "<benchmarks>/shared/download_mirca_os_{archive}.tsv"
+    script:
+        "../scripts/download_mirca_os_bag_member.py"
+
+
+rule extract_mirca_os_annual_harvested:
+    """Unpack all crop/system annual-harvested-area GeoTIFFs for one year.
+
+    Harvested area sums subcrops, so a twice-cropped field counts twice; this is
+    the numerator of the extra-cycle magnitude M = harvested - footprint. The
+    archive is scanned once for the complete batch rather than once per raster.
+    """
+    input:
+        rar="data/downloads/mirca_os/Annual_Harvested_Area_Grids.rar",
+    output:
+        expand(
+            "data/downloads/mirca_os/grids/annual/MIRCA-OS_{crop}_{{year}}_{ws}_v2.tif",
+            crop=MIRCA_OS_BASE_CROPS,
+            ws=("ir", "rf"),
+        ),
+    wildcard_constraints:
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*MIRCA-OS_{crop}_{{year}}_{ws}_v2.tif",
+            crop=MIRCA_OS_BASE_CROPS,
+            ws=("ir", "rf"),
+        ),
+    resources:
+        runtime="20m",
+        mem_mb=1000,
+    log:
+        "<logs>/shared/extract_mirca_os_annual_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
+
+
+rule extract_mirca_os_footprint:
+    """Unpack both maximum-monthly-cropped-area GeoTIFFs for one year.
+
+    This is the AEI-capped physical field footprint per system. The derivation
+    keeps irrigated and rainfed extra-cycle magnitudes separate so observed area
+    cannot be attributed across water-supply systems.
+    """
+    input:
+        rar="data/downloads/mirca_os/Maximum_Monthly_Cropped_Area_Grids.rar",
+    output:
+        expand(
+            "data/downloads/mirca_os/grids/footprint/MIRCA-OS_{{year}}_{ws}_v2.tif",
+            ws=("ir", "rf"),
+        ),
+    wildcard_constraints:
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*5-arcminute/MIRCA-OS_{{year}}_{ws}_v2.tif", ws=("ir", "rf")
+        ),
+    resources:
+        runtime="10m",
+        mem_mb=1000,
+    log:
+        "<logs>/shared/extract_mirca_os_footprint_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
+
+
+rule extract_mirca_os_subcrop_monthly:
+    """Unpack the repeated-rice monthly grids for one year in one archive pass.
+
+    The subcrop-resolved monthly product preserves subcrop identity
+    (Rice1/2/3, Wheat1/2, ...). Rice2/3 feed the multi-cropping derivation's
+    repeated-cycle detection (never crop timing).
+    """
+    input:
+        rar="data/downloads/mirca_os/Monthly_Growing_Area_Grids.rar",
+    output:
+        expand(
+            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
+            subcrop=("Rice2", "Rice3"),
+            ws=("ir", "rf"),
+        ),
+    wildcard_constraints:
+        year="|".join(map(str, MIRCA_OS_YEARS)),
+    params:
+        member_globs=expand(
+            "*MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
+            subcrop=("Rice2", "Rice3"),
+            ws=("ir", "rf"),
+        ),
+    resources:
+        runtime="30m",
+        mem_mb=2000,
+    log:
+        "<logs>/shared/extract_mirca_os_subcrop_{year}.log",
+    script:
+        "../scripts/extract_mirca_os_archive.py"
+
+
 rule download_grassland_yield_data:
     """Retrieve historical managed-grassland yield from ISIMIP2a / LPJmL.
 

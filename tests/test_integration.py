@@ -57,6 +57,25 @@ def test_build_solve_analyze(results_dir):
         results_dir / "analysis" / "scen-default" / "objective_breakdown.parquet"
     ).exists()
 
+    # Enabled catalog combinations restricted to the test config's crops must
+    # yield anchored multi links.
+    import pypsa
+
+    n = pypsa.Network(str(results_dir / "solved" / "model_scen-default.nc"))
+    links = n.links.static
+    multi = links[links["carrier"] == "crop_production_multi"]
+    assert not multi.empty, "expected crop_production_multi links"
+    assert (multi["baseline_area_mha"] > 0).any(), "multi links lack a baseline anchor"
+    # Irrigated multi links must carry a water port (no free irrigation).
+    bus_cols = [c for c in multi.columns if c.startswith("bus") and c[3:].isdigit()]
+    irrigated = multi[multi["water_supply"] == "irrigated"]
+    if not irrigated.empty:
+        has_water = irrigated[bus_cols].apply(
+            lambda row: any(isinstance(v, str) and v.startswith("water:") for v in row),
+            axis=1,
+        )
+        assert has_water.all(), "irrigated multi links without a water port"
+
 
 @pytest.mark.plots
 def test_plots(results_dir):
@@ -66,9 +85,9 @@ def test_plots(results_dir):
     Snakemake handles the dependency automatically.
     """
     run_snakemake_target(
-        "results/test/plots/scen-default/consumption_balance.pdf",
+        "results/test/plots/scen-default/food_consumption.pdf",
         "results/test/plots/scen-default/objective_breakdown.pdf",
     )
 
-    assert (results_dir / "plots" / "scen-default" / "consumption_balance.pdf").exists()
+    assert (results_dir / "plots" / "scen-default" / "food_consumption.pdf").exists()
     assert (results_dir / "plots" / "scen-default" / "objective_breakdown.pdf").exists()

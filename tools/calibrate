@@ -96,13 +96,6 @@ trap 'rm -f "$ANCHOR_OVERLAY"' EXIT
 printf 'diet:\n  anchor_groups_to_gbd: %s\n' "$ANCHORING" > "$ANCHOR_OVERLAY"
 echo "[calibrate] baseline-diet GBD anchoring: ${ANCHORING}"
 
-# Non-default sources get their own processing/results tree so repeated
-# calibrations against different bases don't thrash each other's builds.
-NAME_OVERRIDE=()
-if [[ "$SOURCE" != "default" ]]; then
-  NAME_OVERRIDE=(--config "name=calibration-${SOURCE}")
-fi
-
 ARTEFACT_FILES=(
   grassland_yield.csv
   fodder_conversion.csv
@@ -111,6 +104,7 @@ ARTEFACT_FILES=(
   food_waste.yaml
   food_demand.csv
   crop_cost.csv
+  multi_crop_cost.csv
   grassland_cost.csv
   animal_cost.csv
   deviation_penalty.yaml
@@ -130,6 +124,7 @@ FOOD_DEMAND_TARGETS=(
 )
 COST_TARGETS=(
   "$CAL_DIR"/crop_cost.csv
+  "$CAL_DIR"/multi_crop_cost.csv
   "$CAL_DIR"/grassland_cost.csv
   "$CAL_DIR"/animal_cost.csv
 )
@@ -137,7 +132,7 @@ STABILITY_TARGETS=(
   "$CAL_DIR"/deviation_penalty.yaml
 )
 
-# All three calibration configs use gurobi; default the pixi env accordingly.
+# All calibration configs use gurobi; default the pixi env accordingly.
 # Caller can override by setting CALIBRATE_PIXI_ENV= (empty) or a different env.
 DEFAULT_PIXI_ENV="${CALIBRATE_PIXI_ENV-gurobi}"
 
@@ -182,8 +177,9 @@ run_step() {
   local cfgfiles=()
   [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
   cfgfiles+=("$configfile" "$ANCHOR_OVERLAY")
-  echo "[calibrate] $label -- tools/smk --configfile ${cfgfiles[*]} ${NAME_OVERRIDE[*]} ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
-  tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
+  local name_override=(--config "name=calibration-${SOURCE}-${label}")
+  echo "[calibrate] $label -- tools/smk --configfile ${cfgfiles[*]} ${name_override[*]} ${PASSTHROUGH_ARR[*]} -- ${TARGETS_ARR[*]}"
+  tools/smk --configfile "${cfgfiles[@]}" "${name_override[@]}" "${PASSTHROUGH_ARR[@]}" -- "${TARGETS_ARR[@]}"
 }
 
 check_step() {
@@ -194,8 +190,9 @@ check_step() {
   local cfgfiles=()
   [[ -n "$BASE_CONFIG" ]] && cfgfiles+=("$BASE_CONFIG")
   cfgfiles+=("$configfile" "$ANCHOR_OVERLAY")
+  local name_override=(--config "name=calibration-${SOURCE}-${label}")
   local out
-  if ! out=$(tools/smk --configfile "${cfgfiles[@]}" "${NAME_OVERRIDE[@]}" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
+  if ! out=$(tools/smk --configfile "${cfgfiles[@]}" "${name_override[@]}" "${PASSTHROUGH_ARR[@]}" --dry-run --quiet -- "${TARGETS_ARR[@]}" 2>&1); then
     printf '  [error]      %-10s (dry-run failed; see output below)\n' "$label"
     printf '%s\n' "$out" | sed 's/^/    /'
     return 2

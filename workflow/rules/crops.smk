@@ -558,8 +558,88 @@ rule build_harvested_area_yield_weighted:
         "../scripts/build_harvested_area_yield_weighted.py"
 
 
+MIRCA_MULTICROPPING_CATALOG = "data/curated/mirca_os_multicropping_combinations.yaml"
+MIRCA_MULTICROPPING_YEAR = closest_mirca_multicropping_year(config["baseline_year"])
+if MIRCA_MULTICROPPING_YEAR != config["baseline_year"]:
+    logger.warning(
+        "MIRCA-OS has no release for baseline_year=%d; using closest release %d "
+        "for the multiple-cropping baseline",
+        config["baseline_year"],
+        MIRCA_MULTICROPPING_YEAR,
+    )
+
+
+def mirca_multicropping_inputs(_wildcards):
+    """Inputs for the config-specific observed multi-cropping derivation.
+
+    All 23 MIRCA crops' annual harvested grids (for the all-crop M_total),
+    the ir/rf footprint layers, the rice subcrop monthly grids (repeated-cycle
+    detection), the GAEZ multiple-cropping-zone rasters (cycle-count gate), and the
+    crop concordance and fixed combination catalog. The active config's region,
+    resource-class, and GAEZ grids make the resulting aggregate config-specific.
+    """
+    grids = "data/downloads/mirca_os/grids"
+    year = MIRCA_MULTICROPPING_YEAR
+    inputs = {
+        "concordance": "data/curated/mirca_os_crop_mapping.csv",
+        "catalog": MIRCA_MULTICROPPING_CATALOG,
+        "classes": "<processing>/{name}/resource_classes.nc",
+        "regions": "<processing>/{name}/regions.geojson",
+        "footprint_ir": f"{grids}/footprint/MIRCA-OS_{year}_ir_v2.tif",
+        "footprint_rf": f"{grids}/footprint/MIRCA-OS_{year}_rf_v2.tif",
+        "rice2_ir": f"{grids}/monthly/MIRCA-OS_Rice2_{year}_ir.nc",
+        "rice2_rf": f"{grids}/monthly/MIRCA-OS_Rice2_{year}_rf.nc",
+        "rice3_ir": f"{grids}/monthly/MIRCA-OS_Rice3_{year}_ir.nc",
+        "rice3_rf": f"{grids}/monthly/MIRCA-OS_Rice3_{year}_rf.nc",
+        "zone_i": gaez_path("multiple_cropping_zone", "i", "all"),
+        "zone_r": gaez_path("multiple_cropping_zone", "r", "all"),
+    }
+    for mirca_crop in MIRCA_OS_BASE_CROPS:
+        for mws in ("ir", "rf"):
+            key = f"annual_{mirca_crop.replace(' ', '_')}_{mws}"
+            inputs[key] = f"{grids}/annual/MIRCA-OS_{mirca_crop}_{year}_{mws}_v2.tif"
+    return inputs
+
+
+rule derive_mirca_multicropping:
+    """Derive and aggregate the observed multi-cropping baseline.
+
+    Attributes MIRCA's extra-cycle harvested area to the fixed curated crop-
+    sequence catalog, gating on MIRCA co-occurrence and the active config's GAEZ
+    multiple-cropping zones. The physical link areas are aggregated directly to
+    the active region and resource-class grids.
+    """
+    input:
+        unpack(mirca_multicropping_inputs),
+    output:
+        baseline="<processing>/{name}/multi_cropping/baseline_area.csv",
+        residual="<processing>/{name}/multi_cropping/residual_multicrop.tif",
+        stats="<processing>/{name}/multi_cropping/attribution_stats.csv",
+    params:
+        source_year=MIRCA_MULTICROPPING_YEAR,
+    resources:
+        runtime="15m",
+        mem_mb=8000,
+    log:
+        "<logs>/{name}/derive_mirca_multicropping.log",
+    benchmark:
+        "<benchmarks>/{name}/derive_mirca_multicropping.tsv"
+    script:
+        "../scripts/derive_mirca_multicropping.py"
+
+
+def multicropping_combinations_yaml():
+    """Path of the authoritative observed combination catalog."""
+    return MIRCA_MULTICROPPING_CATALOG
+
+
+def _effective_multicropping():
+    """The effective observed and greenfield combination set, DAG-side."""
+    return effective_combinations(config, multicropping_combinations_yaml())
+
+
 def multi_cropping_inputs(_wildcards):
-    combos_cfg = config["multiple_cropping"]
+    combos_cfg = _effective_multicropping()
     crops_by_supply: dict[str, set[str]] = {"r": set(), "i": set()}
     for combo_name, entry in combos_cfg.items():
         if entry is None:
@@ -576,18 +656,13 @@ def multi_cropping_inputs(_wildcards):
         "classes": "<processing>/{name}/resource_classes.nc",
         "regions": "<processing>/{name}/regions.geojson",
         "yield_unit_conversions": "data/curated/yield_unit_conversions.csv",
+        "combinations": multicropping_combinations_yaml(),
     }
     for ws in ("r", "i"):
         for crop in sorted(crops_by_supply[ws]):
             prefix = f"{crop}_{ws}"
             inputs[f"{prefix}_yield_raster"] = gaez_path(yield_kind, ws, crop)
             inputs[f"{prefix}_suitability_raster"] = gaez_path("suitability", ws, crop)
-            inputs[f"{prefix}_growing_season_start_raster"] = gaez_path(
-                "growing_season_start", ws, crop
-            )
-            inputs[f"{prefix}_growing_season_length_raster"] = gaez_path(
-                "growing_season_length", ws, crop
-            )
             if ws == "i":
                 inputs[f"{prefix}_water_requirement_raster"] = gaez_path(
                     "water_requirement", ws, crop
@@ -604,7 +679,6 @@ rule build_multi_cropping:
         unpack(multi_cropping_inputs),
         moisture_content="data/curated/crop_moisture_content.csv",
     params:
-        combinations=lambda wildcards: config["multiple_cropping"],
         use_actual_yields=config["validation"]["use_actual_yields"],
     output:
         eligible="<processing>/{name}/multi_cropping/eligible_area.csv",
@@ -799,6 +873,9 @@ if config["cost_calibration"]["generate"]:
             network=f"<results>/{_cal_name}/solved/model_scen-{_cal_scenario}.nc",
         output:
             crop_correction=config["cost_calibration"]["crop_correction_csv"],
+            multi_crop_correction=config["cost_calibration"][
+                "multi_crop_correction_csv"
+            ],
             grassland_correction=config["cost_calibration"]["grassland_correction_csv"],
             animal_correction=config["cost_calibration"]["animal_correction_csv"],
         resources:

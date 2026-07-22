@@ -30,9 +30,8 @@
 #     data/curated/calibration/exogenous_forage.csv \
 #     data/curated/calibration/exogenous_feed.csv
 
-# Shared name across all calibration configs so the expensive upstream
-# processing (crop yields, harvested area, regions, etc.) is built once
-# under processing/calibration/ and reused by each calibration step.
+# ``tools/calibrate`` overrides this with a source- and step-specific name so
+# another calibration config cannot overwrite this step's intermediates.
 name: "calibration"
 
 scenarios:
@@ -81,6 +80,7 @@ exogenous_feed_calibration:
   scenario: feed_uncal
 
 health:
+  enabled: false
   value_per_yll: 0
 
 emissions:

@@ -78,11 +78,17 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/build_crop_yields.py``
   * **Purpose**: Aggregate yields by (region, class) for each crop
 
+**derive_mirca_multicropping**
+  * **Input**: Annual harvested-area, footprint, and rice-subcrop grids from the MIRCA-OS release nearest ``baseline_year``; resource classes; regions; GAEZ RES01 multiple-cropping-zone rasters; the crop concordance; and the fixed combination catalog
+  * **Output**: ``processing/{name}/multi_cropping/baseline_area.csv`` (observed physical link area), ``residual_multicrop.tif`` (unattributed extra-cycle area), and ``attribution_stats.csv`` (diagnostic totals)
+  * **Script**: ``workflow/scripts/derive_mirca_multicropping.py``
+  * **Purpose**: Derive and aggregate the observed multi-cropping baseline independently for irrigated and rainfed systems. This is an ordinary config-specific rule because its spatial aggregation and GAEZ zone gate depend on config inputs
+
 **build_multi_cropping**
-  * **Input**: Resource classes, regions, the RES01 multiple-cropping zone rasters, and the required GAEZ RES05 rasters (yield, suitability, growing season start/length, plus water requirement for irrigated variants) for every crop referenced in ``config.multiple_cropping``
+  * **Input**: Resource classes, regions, the effective curated-plus-greenfield combination set, the RES01 multiple-cropping zone rasters, and the required GAEZ RES05 rasters (yield, suitability, plus water requirement for irrigated variants) for every crop in that set
   * **Output**: ``processing/{name}/multi_cropping/eligible_area.csv`` (eligible hectares, irrigated water requirement), ``processing/{name}/multi_cropping/cycle_yields.csv`` (per-cycle yields)
   * **Script**: ``workflow/scripts/build_multi_cropping.py``
-  * **Purpose**: Filter pixels by the RES01 class (ignoring relay-only options), confirm crop calendars fit within the year, aggregate eligible hectares to regions/resource classes, and compute per-cycle yields
+  * **Purpose**: Filter pixels by the RES01 class and per-crop suitability/yield/water validity, aggregate eligible potential hectares to regions/resource classes, and compute per-cycle yields
 
 **build_grassland_yields**
   * **Input**: ISIMIP grassland yield NetCDF, resource classes, regions

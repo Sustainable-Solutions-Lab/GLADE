@@ -59,6 +59,7 @@ _CALIBRATION_SECTIONS = [
         "path": ("cost_calibration",),
         "files": [
             "crop_correction_csv",
+            "multi_crop_correction_csv",
             "grassland_correction_csv",
             "animal_correction_csv",
         ],
