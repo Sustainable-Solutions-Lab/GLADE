@@ -736,15 +736,14 @@ rule build_grassland_yields:
 rule build_luicube_grassland_yields:
     input:
         luicube="<processing>/shared/luc/luicube_grassland.nc",
-        classes="<processing>/{name}/resource_classes.nc",
-        regions="<processing>/{name}/regions.geojson",
+        cell_mapping="<processing>/{name}/region_class_cell_mapping.npz",
     output:
         "<processing>/{name}/luicube_grassland_yields.csv",
     group:
         "prep"
     resources:
         runtime="1m",
-        mem_mb=2600,
+        mem_mb=1000,
     log:
         "<logs>/{name}/build_luicube_grassland_yields.log",
     benchmark:

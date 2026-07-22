@@ -565,6 +565,7 @@ def add_regional_crop_production_links(
     all_df["baseline_area_mha"] = _redistribute_excess_baseline(all_df)
 
     # Look up per-(crop, country) cost, falling back to global median
+    cost_keys = list(zip(all_df["crop"].astype(str), all_df["country"].astype(str)))
     per_link_cost = pd.Series(
         _crop_cost_values(
             all_df["crop"], all_df["country"], crop_costs, global_median_cost
