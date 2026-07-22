@@ -709,6 +709,11 @@ def add_water_scarcity_cap(n: pypsa.Network, cap_mm3_world_eq: float) -> None:
     The water-scarcity store is extendable, so bounding its capacity bounds the
     accumulated scarcity (Mm^3 world-equivalent). Used to trace the emissions
     vs water-scarcity Pareto front by sweeping the cap while pricing GHG.
+
+    Non-renewable groundwater carries no CF and does not count against this
+    cap; with ``water.supply.groundwater`` on, combine the cap with a
+    groundwater_depletion price or cap, or the LP can satisfy it by mining
+    (``run_solve`` warns in that case).
     """
     n.stores.static.at["store:impact:water_scarcity", "e_nom_max"] = cap_mm3_world_eq
 
@@ -1528,11 +1533,24 @@ def run_solve(
             "water.supply.groundwater: without the groundwater bands nothing "
             "is ever mined, so the lever is vacuous."
         )
+    if (
+        scarcity_capped
+        and smk.params.water_groundwater
+        and not (scarcity_priced or depletion_priced or depletion_capped)
+    ):
+        # nonrenewable_cf charges mining only under scarcity *pricing*; a bare
+        # cap leaves CF-free mining as an escape deterred only by pumping cost.
+        logger.warning(
+            "water_scarcity cap is porous: groundwater mining carries no CF and "
+            "is neither priced nor capped, so the LP can meet the cap by "
+            "substituting mined groundwater. Combine with a "
+            "groundwater_depletion price or cap for a closed sweep."
+        )
     if depletion_priced:
         add_groundwater_depletion_pricing_to_objective(
             n, float(smk.params.groundwater_price)
         )
-    if smk.params.groundwater_cap is not None:
+    if depletion_capped:
         add_groundwater_depletion_cap(n, float(smk.params.groundwater_cap))
 
     # Update health store marginal costs to match scenario value_per_yll.

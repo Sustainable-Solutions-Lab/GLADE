@@ -24,7 +24,7 @@ bus that irrigated crops draw from:
 
 .. code-block:: text
 
-   supply:water_source
+   water:source
       --(tiered supply: CF -> scarcity, groundwater-band routing)-->
    water:{region}                    <- consumption pool (C)
       --(irrigate:{region}, efficiency = eta_c)-->
@@ -330,7 +330,10 @@ groundwater fall short of demand -- the pumping cost keeps the draw minimal, so
 the ceiling itself does not bind. The groundwater sizing fields come from
 WaterGAP 2.2e via ``build_region_watergap.py`` (see :doc:`data_sources`): mining
 is the groundwater-storage decline and renewable groundwater is the recharged
-part of irrigation groundwater consumption (:math:`\text{pirrusegw}`). There is
+part of irrigation groundwater consumption (:math:`\text{pirrusegw}`). The
+subtraction crosses sectors -- the storage decline reflects all users, so heavy
+municipal or industrial mining also shrinks the irrigation renewable band (a
+conservative attribution). There is
 no endogenous inter-period surface storage; current reservoir operation enters
 through the WaterGAP monthly surface profile, so mining reflects the deficit
 under today's regulation. With ``water.supply.groundwater: false`` there are no
@@ -354,7 +357,12 @@ in ``build_region_water_aware.py`` (as the model draws down a basin's pool its
 AMD falls and the CF rises), discretised into tiers, and drawn low-CF-first via
 a negligible merit-order regularizer. At solve time the accumulated scarcity can
 be priced (``water_scarcity.price``) or capped
-(``water_scarcity.cap_mm3_world_eq``).
+(``water_scarcity.cap_mm3_world_eq``). A cap alone is porous when
+``water.supply.groundwater`` is on: ``nonrenewable_cf`` applies only under
+scarcity *pricing*, so with mining neither priced nor capped the LP can meet
+the cap by substituting CF-free mining, deterred only by the pumping cost.
+Combine the cap with a ``groundwater_depletion`` price or cap for a closed
+sweep (the solve logs a warning otherwise).
 
 Groundwater depletion accounting
 --------------------------------
@@ -373,14 +381,12 @@ scarcity pricing alone the CF-free mined band would become the cheapest source
 wherever the scarcity charge exceeds the pumping cost, and "relief" would be
 substitution into fossil groundwater rather than conservation.
 ``water_scarcity.nonrenewable_cf`` therefore charges each mined m3 at
-``nonrenewable_cf * water_scarcity.price``. The default 30 is the
-mining-volume-weighted mean local AWARE CF of the regions that actually
-deplete groundwater (so a mined m3 is priced at the scarcity of the exhausted
-renewable water it displaces); weights below that reintroduce the substitution
-at low-to-mid prices, while 100 (AWARE's demand-exceeds-availability cutoff
-plus a non-renewability premium) is the precautionary upper anchor. Set it to
-``null`` to study depletion as a separate axis via the ``groundwater_depletion``
-options (enabling both pricings together is an error).
+``nonrenewable_cf * water_scarcity.price``. The default 100 -- AWARE's
+demand-exceeds-availability cutoff plus a non-renewability premium -- is a
+precautionary anchor pricing a mined m3 at least at the scarcity of the
+exhausted renewable water it displaces. Set it to ``null`` to study depletion
+as a separate axis via the ``groundwater_depletion`` options (enabling both
+pricings together is an error).
 
 The renewable-groundwater band additionally tallies its drawn volume on
 ``impact:groundwater_renewable`` (via a ``bus3`` output) purely for reporting

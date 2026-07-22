@@ -117,6 +117,11 @@ def add_primary_resources(
 
     tiers = water_tiers[water_tiers["region"].isin(water_region_list)]
     tiers = _retain_material_water_capacities(tiers, min_water_capacity_mm3)
+    if not (tiers["source"] == "renewable").all():
+        raise ValueError(
+            "region_water_tiers.csv must contain only surface tiers "
+            "(source='renewable'); groundwater belongs in the bands table"
+        )
     period_str = tiers["period"].astype(int).astype(str)
     tier_names = (
         "supply:water:"
@@ -126,21 +131,11 @@ def add_primary_resources(
         + ":t"
         + tiers["tier"].astype(str)
     ).to_numpy()
-    # Each tier is surface water, renewable groundwater, or non-renewable
-    # groundwater. Surface and renewable groundwater both accumulate AWARE
-    # scarcity on impact:water_scarcity at their marginal CF (renewable
-    # groundwater is part of the renewable blue-water system AWARE's AMD
-    # counts) and carry the negligible merit-order regularizer (cost
-    # proportional to CF) so the unpriced LP draws low-CF water first;
-    # renewable groundwater additionally tallies its drawn volume 1:1 on
-    # impact:groundwater_renewable (bus3) as a hook for future policy.
-    # Non-renewable groundwater accumulates mined volume 1:1 on
-    # impact:groundwater_depletion instead of a CF, and carries a small real
-    # pumping cost that both adds realism and orders it last in the merit
-    # order (drawn only once renewable water in the region is exhausted).
-    source = tiers["source"].to_numpy()
-    is_nonrenewable = source == "groundwater_nonrenewable"
-    is_renewable_gw = source == "groundwater_renewable"
+    # Surface tiers (source is always "renewable") accumulate AWARE scarcity
+    # on impact:water_scarcity at their marginal CF and carry the negligible
+    # merit-order regularizer (cost proportional to CF) so the unpriced LP
+    # draws low-CF water first. Groundwater never appears here; it is supplied
+    # through the annual per-region bands below.
     marginal_cf = tiers["marginal_cf"].to_numpy()
     pumping_cost_bnusd_per_mm3 = (
         groundwater_pumping_cost_usd_per_m3
@@ -151,24 +146,16 @@ def add_primary_resources(
         tier_names,
         bus0="water:source",
         bus1=("water:" + tiers["region"] + ":p" + period_str).to_numpy(),
-        bus2=np.where(
-            is_nonrenewable, "impact:groundwater_depletion", "impact:water_scarcity"
-        ),
-        bus3=np.where(is_renewable_gw, "impact:groundwater_renewable", ""),
+        bus2="impact:water_scarcity",
         carrier="water_supply",
         efficiency=1.0,
-        efficiency2=np.where(is_nonrenewable, 1.0, marginal_cf),
-        efficiency3=np.where(is_renewable_gw, 1.0, 0.0),
-        marginal_cost=np.where(
-            is_nonrenewable,
-            pumping_cost_bnusd_per_mm3,
-            WATER_MERIT_ORDER_EPSILON * marginal_cf,
-        ),
+        efficiency2=marginal_cf,
+        marginal_cost=WATER_MERIT_ORDER_EPSILON * marginal_cf,
         p_nom=tiers["capacity_mm3"].to_numpy(),
         p_nom_extendable=False,
         region=tiers["region"].to_numpy(),
         period=tiers["period"].astype(int).to_numpy(),
-        source=source,
+        source=tiers["source"].to_numpy(),
     )
 
     # Accumulating impact stores: renewable water scarcity and non-renewable

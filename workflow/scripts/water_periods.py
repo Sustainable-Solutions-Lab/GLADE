@@ -102,14 +102,15 @@ def calendar_period_shares(
     start_days: np.ndarray,
     length_days: np.ndarray,
     water_periods: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """``(N, T)`` period demand shares from an observed monthly calendar.
 
     ``monthly_shares`` is ``(N, 12)`` of observed per-month growing-area shares
     (MIRCA-OS). Rows with a positive monthly profile are binned into the ``T``
     periods; rows that are all-zero (no observed calendar for that season) fall
     back to the GAEZ growing-season split ``period_demand_shares(start, length)``.
-    Fully vectorised.
+    Fully vectorised. Returns the shares and the ``(N,)`` boolean mask of rows
+    with an observed calendar.
     """
     periods = int(water_periods)
     monthly = np.asarray(monthly_shares, dtype=float)

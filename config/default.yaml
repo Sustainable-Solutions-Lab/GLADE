@@ -293,9 +293,6 @@ water:
     # Regional water availability + scarcity pool: "aware" (AWARE2.0) or
     # "current_use" (Huang et al. gridded irrigation withdrawals; validation).
     availability: "aware"
-    # Groundwater band source (storage-decline depletion + renewable irrigation
-    # groundwater consumption); used only when supply.groundwater is true.
-    groundwater: "watergap"
     # Inclusive reference window for WaterGAP irrigation consumption, surface
     # delivery and the eta_c anchor. Matches AWARE2.0's recent scarcity window.
     surface_reference_start: 1990

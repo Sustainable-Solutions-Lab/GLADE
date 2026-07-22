@@ -1375,6 +1375,18 @@ def add_multi_cropping_links(
             return
         water_valid, _ = _water_gate(index_df)
 
+    # A water_field bus missing for an irrigated link's region would silently
+    # drop its water ports at solve time (consistency checks are skipped there),
+    # granting free irrigation. Fail loudly instead.
+    field_bus = "water_field:" + index_df["region"].astype(str) + ":p0"
+    dangling = water_valid & ~field_bus.isin(n.buses.static.index).to_numpy()
+    if dangling.any():
+        missing = sorted(index_df.loc[dangling, "region"].unique())
+        raise ValueError(
+            "Irrigated multi-cropping links reference regions without water "
+            f"buses: {missing[:10]}"
+        )
+
     # bus0 is land in Mha, water buses are Mm3, so each period coefficient is
     # m3/ha (numerically equal to Mm3/Mha). The per-period columns already carry
     # each cycle's calendar-placed requirement, so each period's own requirement
@@ -1458,7 +1470,8 @@ def add_multi_cropping_links(
     if not water_src.empty:
         # One water entry per period: buses at offsets crop_count+1 .. crop_count+T
         # (right after the crop outputs), each carrying its own calendar-placed
-        # requirement. A zero-demand period keeps its reserved port.
+        # requirement. A zero-demand period keeps its reserved offset but blanks
+        # the bus, matching the single-crop path.
         period_frames = []
         for p in range(water_periods):
             w = water_src.copy()
@@ -1467,8 +1480,12 @@ def add_multi_cropping_links(
             w["bus_col"] = "bus" + offset_str
             w["eff_col"] = "efficiency" + offset_str
             w.loc[w["offset"].eq(1), "eff_col"] = "efficiency"
-            w["bus_value"] = "water_field:" + w["region"].astype(str) + f":p{p}"
             w["eff_value"] = w[f"water_eff_p{p}"]
+            w["bus_value"] = np.where(
+                w["eff_value"].to_numpy() != 0.0,
+                "water_field:" + w["region"].astype(str) + f":p{p}",
+                "",
+            )
             period_frames.append(
                 w[["link_name", "bus_col", "bus_value", "eff_col", "eff_value"]]
             )

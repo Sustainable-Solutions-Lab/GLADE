@@ -1040,28 +1040,6 @@ be updated accordingly.
 Water Resources Data
 --------------------
 
-Water Footprint Network -- Monthly Blue Water Availability
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Provider**: Water Footprint Network (Hoekstra & Mekonnen)
-
-**Description**: Monthly blue water availability for 405 GRDC river basins, provided alongside blue-water scarcity indicators.
-
-**Version**: Appendix VII of Hoekstra & Mekonnen (2011); ESRI shapefile + Excel workbook (monthly availability in Mm3/month)
-
-**Coverage**:
-  * Spatial: 405 GRDC river basins (global)
-
-**Access**: https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip
-
-**License**: No explicit license; citation requested. Users should evaluate whether their use qualifies as fair use and contact UNESCO-IHE for commercial applications.
-
-**Citation**: Hoekstra, A.Y. and Mekonnen, M.M. (2011). *Global water scarcity: monthly blue water footprint compared to blue water availability for the world's major river basins*, Value of Water Research Report Series No. 53, UNESCO-IHE, Delft, Netherlands.
-
-**Retrieval**: Automatic via Snakemake rules
-
-**Usage**: Constraining irrigated crop production by basin-level water availability.
-
 Huang et al. -- Gridded Irrigation Water Withdrawals
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

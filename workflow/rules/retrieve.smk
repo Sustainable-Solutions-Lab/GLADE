@@ -1140,25 +1140,6 @@ rule download_wpp_population:
         """
 
 
-rule download_waterfootprint_appendix:
-    output:
-        "data/downloads/Report53_Appendix.zip",
-    params:
-        url="https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip",
-    resources:
-        runtime="30m",
-        mem_mb=500,
-    log:
-        "<logs>/shared/download_waterfootprint_appendix.log",
-    benchmark:
-        "<benchmarks>/shared/download_waterfootprint_appendix.tsv"
-    shell:
-        r"""
-        mkdir -p "$(dirname {output})"
-        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
-        """
-
-
 rule download_huang_irrigation_water:
     output:
         temp("data/downloads/huang_irrigation_water_v2.7z"),

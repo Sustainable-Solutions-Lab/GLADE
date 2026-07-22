@@ -104,7 +104,8 @@ introduce breaking changes to configuration and outputs.
   consumption, withdrawal) are now distinct and separately reported. New
   automatic downloads: AWARE 2.0 and WaterGAP 2.2e (ISIMIP3a). The Water
   Footprint Network "sustainable" supply scenario and the
-  `water.supply_scenario` key are removed; the source is now
+  `water.supply_scenario` key are removed, along with the WFN availability
+  download/processing pipeline and its documentation figure; the source is now
   `water.data.availability` (`aware` or `current_use`), defaulting to `aware`.
   **This is a results-affecting default change** — the AWARE pool is a looser
   constraint than the previous binding present-day withdrawal cap.

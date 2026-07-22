@@ -5,16 +5,13 @@
 """
 Water and fertilizer-related data preparation rules.
 
-Includes fertilizer application rates, blue water availability,
-and regional water resource calculations.
-
-Water supply scenario:
+Water availability source (``water.data.availability``):
 - "aware": Uses AWARE2.0 (Seitfudem et al. 2025, WaterGAP2.2e) naturalised
   availability and a convex water-scarcity supply curve.
 - "current_use": Uses Huang et al. (2018) gridded irrigation water withdrawals
   (validation/benchmarking; a single zero-scarcity supply tier).
 
-Both scenarios emit a ``region_water_tiers.csv`` describing the regional water
+Both sources emit a ``region_water_tiers.csv`` describing the regional water
 supply as one or more tiers (capacity in Mm3, marginal scarcity characterisation
 factor); ``aware`` resolves it to a convex merit-order curve while ``current_use``
 emits a single zero-CF tier reproducing a hard availability cap.
@@ -70,46 +67,6 @@ rule derive_global_fertilizer_rates:
         "<benchmarks>/{name}/derive_global_fertilizer_rates.tsv"
     script:
         "../scripts/derive_global_fertilizer_rates.py"
-
-
-rule extract_waterfootprint_appendix:
-    input:
-        zip_path="data/downloads/Report53_Appendix.zip",
-    output:
-        shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
-        excel="data/downloads/Report53_Appendix/Report53-Appendices-VI-IX.xls",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=200,
-    log:
-        "<logs>/shared/extract_waterfootprint_appendix.log",
-    benchmark:
-        "<benchmarks>/shared/extract_waterfootprint_appendix.tsv"
-    shell:
-        r"""
-        unzip -o {input.zip_path} -d data/downloads > {log} 2>&1
-        """
-
-
-rule process_blue_water_availability:
-    input:
-        shapefile=rules.extract_waterfootprint_appendix.output.shapefile,
-        excel=rules.extract_waterfootprint_appendix.output.excel,
-    output:
-        "<processing>/{name}/water/blue_water_availability.csv",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=200,
-    log:
-        "<logs>/{name}/process_blue_water_availability.log",
-    benchmark:
-        "<benchmarks>/{name}/process_blue_water_availability.tsv"
-    script:
-        "../scripts/process_blue_water_availability.py"
 
 
 def crop_yield_file_list(w):
@@ -297,8 +254,8 @@ def water_groundwater_input(w):
 
 
 # Compose the scenario-agnostic water-supply tables from the selected
-# availability source, tagging each tier with a `source` (renewable |
-# groundwater).
+# availability source: per-period surface tiers (source "renewable") and,
+# with supply.groundwater, the annual per-region groundwater bands.
 rule compose_water_supply:
     input:
         unpack(water_availability_inputs),

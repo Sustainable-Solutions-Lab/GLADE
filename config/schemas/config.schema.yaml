@@ -24,6 +24,8 @@ required:
   - optimal_taxes
   - land
   - water
+  - water_scarcity
+  - groundwater_depletion
   - fertilizer
   - residues
   - emissions
@@ -454,7 +456,7 @@ properties:
             description: "Non-renewable groundwater ceiling as a multiple of annual agricultural consumption; generous and non-binding, active only when groundwater is true"
       data:
         type: object
-        required: [availability, groundwater, surface_reference_start, surface_reference_end, groundwater_trend_start, groundwater_trend_end, huang_reference_year]
+        required: [availability, surface_reference_start, surface_reference_end, groundwater_trend_start, groundwater_trend_end, huang_reference_year]
         additionalProperties: false
         properties:
           availability:
@@ -464,10 +466,6 @@ properties:
               Regional water availability + scarcity pool source:
               - 'aware': AWARE2.0 (Seitfudem et al. 2025, WaterGAP2.2e) convex scarcity curve and native basin geometry; pool volumes, monthly timing and within-region basin allocation set by the WaterGAP surface field
               - 'current_use': Huang et al. (2018) gridded irrigation water withdrawals
-          groundwater:
-            type: string
-            enum: [watergap]
-            description: "Groundwater band source (depletion + renewable net abstraction); used only when supply.groundwater is true"
           surface_reference_start:
             type: integer
             minimum: 1901

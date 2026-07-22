@@ -252,6 +252,7 @@ def test_multi_cropping_rice_emits_methane_per_cycle():
             "crop:wetland-rice:USA",
             "fertilizer:USA",
             "emission:ch4",
+            "water_field:regionA:p0",
         ]
     )
     eligible_area = pd.DataFrame(

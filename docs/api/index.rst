@@ -71,11 +71,6 @@ Yield and Land Processing
 Water Resources
 ~~~~~~~~~~~~~~~
 
-.. automodule:: workflow.scripts.process_blue_water_availability
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 .. automodule:: workflow.scripts.build_region_water_aware
    :members:
    :undoc-members:

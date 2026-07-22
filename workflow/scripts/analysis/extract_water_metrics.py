@@ -42,6 +42,7 @@ equal ``scarcity_mm3_eq`` / ``groundwater_depletion_mm3`` summed over regions,
 modulo solver tolerance.
 """
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -50,7 +51,11 @@ RENEWABLE_GW = "groundwater_renewable"
 
 
 def _water_supply_draw(n: pypsa.Network) -> pd.DataFrame:
-    """Return a per-tier-link frame with region, CF, drawn volume (Mm3), source."""
+    """Return a per-tier-link frame with region, CF, drawn volume (Mm3), source.
+
+    ``cf`` is NaN for non-renewable rows: their ``efficiency2`` is the 1:1
+    mined-volume tally, not an AWARE characterisation factor.
+    """
     links = n.links.static
     tiers = links[links["carrier"] == "water_supply"]
     if tiers.empty:
@@ -58,12 +63,11 @@ def _water_supply_draw(n: pypsa.Network) -> pd.DataFrame:
         # pipeline stays config-agnostic; callers that require it check emptiness.
         return pd.DataFrame(columns=["region", "cf", "draw_mm3", "source"])
     draw = n.links.dynamic.p0.iloc[0].reindex(tiers.index).clip(lower=0.0)
-    # Pre-source solved networks had only renewable tiers.
-    source = tiers["source"].to_numpy() if "source" in tiers.columns else "renewable"
+    source = tiers["source"].to_numpy()
     return pd.DataFrame(
         {
             "region": tiers["region"].to_numpy(),
-            "cf": tiers["efficiency2"].to_numpy(),
+            "cf": np.where(source == NONRENEWABLE, np.nan, tiers["efficiency2"]),
             "draw_mm3": draw.to_numpy(),
             "source": source,
         },

@@ -109,12 +109,6 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/build_grassland_yields.py``
   * **Purpose**: Aggregate grassland yields for grazing production
 
-**process_blue_water_availability**
-  * **Input**: Water Footprint Network shapefile + Excel workbook
-  * **Output**: ``processing/{name}/water/blue_water_availability.csv``
-  * **Script**: ``workflow/scripts/process_blue_water_availability.py``
-  * **Purpose**: Build monthly basin-level blue water availability
-
 **build_region_watergap**
   * **Input**: WaterGAP 2.2e (ISIMIP3a) groundwater storage, potential irrigation consumption total and from groundwater, continental area, regions
   * **Output**: ``processing/{name}/water/watergap/`` -- ``region_watergap_surface.csv`` (monthly irrigation surface consumption), ``region_groundwater_depletion.csv``, ``region_agri_consumption.csv`` (the eta_c and mining-ceiling anchor), ``region_watergap_demand.csv`` (monthly demand, the calendar retiming target)
@@ -130,6 +124,7 @@ Data Preparation Rules
 **build_region_water_current_use**
   * **Input**: Huang et al. gridded irrigation withdrawals, regions, crop yields
   * **Output**: ``processing/{name}/water/current_use/`` (same schema)
+  * **Script**: ``workflow/scripts/process_huang_irrigation_water.py``
   * **Purpose**: Present-day withdrawal alternative, selected by ``water.data.availability``
 
 **build_mirca_crop_calendar**
