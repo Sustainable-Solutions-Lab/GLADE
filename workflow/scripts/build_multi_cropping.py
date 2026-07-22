@@ -17,6 +17,7 @@ from workflow.scripts.raster_utils import (
     scale_fraction,
 )
 from workflow.scripts.region_class_aggregation import load_cell_mapping
+from workflow.scripts.water_periods import DAYS_IN_YEAR, calendar_period_shares
 
 ZONE_CAPABILITIES: dict[int, dict[str, int | bool]] = {
     0: {"valid": False, "max_cycles": 0, "max_wetland_rice": 0},
@@ -66,8 +67,8 @@ def compute_eligibility_mask(
     overshoot the farmed cycle, so it rejects ~all observed double-cropping
     (including repeated same-crop combos fed identical windows). This mirrors the
     Stage-1 decoupling -- feasibility from observation, GAEZ only for the water
-    split -- and keeps the potential cap aligned with the anchored baseline
-    (``p_nom_max = max(potential, anchor)``).
+    split -- and keeps the potential cap aligned with the anchored baseline (design
+    section 4 correction; ``p_nom_max = max(potential, anchor)``).
     """
     # Zone capability check (enforces cycle count and wetland-rice-cycle limit)
     rice_cycles = sum(1 for crop in crop_sequence if crop in WETLAND_RICE_CROPS)
@@ -112,10 +113,68 @@ def compute_eligibility_mask(
     return combined_mask, min_fraction, total_water_arr
 
 
+def compute_period_water_demand(
+    crop_sequence: list[str],
+    ws: str,
+    mask: np.ndarray,
+    start_data: dict,
+    length_data: dict,
+    water_requirement_data: dict,
+    water_periods: int,
+    region_index: np.ndarray,
+    calendar_tables: dict,
+) -> list[np.ndarray]:
+    """Per-period irrigation-demand rasters (m3/ha) for a combo, on masked cells.
+
+    Each cycle's net requirement is placed into the intra-year periods by the
+    observed MIRCA-OS irrigated calendar for that cycle's crop and the cell's
+    region (``calendar_tables[crop]`` indexed by ``region_index``). Cells whose
+    region has no MIRCA calendar for the crop fall back to the cycle's GAEZ
+    growing season; repeated same-crop cycles in that fallback are staggered by
+    ``365/n`` days so the second cycle lands in a different season (MIRCA already
+    resolves the seasons where present, so no staggering is applied there). The
+    per-cell sum over periods equals the summed cycle requirement (shares sum to
+    1 per cycle), so the annual magnitude is preserved.
+
+    Returns a list of ``T`` full-grid rasters; rainfed combos get all-zero rasters.
+    """
+    periods = int(water_periods)
+    demand = [np.zeros(mask.shape, dtype=float) for _ in range(periods)]
+    if ws != "i":
+        return demand
+    idx = np.nonzero(mask)
+    if idx[0].size == 0:
+        return demand
+
+    cell_regions = region_index[idx]  # (n_masked,) region row, -1 where none
+    n_cycles = len(crop_sequence)
+    repeated = len(set(crop_sequence)) == 1 and n_cycles >= 2
+    for cycle, crop in enumerate(crop_sequence):
+        start = start_data[(crop, ws)][idx].astype(float)
+        length = length_data[(crop, ws)][idx].astype(float)
+        if repeated:
+            # GAEZ-fallback stagger for identical windows (mod 365 handled by
+            # month_overlaps wrap); overridden per cell where MIRCA is present.
+            start = start + cycle * (DAYS_IN_YEAR / n_cycles)
+        # Per-cell observed monthly shares for this crop (zeros -> GAEZ fallback).
+        table = calendar_tables.get(crop)
+        if table is not None:
+            monthly = np.where(cell_regions[:, None] >= 0, table[cell_regions], 0.0)
+        else:
+            monthly = np.zeros((cell_regions.size, 12), dtype=float)
+        requirement = water_requirement_data[(crop, ws)][idx].astype(float)
+        shares, _ = calendar_period_shares(monthly, start, length, periods)
+        for period in range(periods):
+            demand[period][idx] += requirement * shares[:, period]
+    return demand
+
+
 if __name__ == "__main__":
     # Parse combinations from config
     combos: list[dict[str, object]] = []
     use_actual_yields = bool(getattr(snakemake.params, "use_actual_yields", False))  # type: ignore[attr-defined]
+    water_periods = int(snakemake.params.water_periods)  # type: ignore[attr-defined,name-defined]
+    water_cols = [f"water_requirement_m3_per_ha_p{p}" for p in range(water_periods)]
 
     combinations = effective_combinations(
         snakemake.config,  # type: ignore[attr-defined,name-defined]
@@ -140,6 +199,7 @@ if __name__ == "__main__":
     }
     mapping_path = inputs.pop("cell_mapping")
     inputs.pop("combinations")
+    calendar_path = inputs.pop("crop_calendar")
     conv_csv = inputs.pop("yield_unit_conversions")
     moisture_csv = inputs.pop("moisture_content")
 
@@ -148,6 +208,8 @@ if __name__ == "__main__":
     suffixes = {
         "_yield_raster": "yield",
         "_suitability_raster": "suitability",
+        "_growing_season_start_raster": "season_start",
+        "_growing_season_length_raster": "season_length",
         "_water_requirement_raster": "water_requirement",
     }
     for key, path in inputs.items():
@@ -167,7 +229,7 @@ if __name__ == "__main__":
                 "resource_class",
                 "water_supply",
                 "eligible_area_ha",
-                "water_requirement_m3_per_ha",
+                *water_cols,
             ]
         )
         empty_cycles = pd.DataFrame(
@@ -218,6 +280,29 @@ if __name__ == "__main__":
             )
         zone_arrays[ws] = zone_arr.astype(np.int16, copy=False)
 
+    # Region row position per grid cell (-1 outside any region), derived from
+    # the shared cell mapping (a boundary cell resolves to one region), plus
+    # per-crop (n_regions, 12) MIRCA-OS monthly share tables, so the per-period
+    # water split places each cycle's demand in its observed months per region
+    # (build_mirca_crop_calendar). The calendar is area-aggregated downstream,
+    # so single-region cell attribution is exact enough for the timing split.
+    region_index = np.full(height * width, -1, dtype=np.int32)
+    region_index[mapping.cell_ids] = (mapping.group_ids // mapping.n_classes).astype(
+        np.int32
+    )
+    region_index = region_index.reshape(height, width)
+    region_pos = {region: i for i, region in enumerate(mapping.regions)}
+    calendar_df = pd.read_csv(calendar_path)
+    calendar_tables: dict[str, np.ndarray] = {}
+    for crop_name, grp in calendar_df.groupby("crop"):
+        table = np.zeros((len(mapping.regions), 12), dtype=float)
+        rows = grp["region"].map(region_pos)
+        valid = rows.notna()
+        table[
+            rows[valid].astype(int).to_numpy(), grp.loc[valid, "month"].to_numpy() - 1
+        ] = grp.loc[valid, "share"].to_numpy()
+        calendar_tables[str(crop_name)] = table
+
     def conversion_factor(crop: str) -> float:
         base_scale = 1.0 if use_actual_yields else KG_TO_TONNE
         if crop in conv_df.index:
@@ -227,12 +312,16 @@ if __name__ == "__main__":
 
     yield_data: dict[tuple[str, str], np.ndarray] = {}
     suitability_data: dict[tuple[str, str], np.ndarray] = {}
+    start_data: dict[tuple[str, str], np.ndarray] = {}
+    length_data: dict[tuple[str, str], np.ndarray] = {}
     water_requirement_data: dict[tuple[str, str], np.ndarray] = {}
 
     for (crop, ws), files in crop_files.items():
         factor = conversion_factor(crop)
         y_arr = load_raster_array(files["yield"])
         suitability_arr = load_raster_array(files["suitability"])
+        start_arr = load_raster_array(files["season_start"])
+        length_arr = load_raster_array(files["season_length"])
         if y_arr.shape != (height, width):
             raise ValueError(
                 f"Yield raster for '{crop}' ({ws}) has unexpected dimensions"
@@ -241,6 +330,14 @@ if __name__ == "__main__":
             raise ValueError(
                 f"Suitability raster for '{crop}' ({ws}) has unexpected dimensions"
             )
+        if start_arr.shape != (height, width):
+            raise ValueError(
+                f"Growing season start raster for '{crop}' ({ws}) has unexpected dimensions"
+            )
+        if length_arr.shape != (height, width):
+            raise ValueError(
+                f"Growing season length raster for '{crop}' ({ws}) has unexpected dimensions"
+            )
 
         y_scaled = y_arr * factor
         if use_actual_yields and crop in moisture_lookup:
@@ -248,6 +345,8 @@ if __name__ == "__main__":
             y_scaled = y_scaled * (1.0 - moisture_lookup[crop])
         yield_data[(crop, ws)] = y_scaled
         suitability_data[(crop, ws)] = scale_fraction(suitability_arr)
+        start_data[(crop, ws)] = start_arr
+        length_data[(crop, ws)] = length_arr
 
         if ws == "i":
             path = files.get("water_requirement")
@@ -276,7 +375,7 @@ if __name__ == "__main__":
         yield_stack = [yield_data[(crop, ws)] for crop in crop_sequence]
 
         zone_arr = zone_arrays[ws]
-        combined_mask, min_fraction, total_water_arr = compute_eligibility_mask(
+        combined_mask, min_fraction, _total_water = compute_eligibility_mask(
             crop_sequence,
             ws,
             zone_arr,
@@ -289,6 +388,23 @@ if __name__ == "__main__":
 
         eligible_fraction = np.where(combined_mask, min_fraction, np.nan)
         eligible_area = eligible_fraction * cell_area_ha
+
+        # Per-cycle, per-period irrigation demand (m3/ha), placed by each cycle's
+        # observed MIRCA-OS calendar (GAEZ season, staggered for repeated
+        # cycles, where MIRCA is absent). Computed once per combo on the
+        # combined mask, then aggregated per period against the shared
+        # eligible-area denominator.
+        period_demand = compute_period_water_demand(
+            crop_sequence,
+            ws,
+            combined_mask,
+            start_data,
+            length_data,
+            water_requirement_data,
+            water_periods,
+            region_index,
+            calendar_tables,
+        )
 
         selected = combined_mask.ravel()[mapping.cell_ids]
         cells = mapping.cell_ids[selected]
@@ -309,19 +425,19 @@ if __name__ == "__main__":
             }
         )
 
-        # Annual irrigation requirement (m3/ha): aggregate the summed-cycle
-        # demand*area numerator against the same eligible-area denominator.
-        if ws == "i" and total_water_arr is not None:
+        # Per-period irrigation requirement (m3/ha): aggregate each period's
+        # demand*area numerator against the same eligible-area denominator, so
+        # the sum over periods reproduces the annual requirement.
+        for period, col in enumerate(water_cols):
+            if ws != "i":
+                area_stats[col] = 0.0
+                continue
             volume = np.bincount(
                 groups,
-                weights=total_water_arr.ravel()[cells] * area_entries,
+                weights=period_demand[period].ravel()[cells] * area_entries,
                 minlength=mapping.n_groups,
             )
-            area_stats["water_requirement_m3_per_ha"] = (
-                volume[positive] / area_by_group[positive]
-            )
-        else:
-            area_stats["water_requirement_m3_per_ha"] = 0.0
+            area_stats[col] = volume[positive] / area_by_group[positive]
 
         area_stats["resource_class"] = resource_classes
         area_stats["combination"] = combo_name
@@ -334,7 +450,7 @@ if __name__ == "__main__":
                     "resource_class",
                     "water_supply",
                     "eligible_area_ha",
-                    "water_requirement_m3_per_ha",
+                    *water_cols,
                 ]
             ]
         )
@@ -372,9 +488,10 @@ if __name__ == "__main__":
         eligible_df["eligible_area_ha"] = pd.to_numeric(
             eligible_df["eligible_area_ha"], errors="coerce"
         )
-        eligible_df["water_requirement_m3_per_ha"] = pd.to_numeric(
-            eligible_df["water_requirement_m3_per_ha"], errors="coerce"
-        ).fillna(0.0)
+        for col in water_cols:
+            eligible_df[col] = pd.to_numeric(eligible_df[col], errors="coerce").fillna(
+                0.0
+            )
         eligible_df.sort_values(
             ["combination", "water_supply", "region", "resource_class"],
             inplace=True,
@@ -388,7 +505,7 @@ if __name__ == "__main__":
                 "resource_class",
                 "water_supply",
                 "eligible_area_ha",
-                "water_requirement_m3_per_ha",
+                *water_cols,
             ]
         )
 

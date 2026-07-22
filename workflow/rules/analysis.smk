@@ -137,6 +137,29 @@ if config["solving"]["inline_analysis"]:
             ghg_pricing_enabled=lambda w: get_effective_config(w.scenario)[
                 "emissions"
             ]["ghg_pricing_enabled"],
+            water_scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
+            water_availability=config["water"]["data"]["availability"],
+            water_scarcity_pricing_enabled=lambda w: get_effective_config(w.scenario)[
+                "water_scarcity"
+            ]["pricing_enabled"],
+            water_scarcity_price=lambda w: get_effective_config(w.scenario)[
+                "water_scarcity"
+            ]["price"],
+            water_scarcity_cap=lambda w: get_effective_config(w.scenario)[
+                "water_scarcity"
+            ]["cap_mm3_world_eq"],
+            water_scarcity_nonrenewable_cf=lambda w: get_effective_config(w.scenario)[
+                "water_scarcity"
+            ]["nonrenewable_cf"],
+            groundwater_pricing_enabled=lambda w: get_effective_config(w.scenario)[
+                "groundwater_depletion"
+            ]["pricing_enabled"],
+            groundwater_price=lambda w: get_effective_config(w.scenario)[
+                "groundwater_depletion"
+            ]["price"],
+            groundwater_cap=lambda w: get_effective_config(w.scenario)[
+                "groundwater_depletion"
+            ]["cap_mm3"],
             food_incentives_enabled=lambda w: get_effective_config(w.scenario)[
                 "food_incentives"
             ]["enabled"],

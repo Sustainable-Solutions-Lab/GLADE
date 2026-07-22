@@ -71,12 +71,27 @@ Yield and Land Processing
 Water Resources
 ~~~~~~~~~~~~~~~
 
-.. automodule:: workflow.scripts.process_blue_water_availability
+.. automodule:: workflow.scripts.build_region_water_aware
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: workflow.scripts.build_region_water_availability
+.. automodule:: workflow.scripts.build_region_watergap
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: workflow.scripts.compose_water_supply
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: workflow.scripts.water_periods
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: workflow.scripts.build_mirca_crop_calendar
    :members:
    :undoc-members:
    :show-inheritance:

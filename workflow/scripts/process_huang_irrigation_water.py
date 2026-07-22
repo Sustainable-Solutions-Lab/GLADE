@@ -6,11 +6,12 @@
 
 Aggregates monthly gridded irrigation water withdrawal, stored as a depth
 (mm/month at 0.5 degree resolution), converting it to a volume via grid-cell
-area before aggregating to model regions. Produces outputs compatible with the
-sustainable water availability data from the Water Footprint Network.
+area before aggregating to model regions.
 
-This script produces the same output format as build_region_water_availability.py
-so that the two data sources can be used interchangeably.
+This script produces the availability tables in the shared schema of the
+"aware" source, including a single zero-CF supply tier per region-month that
+reproduces a hard cap at current withdrawals, so the two availability sources
+can be used interchangeably.
 
 Reference:
     Huang et al. (2018). Reconstruction of global gridded monthly sectoral
@@ -243,7 +244,6 @@ def compute_region_growing_water(
 ) -> pd.DataFrame:
     """Compute growing-season weighted water availability.
 
-    This mirrors the function from build_region_water_availability.py
     but uses 'water_available_m3' column from monthly data.
     """
     if region_month_water.empty:
@@ -364,7 +364,7 @@ def process_huang_irrigation(
     Returns:
         Tuple of:
         - DataFrame with monthly region water (region, month, water_available_m3)
-        - DataFrame with growing season water (same format as build_region_water_availability)
+        - DataFrame with growing season water (shared availability schema)
     """
     # Load the NetCDF dataset
     ds = xr.open_dataset(nc_path, decode_times=False)
@@ -481,6 +481,7 @@ if __name__ == "__main__":
 
     monthly_out: str = snakemake.output.monthly_region  # type: ignore[name-defined]
     growing_out: str = snakemake.output.region_growing  # type: ignore[name-defined]
+    tiers_out: str = snakemake.output.tiers  # type: ignore[name-defined]
 
     monthly_df, growing_df = process_huang_irrigation(
         nc_path, regions_path, crop_files, reference_year
@@ -491,3 +492,14 @@ if __name__ == "__main__":
 
     Path(growing_out).parent.mkdir(parents=True, exist_ok=True)
     growing_df.to_csv(growing_out, index=False)
+
+    # One flat zero-scarcity tier per region-month: a hard availability cap at
+    # current withdrawals, in the same schema as the AWARE scarcity curve
+    # (capacity in Mm3; compose_water_supply converts it to consumption basis).
+    tiers_df = monthly_df[monthly_df["water_available_m3"] > 0].copy()
+    tiers_df["tier"] = 0
+    tiers_df["capacity_mm3"] = tiers_df["water_available_m3"] * 1e-6
+    tiers_df["marginal_cf"] = 0.0
+    tiers_df[["region", "month", "tier", "capacity_mm3", "marginal_cf"]].to_csv(
+        tiers_out, index=False
+    )

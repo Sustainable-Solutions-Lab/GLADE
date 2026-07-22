@@ -94,6 +94,58 @@ introduce breaking changes to configuration and outputs.
   resource-class cell coverage once per configuration and reuse it across
   crops, substantially reducing build time and peak memory without changing
   outputs.
+- **The water system has been rebuilt on a consumption basis.** Irrigation
+  previously drew from a single per-region growing-season store sized from
+  Huang et al. withdrawals. It now draws from a regional pool anchored on
+  WaterGAP 2.2e irrigation consumption, through a per-region delivery link
+  whose efficiency `eta_c` is calibrated at build time against observed
+  consumption, with availability and scarcity characterised by AWARE 2.0. The
+  three water quantities the literature conflates (crop net requirement,
+  consumption, withdrawal) are now distinct and separately reported. New
+  automatic downloads: AWARE 2.0 and WaterGAP 2.2e (ISIMIP3a). The Water
+  Footprint Network "sustainable" supply scenario and the
+  `water.supply_scenario` key are removed, along with the WFN availability
+  download/processing pipeline and its documentation figure; the source is now
+  `water.data.availability` (`aware` or `current_use`), defaulting to `aware`.
+  **This is a results-affecting default change** — the AWARE pool is a looser
+  constraint than the previous binding present-day withdrawal cap.
+- Water supply and demand can be resolved at **intra-year periods**
+  (`water.temporal_resolution`, a divisor of 12), so a season whose surface
+  cannot meet its demand draws groundwater endogenously instead of being
+  rescued by annual averaging. Crop water demand is placed into periods by the
+  observed MIRCA-OS irrigated crop calendar, retimed to WaterGAP's monthly
+  requirement. **The default is 1 (annual), which is cheap but has a
+  consequence worth stating plainly: at annual resolution the groundwater bands
+  are nearly inert and reported depletion falls to near zero — an artefact of
+  the resolution, not a finding.** Studies about water should raise it.
+- Surface water and renewable groundwater are characterised as **one AWARE
+  renewable resource**: each basin's CF curve spans the joint envelope
+  (WaterGAP surface delivery plus renewable groundwater) and is split at the
+  basin's surface fraction — the lower slice is period-bound surface, the
+  upper slice becomes annual per-region renewable-groundwater CF bands. This
+  replaces the earlier draft's flat renewable-groundwater band at the region's
+  scarcest surface CF, which saturated at the AWARE cutoff (CF 100) almost
+  everywhere and drifted with the temporal resolution. Groundwater is always
+  part of the aware supply (the `water.supply.groundwater` switch is removed;
+  cap mining at solve time via `groundwater_depletion.cap_mm3: 0` for a
+  mining-free system); the `current_use` source emits no groundwater bands,
+  since its observed-withdrawal pool already contains groundwater. Irrigation's
+  share of the groundwater-storage depletion trend is attributed by its share
+  of all-sector potential groundwater consumption (new WaterGAP `ptotusegw`
+  download), so basins mined by municipal or industrial pumping no longer
+  zero irrigation's renewable band. Water supply fidelity remains a single
+  switch, `water.supply.scarcity_tiers` (convex AWARE scarcity curves, default
+  off — each pool is one flat availability cap). Scarcity pricing or capping
+  requires it and raises otherwise, since with collapsed curves there is no
+  scarcity signal to price.
+- New optional solve-time levers, both off by default: `water_scarcity`
+  (pricing and/or capping accumulated AWARE scarcity) and
+  `groundwater_depletion` (pricing and/or capping accumulated mining). With
+  `water_scarcity.nonrenewable_cf` set, mined groundwater is charged at that
+  CF under scarcity pricing *and* counts CF-fold against a scarcity cap (a
+  joint constraint), so neither lever can be satisfied by free substitution
+  into fossil groundwater. Analysis gains a `water_metrics` output with
+  per-region withdrawal, scarcity, renewable groundwater and depletion.
 - Model regions are now built **basin-aware**: GADM provinces are first split
   along AWARE hydrological basin boundaries, and each country is partitioned
   into regions balancing geography against basin scarcity
@@ -170,6 +222,9 @@ introduce breaking changes to configuration and outputs.
 
 ### Fixed
 
+- Fixed a GAEZ data artefact where a handful of cells carry a negative net
+  irrigation requirement, which flipped those crop links into spurious water
+  *producers*. Negative requirements are now clipped to zero.
 - Baseline biofuel/industrial and biogas demand is enforced again. Since
   2026-05-20 the crops-with-supply safety check in `add_biofuel_links` ran
   before any crop production links existed, so every build silently dropped

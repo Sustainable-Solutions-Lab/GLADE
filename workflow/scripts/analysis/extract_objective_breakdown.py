@@ -89,6 +89,7 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
         categories[names.str.startswith("sink:")] = "Biomass exports"
         categories[names.str.startswith("slack:")] = "Slack penalties"
         categories[carriers == "fertilizer"] = "Fertilizer"
+        categories[carriers == "water_source"] = "Water"
         categories[names.str.startswith("supply:") & categories.isna()] = (
             "Resource supply"
         )
@@ -128,6 +129,9 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
             "fiber_demand": "Biomass routing",
             "emission_aggregation": "Emissions aggregation",
             "fertilizer_distribution": "Fertilizer",
+            "water_supply": "Water",
+            "irrigation_delivery": "Water",
+            "groundwater_delivery": "Water",
         }
         carriers = static["carrier"].astype(str)
         categories = carriers.map(carrier_map)
@@ -147,6 +151,12 @@ def _objective_category(n: pypsa.Network, component: str, **_) -> pd.Series:
         exact_map = {
             "ghg": "GHG cost",
             "water": "Water",
+            "water_supply": "Water",
+            "irrigation_delivery": "Water",
+            "groundwater_delivery": "Water",
+            "groundwater_renewable": "Water",
+            "water_scarcity": "Water scarcity cost",
+            "groundwater_depletion": "Groundwater depletion cost",
             "fertilizer": "Fertilizer",
             "spared_land": "Crop production",
             "spared_grassland": "Crop production",
@@ -386,6 +396,8 @@ def extract_objective_breakdown(n: pypsa.Network) -> pd.DataFrame:
         "Emissions aggregation": "emissions_aggregation",
         "Land use": "land_use",
         "Water": "water",
+        "Water scarcity cost": "water_scarcity_cost",
+        "Groundwater depletion cost": "groundwater_depletion_cost",
         "Production stability": "production_stability",
         "Diet stability": "diet_stability",
     }

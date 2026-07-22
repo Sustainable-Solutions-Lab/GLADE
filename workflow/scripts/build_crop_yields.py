@@ -92,7 +92,11 @@ if __name__ == "__main__":
         water_raw_mm, water_src = read_raster_float(water_path)
         validate_raster_grid(water_raw_mm, water_src, mapping)
         water_src.close()
-        water_m3_per_ha = water_raw_mm * 10.0  # 1 mm over 1 ha equals 10 m3
+        # GAEZ RES05-WDC net irrigation requirement carries a handful of small
+        # negative cells (interpolation artifacts); a negative net requirement
+        # is physically meaningless (rainfall covers crop ET), and downstream
+        # it flips the sign of crop water ports into spurious water producers.
+        water_m3_per_ha = np.clip(water_raw_mm, 0.0, None) * 10.0  # mm -> m3/ha
         water_by_group = weighted_mean_by_group(water_m3_per_ha, mapping)
         del water_raw_mm, water_m3_per_ha
     else:

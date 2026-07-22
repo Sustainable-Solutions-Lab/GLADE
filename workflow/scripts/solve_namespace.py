@@ -30,6 +30,8 @@ from workflow.scripts.snakemake_utils import _recursive_update
 SOLVE_TIME_CONFIG_PREFIXES = {
     "emissions.ghg_price",
     "emissions.ghg_pricing_enabled",
+    "water_scarcity",
+    "groundwater_depletion",
     "health.enabled",
     "health.value_per_yll",
     "health.segment_formulation",
@@ -245,6 +247,7 @@ ANALYSIS_OUTPUT_NAMES = (
     "luc_breakdown",
     "baseline_deviation",
     "food_prices",
+    "water_metrics",
 )
 
 
@@ -453,6 +456,15 @@ def build_scenario_entry(
         "regional_limit": eff["land"]["regional_limit"],
         "biofuel_demand_scale": eff["biomass"]["biofuel_demand_scale"],
         "ghg_pricing_enabled": eff["emissions"]["ghg_pricing_enabled"],
+        "water_scarcity_tiers": eff["water"]["supply"]["scarcity_tiers"],
+        "water_availability": eff["water"]["data"]["availability"],
+        "water_scarcity_pricing_enabled": eff["water_scarcity"]["pricing_enabled"],
+        "water_scarcity_price": eff["water_scarcity"]["price"],
+        "water_scarcity_cap": eff["water_scarcity"]["cap_mm3_world_eq"],
+        "water_scarcity_nonrenewable_cf": eff["water_scarcity"]["nonrenewable_cf"],
+        "groundwater_pricing_enabled": eff["groundwater_depletion"]["pricing_enabled"],
+        "groundwater_price": eff["groundwater_depletion"]["price"],
+        "groundwater_cap": eff["groundwater_depletion"]["cap_mm3"],
         "food_incentives_enabled": eff["food_incentives"]["enabled"],
         "equal_by_country_source": equal_source,
         "slack_marginal_cost": eff["validation"]["slack_marginal_cost"],

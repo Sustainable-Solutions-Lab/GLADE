@@ -8,6 +8,7 @@ This module handles the creation of carriers and buses that form the
 foundation of the PyPSA network model.
 """
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -26,6 +27,7 @@ def add_carriers_and_buses(
     countries: list,
     regions: list,
     water_regions: list,
+    water_periods: int,
     food_basis: dict[str, str],
 ) -> None:
     """Add all carriers and their corresponding buses to the network.
@@ -191,8 +193,14 @@ def add_carriers_and_buses(
 
     n.carriers.add("feed_conversion", unit="Mt")
 
-    # Water carrier (buses added per region below)
+    # Water carrier (buses added per region below). The global water source feeds
+    # the tiered regional supply links; water scarcity accumulates on a global bus.
     n.carriers.add("water", unit="Mm^3")
+    n.carriers.add("water_field", unit="Mm^3")
+    n.carriers.add("water_source", unit="Mm^3")
+    n.carriers.add("water_scarcity", unit="Mm^3 world-eq")
+    n.carriers.add("groundwater_depletion", unit="Mm^3 mined")
+    n.carriers.add("groundwater_renewable", unit="Mm^3")
 
     # Global emission and resource carriers with buses
     for carrier, unit in [
@@ -203,7 +211,8 @@ def add_carriers_and_buses(
         ("ghg", "MtCO2e"),
     ]:
         n.carriers.add(carrier, unit=unit)
-    # Add global emission buses and fertilizer supply bus
+    # Add global emission buses, fertilizer supply bus, water source and water
+    # scarcity buses
     n.buses.add(
         [
             "emission:co2",
@@ -211,8 +220,22 @@ def add_carriers_and_buses(
             "emission:n2o",
             "emission:ghg",
             "fertilizer:supply",
+            "water:source",
+            "impact:water_scarcity",
+            "impact:groundwater_depletion",
+            "impact:groundwater_renewable",
         ],
-        carrier=["co2", "ch4", "n2o", "ghg", "fertilizer"],
+        carrier=[
+            "co2",
+            "ch4",
+            "n2o",
+            "ghg",
+            "fertilizer",
+            "water_source",
+            "water_scarcity",
+            "groundwater_depletion",
+            "groundwater_renewable",
+        ],
     )
 
     # Per-country fertilizer buses
@@ -239,6 +262,22 @@ def add_carriers_and_buses(
     ):
         scale_meta["macronutrient_kcal_to_PJ"] = constants.KCAL_TO_PJ
 
-    # Per-region water buses
-    water_bus_names = [f"water:{region}" for region in water_regions]
-    n.buses.add(water_bus_names, carrier="water", region=list(water_regions))
+    # Per-region, per-period water buses: the consumption-basis pool (tiered
+    # supply, scarcity, groundwater bands) and the field bus crops draw their
+    # beneficial ET from, bridged by the irrigation delivery link. The year is
+    # split into ``water_periods`` equal periods (water.temporal_resolution) so
+    # a period's surface availability binds against the crop demand whose growing
+    # season falls in it; a seasonal shortfall then draws groundwater.
+    n_periods = int(water_periods)
+    region_arr = np.array(list(water_regions), dtype=object)
+    region_col = pd.Series(np.repeat(region_arr, n_periods))
+    period_col = pd.Series(np.tile(np.arange(n_periods), len(region_arr))).astype(str)
+    suffix = region_col.astype(str) + ":p" + period_col
+    n.buses.add(
+        ("water:" + suffix).to_numpy(), carrier="water", region=region_col.to_numpy()
+    )
+    n.buses.add(
+        ("water_field:" + suffix).to_numpy(),
+        carrier="water_field",
+        region=region_col.to_numpy(),
+    )

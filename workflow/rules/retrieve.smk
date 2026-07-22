@@ -823,12 +823,45 @@ MIRCA_OS_BAG_MEMBERS = {
 }
 MIRCA_OS_YEARS = (2000, 2005, 2010, 2015, 2020)
 with open("data/curated/mirca_os_crop_mapping.csv") as _mirca_mapping_file:
-    MIRCA_OS_BASE_CROPS = [
+    _mirca_mapping_rows = list(
+        csv.DictReader(line for line in _mirca_mapping_file if not line.startswith("#"))
+    )
+MIRCA_OS_BASE_CROPS = [row["mirca_crop"].strip() for row in _mirca_mapping_rows]
+
+# Monthly-grid subcrop labels feeding the irrigated crop calendar: every
+# GLADE-mapped base crop from the concordance plus the calendar-only
+# supplement, expanded into MIRCA-OS's subcrop naming (Rice1/2/3, Wheat1/2,
+# else the base label). Shared with water.smk's calendar input function so the
+# extraction rule below provably produces what build_mirca_crop_calendar needs.
+MIRCA_SUBCROP_CYCLES = {"Rice": 3, "Wheat": 2}
+with open("data/curated/mirca_os_calendar_supplement.csv") as _mirca_supplement_file:
+    _mirca_calendar_bases = [
         row["mirca_crop"].strip()
-        for row in csv.DictReader(
-            line for line in _mirca_mapping_file if not line.startswith("#")
+        for row in _mirca_mapping_rows
+        + list(
+            csv.DictReader(
+                line for line in _mirca_supplement_file if not line.startswith("#")
+            )
         )
+        if row["glade_crop"].strip()
     ]
+MIRCA_OS_CALENDAR_SUBCROPS = sorted(
+    {
+        label
+        for base in _mirca_calendar_bases
+        for label in (
+            [f"{base}{i}" for i in range(1, MIRCA_SUBCROP_CYCLES[base] + 1)]
+            if base in MIRCA_SUBCROP_CYCLES
+            else [base]
+        )
+    }
+)
+# All monthly grid members one archive pass must yield: the irrigated calendar
+# grids plus the repeated-rice grids (both systems) for multi-cropping.
+_MIRCA_MONTHLY_MEMBERS = sorted(
+    {(subcrop, "ir") for subcrop in MIRCA_OS_CALENDAR_SUBCROPS}
+    | {(subcrop, ws) for subcrop in ("Rice2", "Rice3") for ws in ("ir", "rf")}
+)
 
 
 rule download_mirca_os_archive:
@@ -916,27 +949,32 @@ rule extract_mirca_os_footprint:
 
 
 rule extract_mirca_os_subcrop_monthly:
-    """Unpack the repeated-rice monthly grids for one year in one archive pass.
+    """Unpack all needed monthly growing-area grids for one year in one pass.
 
     The subcrop-resolved monthly product preserves subcrop identity
-    (Rice1/2/3, Wheat1/2, ...). Rice2/3 feed the multi-cropping derivation's
-    repeated-cycle detection (never crop timing).
+    (Rice1/2/3, Wheat1/2, ...). The irrigated grids of every calendar crop
+    feed build_mirca_crop_calendar; Rice2/3 (both systems) additionally feed
+    the multi-cropping derivation's repeated-cycle detection.
     """
     input:
         rar="data/downloads/mirca_os/Monthly_Growing_Area_Grids.rar",
     output:
         expand(
-            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
-            subcrop=("Rice2", "Rice3"),
-            ws=("ir", "rf"),
+            "data/downloads/mirca_os/grids/monthly/MIRCA-OS_{subcrop}_{year}_{ws}.nc",
+            zip,
+            subcrop=[m[0] for m in _MIRCA_MONTHLY_MEMBERS],
+            ws=[m[1] for m in _MIRCA_MONTHLY_MEMBERS],
+            allow_missing=True,
         ),
     wildcard_constraints:
         year="|".join(map(str, MIRCA_OS_YEARS)),
     params:
         member_globs=expand(
-            "*MIRCA-OS_{subcrop}_{{year}}_{ws}.nc",
-            subcrop=("Rice2", "Rice3"),
-            ws=("ir", "rf"),
+            "*MIRCA-OS_{subcrop}_{year}_{ws}.nc",
+            zip,
+            subcrop=[m[0] for m in _MIRCA_MONTHLY_MEMBERS],
+            ws=[m[1] for m in _MIRCA_MONTHLY_MEMBERS],
+            allow_missing=True,
         ),
     resources:
         runtime="30m",
@@ -947,18 +985,21 @@ rule extract_mirca_os_subcrop_monthly:
         "../scripts/extract_mirca_os_archive.py"
 
 
-rule download_aware2_basins:
-    """Download the AWARE2.0 native-basin polygons from Zenodo.
+rule download_aware2:
+    """Download the AWARE2.0 water-scarcity dataset from Zenodo.
 
     Source: Seitfudem, Berger, Mueller Schmied & Boulay (2025), "The updated
     and improved method for water scarcity impact assessment in LCA, AWARE2.0",
     https://doi.org/10.5281/zenodo.15133241 (WaterGAP2.2e). License: CC BY 4.0.
 
-    The geopackage carries the native basin geometries and their
-    characterisation factors; the annual agricultural CF is used as the basin
-    scarcity signal for basin-aware region clustering.
+    Three files are used downstream: the intermediate hydrological variables
+    (naturalised availability, environmental reserve, basin area, AMD), the
+    native characterisation factors with sectoral water demand, and the
+    native-basin polygons for the basin-to-region crosswalk.
     """
     output:
+        intermediate="data/downloads/aware2/AWARE20_Intermediate_Variables.xlsx",
+        native_cfs="data/downloads/aware2/AWARE20_Native_CFs.xlsx",
         basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
     params:
         base_url="https://zenodo.org/records/15133241/files",
@@ -966,14 +1007,89 @@ rule download_aware2_basins:
         runtime="30m",
         mem_mb=500,
     log:
-        "<logs>/shared/download_aware2_basins.log",
+        "<logs>/shared/download_aware2.log",
     benchmark:
-        "<benchmarks>/shared/download_aware2_basins.tsv"
+        "<benchmarks>/shared/download_aware2.tsv"
     shell:
         r"""
-        mkdir -p "$(dirname {output.basins})"
+        mkdir -p "$(dirname {output.intermediate})"
+        curl -L --fail --progress-bar -o "{output.intermediate}" \
+            "{params.base_url}/AWARE20_Intermediate_Variables.xlsx/content" > {log} 2>&1
+        curl -L --fail --progress-bar -o "{output.native_cfs}" \
+            "{params.base_url}/AWARE20_Native_CFs.xlsx/content" >> {log} 2>&1
         curl -L --fail --progress-bar -o "{output.basins}" \
-            "{params.base_url}/AWARE20_Native_CFs_geospatial.gpkg/content" > {log} 2>&1
+            "{params.base_url}/AWARE20_Native_CFs_geospatial.gpkg/content" >> {log} 2>&1
+        """
+
+
+rule download_watergap_isimip:
+    """Download WaterGAP 2.2e water fields from the ISIMIP3a repository.
+
+    Source: Mueller Schmied et al. (2024), "The global water resources and use
+    model WaterGAP v2.2e", Geosci. Model Dev. 17, 8817-8852,
+    https://doi.org/10.5194/gmd-17-8817-2024. Standard ISIMIP3a model output,
+    obsclim climate / histsoc (with human water use) setup, gswp3-w5e5 forcing,
+    monthly 1901-2019, 0.5 degree. License: CC BY 4.0. The ISIMIP repository
+    (https://data.isimip.org) serves the full, documented variable set as stable
+    public files under files.isimip.org.
+
+    We fetch the groundwater storage compartment (``groundwstor``; its negative
+    long-term trend is groundwater depletion, Doll et al. 2014), the potential
+    irrigation water consumption, total (``pirruse``) and from groundwater
+    (``pirrusegw``), and all-sector potential groundwater consumption
+    (``ptotusegw``, the denominator of irrigation's share of the depletion
+    trend). The surface part (``pirruse - pirrusegw``) is WaterGAP's
+    irrigation surface availability, used to cap the AWARE scarcity curve;
+    ``pirrusegw`` gives the renewable groundwater bands.
+    """
+    output:
+        groundwstor="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_groundwstor_global_monthly_1901_2019.nc",
+        pirruse="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_pirruse_global_monthly_1901_2019.nc",
+        pirrusegw="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_pirrusegw_global_monthly_1901_2019.nc",
+        ptotusegw="data/downloads/watergap/watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_ptotusegw_global_monthly_1901_2019.nc",
+    params:
+        base_url="https://files.isimip.org/ISIMIP3a/OutputData/water_global/WaterGAP2-2e/gswp3-w5e5/historical",
+    resources:
+        runtime="30m",
+        mem_mb=500,
+    log:
+        "<logs>/shared/download_watergap_isimip.log",
+    benchmark:
+        "<benchmarks>/shared/download_watergap_isimip.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.groundwstor})"
+        for out in "{output.groundwstor}" "{output.pirruse}" "{output.pirrusegw}" "{output.ptotusegw}"; do
+            curl -L --fail --progress-bar -o "$out" \
+                "{params.base_url}/$(basename "$out")" >> {log} 2>&1
+        done
+        """
+
+
+rule download_watergap_continental_area:
+    """Download WaterGAP's static continental-area grid.
+
+    Source: Mueller Schmied et al. (2024), WaterGAP v2.2e standard output,
+    https://doi.org/10.5194/gmd-17-8817-2024. The field is published with the
+    gswp3-w5e5 histsoc output under https://doi.org/10.25716/GUDE.0TNY-KJPG.
+    It converts WaterGAP's per-area fluxes and storage changes to volume.
+    License: CC BY 4.0.
+    """
+    output:
+        "data/downloads/watergap/watergap22e_gswp3-w5e5_continentalarea_histsoc_static.nc",
+    params:
+        url="https://api.gude.uni-frankfurt.de/api/core/bitstreams/0ba40ee1-4e40-481b-9ffe-811b3e786597/content",
+    resources:
+        runtime="5m",
+        mem_mb=200,
+    log:
+        "<logs>/shared/download_watergap_continental_area.log",
+    benchmark:
+        "<benchmarks>/shared/download_watergap_continental_area.tsv"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output})"
+        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
         """
 
 
@@ -1062,25 +1178,6 @@ rule download_wpp_population:
         mkdir -p "$(dirname {output.population})"
         curl -L --fail --progress-bar -o "{output.population}" "{params.population_url}" > {log} 2>&1
         curl -L --fail --progress-bar -o "{output.life_table}" "{params.life_table_url}" >> {log} 2>&1
-        """
-
-
-rule download_waterfootprint_appendix:
-    output:
-        "data/downloads/Report53_Appendix.zip",
-    params:
-        url="https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip",
-    resources:
-        runtime="30m",
-        mem_mb=500,
-    log:
-        "<logs>/shared/download_waterfootprint_appendix.log",
-    benchmark:
-        "<benchmarks>/shared/download_waterfootprint_appendix.tsv"
-    shell:
-        r"""
-        mkdir -p "$(dirname {output})"
-        curl -L --fail --progress-bar -o "{output}" "{params.url}" > {log} 2>&1
         """
 
 

@@ -81,7 +81,8 @@ deviation_penalty:
   deviation_type: "absolute"
 
 water:
-  supply_scenario: "current_use"
+  data:
+    availability: "current_use"
 
 health:
   # Documentation figures include health-cluster maps and the diet-attributable

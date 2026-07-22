@@ -109,28 +109,35 @@ Data Preparation Rules
   * **Script**: ``workflow/scripts/build_grassland_yields.py``
   * **Purpose**: Aggregate grassland yields for grazing production
 
-**process_blue_water_availability**
-  * **Input**: Water Footprint Network shapefile + Excel workbook
-  * **Output**: ``processing/{name}/water/blue_water_availability.csv``
-  * **Script**: ``workflow/scripts/process_blue_water_availability.py``
-  * **Purpose**: Build monthly basin-level blue water availability
+**build_region_watergap**
+  * **Input**: WaterGAP 2.2e (ISIMIP3a) groundwater storage, potential irrigation consumption total and from groundwater, continental area, regions
+  * **Output**: ``processing/{name}/water/watergap/`` -- ``region_watergap_surface.csv`` (monthly irrigation surface consumption), ``region_groundwater_depletion.csv``, ``region_agri_consumption.csv`` (the eta_c and mining-ceiling anchor), ``region_watergap_demand.csv`` (monthly demand, the calendar retiming target)
+  * **Script**: ``workflow/scripts/build_region_watergap.py``
+  * **Purpose**: Aggregate WaterGAP surface availability, the groundwater bands and the irrigation-consumption anchor per region
 
-**build_region_water_sustainable**
-  * **Input**: Blue water availability, regions, crop yields
-  * **Output**: ``processing/{name}/water/sustainable/monthly_region_water.csv``, ``processing/{name}/water/sustainable/region_growing_season_water.csv``
-  * **Script**: ``workflow/scripts/build_region_water_availability.py``
-  * **Purpose**: Allocate basin availability to regions and growing seasons
+**build_region_water_aware**
+  * **Input**: AWARE2.0 intermediate variables, native CFs, basin polygons, regions, crop yields, WaterGAP surface
+  * **Output**: ``processing/{name}/water/aware/`` -- monthly and growing-season availability plus ``region_water_tiers.csv``
+  * **Script**: ``workflow/scripts/build_region_water_aware.py``
+  * **Purpose**: Build the convex water-scarcity supply curve; AWARE contributes the CF curve and basin distribution, WaterGAP the volumes and timing
 
 **build_region_water_current_use**
-  * **Input**: Huang irrigation withdrawals, regions, crop yields
-  * **Output**: ``processing/{name}/water/current_use/monthly_region_water.csv``, ``processing/{name}/water/current_use/region_growing_season_water.csv``
+  * **Input**: Huang et al. gridded irrigation withdrawals, regions, crop yields
+  * **Output**: ``processing/{name}/water/current_use/`` (same schema)
   * **Script**: ``workflow/scripts/process_huang_irrigation_water.py``
-  * **Purpose**: Aggregate current irrigation withdrawals to regions and growing seasons
+  * **Purpose**: Present-day withdrawal alternative, selected by ``water.data.availability``
 
-**select_water_scenario**
-  * **Input**: Scenario-specific water outputs
-  * **Output**: ``processing/{name}/water/monthly_region_water.csv``, ``processing/{name}/water/region_growing_season_water.csv``
-  * **Purpose**: Copy the configured water supply scenario into the unified paths used by the model
+**build_mirca_crop_calendar**
+  * **Input**: MIRCA-OS 2015 monthly irrigated growing-area grids, crop concordance and calendar supplement, WaterGAP monthly demand, crop yields, regions
+  * **Output**: ``processing/{name}/water/mirca_crop_calendar.csv``
+  * **Script**: ``workflow/scripts/build_mirca_crop_calendar.py``
+  * **Purpose**: Observed per-(region, crop) monthly irrigation demand shares, retimed by iterative proportional fitting so region-month totals follow WaterGAP while each crop's annual total and observed season are preserved
+
+**compose_water_supply**
+  * **Input**: The selected availability source's outputs, plus the renewable-groundwater CF bands and consumption anchor for the ``aware`` source
+  * **Output**: ``processing/{name}/water/`` -- ``region_water_tiers.csv`` (per-period surface), ``region_groundwater_bands.csv`` (annual per-region groundwater), and the availability tables copied through
+  * **Script**: ``workflow/scripts/compose_water_supply.py``
+  * **Purpose**: Group months into the model's intra-year periods and finish the supply tables: keep the convex scarcity curve or collapse it to a flat cap, and emit the groundwater bands
 
 **build_current_grassland_area**
   * **Input**: Resource classes, land-cover fractions (``processing/{name}/luc/lc_masks.nc``), regions

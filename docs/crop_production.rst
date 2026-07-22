@@ -344,63 +344,14 @@ For comprehensive details on crop production cost data sources, processing metho
 Water Constraints
 -----------------
 
-For irrigated crops, water availability is a key constraint. The model supports two water supply scenarios, selected via ``config.water.supply_scenario``:
-
-* ``sustainable``: Water Footprint Network blue water availability by basin, representing sustainable extraction limits.
-* ``current_use``: Huang et al. monthly irrigation withdrawals, representing present-day agricultural water use (useful for validation).
-
-Both scenarios are processed into the same regional monthly and growing-season CSVs. ``workflow/rules/water.smk`` selects the configured scenario and writes the unified outputs under ``processing/{name}/water/`` for model building.
-
-Sustainable Basin-Level Availability
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The model uses the Water Footprint Network's monthly blue water availability dataset for 405 GRDC river basins [hoekstra2011]_.
-
-Processing steps (``workflow/scripts/process_blue_water_availability.py``):
-
-1. **Load basin shapefile** with monthly availability (Mm³/month)
-2. **Aggregate by basin and month** to get monthly water budgets
-
-.. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/water_basin_availability.png
-   :width: 100%
-   :alt: Basin water availability map
-
-   Annual blue water availability by GRDC river basin (mm/year). The map shows area-normalized yearly water availability across 405 major river basins globally. Higher availability is shown in darker blue, allowing direct comparison between basins of different sizes. While we normalize by area for better visualisation here, GLADE tracks total water amount availability internally.
-
-Current-Use Irrigation Withdrawals
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-When ``water.supply_scenario`` is set to ``current_use``, the workflow uses Huang et al. (2018) gridded monthly irrigation withdrawals (0.5 degree resolution, 1971-2010) [huang2018]_. ``workflow/scripts/process_huang_irrigation_water.py`` aggregates these withdrawals to regions and computes growing-season totals using the same crop-weighted method as the sustainable dataset.
-
-Outputs:
-
-* ``processing/{name}/water/current_use/monthly_region_water.csv``
-* ``processing/{name}/water/current_use/region_growing_season_water.csv``
-
-Regional Water Assignment
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Blue water availability is allocated to optimization regions using the dataset-specific processing scripts:
-
-* ``workflow/scripts/build_region_water_availability.py`` for ``sustainable``
-* ``workflow/scripts/process_huang_irrigation_water.py`` for ``current_use``
-
-Both produce the same output schema so the model can remain unchanged.
-
-For the sustainable dataset, the allocation steps are:
-
-1. **Spatial join**: Intersect region polygons with basin polygons
-2. **Area weighting**: Allocate basin water proportional to overlap area
-3. **Growing season matching**: Assign water to regions based on when crops are growing
-
-   * Uses growing season start/length from GAEZ
-   * Sums monthly availability over the growing period
-   * For now, this is done on average over all crops that can grow in the region
-
-4. **Output**: CSV files:
-
-   * ``processing/{name}/water/monthly_region_water.csv``: Monthly water by region
-   * ``processing/{name}/water/region_growing_season_water.csv``: Growing season totals
+For irrigated crops, water availability is a key constraint. Water is a primary
+resource in its own right: the crop-production link consumes the crop's net
+irrigation requirement :math:`E` (GAEZ ``RES05-WDC``, m3/ha) from a per-region
+*field* bus, which a calibrated efficiency link feeds from the regional
+consumption pool. The pool, the AWARE scarcity characterisation, the groundwater
+bands, the three water quantities (net requirement, consumption, withdrawal) and
+the solve-time pricing/capping levers are documented in the dedicated
+:doc:`water` chapter.
 
 .. figure:: https://github.com/Sustainable-Solutions-Lab/GLADE/releases/download/doc-figures/water_region_availability.png
    :width: 100%
@@ -533,6 +484,16 @@ modeled. The ``multiple_cropping`` config section may set a catalog name to
 ``null`` to disable it or add a uniquely named greenfield sequence. Greenfield
 sequences have an implicit zero baseline and expose only GAEZ-constrained
 optimization potential; catalog entries cannot be redefined in config.
+
+**Seasonal water split.** When the model resolves intra-year water periods
+(``water.temporal_resolution`` > 1), each irrigated cycle's net requirement is
+placed into the periods by that crop's observed MIRCA-OS irrigated calendar for
+the cell's region, rather than smeared evenly across the year -- so a dry-season
+cycle (rabi wheat, boro rice) lands its demand in the scarce period. Where a
+region has no observed calendar for the crop, the cycle falls back to its own
+GAEZ growing season; repeated same-crop cycles, for which GAEZ gives a single
+window, are staggered at equal ``365/n``-day offsets in that fallback so the
+second cycle does not double the monsoon window.
 
 The RES01 classes report the agro-climatic zone the pixel belongs to. We interpret the
 numeric codes as:
@@ -678,10 +639,3 @@ by volume)::
 
 Produced by ``rule plot_crop_trade_map``
 (``workflow/scripts/plotting/plot_crop_trade_map.py``).
-
-
-References
------------
-
-.. [hoekstra2011] Hoekstra, A.Y. and Mekonnen, M.M. (2011) *Global water scarcity: monthly blue water footprint compared to blue water availability for the world's major river basins*, Value of Water Research Report Series No. 53, UNESCO-IHE, Delft, the Netherlands. http://www.waterfootprint.org/Reports/Report53-GlobalBlueWaterScarcity.pdf
-.. [huang2018] Huang, Z., Hejazi, M., Li, X., Tang, Q., Vernon, C., Leng, G., Liu, Y., Doll, P., Eisner, S., Gerten, D., Hanasaki, N., and Wada, Y. (2018). Reconstruction of global gridded monthly sectoral water withdrawals for 1971-2010 and analysis of their spatiotemporal patterns. *Hydrology and Earth System Sciences*, 22, 2117-2133. https://doi.org/10.5194/hess-22-2117-2018

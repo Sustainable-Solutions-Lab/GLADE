@@ -6,7 +6,7 @@
 # Build documentation figures and Sphinx docs.
 #
 # Validation figures use a separate config (doc_validation) because several
-# settings (planning_horizon, water.supply_scenario, etc.) are consumed by
+# settings (planning_horizon, water.data.availability, etc.) are consumed by
 # processing rules that read config[...] directly — scenario overrides don't
 # reach them. This script runs the validation config first, then builds
 # everything else with the doc_figures config.

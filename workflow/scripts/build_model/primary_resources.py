@@ -16,6 +16,22 @@ import pypsa
 
 from .. import constants
 
+# Merit-order regularizer for the tiered water supply (bn USD per Mm^3, per unit
+# characterisation factor). Breaks the unpriced tier-choice degeneracy by making
+# low-CF water marginally cheaper to draw. Sized to be economically negligible
+# (equivalent to a ~1e-5 USD/m3-world-eq water price, orders of magnitude below
+# the swept water-scarcity prices) yet above solver optimality tolerance.
+WATER_MERIT_ORDER_EPSILON = 1e-8
+
+
+def _retain_material_water_capacities(
+    capacities: pd.DataFrame, min_capacity_mm3: float
+) -> pd.DataFrame:
+    """Drop supply bands smaller than the configured physical capacity floor."""
+    if min_capacity_mm3 == 0:
+        return capacities
+    return capacities[capacities["capacity_mm3"] >= min_capacity_mm3].copy()
+
 
 def _add_land_slack_generators(
     n: pypsa.Network, bus_names: list[str], marginal_cost: float
@@ -44,38 +60,213 @@ def _add_land_slack_generators(
 def add_primary_resources(
     n: pypsa.Network,
     fertilizer_config: dict,
-    region_water_limits: pd.Series,
+    water_tiers: pd.DataFrame,
+    groundwater_bands: pd.DataFrame,
+    water_regions: Iterable[str],
+    water_periods: int,
     ch4_to_co2_factor: float,
     n2o_to_co2_factor: float,
     use_actual_production: bool,
     water_slack_cost: float,
+    groundwater_pumping_cost_usd_per_m3: float,
+    min_water_capacity_mm3: float,
 ) -> None:
     """Add primary resource components and emissions bookkeeping.
 
-    Note: GHG pricing is applied at solve time, not build time.
+    **Surface water** is supplied through a convex tiered curve: a single free
+    global source (``water:source``) feeds per-region, per-period, per-tier links
+    that deliver water to ``water:{region}:p{period}`` (efficiency 1) and
+    accumulate water scarcity on ``impact:water_scarcity`` at each tier's marginal
+    characterisation factor (``efficiency2``). The sum of a region-period's tier
+    capacities is its per-period availability cap (a period's surface draw cannot
+    exceed it, so a seasonal shortfall must draw groundwater). Capacities are
+    already in Mm^3.
+
+    **Groundwater** (``groundwater_bands``, aware availability only) is instead
+    an *annual* per-region resource: an aquifer integrates recharge over the
+    year and can be pumped in any period. Each region gets a
+    ``groundwater:{region}`` bus fed by supply links from ``water:source`` --
+    renewable CF bands (the upper slice of the joint AWARE renewable envelope,
+    scarcity-priced at their own curve CFs and tallied on
+    ``impact:groundwater_renewable``) and a non-renewable ceiling band (mined
+    volume on ``impact:groundwater_depletion``, ordered last by its pumping
+    cost) -- and free ``groundwater_delivery`` links distribute it to every
+    period bus. The annual cap therefore lets a dry period draw the whole
+    year's recharge, unlike surface which is period-bound.
+
+    Because the water itself is free, the unpriced LP is indifferent to which
+    tier it draws from within a region and lands on an arbitrary (high-CF) mix.
+    A negligible merit-order regularizer (``marginal_cost = WATER_MERIT_ORDER_
+    EPSILON * marginal_cf``) breaks this degeneracy so the LP always draws
+    low-scarcity water first within each region, independent of any solve-time
+    water-scarcity price. The cost is economically negligible (equivalent to a
+    water price ~1e-5 USD/m3-world-eq, far below the swept prices) but well above
+    solver tolerance, so it only resolves the tie and does not distort trade-offs.
+
+    Note: GHG and water-scarcity pricing are applied at solve time, not build time.
     """
-    # Water stores use Mm^3, so convert m^3 limits accordingly.
-    water_limits = region_water_limits * constants.MM3_PER_M3
-    n.stores.add(
-        "store:water:" + water_limits.index,
-        bus="water:" + water_limits.index,
-        carrier="water",
-        e_nom=water_limits.values,
-        e_initial=water_limits.values,
-        e_nom_extendable=False,
-        e_cyclic=False,
-        region=water_limits.index,
+    water_region_list = list(water_regions)
+
+    # Global free water source feeding the tiered regional supply links.
+    n.carriers.add("water_supply", unit="Mm^3")
+    n.generators.add(
+        "supply:water_source",
+        bus="water:source",
+        carrier="water_source",
+        p_nom_extendable=True,
     )
 
-    # Slack in water limits when using actual (current) production
-    if use_actual_production:
+    tiers = water_tiers[water_tiers["region"].isin(water_region_list)]
+    tiers = _retain_material_water_capacities(tiers, min_water_capacity_mm3)
+    if not (tiers["source"] == "renewable").all():
+        raise ValueError(
+            "region_water_tiers.csv must contain only surface tiers "
+            "(source='renewable'); groundwater belongs in the bands table"
+        )
+    period_str = tiers["period"].astype(int).astype(str)
+    tier_names = (
+        "supply:water:"
+        + tiers["region"]
+        + ":p"
+        + period_str
+        + ":t"
+        + tiers["tier"].astype(str)
+    ).to_numpy()
+    # Surface tiers (source is always "renewable") accumulate AWARE scarcity
+    # on impact:water_scarcity at their marginal CF and carry the negligible
+    # merit-order regularizer (cost proportional to CF) so the unpriced LP
+    # draws low-CF water first. Groundwater never appears here; it is supplied
+    # through the annual per-region bands below.
+    marginal_cf = tiers["marginal_cf"].to_numpy()
+    pumping_cost_bnusd_per_mm3 = (
+        groundwater_pumping_cost_usd_per_m3
+        / constants.MM3_PER_M3
+        * constants.USD_TO_BNUSD
+    )
+    n.links.add(
+        tier_names,
+        bus0="water:source",
+        bus1=("water:" + tiers["region"] + ":p" + period_str).to_numpy(),
+        bus2="impact:water_scarcity",
+        carrier="water_supply",
+        efficiency=1.0,
+        efficiency2=marginal_cf,
+        marginal_cost=WATER_MERIT_ORDER_EPSILON * marginal_cf,
+        p_nom=tiers["capacity_mm3"].to_numpy(),
+        p_nom_extendable=False,
+        region=tiers["region"].to_numpy(),
+        period=tiers["period"].astype(int).to_numpy(),
+        source=tiers["source"].to_numpy(),
+    )
+
+    # Accumulating impact stores: renewable water scarcity and non-renewable
+    # groundwater depletion (both priced/capped at solve time), and the
+    # renewable-groundwater volume tally (reporting/future policy only).
+    n.stores.add(
+        "store:impact:water_scarcity",
+        bus="impact:water_scarcity",
+        carrier="water_scarcity",
+        e_nom_extendable=True,
+    )
+    n.stores.add(
+        "store:impact:groundwater_depletion",
+        bus="impact:groundwater_depletion",
+        carrier="groundwater_depletion",
+        e_nom_extendable=True,
+    )
+    n.stores.add(
+        "store:impact:groundwater_renewable",
+        bus="impact:groundwater_renewable",
+        carrier="groundwater_renewable",
+        e_nom_extendable=True,
+    )
+
+    # Annual per-region groundwater (aquifer). Each region's groundwater:{region}
+    # bus is fed by renewable CF bands and a non-renewable ceiling band (annual
+    # caps, same impact wiring as the surface tiers) and distributed to every
+    # period water bus by free delivery links, so the year's recharge is shared
+    # across periods (a dry period can draw all of it). An empty bands table
+    # (current_use availability) skips this entirely.
+    gw = groundwater_bands[groundwater_bands["region"].isin(water_region_list)]
+    gw = _retain_material_water_capacities(gw, min_water_capacity_mm3)
+    if not gw.empty:
+        n.carriers.add("groundwater", unit="Mm^3")
+        n.carriers.add("groundwater_delivery", unit="Mm^3")
+        gw_regions = sorted(gw["region"].unique())
+        n.buses.add(
+            ["groundwater:" + r for r in gw_regions],
+            carrier="groundwater",
+            region=gw_regions,
+        )
+
+        gw_nonrenew = (gw["source"] == "groundwater_nonrenewable").to_numpy()
+        gw_cf = gw["marginal_cf"].to_numpy()
+        n.links.add(
+            (
+                "supply:groundwater:"
+                + gw["region"]
+                + ":"
+                + gw["source"]
+                + ":b"
+                + gw["band"].astype(int).astype(str)
+            ).to_numpy(),
+            bus0="water:source",
+            bus1=("groundwater:" + gw["region"]).to_numpy(),
+            bus2=np.where(
+                gw_nonrenew, "impact:groundwater_depletion", "impact:water_scarcity"
+            ),
+            bus3=np.where(gw_nonrenew, "", "impact:groundwater_renewable"),
+            carrier="water_supply",
+            efficiency=1.0,
+            efficiency2=np.where(gw_nonrenew, 1.0, gw_cf),
+            efficiency3=np.where(gw_nonrenew, 0.0, 1.0),
+            marginal_cost=np.where(
+                gw_nonrenew,
+                pumping_cost_bnusd_per_mm3,
+                WATER_MERIT_ORDER_EPSILON * gw_cf,
+            ),
+            p_nom=gw["capacity_mm3"].to_numpy(),
+            p_nom_extendable=False,
+            region=gw["region"].to_numpy(),
+            period=-1,
+            source=gw["source"].to_numpy(),
+        )
+
+        n_periods = int(water_periods)
+        deliver_region = pd.Series(np.repeat(gw_regions, n_periods))
+        deliver_period = pd.Series(
+            np.tile(np.arange(n_periods), len(gw_regions))
+        ).astype(str)
+        deliver_suffix = deliver_region.astype(str) + ":p" + deliver_period
+        n.links.add(
+            ("deliver:groundwater:" + deliver_suffix).to_numpy(),
+            bus0=("groundwater:" + deliver_region.astype(str)).to_numpy(),
+            bus1=("water:" + deliver_suffix).to_numpy(),
+            carrier="groundwater_delivery",
+            efficiency=1.0,
+            p_nom_extendable=True,
+            region=deliver_region.to_numpy(),
+        )
+
+    # Slack in water limits when using actual (current) production. One slack
+    # generator per region-period water bus, so a fixed-area baseline stays
+    # feasible even where a single period's supply cannot meet its demand.
+    if use_actual_production and water_region_list:
+        n_periods = int(water_periods)
+        slack_regions = pd.Series(np.repeat(water_region_list, n_periods))
+        slack_period = pd.Series(
+            np.tile(np.arange(n_periods), len(water_region_list))
+        ).astype(str)
+        slack_bus = pd.Index(
+            "water:" + slack_regions.astype(str) + ":p" + slack_period, dtype="object"
+        )
         n.generators.add(
-            "slack:water:" + water_limits.index,
-            bus="water:" + water_limits.index,
+            "slack:" + slack_bus,
+            bus=slack_bus,
             carrier="water",
             marginal_cost=water_slack_cost,
             p_nom_extendable=True,
-            region=water_limits.index,
+            region=slack_regions.to_numpy(),
         )
 
     scale_meta = n.meta.setdefault("carrier_unit_scale", {})

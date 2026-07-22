@@ -24,6 +24,7 @@ from workflow.scripts.build_model import (
     grassland,
     health,
     infrastructure,
+    irrigation,
     land,
     nutrition,
     primary_resources,
@@ -372,6 +373,7 @@ if __name__ == "__main__":
     multi_cropping_area_df = read_csv(snakemake.input.multi_cropping_area)
     multi_cropping_cycle_df = read_csv(snakemake.input.multi_cropping_yields)
     multi_cropping_baseline_df = read_csv(snakemake.input.multi_cropping_baseline)
+    irrigation_calendar_df = read_csv(snakemake.input.mirca_crop_calendar)
 
     luc_lef_lookup = pd.DataFrame(
         columns=["region", "resource_class", "water_supply", "use", "lef"]
@@ -515,21 +517,16 @@ if __name__ == "__main__":
                 "Grazing-only land data is available but current grassland area is empty"
             )
 
-    blue_water_availability_df = read_csv(snakemake.input.blue_water_availability)
-    monthly_region_water_df = read_csv(snakemake.input.monthly_region_water)
-    region_growing_water_df = read_csv(snakemake.input.growing_season_water)
+    water_tiers_df = read_csv(snakemake.input.water_tiers)
+    groundwater_bands_df = read_csv(snakemake.input.groundwater_bands)
+    region_agri_consumption = read_csv(
+        snakemake.input.region_agri_consumption
+    ).set_index("region")["agri_consumption_m3"]
 
     logger.info(
-        "Loaded blue water availability data: %d basin-month pairs",
-        len(blue_water_availability_df),
-    )
-    logger.info(
-        "Loaded monthly region water availability: %d rows",
-        len(monthly_region_water_df),
-    )
-    logger.info(
-        "Loaded region growing-season water availability: %d regions",
-        region_growing_water_df.shape[0],
+        "Loaded water supply: %d region-period surface tiers, %d groundwater bands",
+        len(water_tiers_df),
+        len(groundwater_bands_df),
     )
 
     # Load population per country for planning horizon
@@ -560,23 +557,19 @@ if __name__ == "__main__":
 
     regions = sorted(region_to_country.index.unique())
 
-    region_water_limits = (
-        region_growing_water_df.set_index("region")["growing_season_water_available_m3"]
-        .reindex(regions)
-        .fillna(0.0)
-    )
-
+    # Regions that actually draw irrigation water: those with positive irrigated
+    # suitable area (the same condition under which crops.py builds an irrigated
+    # produce link). Regions present in the yield tables with zero suitable area
+    # get no produce link, so they must not get a water bus -- a dangling bus
+    # with no attached components breaks the LP during matrix assembly.
     irrigated_regions: set[str] = set()
     for key, df in yields_data.items():
         if key.endswith("_yield_i"):
-            irrigated_regions.update(df.index.get_level_values("region"))
+            positive = df[df["suitable_area"] > 0]
+            irrigated_regions.update(positive.index.get_level_values("region"))
 
     land_regions = set(land_class_df.index.get_level_values("region"))
-    water_bus_regions = sorted(
-        set(region_water_limits.index)
-        .union(irrigated_regions)
-        .intersection(land_regions)
-    )
+    water_bus_regions = sorted(irrigated_regions & land_regions)
 
     logger.debug("Foods data:\n%s", foods.head())
     logger.debug("Food groups data:\n%s", food_groups.head())
@@ -615,6 +608,12 @@ if __name__ == "__main__":
     ) * (1.0 - moisture_df["moisture_fraction"])
 
     # Optional cost calibration corrections (crops, multi-crops, grassland, animals)
+    # Configs that accept a calibration provenance mismatch (test/tutorial
+    # grade) may build (crop, country) links the artefact's own build did not
+    # carry; the missing-correction check then warns instead of raising.
+    require_complete_cost_calibration = not bool(
+        snakemake.config["calibration"]["accept_provenance_mismatch"]
+    )
     crop_cost_calibration = None
     multi_crop_cost_calibration = None
     grassland_cost_calibration = None
@@ -738,6 +737,9 @@ if __name__ == "__main__":
     # All nutrients from nutrition data get buses (tracked but not necessarily constrained)
     all_nutrient_names = list(nutrient_units.keys())
 
+    # Number of intra-year water periods the LP resolves (structural).
+    water_periods = int(snakemake.config["water"]["temporal_resolution"])
+
     # Infrastructure: carriers and buses
     infrastructure.add_carriers_and_buses(
         n,
@@ -750,6 +752,7 @@ if __name__ == "__main__":
         cfg_countries,
         regions,
         water_bus_regions,
+        water_periods,
         food_basis=food_basis,
     )
 
@@ -790,15 +793,25 @@ if __name__ == "__main__":
 
     # Primary resources: water, fertilizer, emissions
     water_slack_cost = validation_slack_cost / 1e3
+    groundwater_pumping_cost = float(
+        snakemake.config["water"]["supply"]["pumping_cost_usd_per_m3"]
+    )
 
     primary_resources.add_primary_resources(
         n,
         snakemake.params.fertilizer,
-        region_water_limits,
+        water_tiers_df,
+        groundwater_bands_df,
+        water_bus_regions,
+        water_periods,
         ch4_to_co2_factor,
         n2o_to_co2_factor,
         use_actual_production=use_actual_production,
         water_slack_cost=water_slack_cost,
+        groundwater_pumping_cost_usd_per_m3=groundwater_pumping_cost,
+        min_water_capacity_mm3=float(
+            snakemake.params.numerics["min_water_capacity_mm3"]
+        ),
     )
     synthetic_n2o_factor = float(
         snakemake.params.emissions["fertilizer"]["synthetic_n2o_factor"]
@@ -987,7 +1000,10 @@ if __name__ == "__main__":
         residue_fue_lookup=residue_fue_lookup,
         residue_n2o_eff_lookup=residue_n2o_eff_lookup,
         use_actual_production=use_actual_production,
+        water_periods=water_periods,
+        irrigation_calendar=irrigation_calendar_df,
         cost_calibration=crop_cost_calibration,
+        require_complete_cost_calibration=require_complete_cost_calibration,
         min_yield_t_per_ha=min_crop_yield,
         seed_kg_dm_per_ha=seed_kg_dm_per_ha,
         crop_loss_multiplier=crop_loss_multiplier,
@@ -1018,6 +1034,7 @@ if __name__ == "__main__":
             residue_lookup,
             residue_fue_lookup=residue_fue_lookup,
             residue_n2o_eff_lookup=residue_n2o_eff_lookup,
+            water_periods=water_periods,
             rice_methane_factor=rice_methane_factor,
             rainfed_wetland_rice_ch4_scaling_factor=(
                 rainfed_wetland_rice_ch4_scaling_factor
@@ -1030,6 +1047,7 @@ if __name__ == "__main__":
             baseline_area=multi_cropping_baseline_df,
             use_actual_production=use_actual_production,
             multi_crop_cost_calibration=multi_crop_cost_calibration,
+            require_complete_cost_calibration=require_complete_cost_calibration,
         )
     # Clip sub-min_link_area_mha crop baselines before multi-crop reconciliation,
     # pinning, or growth-cap aggregation. Reconciliation can then conserve the
@@ -1072,6 +1090,22 @@ if __name__ == "__main__":
     land.add_multi_cropping_land_correction(
         n,
         land_use_cost_bnusd_per_mha=land_use_cost_bnusd_per_mha,
+    )
+
+    # Irrigation delivery links (after the crop links and the baseline
+    # reconciliation: eta_c is calibrated from their baseline areas and water
+    # requirements).
+    irrigation_cfg = snakemake.config["water"]["irrigation"]
+    irrigation.add_irrigation_delivery(
+        n,
+        region_agri_consumption,
+        water_tiers_df,
+        groundwater_bands_df,
+        water_bus_regions,
+        water_periods,
+        eta_min=float(irrigation_cfg["eta_min"]),
+        eta_max=float(irrigation_cfg["eta_max"]),
+        consumed_fraction=float(irrigation_cfg["consumed_fraction"]),
     )
 
     if snakemake.params.grazing["enabled"]:

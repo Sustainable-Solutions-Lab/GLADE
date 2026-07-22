@@ -93,6 +93,7 @@ numerics:
   # Coefficient clipping: zero negligible coefficients on retained components.
   min_link_area_mha: 0.000001            # ~1 ha; smaller land areas -> 0
   min_water_requirement_m3_per_ha: 0.1   # <0.1 mm/ha irrigation -> no water draw
+  min_water_capacity_mm3: 0.000001       # <1 m3 annual/period capacity -> no supply link
   min_co2_coefficient_tco2_per_ha: 0.001 # near-zero land carbon flux -> 0
   min_cost_correction_bnusd: 0.000001    # ~0.001 USD per unit flow -> 0
 
@@ -250,14 +251,111 @@ land:
 
 # --- section: water ---
 water:
-  # Water supply scenario determines which dataset is used for regional water limits:
-  # - "sustainable": Water Footprint Network blue water availability by basin (Hoekstra & Mekonnen 2011)
-  #                  Represents sustainable water extraction limits.
-  # - "current_use": Huang et al. (2018) gridded irrigation water withdrawals
-  #                  Represents actual/current agricultural water use, useful for validation.
-  supply_scenario: "current_use"
-  # Reference year for Huang irrigation data (only used when supply_scenario is "current_use")
-  huang_reference_year: 2010
+  # Number of intra-year periods the LP resolves for water supply and demand
+  # (structural; must divide 12). Each period balances its own surface
+  # availability against the crop water demand whose growing season falls in it,
+  # so a season whose surface cannot meet its demand draws groundwater
+  # endogenously. 1 = annual, 12 = monthly, 4 = quarterly.
+  #
+  # The default is 1: cheap, and adequate wherever water is not the object of
+  # study. Note what it costs. At 1 a region's whole annual surface pool is
+  # available to every season, so wet-season surplus subsidises the dry season
+  # and the groundwater bands go nearly inert -- a near-zero reported depletion
+  # at T=1 is an artefact of the resolution, not a finding. Studies about water
+  # should raise this (4 is a reasonable seasonality/solve-time compromise).
+  temporal_resolution: 1
+  # Structural (build-time) water-supply configuration. Groundwater is always
+  # part of the aware supply: additive renewable- and non-renewable-groundwater
+  # bands (annual, per region) on top of the period-bound surface supply, so
+  # mining emerges endogenously wherever surface plus renewable groundwater
+  # fall short. Studies wanting a groundwater-free system can constrain it at
+  # solve time (groundwater_depletion.cap_mm3: 0 caps mining; scarcity pricing
+  # penalises the renewable draw).
+  supply:
+    # Convex AWARE scarcity tiers per region-period (and renewable-groundwater
+    # bands), so drawing more water costs more where water is scarcer. False
+    # collapses each pool to one flat cap -- a plain availability constraint,
+    # cheaper and sufficient where water is not the object of study. Scarcity
+    # pricing (see water_scarcity) requires this.
+    scarcity_tiers: false
+    # Marginal cost of non-renewable groundwater (USD per m3): a small pumping-
+    # energy cost (~100 m lift at ~0.1 USD/kWh) that also orders groundwater last
+    # in the merit order.
+    pumping_cost_usd_per_m3: 0.04
+    # Non-renewable groundwater ceiling as a multiple of a region's annual
+    # agricultural consumption. Generous and non-binding: mining is drawn only to
+    # cover the residual deficit (pumping cost keeps it minimal), so this bounds
+    # mining well above any plausible draw without pinning it.
+    groundwater_ceiling_factor: 3.0
+  # Data provenance (build-time). Swapping a source changes numbers, not model
+  # behaviour; every source yields the same consumption-basis regional pool.
+  data:
+    # Regional water availability + scarcity pool: "aware" (AWARE2.0) or
+    # "current_use" (Huang et al. gridded irrigation withdrawals; validation).
+    availability: "aware"
+    # Inclusive reference window for WaterGAP irrigation consumption, surface
+    # delivery and the eta_c anchor. Matches AWARE2.0's recent scarcity window.
+    surface_reference_start: 1990
+    surface_reference_end: 2019
+    # Inclusive year window for the groundwater-storage depletion trend. This
+    # stays recent so the depletion band represents current mining.
+    groundwater_trend_start: 2000
+    groundwater_trend_end: 2019
+    # Reference year for Huang irrigation data (only when availability is "current_use").
+    huang_reference_year: 2010
+  # Consumption-basis irrigation delivery. The water pool, scarcity and
+  # groundwater bands sit on consumption C; crops need the GAEZ net requirement
+  # E. A per-region delivery link draws C = E / eta_c from the pool, with eta_c
+  # calibrated at build time as E_baseline / C_anchor (clipped to
+  # [eta_min, eta_max] and floored at E_baseline / pool for baseline
+  # feasibility). The anchor is WaterGAP irrigation consumption (pirruse) --
+  # one volume basis for supply envelope, groundwater bands and demand.
+  irrigation:
+    # Lower clip on the calibrated consumptive efficiency; ratios below this
+    # are treated as data-quality issues (logged), not real inefficiency.
+    eta_min: 0.2
+    # Upper clip. Values above 1 encode deficit irrigation: observed
+    # consumption below the GAEZ full requirement (India, Pakistan, Thailand),
+    # so the baseline draw matches observed consumption instead of the
+    # requirement. The cap guards regions with unreliably small consumption
+    # anchors, where an uncapped ratio would make marginal irrigation free.
+    eta_max: 5.0
+    # Consumed fraction C/W (consumption over withdrawal). Used to report
+    # withdrawal in the analysis and to convert the current_use availability
+    # pool from withdrawal to consumption basis. Global constant for now.
+    consumed_fraction: 0.58
+
+# --- section: water_scarcity ---
+# Solve-time pricing and/or capping of the accumulated AWARE water-scarcity
+# impact (Mm3 world-equivalent). Both default off; the availability cap from the
+# supply curve is always active. Requires water.supply.scarcity_tiers, since with
+# collapsed tiers every surface characterisation factor is zero and there is no
+# scarcity signal to price.
+water_scarcity:
+  pricing_enabled: false
+  price: 0                  # Shadow price, USD per m3 world-equivalent
+  cap_mm3_world_eq: null    # Epsilon-constraint cap (Mm3 world-eq); null = no cap
+  # CF applied to non-renewable groundwater under scarcity pricing or capping:
+  # each mined m3 is charged nonrenewable_cf * price, and counts
+  # nonrenewable_cf-fold against cap_mm3_world_eq (a joint constraint). AWARE
+  # covers renewable water only and excludes fossil stocks, so this is a
+  # bridging weight that prices a mined m3 at the scarcity of the exhausted
+  # renewable water it displaces, closing the otherwise free substitution into
+  # fossil groundwater. 100 is AWARE's demand-exceeds-availability cutoff plus
+  # a non-renewability premium. Set null to leave mining out of both, e.g.
+  # when groundwater_depletion prices or caps it separately (combining both
+  # pricings is an error; a null-cf scarcity cap with mining unconstrained
+  # logs a porosity warning).
+  nonrenewable_cf: 100
+
+# --- section: groundwater_depletion ---
+# Solve-time pricing and/or capping of accumulated non-renewable groundwater
+# depletion (Mm3 mined). Requires water.data.availability: aware; both
+# default off.
+groundwater_depletion:
+  pricing_enabled: false
+  price: 0                  # Shadow price, USD per m3 mined
+  cap_mm3: null             # Epsilon-constraint cap (Mm3 mined); null = no cap
 
 # --- section: fertilizer ---
 fertilizer:

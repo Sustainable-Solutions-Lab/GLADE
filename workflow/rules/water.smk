@@ -5,13 +5,27 @@
 """
 Water and fertilizer-related data preparation rules.
 
-Includes fertilizer application rates, blue water availability,
-and regional water resource calculations.
-
-Water supply scenario:
-- "sustainable": Uses Water Footprint Network blue water availability (Hoekstra & Mekonnen 2011)
+Water availability source (``water.data.availability``):
+- "aware": Uses AWARE2.0 (Seitfudem et al. 2025, WaterGAP2.2e) naturalised
+  availability and a convex water-scarcity supply curve.
 - "current_use": Uses Huang et al. (2018) gridded irrigation water withdrawals
+  (validation/benchmarking; a single zero-scarcity supply tier).
+
+Both sources emit a ``region_water_tiers.csv`` describing the regional water
+supply as one or more tiers (capacity in Mm3, marginal scarcity characterisation
+factor); ``aware`` resolves it to a convex merit-order curve while ``current_use``
+emits a single zero-CF tier reproducing a hard availability cap.
 """
+
+
+_WATERGAP_ISIMIP = (
+    "data/downloads/watergap/"
+    "watergap2-2e_gswp3-w5e5_obsclim_histsoc_default_{var}_global_monthly_1901_2019.nc"
+)
+_WATERGAP_CONTINENTALAREA = (
+    "data/downloads/watergap/"
+    "watergap22e_gswp3-w5e5_continentalarea_histsoc_static.nc"
+)
 
 
 rule prepare_fertilizer_application_rates:
@@ -55,71 +69,44 @@ rule derive_global_fertilizer_rates:
         "../scripts/derive_global_fertilizer_rates.py"
 
 
-rule extract_waterfootprint_appendix:
-    input:
-        zip_path="data/downloads/Report53_Appendix.zip",
-    output:
-        shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
-        excel="data/downloads/Report53_Appendix/Report53-Appendices-VI-IX.xls",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=200,
-    log:
-        "<logs>/shared/extract_waterfootprint_appendix.log",
-    benchmark:
-        "<benchmarks>/shared/extract_waterfootprint_appendix.tsv"
-    shell:
-        r"""
-        unzip -o {input.zip_path} -d data/downloads > {log} 2>&1
-        """
-
-
-rule process_blue_water_availability:
-    input:
-        shapefile=rules.extract_waterfootprint_appendix.output.shapefile,
-        excel=rules.extract_waterfootprint_appendix.output.excel,
-    output:
-        "<processing>/{name}/water/blue_water_availability.csv",
-    group:
-        "prep"
-    resources:
-        runtime="1m",
-        mem_mb=200,
-    log:
-        "<logs>/{name}/process_blue_water_availability.log",
-    benchmark:
-        "<benchmarks>/{name}/process_blue_water_availability.tsv"
-    script:
-        "../scripts/process_blue_water_availability.py"
-
-
 def crop_yield_file_list(w):
     return list(yield_inputs(w).values())
 
 
-# Rule for sustainable water availability (Water Footprint Network data)
-rule build_region_water_sustainable:
+# Rule for the convex water-scarcity supply curve. The volumes (per
+# region-month) are WaterGAP's irrigation surface consumption; its grid cells
+# set the within-region AWARE-basin allocation, while AWARE contributes the CF
+# curve.
+rule build_region_water_aware:
     input:
-        shapefile=rules.extract_waterfootprint_appendix.output.shapefile,
+        intermediate="data/downloads/aware2/AWARE20_Intermediate_Variables.xlsx",
+        native_cfs="data/downloads/aware2/AWARE20_Native_CFs.xlsx",
+        basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
         regions="<processing>/{name}/regions.geojson",
-        monthly="<processing>/{name}/water/blue_water_availability.csv",
-        crop_yields=crop_yield_file_list,
+        watergap_surface="<processing>/{name}/water/watergap/region_watergap_surface.csv",
+        watergap_groundwater="<processing>/{name}/water/watergap/region_groundwater_depletion.csv",
+        watergap_pirruse=_WATERGAP_ISIMIP.format(var="pirruse"),
+        watergap_pirrusegw=_WATERGAP_ISIMIP.format(var="pirrusegw"),
+        watergap_continentalarea=_WATERGAP_CONTINENTALAREA,
+    params:
+        surface_start=config["water"]["data"]["surface_reference_start"],
+        surface_end=config["water"]["data"]["surface_reference_end"],
     output:
-        monthly_region="<processing>/{name}/water/sustainable/monthly_region_water.csv",
-        region_growing="<processing>/{name}/water/sustainable/region_growing_season_water.csv",
+        monthly_region="<processing>/{name}/water/aware/monthly_region_water.csv",
+        region_growing="<processing>/{name}/water/aware/region_growing_season_water.csv",
+        tiers="<processing>/{name}/water/aware/region_water_tiers.csv",
+        renewable_gw_tiers="<processing>/{name}/water/aware/region_renewable_gw_tiers.csv",
     group:
         "prep"
     resources:
-        runtime="1m",
-        mem_mb=300,
+        runtime="15m",
+        mem_mb=2000,
     log:
-        "<logs>/{name}/build_region_water_sustainable.log",
+        "<logs>/{name}/build_region_water_aware.log",
     benchmark:
-        "<benchmarks>/{name}/build_region_water_sustainable.tsv"
+        "<benchmarks>/{name}/build_region_water_aware.tsv"
     script:
-        "../scripts/build_region_water_availability.py"
+        "../scripts/build_region_water_aware.py"
 
 
 # Rule for current water use (Huang et al. 2018 gridded irrigation data)
@@ -129,10 +116,11 @@ rule build_region_water_current_use:
         regions="<processing>/{name}/regions.geojson",
         crop_yields=crop_yield_file_list,
     params:
-        reference_year=config["water"]["huang_reference_year"],
+        reference_year=config["water"]["data"]["huang_reference_year"],
     output:
         monthly_region="<processing>/{name}/water/current_use/monthly_region_water.csv",
         region_growing="<processing>/{name}/water/current_use/region_growing_season_water.csv",
+        tiers="<processing>/{name}/water/current_use/region_water_tiers.csv",
     group:
         "prep"
     resources:
@@ -146,47 +134,137 @@ rule build_region_water_current_use:
         "../scripts/process_huang_irrigation_water.py"
 
 
-def water_monthly_input(w):
-    """Select monthly water input based on config."""
-    scenario = config["water"]["supply_scenario"]
-    return f"<processing>/{w.name}/water/{scenario}/monthly_region_water.csv"
-
-
-def water_growing_input(w):
-    """Select growing season water input based on config."""
-    scenario = config["water"]["supply_scenario"]
-    return f"<processing>/{w.name}/water/{scenario}/region_growing_season_water.csv"
-
-
-# Unified rule that creates symlinks to the selected water data source
-# This maintains backward compatibility with existing downstream rules
-rule select_water_scenario:
+# Rule for regional WaterGAP 2.2e (ISIMIP3a) water fields: irrigation surface
+# availability (pirruse - pirrusegw, the cap for the AWARE curve) and renewable
+# groundwater (pirrusegw minus irrigation's share of the storage-decline trend).
+rule build_region_watergap:
     input:
-        monthly=water_monthly_input,
-        growing=water_growing_input,
+        groundwstor=_WATERGAP_ISIMIP.format(var="groundwstor"),
+        pirruse=_WATERGAP_ISIMIP.format(var="pirruse"),
+        pirrusegw=_WATERGAP_ISIMIP.format(var="pirrusegw"),
+        ptotusegw=_WATERGAP_ISIMIP.format(var="ptotusegw"),
+        continentalarea=_WATERGAP_CONTINENTALAREA,
+        regions="<processing>/{name}/regions.geojson",
+    params:
+        trend_start=config["water"]["data"]["groundwater_trend_start"],
+        trend_end=config["water"]["data"]["groundwater_trend_end"],
+        surface_start=config["water"]["data"]["surface_reference_start"],
+        surface_end=config["water"]["data"]["surface_reference_end"],
+    output:
+        surface="<processing>/{name}/water/watergap/region_watergap_surface.csv",
+        depletion="<processing>/{name}/water/watergap/region_groundwater_depletion.csv",
+        region_agri="<processing>/{name}/water/watergap/region_agri_consumption.csv",
+        demand="<processing>/{name}/water/watergap/region_watergap_demand.csv",
+    group:
+        "prep"
+    resources:
+        runtime="5m",
+        mem_mb=2000,
+    log:
+        "<logs>/{name}/build_region_watergap.log",
+    benchmark:
+        "<benchmarks>/{name}/build_region_watergap.tsv"
+    script:
+        "../scripts/build_region_watergap.py"
+
+
+def mirca_calendar_grids(w):
+    """2015 irrigated monthly growing-area grids for every calendar crop.
+
+    One entry per subcrop label in ``MIRCA_OS_CALENDAR_SUBCROPS`` (the
+    concordance plus the calendar-only supplement, expanded to MIRCA's subcrop
+    naming in retrieve.smk), keyed ``nc_{subcrop}`` for
+    ``build_mirca_crop_calendar``.
+    """
+    return {
+        f"nc_{label}": (
+            f"data/downloads/mirca_os/grids/monthly/MIRCA-OS_{label}_2015_ir.nc"
+        )
+        for label in MIRCA_OS_CALENDAR_SUBCROPS
+    }
+
+
+# Observed irrigated crop calendar: per (region, crop) monthly water-demand
+# shares from MIRCA-OS 2015 monthly growing-area grids, retimed by iterative
+# proportional fitting so that region-month demand totals follow WaterGAP's
+# monthly irrigation requirement (pirruse) while each crop's annual total and
+# observed season (structural zeros) are preserved. Places irrigation demand
+# in the observed months at requirement weighting (single-crop links and
+# multi-cropping cycles), consistent with WaterGAP's reservoir-regulated
+# monthly surface delivery, instead of GAEZ's yield-maximising potential
+# calendar with uniform within-season weighting.
+rule build_mirca_crop_calendar:
+    input:
+        unpack(mirca_calendar_grids),
+        mapping="data/curated/mirca_os_crop_mapping.csv",
+        supplement="data/curated/mirca_os_calendar_supplement.csv",
+        demand="<processing>/{name}/water/watergap/region_watergap_demand.csv",
+        crop_yields=crop_yield_file_list,
+        regions="<processing>/{name}/regions.geojson",
+    output:
+        "<processing>/{name}/water/mirca_crop_calendar.csv",
+    group:
+        "prep"
+    resources:
+        runtime="10m",
+        mem_mb=3000,
+    log:
+        "<logs>/{name}/build_mirca_crop_calendar.log",
+    benchmark:
+        "<benchmarks>/{name}/build_mirca_crop_calendar.tsv"
+    script:
+        "../scripts/build_mirca_crop_calendar.py"
+
+
+def water_availability_inputs(w):
+    """The availability source's monthly/growing/tier files (aware or current_use)."""
+    availability = config["water"]["data"]["availability"]
+    base = f"<processing>/{w.name}/water/{availability}"
+    return {
+        "monthly": f"{base}/monthly_region_water.csv",
+        "growing": f"{base}/region_growing_season_water.csv",
+        "tiers": f"{base}/region_water_tiers.csv",
+    }
+
+
+def water_groundwater_input(w):
+    """Renewable-GW curve and consumption anchor (aware availability only)."""
+    if config["water"]["data"]["availability"] == "aware":
+        return {
+            "renewable_gw_tiers": f"<processing>/{w.name}/water/aware/region_renewable_gw_tiers.csv",
+            "region_agri": f"<processing>/{w.name}/water/watergap/region_agri_consumption.csv",
+        }
+    return {}
+
+
+# Compose the scenario-agnostic water-supply tables from the selected
+# availability source: per-period surface tiers (source "renewable") and, for
+# the aware source, the annual per-region groundwater bands.
+rule compose_water_supply:
+    input:
+        unpack(water_availability_inputs),
+        unpack(water_groundwater_input),
+    params:
+        scarcity_tiers=config["water"]["supply"]["scarcity_tiers"],
+        availability=config["water"]["data"]["availability"],
+        temporal_resolution=config["water"]["temporal_resolution"],
+        consumed_fraction=config["water"]["irrigation"]["consumed_fraction"],
+        groundwater_ceiling_factor=config["water"]["supply"][
+            "groundwater_ceiling_factor"
+        ],
     output:
         monthly_region="<processing>/{name}/water/monthly_region_water.csv",
         region_growing="<processing>/{name}/water/region_growing_season_water.csv",
+        tiers="<processing>/{name}/water/region_water_tiers.csv",
+        groundwater_bands="<processing>/{name}/water/region_groundwater_bands.csv",
     group:
         "prep"
     resources:
         runtime="1m",
         mem_mb=400,
     log:
-        "<logs>/{name}/select_water_scenario.log",
+        "<logs>/{name}/compose_water_supply.log",
     benchmark:
-        "<benchmarks>/{name}/select_water_scenario.tsv"
-    run:
-        import shutil
-        from pathlib import Path
-
-        Path(output.monthly_region).parent.mkdir(parents=True, exist_ok=True)
-
-        # Copy files (Snakemake handles symlinks poorly across rules)
-        shutil.copy(input.monthly, output.monthly_region)
-        shutil.copy(input.growing, output.region_growing)
-
-        with open(log[0], "w") as f:
-            f.write(f"Water supply scenario: {config['water']['supply_scenario']}\n")
-            f.write(f"Copied {input.monthly} -> {output.monthly_region}\n")
-            f.write(f"Copied {input.growing} -> {output.region_growing}\n")
+        "<benchmarks>/{name}/compose_water_supply.tsv"
+    script:
+        "../scripts/compose_water_supply.py"

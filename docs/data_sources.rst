@@ -205,7 +205,30 @@ AWARE2.0
 
 **Citation**: Seitfudem, G., Berger, M., Mueller Schmied, H., & Boulay, A.-M. (2025). *The updated and improved method for water scarcity impact assessment in LCA, AWARE2.0*. https://doi.org/10.5281/zenodo.15133241
 
-**Retrieval**: ``download_aware2_basins`` fetches the geopackage from Zenodo. Basins whose annual agricultural CF is missing (about a fifth of polygons, mostly ice, desert and small islands) are filled with the global median.
+**Retrieval**: ``download_aware2`` fetches the geopackage plus two workbooks (intermediate hydrological variables and native characterisation factors with sectoral demand) from Zenodo. Basins whose annual agricultural CF is missing (about a fifth of polygons, mostly ice, desert and small islands) are filled with the global median.
+
+**Usage**: the basin geometries drive basin-aware region clustering (see :doc:`land_use`); the characterisation factors and hydrological variables build the regional water-scarcity supply curve (see :doc:`water`).
+
+WaterGAP 2.2e
+~~~~~~~~~~~~~
+
+**Provider**: Mueller Schmied et al. (2024), via ISIMIP3a
+
+**Description**: Global hydrological and water-use model output. The model uses the groundwater storage compartment (``groundwstor``; its long-term decline is groundwater depletion), potential irrigation water consumption in total (``pirruse``) and from groundwater (``pirrusegw``), and all-sector potential groundwater consumption (``ptotusegw``, the denominator of irrigation's share of the depletion trend). The surface part (``pirruse - pirrusegw``) is the irrigation surface availability that scales the AWARE scarcity curve; ``pirrusegw`` (net of irrigation-attributed mining) gives the renewable groundwater bands; ``pirruse`` anchors the consumptive-efficiency calibration and the mining ceiling.
+
+**Coverage**:
+  * Spatial: Global, 0.5 degree
+  * Temporal: Monthly, 1901-2019 (obsclim / histsoc, gswp3-w5e5 forcing)
+
+**Access**: https://files.isimip.org (ISIMIP3a water_global / WaterGAP2-2e); the static continental-area grid via https://doi.org/10.25716/GUDE.0TNY-KJPG.
+
+**License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+**Citation**: Mueller Schmied, H., et al. (2024). *The global water resources and use model WaterGAP v2.2e*. Geoscientific Model Development 17, 8817-8852. https://doi.org/10.5194/gmd-17-8817-2024
+
+**Retrieval**: ``download_watergap_isimip`` and ``download_watergap_continental_area``.
+
+**Usage**: The volume basis for the whole water system -- supply envelope, groundwater bands, demand timing and the ``eta_c`` anchor. See :doc:`water`.
 
 MIRCA-OS v2
 ~~~~~~~~~~~
@@ -1017,28 +1040,6 @@ be updated accordingly.
 Water Resources Data
 --------------------
 
-Water Footprint Network -- Monthly Blue Water Availability
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Provider**: Water Footprint Network (Hoekstra & Mekonnen)
-
-**Description**: Monthly blue water availability for 405 GRDC river basins, provided alongside blue-water scarcity indicators.
-
-**Version**: Appendix VII of Hoekstra & Mekonnen (2011); ESRI shapefile + Excel workbook (monthly availability in Mm3/month)
-
-**Coverage**:
-  * Spatial: 405 GRDC river basins (global)
-
-**Access**: https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip
-
-**License**: No explicit license; citation requested. Users should evaluate whether their use qualifies as fair use and contact UNESCO-IHE for commercial applications.
-
-**Citation**: Hoekstra, A.Y. and Mekonnen, M.M. (2011). *Global water scarcity: monthly blue water footprint compared to blue water availability for the world's major river basins*, Value of Water Research Report Series No. 53, UNESCO-IHE, Delft, Netherlands.
-
-**Retrieval**: Automatic via Snakemake rules
-
-**Usage**: Constraining irrigated crop production by basin-level water availability.
-
 Huang et al. -- Gridded Irrigation Water Withdrawals
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1058,7 +1059,7 @@ Huang et al. -- Gridded Irrigation Water Withdrawals
 
 **Citation**: Huang, Z., Hejazi, M., Li, X., Tang, Q., Vernon, C., Leng, G., Liu, Y., Doll, P., Eisner, S., Gerten, D., Hanasaki, N., and Wada, Y. (2018). Reconstruction of global gridded monthly sectoral water withdrawals for 1971-2010 and analysis of their spatiotemporal patterns. *Hydrology and Earth System Sciences*, 22, 2117-2133. https://doi.org/10.5194/hess-22-2117-2018
 
-**Retrieval**: Retrieved via the ``download_huang_irrigation_water`` rule (Zenodo download, 7z extraction). The ``process_huang_irrigation_water`` rule aggregates gridded monthly data to model regions by area-weighted summation. Outputs: ``processing/{name}/water/current_use/monthly_region_water.csv`` and ``processing/{name}/water/current_use/region_growing_season_water.csv``, selected when ``config['water']['supply_scenario']`` is ``"current_use"``.
+**Retrieval**: Retrieved via the ``download_huang_irrigation_water`` rule (Zenodo download, 7z extraction). The ``process_huang_irrigation_water`` rule aggregates gridded monthly data to model regions by area-weighted summation. Outputs: ``processing/{name}/water/current_use/monthly_region_water.csv`` and ``processing/{name}/water/current_use/region_growing_season_water.csv``, selected when ``config['water']['data']['availability']`` is ``"current_use"``.
 
 **Usage**: Aggregated to regions for validation of water module against observed irrigation withdrawals.
 

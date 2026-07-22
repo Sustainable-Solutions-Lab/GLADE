@@ -1,0 +1,15 @@
+# Calendar-only additions to mirca_os_crop_mapping.csv: MIRCA-OS classes whose
+# monthly growing-area grids feed the irrigated crop calendar
+# (build_mirca_crop_calendar) but which are excluded from the multi-cropping
+# concordance (long-duration/ratoon crops, unmappable aggregates). A MIRCA
+# class may map to several GLADE crops (all receive the same monthly profile;
+# the class's growing area is split evenly between them for weighting).
+mirca_crop,glade_crop
+Sugar cane,sugarcane
+Pulses,dry-pea
+Pulses,chickpea
+Pulses,cowpea
+Pulses,gram
+Pulses,phaseolus-bean
+Pulses,pigeonpea
+Fodder,alfalfa

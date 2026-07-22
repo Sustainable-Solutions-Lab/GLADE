@@ -44,7 +44,6 @@ DOC_FIGURES = [
     "multi_cropping_potential_rainfed",
     "multi_cropping_potential_irrigated",
     # Water availability figures
-    "water_basin_availability",
     "water_region_availability",
     "irrigated_land_fraction",
     # Livestock figures
@@ -304,28 +303,6 @@ rule doc_fig_multi_cropping_potential_irrigated:
         "<benchmarks>/shared/doc_fig_multi_cropping_potential_irrigated.tsv"
     script:
         "../scripts/doc_figures/multi_cropping_potential.py"
-
-
-rule doc_fig_water_basin_availability:
-    """Generate basin water availability map."""
-    input:
-        basin_shapefile="data/downloads/Report53_Appendix/Report53-BlueWaterScarcity-ArcGIS-ShapeFile/Monthly_WS_GRDC_405_basins.shp",
-        water_data=f"<processing>/{DOC_FIG_NAME}/water/blue_water_availability.csv",
-        style=DOC_FIG_STYLE,
-    output:
-        svg="docs/_static/figures/water_basin_availability.svg",
-        png="docs/_static/figures/water_basin_availability.png",
-    group:
-        "analysis_plot"
-    resources:
-        runtime="10m",
-        mem_mb=2000,
-    log:
-        "<logs>/shared/doc_fig_water_basin_availability.log",
-    benchmark:
-        "<benchmarks>/shared/doc_fig_water_basin_availability.tsv"
-    script:
-        "../scripts/doc_figures/water_basin_availability.py"
 
 
 rule doc_fig_water_region_availability:

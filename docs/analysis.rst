@@ -120,6 +120,23 @@ attribution is to primary (non-trade) inflows.
 ``feed_by_category.parquet`` and ``feed_by_animal.parquet`` are coarser views
 (by feed category alone, or by animal alone) that drop the source breakdown.
 
+**water_metrics.parquet** — Irrigation water use and scarcity by region
+
+Reported on a consumption basis; see :doc:`water` for the underlying model and
+the caveat that reported depletion is only meaningful at
+``water.temporal_resolution`` > 1.
+
+.. csv-table::
+   :header: "Column", "Type", "Unit", "Description"
+
+   ``region``, str, –, "Model region"
+   ``withdrawn_mm3``, float, Mm³, "Irrigation consumption drawn from the regional pool (all sources)"
+   ``withdrawal_reported_mm3``, float, Mm³, "Estimated physical withdrawal (consumption / consumed fraction C/W)"
+   ``scarcity_mm3_eq``, float, Mm³ world-eq, "Accumulated AWARE scarcity of the CF-carrying draw"
+   ``groundwater_renewable_mm3``, float, Mm³, "Renewable groundwater drawn"
+   ``groundwater_depletion_mm3``, float, Mm³, "Non-renewable groundwater mined"
+   ``mean_cf``, float, –, "Draw-weighted mean AWARE CF of the CF-carrying draw (NaN where none)"
+
 Example Usage
 ~~~~~~~~~~~~~
 

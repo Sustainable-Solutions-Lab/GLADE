@@ -126,6 +126,7 @@ def clip_negligible_coefficients(
     # 2. Trace irrigation water requirements and 3. near-zero carbon fluxes,
     #    both carried as link efficiencies onto the water / CO2 buses.
     n_water = _clip_port_coefficients(links, bus_carrier, "water", water_floor)
+    n_water += _clip_port_coefficients(links, bus_carrier, "water_field", water_floor)
     n_co2 = _clip_port_coefficients(links, bus_carrier, "co2", co2_floor)
 
     # 4. Rounding-level cost-calibration corrections (bnUSD per Mha or Mt flow).
