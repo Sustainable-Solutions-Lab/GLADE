@@ -60,7 +60,6 @@ rule build_regions:
         basins="data/downloads/aware2/AWARE20_Native_CFs_geospatial.gpkg",
     params:
         n_regions=config["aggregation"]["regions"]["target_count"],
-        allow_cross_border=config["aggregation"]["regions"]["allow_cross_border"],
         cluster_method=config["aggregation"]["regions"]["method"],
         basin_scarcity_weight=config["aggregation"]["regions"]["basin_scarcity_weight"],
         countries=config["countries"],

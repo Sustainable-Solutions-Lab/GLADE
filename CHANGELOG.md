@@ -94,8 +94,9 @@ introduce breaking changes to configuration and outputs.
   a scarce basin is no longer pooled into one region, which used to average away
   exactly the sub-provincial scarcity that constrains irrigation. Every region
   is still either contained in one province or a union of whole provinces, so
-  regions remain comparable to political units. `allow_cross_border: true` is no
-  longer supported and now raises. **This changes default region geometry for
+  regions remain comparable to political units. The
+  `aggregation.regions.allow_cross_border` option is removed; regions never
+  cross country borders. **This changes default region geometry for
   every config**, so all `processing/` artefacts are rebuilt and the tracked
   calibration sets must be regenerated. Requires the AWARE2.0 basin geopackage
   (new automatic download).

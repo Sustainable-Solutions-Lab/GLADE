@@ -1324,16 +1324,13 @@ properties:
     properties:
       regions:
         type: object
-        required: [target_count, allow_cross_border, method, basin_scarcity_weight]
+        required: [target_count, method, basin_scarcity_weight]
         additionalProperties: false
         properties:
           target_count:
             type: integer
             minimum: 1
             description: "Target number of regions to create through clustering"
-          allow_cross_border:
-            type: boolean
-            description: "Whether to allow regions to cross country borders (false = cluster within each country separately)"
           method:
             type: string
             enum: [kmeans, agglomerative]

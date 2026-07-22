@@ -100,16 +100,6 @@ def test_cluster_country_reconciles_when_pieces_scarce():
     assert _nesting_holds(pieces, labels)
 
 
-def test_allow_cross_border_rejected():
-    pieces = gpd.GeoDataFrame(
-        {"GID_0": ["A"], "prov": ["P1"], "cf": [5.0]},
-        geometry=[box(0, 0, 1, 1)],
-        crs="EPSG:4326",
-    )
-    with pytest.raises(ValueError, match="per-country"):
-        cluster_regions(pieces, 2, allow_cross_border=True, scarcity_weight=3.0)
-
-
 def test_country_budget_uses_full_province_area():
     """A country's region budget follows its land area, not its basin fragmentation.
 
@@ -138,7 +128,7 @@ def test_country_budget_uses_full_province_area():
         ],
         crs="EPSG:4326",
     )
-    regions = cluster_regions(pieces, 4, allow_cross_border=False, scarcity_weight=3.0)
+    regions = cluster_regions(pieces, 4, scarcity_weight=3.0)
     per_country = regions["country"].value_counts()
     assert (
         per_country["A"] == 2
@@ -167,5 +157,5 @@ def test_dissolved_regions_are_valid_geometries():
         geometry=[bad, box(10, 0, 11, 1)],
         crs="EPSG:4326",
     )
-    regions = cluster_regions(pieces, 2, allow_cross_border=False, scarcity_weight=3.0)
+    regions = cluster_regions(pieces, 2, scarcity_weight=3.0)
     assert regions.geometry.is_valid.all(), "invalid geometry escaped build_regions"

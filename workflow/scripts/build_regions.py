@@ -79,7 +79,7 @@ def _allocate_per_country_targets_by_weight(
     if total_target < len(nonempty):
         raise ValueError(
             "target_count is smaller than the number of countries with regions; "
-            "cannot avoid cross-border clustering with this target."
+            "every country needs at least one region."
         )
 
     # Respect global capacity (cannot exceed number of base units)
@@ -330,7 +330,6 @@ def _reconcile_to_k(
 def cluster_regions(
     pieces: gpd.GeoDataFrame,
     target_count: int,
-    allow_cross_border: bool,
     scarcity_weight: float,
     method: str = "kmeans",
     random_state: int = 0,
@@ -347,11 +346,6 @@ def cluster_regions(
     """
     if target_count <= 0:
         raise ValueError("target_count must be positive")
-    if allow_cross_border:
-        raise ValueError(
-            "Basin-aware clustering requires per-country partitioning; set "
-            "aggregation.regions.allow_cross_border to false."
-        )
     if "GID_0" not in pieces.columns:
         raise ValueError("Expected GID_0 column for country codes")
 
@@ -471,7 +465,6 @@ if __name__ == "__main__":
     regions = cluster_regions(
         pieces,
         snakemake.params.n_regions,
-        snakemake.params.allow_cross_border,
         snakemake.params.basin_scarcity_weight,
         snakemake.params.cluster_method,
     )

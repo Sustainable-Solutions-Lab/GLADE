@@ -1364,7 +1364,6 @@ health:
 aggregation:
   regions:
     target_count: 750
-    allow_cross_border: false
     method: "kmeans"
     # Basin-aware clustering: split provinces that straddle hydrological basins so
     # a scarce sub-basin is not pooled with an abundant one (which averages away

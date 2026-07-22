@@ -102,7 +102,6 @@ basin-aware so that hydrological scarcity is not averaged away:
 Key configuration parameters:
 
 - ``aggregation.regions.target_count``: Number of regions to create (default 750)
-- ``aggregation.regions.allow_cross_border``: Whether regions can span country boundaries (must be ``false``; basin-aware clustering has no cross-border path and raises otherwise)
 - ``aggregation.regions.basin_scarcity_weight``: Influence of AWARE basin scarcity relative to geography when partitioning a country (default 2.0; 0 recovers plain geographic clustering)
 - ``aggregation.simplify_tolerance_km``: Geometry simplification tolerance
 
